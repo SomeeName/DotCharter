@@ -1,0 +1,41 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.TonePreviewTargetPanel"
+             x:DataType="contracts:IToneDesignerPreviewTargets"
+             x:CompileBindings="True">
+
+    <!-- The Tone Designer footer's preview target (tonelab): the rig, or Rocksmith only while a
+         session is ready. Disabled, Rocksmith prints its reason; the last in-game result follows.
+         Lifted out of ToneDesignerDialogView.axaml to keep that view under its size budget. -->
+    <StackPanel x:Name="PreviewTargetPanel"
+                VerticalAlignment="Center" MaxWidth="320">
+        <StackPanel Orientation="Horizontal" Spacing="{DynamicResource FireSpaceSmPlus}">
+            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" VerticalAlignment="Center"
+                       Text="{localization:Loc Dialog_Tones_PreviewTarget}" />
+            <RadioButton x:Name="PreviewTargetClone" GroupName="TonePreviewTarget"
+                         IsChecked="{Binding IsClone, Mode=TwoWay}"
+                         Content="{localization:Loc Dialog_Tones_PreviewTargetClone}" />
+            <RadioButton x:Name="PreviewTargetInGame" GroupName="TonePreviewTarget"
+                         IsChecked="{Binding IsInGame, Mode=TwoWay}" IsEnabled="{Binding CanUseInGame}"
+                         Content="{localization:Loc Dialog_Tones_PreviewTargetInGame}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="{DynamicResource FireSpaceSmPlus}"
+                    IsVisible="{Binding HasInGameUnavailableReason}">
+            <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="InGameReason" Classes="DlgHint" TextWrapping="Wrap"
+                       MaxWidth="240" Text="{Binding InGameUnavailableReason}" />
+            <Button x:Name="InGameLaunch" Theme="{DynamicResource FirePopoverLinkButton}" Classes="FirePopoverLink"
+                    IsVisible="{Binding CanLaunch}"
+                    Command="{Binding LaunchCommand}"
+                    Content="{localization:Loc Dialog_Tones_InGameLaunch}" />
+            <Button x:Name="InGameReconnect" Theme="{DynamicResource FirePopoverLinkButton}" Classes="FirePopoverLink"
+                    Command="{Binding ReconnectCommand}"
+                    Content="{localization:Loc Dialog_Tones_InGameReconnect}" />
+        </StackPanel>
+        <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="InGameAsioNote" Classes="DlgHint" TextWrapping="Wrap"
+                   Text="{Binding AsioNote}" IsVisible="{Binding HasAsioNote}" />
+        <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="InGameStatus" Classes="DlgHint" TextWrapping="Wrap"
+                   Text="{Binding Status}" IsVisible="{Binding HasStatus}" />
+    </StackPanel>
+</UserControl>

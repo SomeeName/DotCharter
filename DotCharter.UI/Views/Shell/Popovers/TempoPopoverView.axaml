@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:appControls="using:DotCharter.UI.Controls"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.TempoPopoverView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- TEMPO — `Play Menus.dc.html`, `tempo()`. 344 px. -->
+    <controls:FirePopover Width="344"
+                          Title="{localization:Loc Toolbar_TempoFlyout}"
+                          Icon="{DynamicResource IconClock}">
+        <controls:FirePopover.Footer>
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="*">
+                <Button Grid.Column="0" Theme="{StaticResource FirePopoverLinkButton}" Classes="FirePopoverLink"
+                        HorizontalAlignment="Left"
+                        Content="{localization:Loc Toolbar_Tempo_Reset}"
+                        Command="{Binding Transport.ResetTempoCommand}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <StackPanel>
+            <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody">
+                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="92,*,52"
+                      ColumnSpacing="{StaticResource FirePopoverGapSlider}"
+                      ToolTip.Tip="{localization:Loc Toolbar_PlaybackSpeed}">
+                    <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                               Text="{localization:Loc Toolbar_Speed}" />
+                    <Slider VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverSlider Song"
+                            Minimum="0.25" Maximum="2.0"
+                            AutomationProperties.Name="{localization:Loc Toolbar_Speed}"
+                            Value="{Binding Transport.PlaybackSpeed}"
+                            appControls:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                            appControls:ResetOnDoubleClick.CommandParameter="SpeedSlider"
+                            TickFrequency="0.05" IsSnapToTickEnabled="False" />
+                    <TextBlock VerticalAlignment="Center" Grid.Column="2" Theme="{StaticResource FirePopoverValueText}" Classes="FirePopoverValue"
+                               Text="{Binding Transport.PlaybackSpeed, StringFormat=\{0:P0\}}" />
+                </Grid>
+                <!-- Song pitch, the other half of a practice rig: slow a passage
+                     down AND drop it into a key you can play. Whole semitones
+                     only (IsSnapToTickEnabled + an integer format) — a
+                     fractional transpose is not a musical request, and
+                     `PitchShift` is a double, so nothing else keeps the readout
+                     off ".37 st". The ORANGE fill is the mockup's own: the two
+                     sliders do different things and the gradient says so. -->
+                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="92,*,52"
+                      ColumnSpacing="{StaticResource FirePopoverGapSlider}"
+                      ToolTip.Tip="{localization:Loc Toolbar_SongPitch_Tip}">
+                    <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                               Text="{localization:Loc Toolbar_Pitch}" />
+                    <Slider VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverSlider Pitch"
+                            Minimum="-12" Maximum="12"
+                            AutomationProperties.Name="{localization:Loc Toolbar_Pitch}"
+                            Value="{Binding Transport.PitchShift}"
+                            appControls:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                            appControls:ResetOnDoubleClick.CommandParameter="PitchShiftSlider"
+                            TickFrequency="1" IsSnapToTickEnabled="True" />
+                    <TextBlock VerticalAlignment="Center" Grid.Column="2" Theme="{StaticResource FirePopoverValueText}" Classes="FirePopoverValue"
+                               Text="{Binding Transport.PitchShift, StringFormat=\{0:+0;-0;0\} st}" />
+                </Grid>
+            </StackPanel>
+
+            <!-- SPEED PRESETS. The parameter is a STRING and is parsed
+                 invariantly: a RelayCommand of a value type fed a literal
+                 CommandParameter throws during layout, and "0.65" is not 65 on a
+                 German locale. The LIT chip is derived from the live speed, so
+                 dragging the slider un-lights it — two sources of truth is how
+                 "100%" stays lit at 0.62x. -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <!-- The two speed keys, printed LIVE from the real chords (`-` and `=`
+                         by default, KeybindConfig.SpeedDown/SpeedUp) so they follow a rebind.
+                         They sit with the speeds they step through: in the footer beside
+                         "Back to 100 %" they read as that link's shortcut (2026-09-24). -->
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                                   Text="{localization:Loc Toolbar_Tempo_Presets}" />
+                        <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverChordText}" Classes="FirePopoverChord" VerticalAlignment="Top"
+                                   ToolTip.Tip="{localization:Loc Keybind_SpeedDown}"
+                                   Text="{Binding ProjectState.Keybinds.SpeedDown, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+                        <TextBlock Grid.Column="2" Theme="{StaticResource FirePopoverChordText}" Classes="FirePopoverChord" VerticalAlignment="Top"
+                                   ToolTip.Tip="{localization:Loc Keybind_SpeedUp}"
+                                   Text="{Binding ProjectState.Keybinds.SpeedUp, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+                    </Grid>
+                    <WrapPanel ItemSpacing="{StaticResource FireSpaceSm}"
+                               LineSpacing="{StaticResource FireSpaceSm}">
+                        <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip" Content="50%"
+                                Classes.On="{Binding Transport.PlaybackSpeed, Converter={x:Static converters:DoubleEqualsConverter.Instance}, ConverterParameter=0.5}"
+                                Command="{Binding Transport.SetSpeedPresetCommand}"
+                                CommandParameter="0.5" />
+                        <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip" Content="65%"
+                                Classes.On="{Binding Transport.PlaybackSpeed, Converter={x:Static converters:DoubleEqualsConverter.Instance}, ConverterParameter=0.65}"
+                                Command="{Binding Transport.SetSpeedPresetCommand}"
+                                CommandParameter="0.65" />
+                        <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip" Content="80%"
+                                Classes.On="{Binding Transport.PlaybackSpeed, Converter={x:Static converters:DoubleEqualsConverter.Instance}, ConverterParameter=0.8}"
+                                Command="{Binding Transport.SetSpeedPresetCommand}"
+                                CommandParameter="0.8" />
+                        <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip" Content="100%"
+                                Classes.On="{Binding Transport.PlaybackSpeed, Converter={x:Static converters:DoubleEqualsConverter.Instance}, ConverterParameter=1.0}"
+                                Command="{Binding Transport.SetSpeedPresetCommand}"
+                                CommandParameter="1.0" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

@@ -1,0 +1,247 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctl="using:DotCharter.UI.Controls">
+
+    <!-- Part of the inspector grammar — see `Views/Editor/InspectorStyles.axaml`,
+         which merges this file and its siblings IN ORDER. The nine-header tab strip, and the mixer row shared by every channel. -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         THE TAB STRIP (0.50). The nine headers are the shared Fire segmented
+         control — `Border.FireSegment` around `ToggleButton.FireSegmentItem`s,
+         declared once in `Styles/Fire.axaml` and worn by the editor's nav
+         switcher, the Progress hub and the Network screen. What is left here
+         is the strip's own frame and the two marks a segment cannot carry: the
+         label lockup and the FEHLER count.
+
+         The strip is ALL labelled or ALL icons, never a mix (#573):
+         `ctl:OverflowTabStrip` decides from MEASURED widths
+         (`TabStripLayout.Decide`) and raises `:icons` when every caption does
+         not fit; the rule at the end of this block then hides the caption of
+         every unchecked tab. The active tab keeps its caption, and tabs that do
+         not fit even as icons go into the strip's "More" button. Only the
+         caption hides: the glyph, the tooltip, the accessible name and the
+         Issues count badge (a TextBlock inside a Border, not a direct child of
+         the label) all stay.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Style Selector="Border.TabStrip">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="{StaticResource FirePadSegment}" />
+    </Style>
+    <!-- Icon + caption inside one segment. The PathIcon's colour is driven by
+         `Fire.axaml`'s own `:is(ToggleButton).FireSegmentItem PathIcon`
+         selectors, so it tracks the segment dim → accent for free. -->
+    <Style Selector="StackPanel.TabLabel">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="{StaticResource FireSpaceXs}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- The FEHLER counter — the one thing on this strip that can be BAD, so
+         the one thing that carries colour. A Fire `Border.FireBadge` is
+         accent-filled and has no danger spelling, and adding one would mean
+         editing `Fire.axaml` for a mark only this strip uses. -->
+    <Style Selector="Border.TabCountBadge">
+        <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadBadge}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.TabCountBadge > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <!-- One inset for every tab in every mode. The strip's width decision
+         subtracts a hidden caption from a MEASURED tab, which only holds while
+         the padding does not change with the mode; the strip shares its slack
+         between the tabs anyway, so a wide pane still spaces them out. -->
+    <Style Selector="ctl|OverflowTabStrip.TabRow > ToggleButton.FireSegmentItem">
+        <Setter Property="Padding" Value="{StaticResource FirePadSegmentItemDense}" />
+    </Style>
+    <Style Selector="ctl|OverflowTabStrip.TabRow:icons ToggleButton.FireSegmentItem:not(:checked) StackPanel.TabLabel > TextBlock">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         THE MIXER ROW (0.51, from `Chart Editor.dc.html`).
+
+         One row shape for every channel in the tab: [M][S] · label · fader ·
+         value. The two verb squares are 18 px, the label rail and the value
+         rail are FIXED, and the fader takes what is left — which is what gives
+         the whole tab one left edge and one right edge no matter which group a
+         row belongs to. A row with no mute (Track pan cannot be muted; the
+         master bus has no solo) leaves the square EMPTY rather than drawing a
+         dead control: the column is reserved by `Border.MixerVerbSlot`, so the
+         labels below still line up under the labels above.
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- The channel verbs. A lit M or S is a TINT plus a coloured edge and a
+         coloured letter, not a solid block — the layer's rule for a checked
+         control. 18 px is the mockup's square; the mono caption drops to the
+         nano step with it, or the glyph fills the box edge to edge. -->
+    <Style Selector="ToggleButton.MuteBtn, ToggleButton.SoloBtn">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackMicro}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!-- …and EVERY state is stated on the `/template/ ContentPresenter`, not on
+         the ToggleButton. Fluent's ToggleButton theme template-binds the
+         presenter's fill at REST (so a control-level setter appeared to work)
+         but writes the presenter's Background DIRECTLY on `:checked` and
+         `:pointerover` — a style setter on the deeper target, which beats a
+         TemplateBinding. A muted channel therefore lit up in Fluent's ACCENT
+         VIOLET, i.e. exactly the colour this layer reserves for selection,
+         while the danger tint the grammar declared never appeared. -->
+    <Style Selector="ToggleButton.MuteBtn /template/ ContentPresenter,
+                     ToggleButton.SoloBtn /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextDim}" />
+    </Style>
+    <Style Selector="ToggleButton.MuteBtn:pointerover /template/ ContentPresenter,
+                     ToggleButton.SoloBtn:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="ToggleButton.MuteBtn:checked /template/ ContentPresenter,
+                     ToggleButton.MuteBtn:checked:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="ToggleButton.SoloBtn:checked /template/ ContentPresenter,
+                     ToggleButton.SoloBtn:checked:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+
+    <Style Selector="Grid.SliderRow">
+        <Setter Property="Margin" Value="0,4" />
+    </Style>
+
+    <!-- The reserved square where a row has no mute or no solo. Transparent and
+         hit-test-free — its whole job is to hold the column open. -->
+    <Style Selector="Border.MixerVerbSlot">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- The label rail and the value rail, as WIDTHS on the cells rather than
+         on the ColumnDefinitions — a `GridLength` is not a double, so a shared
+         number has to live on something that takes one, and a cell is the only
+         such thing here. Every mixer row in the tab wears both, which is the
+         only reason the faders start and end on one line. -->
+    <Style Selector="TextBlock.MixerLabel">
+        <Setter Property="Width" Value="78" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <!-- Indented variant: an EQ filter's Q sits under its own frequency row. -->
+    <Style Selector="TextBlock.MixerLabel.Sub">
+        <Setter Property="Width" Value="62" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <!-- The readout. Mono, right-aligned, and it prints the channel's OWN unit
+         (a gain ratio, a dB, "1.00x", "0 st", "1200 Hz") — one column, several
+         vocabularies, which is exactly why it is fixed-width. -->
+    <!-- NO letter-spacing: the layer tracks its mono CAPTIONS, never its
+         figures. "-12.5 dB" at 10.5 px is already 50 of the rail's 54 px, and
+         a tracked one overflows and clips its own unit. -->
+    <Style Selector="TextBlock.MixerValue">
+        <Setter Property="Width" Value="54" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="TextAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- The fader. It is NOT `Slider.FireSlider`: that class hard-wires the
+         accent gradient into its decrease-track template, and this tab's whole
+         point is that the FILL carries the channel's identity (violet for the
+         levels bus, the instrument colour for a stem, amber for a playback
+         effect) while the track behind it stays neutral. `Foreground` INHERITS
+         down into the templated RepeatButton, so one property on the Slider
+         paints the fill and nothing else moves. -->
+    <!-- HEIGHT, not MinHeight. Fluent's slider template lays its track out
+         inside a three-row Grid whose measured height is 44 px — nearly a
+         mixer row and a half — so a `MinHeight` leaves it exactly where it
+         was and the pane scrolls twice as far as the design does. -->
+    <Style Selector="Slider.MixerSlider">
+        <Setter Property="Height" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Slider.MixerSlider:horizontal /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="5" CornerRadius="{StaticResource FireRadiusPill}"
+                        Background="{TemplateBinding Foreground}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.MixerSlider:horizontal /template/ Track RepeatButton#PART_IncreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="5" CornerRadius="{StaticResource FireRadiusPill}"
+                        Background="{DynamicResource FireSurfaceTrack}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.MixerSlider /template/ Thumb">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Width="14" Height="14"
+                        CornerRadius="{StaticResource FireRadiusPill}"
+                        Background="{DynamicResource FireTextBright}"
+                        BoxShadow="{DynamicResource FireGlowAccentSoft}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.MixerSlider:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+
+    <Style Selector="Grid.EqSubRow">
+        <Setter Property="Margin" Value="16,0,0,4" />
+        <Setter Property="Opacity" Value="0.75" />
+    </Style>
+    <Style Selector="Grid.EqSubRow:pointerover">
+        <Setter Property="Opacity" Value="1.0" />
+    </Style>
+
+    <Style Selector="Border.FilterBadge">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+    </Style>
+
+</Styles>

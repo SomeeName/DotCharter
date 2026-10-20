@@ -1,0 +1,230 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:screens="using:DotCharter.UI.Views.PlayMode.Screens"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.SongSelectDetailRailView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- Song Select's detail pane (420, hard right edge). Its own view (#294)
+         so Screens/SongSelectView.axaml stays inside its size budget; that view
+         declares it in its body grid's second column. Markup unchanged. -->
+    <Border x:Name="SongSelectDetailRail" Theme="{StaticResource FireContextRailBorder}" Classes="FireContextRail"
+            Width="420">
+        <Grid x:Name="SongSelectRailGrid" RowDefinitions="*,Auto">
+            <StackPanel VerticalAlignment="Center" Spacing="{StaticResource FireSpaceMd}"
+                        IsVisible="{Binding SelectedSong, Converter={x:Static ObjectConverters.IsNull}}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" HorizontalAlignment="Center"
+                           Text="{localization:Loc PlayMode_Nav_Play}" />
+                <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextAlignment="Center"
+                           Text="{localization:Loc PlayMode_SongSelect_PickPrompt}" />
+            </StackPanel>
+
+            <Grid x:Name="SongSelectDetailBody" RowDefinitions="*,Auto"
+                  IsVisible="{Binding SelectedSong, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="{StaticResource FireSpaceXl}">
+                        <Border Height="200" CornerRadius="{StaticResource FireRadiusCard}"
+                                Background="{DynamicResource FireSurfaceRaised}"
+                                ClipToBounds="True">
+                            <Panel>
+                                <PathIcon Data="{DynamicResource IconMusicNote}" Width="34" Height="34"
+                                          Foreground="{DynamicResource FireTextFaint}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Image AutomationProperties.AccessibilityView="Raw" Source="{Binding SelectedSong.Inner.CoverImage}"
+                                       Stretch="UniformToFill" />
+                            </Panel>
+                        </Border>
+
+                        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                            <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" TextWrapping="Wrap"
+                                       Text="{Binding SelectedSong.Title}" />
+                            <!-- "3 Doors Down · 2002" — the year is
+                                 the library index's own field. -->
+                            <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle"
+                                       Text="{Binding SelectedSong.DetailSubtitle}" />
+                        </StackPanel>
+
+                        <!-- ARRANGEMENT SELECTOR, with the real note
+                             count per path. Picking one here picks
+                             the path the run opens on. -->
+                        <ItemsControl x:Name="SongSelectArrangementTiles"
+                                      ItemsSource="{Binding SelectedSongArrangements}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SongArrangementFact">
+                                    <ToggleButton AutomationProperties.Name="{Binding Label}" Theme="{StaticResource FireChoiceToggle}" Classes="FireChoice Card" Margin="0,0,7,0"
+                                                  IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                  Command="{Binding $parent[ItemsControl].((vm:PlayModeViewModel)DataContext).SelectArrangementCommand}"
+                                                  CommandParameter="{Binding}">
+                                        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                            <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel" Text="{Binding Label}" />
+                                            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Accent"
+                                                       IsVisible="{Binding HasNoteCount}"
+                                                       ToolTip.Tip="{localization:Loc PlayMode_SongSelect_NoteCount_Tip}"
+                                                       Text="{Binding NoteCountLabel}" />
+                                            <!-- THIS arrangement's tuning (index schema v8) — a
+                                                 Bass in drop D under a Lead in E standard is two
+                                                 tunings, and the song card can only print one. -->
+                                            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                       IsVisible="{Binding HasTuning}"
+                                                       Text="{Binding TuningLabel}" />
+                                        </StackPanel>
+                                    </ToggleButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- YOUR BEST: accuracy, score, grade, then
+                             the mastery meter. Only when you have
+                             one — an empty best panel says
+                             nothing. It is the song's best on ANY
+                             arrangement and EITHER note detector
+                             (GameplayStatsService.GetBestForSong),
+                             unlike the results board, which ranks one
+                             detector; the tooltip says so (#642). -->
+                        <Border x:Name="SongSelectBestPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel"
+                                IsVisible="{Binding SelectedSong.HasBest}"
+                                ToolTip.Tip="{localization:Loc PlayMode_SongSelect_YourBest_Tip}">
+                            <StackPanel Spacing="{StaticResource FireSpaceLg}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                               Text="{localization:Loc PlayMode_SongSelect_YourBest}" />
+                                    <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                               Text="{Binding SelectedSong.LastPlayedLabel}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                                        <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure"
+                                                   Text="{Binding SelectedSong.AccuracyLabel}" />
+                                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc PlayMode_SongSelect_Accuracy}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXxs}">
+                                        <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure"
+                                                   Text="{Binding SelectedSong.BestLabel}" />
+                                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc LivePlay_Score}" />
+                                    </StackPanel>
+                                    <Border Grid.Column="2" Theme="{StaticResource FireGradeBadgeBorder}" Classes="FireGradeBadge Small"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding SelectedSong.GradeLabel}" />
+                                    </Border>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto"
+                                      ColumnSpacing="{StaticResource FireSpaceLg}">
+                                    <ProgressBar Grid.Column="0" Classes="FireMeter" Maximum="1"
+                                                 VerticalAlignment="Center"
+                                                 Value="{Binding SelectedSong.MasteryFraction}" />
+                                    <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Accent"
+                                               VerticalAlignment="Center"
+                                               ToolTip.Tip="{localization:Loc PlayMode_SongSelect_Mastery_Tip}"
+                                               Text="{Binding SelectedSong.MasteryLabel}" />
+                                </Grid>
+                                <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent" HorizontalAlignment="Left"
+                                        IsVisible="{Binding SelectedSong.IsFullCombo}"
+                                        ToolTip.Tip="{localization:Loc PlayMode_FullCombo_Tip}">
+                                    <TextBlock Text="{localization:Loc PlayMode_FullCombo_Badge}" />
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- TUNING CHECK + LAN AVAILABILITY. THREE
+                             states, not two: green only when the
+                             song matches the tuning you last
+                             verified, amber when it does not, and
+                             NEUTRAL when the app cannot judge (the
+                             song carries no tuning, or you have
+                             verified none yet). The green pill hung
+                             off `!SelectedTuningNeedsChange`, which
+                             painted both claim-nothing states as
+                             IN TUNE. -->
+                        <StackPanel x:Name="SongSelectTuningCheck"
+                                    Spacing="{StaticResource FireSpaceMd}">
+                            <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Success"
+                                    HorizontalAlignment="Left"
+                                    IsVisible="{Binding SelectedTuningIsVerified}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                            Spacing="{StaticResource FireSpaceMd}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Success" />
+                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText Success"
+                                               Text="{Binding SelectedTuningCheckLabel}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill"
+                                    HorizontalAlignment="Left"
+                                    IsVisible="{Binding SelectedTuningIsUnverified}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                            Spacing="{StaticResource FireSpaceMd}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot" />
+                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText"
+                                               Text="{Binding SelectedTuningCheckLabel}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Warn"
+                                    HorizontalAlignment="Left"
+                                    IsVisible="{Binding SelectedTuningNeedsChange}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                            Spacing="{StaticResource FireSpaceMd}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn" />
+                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText Warn"
+                                               Text="{Binding SelectedTuningCheckLabel}" />
+                                </StackPanel>
+                            </Border>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="{StaticResource FireSpaceLg}">
+                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Warn"
+                                           IsVisible="{Binding SelectedSong.HasCapo}"
+                                           Text="{Binding SelectedSong.CapoLabel}" />
+                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                           IsVisible="{Binding !SelectedSong.HasCapo}"
+                                           Text="{localization:Loc PlayMode_SongSelect_NoCapo}" />
+                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono"
+                                           Text="{Binding SelectedSong.SongLengthFormatted}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Actions. The notched PLAY is the ONE lit action
+                     on this screen — and the only Play button on
+                     it; everything else is an outlined secondary
+                     under it. -->
+                <StackPanel Grid.Row="1" Spacing="{StaticResource FireSpaceMd}"
+                            Margin="{StaticResource FireGapTopLg}">
+                    <!-- The notch is the THEME's now (a real clip
+                         geometry, not a CornerRadius) — this row
+                         only asks for the taller CTA height. -->
+                    <Button AutomationProperties.Name="{localization:Loc PlayMode_Menu_Play}" x:Name="SongSelectPlayButton" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary"
+                            Height="56"
+                            HorizontalAlignment="Stretch"
+                            IsEnabled="{Binding SelectedSong.CanPlay}"
+                            Command="{Binding PlaySongCommand}"
+                            CommandParameter="{Binding SelectedSong}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceLg}">
+                            <PathIcon Data="{DynamicResource IconPlay}" Width="16" Height="16"
+                                      Foreground="{DynamicResource FireTextOnAccent}"
+                                      VerticalAlignment="Center" />
+                            <TextBlock Text="{localization:Loc PlayMode_Menu_Play}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- SETLISTS (#646): under both states, so a setlist plays with no
+                 song picked. Its height is capped from code-behind
+                 (SetlistPanelMaxHeight) so a long list never pushes the picked
+                 song's details and Play button out of the rail. -->
+            <screens:SetlistPanelView Grid.Row="1" x:Name="SongSelectSetlistHost"
+                                      Margin="{StaticResource FireGapTopLg}"
+                                      DataContext="{Binding Setlists}" />
+        </Grid>
+    </Border>
+</UserControl>

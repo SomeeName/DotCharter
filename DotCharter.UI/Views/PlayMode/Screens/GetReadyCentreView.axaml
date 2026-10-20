@@ -1,0 +1,386 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="using:DotCharter.Tone.UI.Converters"
+             xmlns:editorVm="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GetReadyCentreView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- Get Ready's centre column: the tuner, full height, over the In-game
+         tones and Backing track cards. Its own view (#294) so the Get Ready
+         screen stays inside its size budget; Screens/GetReadyView.axaml hosts
+         it in the body grid's third column. The screen's design notes are at
+         the top of that file. -->
+    <ScrollViewer x:Name="GetReadyCentreScroll"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto"
+                  VerticalContentAlignment="Stretch"
+                  BringIntoViewOnFocusChange="False">
+    <Grid x:Name="GetReadyCentre" RowDefinitions="*,14,Auto">
+
+        <!-- ── The tuner ─────────────────────────────────────── -->
+        <Border Grid.Row="0" x:Name="GetReadyTunerPanel" Theme="{StaticResource FireHeroPanelBorder}" Classes="FireHeroPanel">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="*,14,Auto">
+                    <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow OnHero"
+                                   Text="{localization:Loc PlayMode_GetReady_Tuner_Eyebrow}" />
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{StaticResource FireSpaceLg}">
+                            <TextBlock x:Name="GetReadyExpectedTuning" Theme="{StaticResource FireTitleText}" Classes="FireTitle"
+                                       Text="{Binding FlowTunerTarget}" />
+                            <TextBlock x:Name="GetReadyExpectedTuningCaption"
+                                       Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Bottom"
+                                       Text="{Binding FlowTunerTargetCaption}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceMd}"
+                                VerticalAlignment="Center">
+                        <Button x:Name="GetReadyTunerRestart" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                Command="{Binding GuidedTuning.RestartCommand}"
+                                Content="{localization:Loc PlayMode_GuidedTuning_Restart}" />
+                        <Button x:Name="GetReadyTunerSkip" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                Command="{Binding GuidedTuning.SkipCurrentCommand}"
+                                ToolTip.Tip="{localization:Loc PlayMode_GetReady_Tuner_SkipCheck_Consequence}"
+                                Content="{localization:Loc PlayMode_GetReady_Tuner_SkipCheck}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- The six string rows. The caption row and the row
+                     template share ONE set of column widths — that
+                     is the only thing keeping the states under the
+                     caption and the needles on one scale. -->
+                <StackPanel Grid.Row="1" VerticalAlignment="Center"
+                            Margin="{StaticResource FireGapTopRow}"
+                            Spacing="{StaticResource FireSpaceMd}"
+                            IsVisible="{Binding GuidedTuning.HasCheck}">
+                    <Grid x:Name="GetReadyTunerCaptions"
+                          ColumnDefinitions="46,14,*,14,80">
+                        <TextBlock Grid.Column="2" Theme="{StaticResource FireColumnHeadText}" Classes="FireColumnHead"
+                                   HorizontalAlignment="Left"
+                                   Text="{localization:Loc PlayMode_GetReady_Tuner_Flat}" />
+                        <TextBlock Grid.Column="2" Theme="{StaticResource FireColumnHeadText}" Classes="FireColumnHead"
+                                   HorizontalAlignment="Right"
+                                   Text="{localization:Loc PlayMode_GetReady_Tuner_Sharp}" />
+                    </Grid>
+
+                    <ItemsControl x:Name="GetReadyTunerStrings"
+                                  ItemsSource="{Binding GuidedTuning.Strings}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TuningStringRow">
+                                <!-- The row is PRESSABLE, and until 0.58 it was
+                                     not. `SkipCurrentCommand`'s own doc says a
+                                     skipped string is revisited "by tapping it"
+                                     — but nothing here was a click target, so a
+                                     skipped or confirmed string could only be
+                                     reached again by restarting the whole check.
+                                     `SelectStringCommand` existed the whole time
+                                     with no surface raising it.
+
+                                     `Button.FireListRow` with its border and
+                                     padding turned off, exactly like `D6PlanList`
+                                     above: the pixels the caption row lines up
+                                     with are unchanged (the Grid keeps its own
+                                     columns and margin) and all it adds is the
+                                     hand cursor, the hover/press tint and the
+                                     row focus adorner a pressable row must have.
+                                     The command hangs off the screen's view
+                                     model, so it is reached through the
+                                     ItemsControl the way every other row command
+                                     on this screen is. -->
+                                <Button Theme="{StaticResource FireListRowButton}" Classes="FireListRow"
+                                        BorderThickness="0"
+                                        Padding="{StaticResource FirePadNone}"
+                                        AutomationProperties.Name="{Binding NoteName}"
+                                        Command="{Binding $parent[ItemsControl].((vm:PlayModeViewModel)DataContext).GuidedTuning.SelectStringCommand}"
+                                        CommandParameter="{Binding}">
+                                <Grid ColumnDefinitions="46,14,*,14,80"
+                                      Margin="{StaticResource FireGapRowSm}">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                                Spacing="{StaticResource FireSpaceSmPlus}"
+                                                VerticalAlignment="Center">
+                                        <!-- The string's FIXED identity —
+                                             the same colour as its lane
+                                             on the highway. -->
+                                        <Border Theme="{StaticResource FireStringChipBorder}" Classes="FireStringChip"
+                                                Background="{Binding ColorTokenKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                   Text="{Binding NoteName}" />
+                                    </StackPanel>
+
+                                    <fire:FireTunerMeter Grid.Column="2"
+                                                         VerticalAlignment="Center"
+                                                         Cents="{Binding Cents}"
+                                                         HasReading="{Binding HasReading}"
+                                                         InTuneCents="{Binding InTuneCents}" />
+
+                                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                               Classes.Success="{Binding IsReadingGood}"
+                                               Classes.Warn="{Binding IsReadingBad}"
+                                               Classes.Quiet="{Binding IsAwaitingPluck}"
+                                               Text="{Binding StateText}" />
+                                </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- No arrangement picked yet ⇒ no targets to tune
+                     to. Says so, with the one thing that fixes it. -->
+                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Grid.Row="1" Classes="FireEmptyState"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding !GuidedTuning.HasCheck}">
+                    <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                               Text="{localization:Loc PlayMode_GetReady_Tuner_Eyebrow}" />
+                    <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                               Text="{localization:Loc PlayMode_GetReady_Tuner_NoCheck}" />
+                </StackPanel>
+
+                <!-- Input level + how far the check has got. -->
+                <Grid Grid.Row="2" x:Name="GetReadyInputRow"
+                      ColumnDefinitions="82,14,*,14,80,18,Auto"
+                      Margin="{StaticResource FireGapTopRow}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                               VerticalAlignment="Center"
+                               Text="{localization:Loc PlayMode_GetReady_Input}" />
+                    <fire:FireLevelMeter Grid.Column="2" x:Name="GetReadyInputMeter"
+                                         HorizontalAlignment="Stretch"
+                                         VerticalAlignment="Center"
+                                         SegmentCount="14"
+                                         BarWidth="14" BarGap="3"
+                                         MinBarHeight="9" MaxBarHeight="9"
+                                         LevelDb="{Binding Settings.GameplayInputLevelDb}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Quiet"
+                               Text="{Binding Settings.GameplayInputLevelText}" />
+                    <Border Grid.Column="6" x:Name="GetReadyVerifiedChip"
+                            Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill"
+                            Classes.Success="{Binding GuidedTuning.AllVerified}"
+                            Classes.Bare="{Binding !GuidedTuning.AllVerified}"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{StaticResource FireSpaceMd}"
+                                    VerticalAlignment="Center">
+                            <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot"
+                                    Classes.Success="{Binding GuidedTuning.AllVerified}" />
+                            <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText"
+                                       Classes.Success="{Binding GuidedTuning.AllVerified}"
+                                       Text="{Binding GuidedTuning.VerifiedLabel}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ── The two sound cards ───────────────────────────── -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,14,*">
+
+            <!-- IN-GAME TONES -->
+            <Border Grid.Column="0" x:Name="GetReadyTonesPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                <StackPanel Spacing="{StaticResource FireSpaceLg}">
+                    <Grid ColumnDefinitions="*,12,Auto">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   VerticalAlignment="Center"
+                                   Text="{localization:Loc PlayMode_InGameTones_Title}" />
+                        <ToggleSwitch Grid.Column="2" x:Name="GetReadyTonesToggle"
+                                      Theme="{DynamicResource FireToggleSwitch}"
+                                      IsEnabled="{Binding HasInGameTones}"
+                                      AutomationProperties.Name="{localization:Loc PlayMode_InGameTones_Title}"
+                                      IsChecked="{Binding UseInGameTones, Mode=TwoWay}" />
+                    </Grid>
+
+                    <!-- §3.8: what the toggle DOES, both ways. -->
+                    <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                               IsVisible="{Binding UseInGameTones}"
+                               Text="{localization:Loc PlayMode_GetReady_Tones_Explain}" />
+                    <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                               IsVisible="{Binding !UseInGameTones}"
+                               Text="{localization:Loc PlayMode_GetReady_Tones_Off}" />
+
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceMd}"
+                                IsVisible="{Binding InGameTonesLoading}">
+                        <ProgressBar Classes="FireMeter Thin" IsIndeterminate="True"
+                                     Width="60" VerticalAlignment="Center" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                   Text="{localization:Loc PlayMode_InGameTones_Loading}" />
+                    </StackPanel>
+
+                    <!-- The chart's REAL tone keys — the ones that
+                         converted, so a chip cannot name a tone the
+                         rig will not play. Each opens its tone on
+                         the rig to edit and save into the song. -->
+                    <ItemsControl x:Name="GetReadyToneChips"
+                                  ItemsSource="{Binding ToneChips}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SongToneChip">
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        Margin="{StaticResource FireGapTag}"
+                                        AutomationProperties.Name="{Binding AccessibleName}"
+                                        ToolTip.Tip="{Binding AccessibleName}"
+                                        Command="{Binding $parent[ItemsControl].((vm:PlayModeViewModel)DataContext).EditSongToneCommand}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                        <TextBlock Text="{Binding Name}" />
+                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" IsVisible="{Binding IsEdited}"
+                                                   Text="{localization:Loc PlayMode_GetReady_Tones_Edited}" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="GetReadyToneEditNote" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               IsVisible="{Binding SongToneEditNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding SongToneEditNote}" />
+
+                    <!-- Amber: the rig could not reproduce something
+                         exactly. Informational, never a failure —
+                         and REVIEWABLE, because "8 effects" without
+                         "which" cannot be acted on. -->
+                    <Border x:Name="GetReadyToneWarning" Theme="{StaticResource FireCardBorder}" Classes="FireCard Warn"
+                            IsVisible="{Binding HasToneApproximations}">
+                        <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                            <Grid ColumnDefinitions="Auto,10,*,10,Auto">
+                                <Border Grid.Column="0" Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn Small"
+                                        VerticalAlignment="Top"
+                                        Margin="{StaticResource FireGapTopSm}" />
+                                <TextBlock Grid.Column="2" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc Wide"
+                                           Text="{Binding InGameToneApproxNote}" />
+                                <Button Grid.Column="4" x:Name="GetReadyToneReview"
+                                        Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                        Command="{Binding ReviewToneApproximationsCommand}"
+                                        Content="{localization:Loc PlayMode_GetReady_Tones_Review}" />
+                            </Grid>
+                            <ScrollViewer MaxHeight="118"
+                                          VerticalScrollBarVisibility="Auto"
+                                          BringIntoViewOnFocusChange="False"
+                                          IsVisible="{Binding AreToneApproximationsExpanded}">
+                                <ItemsControl x:Name="GetReadyToneApproxList"
+                                              ItemsSource="{Binding ToneApproximationNotes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                       TextWrapping="Wrap"
+                                                       Margin="{StaticResource FireGapRowSm}"
+                                                       Text="{Binding}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Per-song override, with its consequence. -->
+                    <Grid ColumnDefinitions="Auto,10,*" VerticalAlignment="Bottom">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   VerticalAlignment="Center"
+                                   Text="{localization:Loc PlayMode_SongTone_Label}" />
+                        <ComboBox Grid.Column="2" x:Name="GetReadyToneOverride"
+                                  Classes="FireCombo" HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_SongTone_Label}"
+                                  SelectedIndex="{Binding SongTonePreferenceIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc PlayMode_SongTone_Global}" />
+                            <ComboBoxItem Content="{localization:Loc PlayMode_SongTone_InGame}" />
+                            <ComboBoxItem Content="{localization:Loc PlayMode_SongTone_MyTone}" />
+                        </ComboBox>
+                    </Grid>
+                    <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                               Text="{localization:Loc PlayMode_GetReady_Tones_Override_Consequence}" />
+                    <ComboBox x:Name="GetReadyMyTonePicker" Classes="FireCombo"
+                              HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding MyTonePresets}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_SongTone_MyTone}"
+                              SelectedItem="{Binding SelectedMyTonePreset, Mode=TwoWay}"
+                              PlaceholderText="{localization:Loc PlayMode_SongTone_NoPresets}"
+                              IsVisible="{Binding IsMyToneSelected}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MyTonePresetOption">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+            </Border>
+
+            <!-- BACKING TRACK -->
+            <Border Grid.Column="2" x:Name="GetReadyBackingPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                <StackPanel Spacing="{StaticResource FireSpaceLg}">
+                    <Grid ColumnDefinitions="*,12,Auto">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   VerticalAlignment="Center"
+                                   Text="{localization:Loc PlayMode_BackingTrack_Title}" />
+                        <TextBlock Grid.Column="2" x:Name="GetReadyNoStemsChip"
+                                   Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" VerticalAlignment="Center"
+                                   IsVisible="{Binding !HasStems}"
+                                   Text="{localization:Loc PlayMode_GetReady_Backing_NoStems}" />
+                    </Grid>
+
+                    <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                               Text="{localization:Loc PlayMode_GetReady_Backing_Explain}" />
+
+                    <!-- The real mixer's stems, master excluded. -->
+                    <ItemsControl x:Name="GetReadyStemList"
+                                  ItemsSource="{Binding BackingStems}"
+                                  IsVisible="{Binding HasStems}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="editorVm:StemTrackViewModel">
+                                <Grid ColumnDefinitions="70,12,*,12,60"
+                                      Margin="{StaticResource FireGapRowSm}">
+                                    <TextBlock Grid.Column="0" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Text="{Binding DisplayName}" />
+                                    <ProgressBar Grid.Column="2" Classes="FireMeter Thin"
+                                                 VerticalAlignment="Center"
+                                                 Minimum="0" Maximum="4"
+                                                 Value="{Binding VolumeLinear}" />
+                                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Quiet"
+                                               IsVisible="{Binding !IsMuted}"
+                                               Text="{Binding VolumeDbLabel}" />
+                                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Warn"
+                                               IsVisible="{Binding IsMuted}"
+                                               Text="{localization:Loc PlayMode_GetReady_Backing_Muted}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Spacing="{StaticResource FireSpaceSm}"
+                                IsVisible="{Binding HasStems}">
+                        <CheckBox IsChecked="{Binding MuteMyInstrument, Mode=TwoWay}"
+                                  Content="{localization:Loc PlayMode_BackingTrack_Mute}" />
+                        <CheckBox IsChecked="{Binding DynamicStemMix, Mode=TwoWay}"
+                                  ToolTip.Tip="{localization:Loc PlayMode_BackingTrack_DynamicMix_Tip}"
+                                  Content="{localization:Loc PlayMode_BackingTrack_DynamicMix}" />
+                    </StackPanel>
+
+                    <!-- The action, and what it will cost. The
+                         estimate is MEASURED on this machine, so it
+                         is absent until a separation has finished
+                         here at least once. -->
+                    <StackPanel Spacing="{StaticResource FireSpaceXs}"
+                                VerticalAlignment="Bottom">
+                        <Button x:Name="GetReadySeparateStems" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Accent"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Command="{Binding RequestStemSeparationCommand}"
+                                Content="{localization:Loc PlayMode_GetReady_Backing_Separate}" />
+                        <TextBlock x:Name="GetReadyStemEstimate"
+                                   Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                   HorizontalAlignment="Center"
+                                   IsVisible="{Binding HasStemSeparationEstimate}"
+                                   Text="{Binding StemSeparationEstimateLabel}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+    </ScrollViewer>
+</UserControl>

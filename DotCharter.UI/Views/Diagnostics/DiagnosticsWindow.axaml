@@ -1,0 +1,580 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:converters="using:DotCharter.UI.Converters"
+        xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+        xmlns:vm="clr-namespace:DotCharter.UI.ViewModels.Diagnostics;assembly=DotCharter"
+        xmlns:locsvc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
+        x:Class="DotCharter.UI.Views.Diagnostics.DiagnosticsWindow"
+        x:DataType="vm:DiagnosticsViewModel"
+        Title="{localization:Loc Diagnostics_Title}"
+        Width="1060" Height="900" MinWidth="820" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackground}"
+        RequestedThemeVariant="Dark">
+    <!-- Session Health. Read-only: the channels the app can dump about itself,
+         plus a bundle export.
+
+         Rebuilt from `Editor Dialogs.dc.html`'s `health()` surface: grouped
+         CARDS each carrying a status pill, metrics in a two-column grid, a
+         stacked startup bar, a severity-filtered log, and a footer stating the
+         one thing worth looking at. It used to be six identical rectangles of
+         monospace dump — every fact was present and none of them stood out.
+
+         WHY IT IS A WINDOW AND NOT AN OVERLAY DIALOG: it is deliberately
+         NON-MODAL (DiagnosticsDialogService.ShowDiagnostics), so the dashboard
+         can be watched WHILE the app is used — which is the only way to catch a
+         frame-time or memory number moving. Being its own Window, it is outside
+         DialogContainerView and carries the dialog grammar's StyleInclude itself.
+
+         EVERY VALUE IS A REAL CHANNEL. Where the mockup draws something the app
+         cannot measure it is simply not drawn. Two cases: a memory GAUGE (there is no denominator) and an attribution for
+         what caused a stall. -->
+    <Window.Styles>
+        <StyleInclude Source="avares://DotCharter/Styles/Theme.axaml" />
+        <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles.axaml" />
+
+        <!-- A card's title. The metric pair below it is the SHARED Fire
+             vocabulary (TextBlock.FireStatLabel over SelectableTextBlock.Mono
+             Value) rather than anything local — a diagnostics figure is the same
+             mark as a stat figure anywhere else in the app. -->
+        <Style Selector="TextBlock.DiagCardTitle">
+            <Setter Property="FontFamily" Value="{DynamicResource FireFontDisplay}" />
+            <Setter Property="FontWeight" Value="{DynamicResource FireWeightDisplay}" />
+            <Setter Property="FontSize" Value="{DynamicResource FireSizeLg}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- The two-column metric grid. Declared as a class so every card keeps
+             one rhythm; the ColumnDefinitions stay inline (a shared
+             ColumnDefinitions instance cannot be attached to two Grids). -->
+        <Style Selector="Grid.DiagMetrics">
+            <Setter Property="ColumnSpacing" Value="{DynamicResource FireSpaceXlPlus}" />
+            <Setter Property="RowSpacing" Value="{DynamicResource FireSpaceLg}" />
+        </Style>
+
+        <Style Selector="SelectableTextBlock.DiagPath">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="PrefixCharacterEllipsis" />
+        </Style>
+
+        <!-- The log table. Four mono columns at the micro step, in a sunken well
+             — local because a log row is not a mark any other surface draws. -->
+        <Style Selector="Border.DiagLogWell">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource FireRadiusField}" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+        <Style Selector="Grid.DiagLogRow">
+            <Setter Property="ColumnSpacing" Value="{DynamicResource FireSpaceMd}" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <!-- The rows worth finding are washed, not just coloured: a red LEVEL
+             cell is four characters wide in a wall of mono. -->
+        <Style Selector="Grid.DiagLogRow.Warn">
+            <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        </Style>
+        <Style Selector="Grid.DiagLogRow.Error">
+            <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+        </Style>
+        <Style Selector="TextBlock.DiagLogCell, SelectableTextBlock.DiagLogCell">
+            <Setter Property="FontFamily" Value="{DynamicResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{DynamicResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.DiagLogCell.Time">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+        <Style Selector="TextBlock.DiagLogCell.Category">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+        <Style Selector="TextBlock.DiagLogCell.Level">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+        <Style Selector="TextBlock.DiagLogCell.Level.Warn">
+            <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+        </Style>
+        <Style Selector="TextBlock.DiagLogCell.Level.Error">
+            <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+        </Style>
+
+        <!-- One segment of the startup bar. Widths come from the view model's
+             star weights, assigned in code-behind: Grid.ColumnDefinitions is a
+             plain CLR property and cannot be bound. -->
+        <Style Selector="Border.DiagPhase">
+            <Setter Property="Height" Value="{DynamicResource FireTrackHeight}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource FireRadiusMicro}" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+        </Style>
+    </Window.Styles>
+
+    <!-- RootScaler: the global UI-scale (accessibility) as a real
+         LayoutTransform, applied in code-behind through
+         Views/Shell/WindowUiScale — identity (1.0) is a no-op. FlowDirection
+         follows the active language so an RTL pack mirrors this window with
+         the shell instead of leaving it the only surface the wrong way round.
+         Both were MainWindow-only until 0.61. -->
+    <LayoutTransformControl x:Name="RootScaler">
+    <Border FlowDirection="{Binding IsRightToLeft, Source={x:Static locsvc:LocalizationService.Instance}, Converter={x:Static converters:BoolConverters.ToFlowDirection}}"
+            Padding="{DynamicResource FirePadBody}" Background="{DynamicResource PanelBackground}">
+        <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+            <!-- ─── Head: the dialog lockup, with the two actions on the right ── -->
+            <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*,Auto">
+                <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                    <PathIcon Classes="DialogIcon" Data="{DynamicResource IconPulse}" />
+                </Border>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Diagnostics_Title}" />
+                    <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Diagnostics_Subtitle}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                            Spacing="{DynamicResource FireSpaceLg}">
+                    <Button Theme="{DynamicResource SubtleButton}" Classes="Subtle" Content="{localization:Loc Diagnostics_Refresh}"
+                            Command="{Binding RefreshCommand}" />
+                    <Button Theme="{DynamicResource PrimaryButton}" Classes="Primary" Content="{localization:Loc Diagnostics_ExportBundle}"
+                            Command="{Binding ExportBundleCommand}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ─── Body: three health cards left, startup / paths / log right ── -->
+            <Grid Grid.Row="1" ColumnDefinitions="430,*"
+                  ColumnSpacing="{DynamicResource FireSpaceXl}">
+
+                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+
+                        <!-- Audio engine -->
+                        <Border Theme="{DynamicResource DlgSectionBorder}" x:Name="AudioCard" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource FireSpaceRow}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="DiagCardTitle"
+                                               Text="{localization:Loc Diagnostics_Section_Audio}" />
+                                    <Border Grid.Column="1" Theme="{DynamicResource FireStatusPillBorder}" Classes="FireStatusPill"
+                                            Classes.Success="{Binding AudioCard.IsGood}"
+                                            Classes.Warn="{Binding AudioCard.IsWatch}"
+                                            Classes.Danger="{Binding AudioCard.IsBad}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                    Spacing="{DynamicResource FireSpaceSm}">
+                                            <Border Theme="{DynamicResource FireDotBorder}" Classes="FireDot Small"
+                                                    Classes.Success="{Binding AudioCard.IsGood}"
+                                                    Classes.Warn="{Binding AudioCard.IsWatch}"
+                                                    Classes.Danger="{Binding AudioCard.IsBad}" />
+                                            <TextBlock Theme="{DynamicResource FireStatusText}" Classes="FireStatusText"
+                                                       Classes.Success="{Binding AudioCard.IsGood}"
+                                                       Classes.Warn="{Binding AudioCard.IsWatch}"
+                                                       Classes.Danger="{Binding AudioCard.IsBad}"
+                                                       Text="{Binding AudioCard.Status}" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                                <Grid Classes="DiagMetrics" ColumnDefinitions="*,*"
+                                      RowDefinitions="Auto,Auto,Auto">
+                                    <StackPanel Grid.Row="0" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Driver}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding AudioDriver}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Device}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding AudioDevice}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_SampleRate}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding AudioSampleRate}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_BufferFrames}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding AudioBuffer}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_OutputLatency}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding AudioOutputLatency}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_DeviceLost}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding AudioDeviceLost}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Rendering -->
+                        <Border Theme="{DynamicResource DlgSectionBorder}" x:Name="RenderCard" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource FireSpaceRow}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="DiagCardTitle"
+                                               Text="{localization:Loc Diagnostics_Section_Render}" />
+                                    <Border Grid.Column="1" Theme="{DynamicResource FireStatusPillBorder}" Classes="FireStatusPill"
+                                            Classes.Success="{Binding RenderCard.IsGood}"
+                                            Classes.Warn="{Binding RenderCard.IsWatch}"
+                                            Classes.Danger="{Binding RenderCard.IsBad}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                    Spacing="{DynamicResource FireSpaceSm}">
+                                            <Border Theme="{DynamicResource FireDotBorder}" Classes="FireDot Small"
+                                                    Classes.Success="{Binding RenderCard.IsGood}"
+                                                    Classes.Warn="{Binding RenderCard.IsWatch}"
+                                                    Classes.Danger="{Binding RenderCard.IsBad}" />
+                                            <TextBlock Theme="{DynamicResource FireStatusText}" Classes="FireStatusText"
+                                                       Classes.Success="{Binding RenderCard.IsGood}"
+                                                       Classes.Warn="{Binding RenderCard.IsWatch}"
+                                                       Classes.Danger="{Binding RenderCard.IsBad}"
+                                                       Text="{Binding RenderCard.Status}" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                                <Grid Classes="DiagMetrics" ColumnDefinitions="*,*"
+                                      RowDefinitions="Auto,Auto">
+                                    <StackPanel Grid.Row="0" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Timeline2D}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding Timeline2DSummary}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Preview3D}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding Preview3DSummary}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Worst2D}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding Timeline2DWorst}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Worst3D}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding Preview3DWorst}" />
+                                    </StackPanel>
+                                </Grid>
+                                <!-- The stall note is a STRIP, not a coloured
+                                     figure: colour is information and this card
+                                     already spends it on the pill. -->
+                                <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" Margin="{DynamicResource FirePadNone}"
+                                        IsVisible="{Binding HasRenderNote}">
+                                    <TextBlock Text="{Binding RenderNote}" />
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Runtime & memory -->
+                        <Border Theme="{DynamicResource DlgSectionBorder}" x:Name="RuntimeCard" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource FireSpaceRow}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="DiagCardTitle"
+                                               Text="{localization:Loc Diagnostics_Section_Runtime}" />
+                                    <Border Grid.Column="1" Theme="{DynamicResource FireStatusPillBorder}" Classes="FireStatusPill"
+                                            Classes.Success="{Binding RuntimeCard.IsGood}"
+                                            Classes.Warn="{Binding RuntimeCard.IsWatch}"
+                                            Classes.Danger="{Binding RuntimeCard.IsBad}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                    Spacing="{DynamicResource FireSpaceSm}">
+                                            <Border Theme="{DynamicResource FireDotBorder}" Classes="FireDot Small"
+                                                    Classes.Success="{Binding RuntimeCard.IsGood}"
+                                                    Classes.Warn="{Binding RuntimeCard.IsWatch}"
+                                                    Classes.Danger="{Binding RuntimeCard.IsBad}" />
+                                            <TextBlock Theme="{DynamicResource FireStatusText}" Classes="FireStatusText"
+                                                       Classes.Success="{Binding RuntimeCard.IsGood}"
+                                                       Classes.Warn="{Binding RuntimeCard.IsWatch}"
+                                                       Classes.Danger="{Binding RuntimeCard.IsBad}"
+                                                       Text="{Binding RuntimeCard.Status}" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                                <Grid Classes="DiagMetrics" ColumnDefinitions="*,*"
+                                      RowDefinitions="Auto,Auto,Auto,Auto">
+                                    <StackPanel Grid.Row="0" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_WorkingSet}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding WorkingSet}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_ManagedHeap}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding ManagedHeap}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Runtime}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding FrameworkVersion}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_AppVersion}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding AppVersion}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Gc}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding GcCounts}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="1">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Processors}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding Processors}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2">
+                                        <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc Diagnostics_Metric_Os}" />
+                                        <SelectableTextBlock Classes="Mono Value" Text="{Binding OperatingSystem}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Paths: label over value like every other card. A path is
+                             trimmed from the FRONT, because its end (the folder or the
+                             file) is what tells the three apart; the whole path is the
+                             tooltip and stays selectable. It lived in the right column
+                             until 2026-09-24, where it wrapped each path over three
+                             lines and ran under the footer at the opening size. -->
+                        <Border Theme="{DynamicResource DlgSectionBorder}" x:Name="PathsCard" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource FireSpaceLg}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Classes="DiagCardTitle"
+                                               Text="{localization:Loc Diagnostics_Section_Paths}" />
+                                    <Button Grid.Column="1" Classes="DlgLink" Cursor="Hand"
+                                            Content="{localization:Loc Diagnostics_OpenLogFolder}"
+                                            Command="{Binding OpenLogFolderCommand}" />
+                                </Grid>
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_ConfigRoot}" />
+                                    <SelectableTextBlock Classes="Mono DiagPath" Text="{Binding ConfigPath}"
+                                                         ToolTip.Tip="{Binding ConfigPath}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_LogRoot}" />
+                                    <SelectableTextBlock Classes="Mono DiagPath" Text="{Binding LogPath}"
+                                                         ToolTip.Tip="{Binding LogPath}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_ActiveLog}" />
+                                    <SelectableTextBlock Classes="Mono DiagPath" Text="{Binding ActiveLogFile}"
+                                                         ToolTip.Tip="{Binding ActiveLogFile}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Clipped: a card that outgrows the column is cut at the body's
+                     edge instead of being drawn over the footer. -->
+                <Grid Grid.Column="1" RowDefinitions="Auto,*" ClipToBounds="True">
+
+                    <!-- Startup -->
+                    <Border Theme="{DynamicResource DlgSectionBorder}" Grid.Row="0" x:Name="StartupCard" Classes="DlgSection">
+                        <StackPanel Spacing="{DynamicResource FireSpaceRow}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Classes="DiagCardTitle"
+                                           Text="{localization:Loc Diagnostics_Section_Startup}" />
+                                <Border Grid.Column="1" Theme="{DynamicResource FireStatusPillBorder}" Classes="FireStatusPill"
+                                        Classes.Success="{Binding StartupCard.IsGood}"
+                                        Classes.Warn="{Binding StartupCard.IsWatch}"
+                                        Classes.Danger="{Binding StartupCard.IsBad}">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                Spacing="{DynamicResource FireSpaceSm}">
+                                        <Border Theme="{DynamicResource FireDotBorder}" Classes="FireDot Small"
+                                                Classes.Success="{Binding StartupCard.IsGood}"
+                                                Classes.Warn="{Binding StartupCard.IsWatch}"
+                                                Classes.Danger="{Binding StartupCard.IsBad}" />
+                                        <TextBlock Theme="{DynamicResource FireStatusText}" Classes="FireStatusText"
+                                                   Classes.Success="{Binding StartupCard.IsGood}"
+                                                   Classes.Warn="{Binding StartupCard.IsWatch}"
+                                                   Classes.Danger="{Binding StartupCard.IsBad}"
+                                                   Text="{Binding StartupCard.Status}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <Grid Classes="DiagMetrics" ColumnDefinitions="*,*"
+                                  RowDefinitions="Auto,Auto,Auto">
+                                <StackPanel Grid.Row="0" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_Di}" />
+                                    <SelectableTextBlock Classes="Mono Value" Text="{Binding StartupDi}" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1">
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_Services}" />
+                                    <SelectableTextBlock Classes="Mono Value" Text="{Binding StartupServices}" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_ViewModels}" />
+                                    <SelectableTextBlock Classes="Mono Value" Text="{Binding StartupViewModels}" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1">
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_Keybinds}" />
+                                    <SelectableTextBlock Classes="Mono Value" Text="{Binding StartupKeybinds}" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_WindowCtor}" />
+                                    <SelectableTextBlock Classes="Mono Value" Text="{Binding StartupWindowCtor}" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1">
+                                    <TextBlock Theme="{DynamicResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc Diagnostics_Metric_Precompiled}" />
+                                    <SelectableTextBlock Classes="Mono Value" Text="{Binding StartupPrecompiled}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- The stacked bar. Its column widths are the phase
+                                 durations as star weights, assigned in
+                                 code-behind (Grid.ColumnDefinitions is a plain
+                                 CLR property and cannot be bound). -->
+                            <Grid x:Name="StartupBar" IsVisible="{Binding HasStartupData}"
+                                  ColumnDefinitions="*,*,*,*,*,*,*">
+                                <Border Grid.Column="0" Classes="DiagPhase"
+                                        Background="{DynamicResource FireAccentPale}" />
+                                <Border Grid.Column="1" Classes="DiagPhase"
+                                        Background="{DynamicResource FireAccentBright}" />
+                                <Border Grid.Column="2" Classes="DiagPhase"
+                                        Background="{DynamicResource FireAccent}" />
+                                <Border Grid.Column="3" Classes="DiagPhase"
+                                        Background="{DynamicResource FireAccentStrong}" />
+                                <Border Grid.Column="4" Classes="DiagPhase"
+                                        Background="{DynamicResource FireAccentDeep}" />
+                                <Border Grid.Column="5" Classes="DiagPhase"
+                                        Background="{DynamicResource FireAccentBar}" />
+                                <!-- Everything left of "interactive" the six named
+                                     phases do not account for. Quiet, but never
+                                     dropped: it is real time the user waited. -->
+                                <Border Grid.Column="6" Classes="DiagPhase"
+                                        Background="{DynamicResource FireSurfaceTrack}" />
+                            </Grid>
+
+                            <!-- …and the caveat that makes those numbers readable
+                                 at all. A phase from a run that is not ReadyToRun
+                                 is a JIT measurement; printing it without this is
+                                 how it gets diagnosed as a product regression. -->
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" Margin="{DynamicResource FirePadNone}"
+                                    IsVisible="{Binding HasStartupNote}">
+                                <TextBlock Text="{Binding StartupNote}" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Recent log, severity filtered -->
+                    <Border Theme="{DynamicResource DlgSectionBorder}" Grid.Row="1" x:Name="LogCard" Classes="DlgSection"
+                            Margin="{DynamicResource FirePadNone}">
+                        <Grid RowDefinitions="Auto,*" RowSpacing="{DynamicResource FireSpaceLg}">
+                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Classes="DiagCardTitle"
+                                           Text="{localization:Loc Diagnostics_Section_LogTail}" />
+                                <Border Grid.Column="1" x:Name="LogSeveritySwitch" Theme="{DynamicResource FireSegmentBorder}" Classes="FireSegment">
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="{DynamicResource FireSpaceXxs}">
+                                        <RadioButton Classes="FireSegmentItem" GroupName="DiagLogSeverity"
+                                                     Content="{localization:Loc Diagnostics_LogFilter_All}"
+                                                     IsChecked="{Binding LogFilterIndex, Mode=TwoWay,
+                                                                 Converter={x:Static converters:IntEqualsConverter.Instance},
+                                                                 ConverterParameter=0}" />
+                                        <RadioButton Classes="FireSegmentItem" GroupName="DiagLogSeverity"
+                                                     Content="{localization:Loc Diagnostics_LogFilter_Warn}"
+                                                     IsChecked="{Binding LogFilterIndex, Mode=TwoWay,
+                                                                 Converter={x:Static converters:IntEqualsConverter.Instance},
+                                                                 ConverterParameter=1}" />
+                                        <RadioButton Classes="FireSegmentItem" GroupName="DiagLogSeverity"
+                                                     Content="{localization:Loc Diagnostics_LogFilter_Error}"
+                                                     IsChecked="{Binding LogFilterIndex, Mode=TwoWay,
+                                                                 Converter={x:Static converters:IntEqualsConverter.Instance},
+                                                                 ConverterParameter=2}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <Border Grid.Row="1" Classes="DiagLogWell">
+                                <Grid>
+                                    <!-- An empty answer is a real state: the
+                                         filter genuinely matched nothing, or no
+                                         log file could be read. Saying so beats
+                                         a blank well. -->
+                                    <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding !HasLogEntries}">
+                                        <TextBlock Text="{localization:Loc Diagnostics_LogTailEmpty}" />
+                                    </Border>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  IsVisible="{Binding HasLogEntries}">
+                                        <ItemsControl ItemsSource="{Binding LogEntries}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:DiagnosticsLogEntry">
+                                                    <!-- Meta over message: the log sits in the narrow
+                                                         right column, where four side-by-side columns left
+                                                         the message about 70 px and wrapped it a word a
+                                                         line (seen live, 2026-09-24). -->
+                                                    <Grid Classes="DiagLogRow"
+                                                          Classes.Warn="{Binding IsWarning}"
+                                                          Classes.Error="{Binding IsError}"
+                                                          RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*">
+                                                        <TextBlock Grid.Column="0" Classes="DiagLogCell Time"
+                                                                   Text="{Binding Time}" />
+                                                        <TextBlock Grid.Column="1" Classes="DiagLogCell Level"
+                                                                   Classes.Warn="{Binding IsWarning}"
+                                                                   Classes.Error="{Binding IsError}"
+                                                                   Text="{Binding Level}" />
+                                                        <TextBlock Grid.Column="2" Classes="DiagLogCell Category"
+                                                                   Text="{Binding Category}" />
+                                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Classes="DiagLogCell"
+                                                                   x:Name="LogMessage" Text="{Binding Message}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- ─── Footer: the ONE thing worth looking at ───────────────────── -->
+            <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{DynamicResource FireSpaceXl}">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                Spacing="{DynamicResource FireSpaceLg}">
+                        <Border Theme="{DynamicResource FireDotBorder}" Classes="FireDot Small"
+                                Classes.Success="{Binding Headline.IsGood}"
+                                Classes.Warn="{Binding Headline.IsWatch}"
+                                Classes.Danger="{Binding Headline.IsBad}" />
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" x:Name="HeadlineFinding" Classes="DlgBody" MaxWidth="620"
+                                   VerticalAlignment="Center" Text="{Binding Headline.Status}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                Spacing="{DynamicResource FireSpaceMd}">
+                        <TextBlock Theme="{DynamicResource DialogContextText}" x:Name="UptimeReadout" Classes="DialogContext"
+                                   Margin="{DynamicResource FirePadNone}" VerticalAlignment="Center"
+                                   Text="{Binding Uptime}" />
+                        <TextBlock Theme="{DynamicResource DialogContextText}" Classes="DialogContext" Margin="{DynamicResource FirePadNone}"
+                                   VerticalAlignment="Center"
+                                   Text="{localization:Loc Diagnostics_ReadOnly}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Export result. Reads as a notice strip, not as a second title
+                 bar. The tint is deliberately NEUTRAL: ExportStatus carries the
+                 FAILURE message too, so a green one would lie half the time. -->
+            <Border Theme="{DynamicResource DlgStripBorder}" Grid.Row="3" Classes="DlgStrip" Margin="{DynamicResource FireGapTopMd}"
+                    IsVisible="{Binding HasExportStatus}">
+                <SelectableTextBlock Text="{Binding ExportStatus}" />
+            </Border>
+        </Grid>
+    </Border>
+    </LayoutTransformControl>
+</Window>

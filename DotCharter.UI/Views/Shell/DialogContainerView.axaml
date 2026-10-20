@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:dialogs="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Shell.DialogContainerView"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- Theme.axaml is NOT included here: it is included once at Application
+         scope (App.axaml); a second include used to re-instantiate the whole
+         1.8k-line style set just for this subtree.
+
+         DialogStyles.axaml IS included here, and here ONLY — it is the shared
+         dialog grammar (scrim / card / head / row / section / state / foot)
+         and every overlay dialog is a child of DialogHost, so one instance
+         styles all ~30 of them. Do not copy this include into the individual
+         dialog views. The one dialog hosted elsewhere carries its own and says
+         why: DiagnosticsWindow (a separate, non-modal top-level Window). -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles.axaml" />
+    </UserControl.Styles>
+
+    <Panel x:Name="DialogPanel">
+        <!-- All legacy dialog views except Message are materialized lazily by
+             the code-behind on the first IsOpen=true of their view model —
+             every dialog is invisible at startup, and eagerly inflating the
+             ~18 overlay views was a measurable chunk of MainWindow
+             construction. The code-behind also adds the rewrite's
+             Views/Shell/DialogHost (the dialogs on IDialogs) just below this
+             message view. Lazily created views go in BELOW that host, so the
+             order bottom to top is: legacy dialogs, hosted dialogs, the
+             generic message dialog (it must be able to surface above any other
+             open dialog, and it stays eager so very early errors can always be
+             shown). -->
+        <dialogs:MessageDialogView DataContext="{Binding Dialogs.Message}" />
+    </Panel>
+</UserControl>

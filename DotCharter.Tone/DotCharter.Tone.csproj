@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        The tone rig and the audio host, split out of DotCharter.Services so a
+        standalone rig (DotCharter.RigLab) can ship without the charting stack:
+        no stem separation, no note detection, no psarc, no export. The types
+        keep their DotCharter.Services.* namespaces, so moving them changed
+        project references and nothing else. See AGENTS.md.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Tone</RootNamespace>
+        <AssemblyName>DotCharter.Tone</AssemblyName>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj" />
+        <ProjectReference Include="..\DotCharter.Localization\DotCharter.Localization.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp\JuceSharp.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp.AudioIo\JuceSharp.AudioIo.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp.Dsp\JuceSharp.Dsp.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The AI tone designer's Claude provider (Ai/ClaudeToneModel). The
+             other providers (OpenAI-compatible, the Claude Code and Codex CLIs)
+             need nothing beyond HttpClient and a child process. -->
+        <PackageReference Include="Anthropic" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <!-- DPAPI (CurrentUser) encryption of the persisted TONE3000 session. -->
+        <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Serilog.Sinks.Async" />
+        <PackageReference Include="Serilog.Sinks.Console" />
+        <PackageReference Include="Serilog.Sinks.File" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The AI tone matcher (Services/Ai/Match) reads the internal
+             DcRigTargetCatalog; it lived in the same assembly until the split. -->
+        <InternalsVisibleTo Include="DotCharter.Services" />
+        <InternalsVisibleTo Include="DotCharter.RigLab" />
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+    </ItemGroup>
+    <!-- Optional plugins (Directory.Build.props): every project at the top of a git-ignored
+         plugins/<name>/ folder, or one level below it (its tests), sees the internals. -->
+    <ItemGroup Condition="'$(DotCharterPlugins)' != 'false'">
+        <DotCharterPluginInternalsProject Include="..\plugins\*\*.csproj;..\plugins\*\*\*.csproj" />
+        <InternalsVisibleTo Include="@(DotCharterPluginInternalsProject->'%(Filename)')" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- RS gear catalogue snapshot (UnitType/Min/Max/Default per knob) for
+             in-game-tone conversion. Verbatim copy of
+             Rocksmith2014.NET/samples/DLCBuilder.Domain/Tones/tone_gear_data.json. -->
+        <EmbeddedResource Include="Audio\Dsp\Tones\tone_gear_data.json" />
+        <!-- Character overrides (amp voicing, cab model, od-vs-distortion,
+             enum/static pins) for the RS tone converter. -->
+        <EmbeddedResource Include="Audio\Dsp\RsToneConversion\rs_gear_overrides.json" />
+    </ItemGroup>
+</Project>

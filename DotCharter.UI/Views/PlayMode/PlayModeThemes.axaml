@@ -1,0 +1,182 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The Play Mode screens' ControlThemes (HeaderRule, GlassPanel, the stat
+         tiles and the type families). A RESOURCE dictionary, not a Styles file,
+         because a theme is only resources: every view that wears one merges
+         this file into its own Resources, so a `{StaticResource EyebrowText}`
+         resolves while THAT view's XAML loads — a lifted screen view (#294)
+         is loaded on its own, outside PlayModeView's resource scope. The
+         selector rules that go with them (Button.PlayMenu, Button.MenuTile, the
+         Results columns) stay in PlayModeStyles.axaml, included ONCE by
+         PlayModeView, and reach the lifted views through the style cascade. -->
+
+    <!-- ══════════════════════════════════════════════════════════════
+         THE FAMILIES ARE CONTROLTHEMES (#428). A `Border.X` / `TextBlock.X`
+         rule in PlayModeStyles.axaml was attached to EVERY Border and TextBlock PlayModeView
+         hosts (1,311 and 1,024 of them, prewarmed), worn or not: ~22,000
+         value frames. A theme's nested `^.X` rules attach only to the
+         controls that WEAR it, so a tile wears both
+         `Theme="{StaticResource PlayStatTileBorder}" Classes="PlayStatTile Hero"`.
+         Two consequences of the move, both checked control by control
+         against the old look (`EffectiveValueDump`):
+           • a theme setter ranks BELOW every style, where the old view-scoped
+             style ranked above the app's; nothing else styles these
+             properties on these controls today;
+           • a control has ONE theme, so the figure families are BASED ON
+             `MonoText`: its rule is gated on `.Mono`, and the family's own
+             rule comes after (and so beats) it, as the old style beat the
+             theme;
+           • `StatTile` and `TopLight` were also other grammars' classes
+             (the Inspector's tiles, ShellStyles' hairline), so here they are
+             `PlayStatTile` and `PlayTopLightEdge`.
+         `UI/StyleIncludeScopeTests` fails a `Border.X` / `TextBlock.X` /
+         `Grid.X` / `StackPanel.X` rule back in PlayModeStyles.axaml.
+         ══════════════════════════════════════════════════════════════ -->
+
+    <ControlTheme x:Key="HeaderRuleBorder" TargetType="Border">
+        <!-- Screen-header accent rule (0.16 visual pass): the short glowing
+             underline under every full-screen / overlay title — the shared
+             "game UI" header treatment. -->
+        <Style Selector="^.HeaderRule">
+            <Setter Property="Height" Value="3" />
+            <Setter Property="Width" Value="72" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}" />
+            <Setter Property="Background" Value="{DynamicResource HeaderAccentUnderline}" />
+            <Setter Property="Margin" Value="{StaticResource GapTopXs}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="GlassPanelBorder" TargetType="Border">
+        <!-- The big surface: a screen's main content slab. -->
+        <Style Selector="^.GlassPanel">
+            <Setter Property="Background" Value="{DynamicResource PlayPanelFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}" />
+            <Setter Property="Padding" Value="{StaticResource PaddingCardLg}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="PlayStatTileBorder" TargetType="Border">
+        <!-- One measured figure. -->
+        <Style Selector="^.PlayStatTile">
+            <Setter Property="Background" Value="{DynamicResource PlayTileFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+            <Setter Property="Padding" Value="{StaticResource PaddingCardLg}" />
+        </Style>
+        <!-- The ONE figure a screen is about — accent-tinted (R4: colour is
+             information, so exactly one tile per screen may claim it). -->
+        <Style Selector="^.PlayStatTile.Hero">
+            <Setter Property="Background" Value="{DynamicResource PlayHeroFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentFaint}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="PlayTopLightEdgeBorder" TargetType="Border">
+        <!-- The lit top edge (R3: depth is edges). Sits INSIDE a panel/tile,
+             hit-test-free, one element. -->
+        <Style Selector="^.PlayTopLightEdge">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Background" Value="{DynamicResource PlayTopLight}" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="StatLabelText" TargetType="TextBlock">
+        <Style Selector="^.StatLabel">
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="StatValueText" TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
+        <Style Selector="^.StatValue">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeLg}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         Content-screen chrome (0.35 menu redesign). ONE vocabulary for
+         every non-gameplay Play Mode screen (Menu, Song Select, Results)
+         so they read as one product: an eyebrow + title + accent rule header block, panels
+         lit from above (pedalboard-visual-language.md (retired v0.43; see docs/agents/ui/pedalboard.md)
+         R1/R3 — the light is in the PlayPanelFill/PlayTileFill gradients
+         and the PlayTopLight hairline, not in a drop shadow), and stat
+         tiles whose FIGURE is the dominant element instead of a
+         label:value row.
+         All metrics come from the Space*/Gap*/Padding*/FontSize*/Radius*
+         token scales — no literal sizes.
+         ══════════════════════════════════════════════════════════════ -->
+    <ControlTheme x:Key="EyebrowText" TargetType="TextBlock">
+        <!-- Small caps-ish kicker above a screen or card title. -->
+        <Style Selector="^.Eyebrow">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMicro}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="ScreenSubtitleText" TargetType="TextBlock">
+        <Style Selector="^.ScreenSubtitle">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="SectionTitleText" TargetType="TextBlock">
+        <!-- Section heading INSIDE a screen (above a card or a card group). -->
+        <Style Selector="^.SectionTitle">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeXl}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <!-- A title names its own colour (#688). Inherited, it takes the
+                 HOST WINDOW's Fluent foreground: white under MainWindow's Dark
+                 variant, black under a Default/Light one. -->
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="ScreenTitleText" TargetType="TextBlock">
+        <Style Selector="^.ScreenTitle">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeTitle}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="StatFigureText" TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
+        <!-- LineHeight is NOT decoration here: these figures are also
+             `Classes="… Mono"`, and `^.Mono` (MonoText, Styles/Typography.axaml)
+             pins LineHeight to 16 for 12 px value text. Without an explicit
+             line box a 28 px figure is clipped to a middle band — every number
+             on this screen rendered as a sliver. Keep the two in step. -->
+        <Style Selector="^.StatFigure">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeHero}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="LineHeight" Value="{StaticResource LineHeightHero}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="StatUnitText" TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
+        <Style Selector="^.StatUnit">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="GradeStampFigureText" TargetType="TextBlock">
+        <!-- The crest. 44 → 66 px: still under the countdown numeral, and the
+             stamp's padding is proportional so the badge grows with it. -->
+        <Style Selector="^.GradeStampFigure">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeStamp}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+    </ControlTheme>
+</ResourceDictionary>

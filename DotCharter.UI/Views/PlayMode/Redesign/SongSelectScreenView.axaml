@@ -1,0 +1,443 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:library="using:DotCharter.Presentation.Contracts.Library"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:appControls="using:DotCharter.UI.Controls"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             xmlns:screens="using:DotCharter.UI.Views.PlayMode.Screens"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:input="clr-namespace:DotCharter.UI.Input;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.SongSelectScreenView"
+             x:DataType="contracts:ISongSelectScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Song Select: the Library's list in the play presentation (wave 5).
+
+        It speaks the Library's language on purpose, so a player who has used one
+        can read the other: the column header is the ONE sort control and carries
+        the column's funnel, artist headings while the list is in artist order,
+        a column prints only what differs from the common case (the paths a song
+        has, an unusual tuning), "—" for an unknown value. What it adds is the
+        player's: your record beside each song, the tuning check and your best
+        run in the rail, and Play where the Library has Load.
+
+        Three regions: the HEADER (back, title and count, search, library folder),
+        the TABLE, and the RAIL for the one song you picked.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Shell/ShellStyles.axaml" />
+        <StyleInclude Source="avares://DotCharter/Styles/SongListHeaderStyles.axaml" />
+        <!-- Same heading and sub-line as the Library's rows. -->
+        <Style Selector="TextBlock.SongSelectGroupHeader">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.SongSelectRowSub">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <!-- The Library's column header: caption + sort glyph as ONE button, the funnel after it. -->
+        <DataTemplate x:Key="SongSelectColumnHeader" x:DataType="library:ILibraryColumn">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                <Button Classes="ColumnSort" Command="{Binding SortCommand}" IsVisible="{Binding IsSortable}"
+                        ToolTip.Tip="{localization:Loc SongBrowser_Sort_ByColumn_Tip}"
+                        AutomationProperties.Name="{Binding Title}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Theme="{StaticResource FireColumnHeadText}" Classes="FireColumnHead Lead" Text="{Binding Title}" />
+                        <TextBlock Theme="{StaticResource FireColumnHeadText}" Classes="FireColumnHead Lead Glyph" Text="{Binding SortGlyph}" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Theme="{StaticResource FireColumnHeadText}" Classes="FireColumnHead Lead" VerticalAlignment="Center"
+                           IsVisible="{Binding !IsSortable}" Text="{Binding Title}" />
+                <Button Classes="FacetFunnel" Classes.on="{Binding IsFiltered}" IsVisible="{Binding HasFilter}" Margin="4,0,0,0"
+                        ToolTip.Tip="{localization:Loc SongBrowser_Facet_Open_Tip}"
+                        AutomationProperties.Name="{Binding Title}">
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedLeft" Opening="OnFilterOpening">
+                            <controls:FirePopover Padding="{StaticResource FirePadPopoverBody}" MinWidth="220" Icon="{DynamicResource IconFilter}" Title="{Binding Title}">
+                                <ItemsControl ItemsSource="{Binding FilterOptions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="library:ILibraryFilterOption">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceLg}">
+                                                <CheckBox Grid.Column="0" Content="{Binding Label}"
+                                                          AutomationProperties.Name="{Binding Label}"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                                <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Center"
+                                                           Text="{Binding CountLabel}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <controls:FirePopover.Footer>
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" HorizontalAlignment="Left"
+                                            Command="{Binding ClearFilterCommand}"
+                                            Content="{localization:Loc SongBrowser_Facet_Clear}" />
+                                </controls:FirePopover.Footer>
+                            </controls:FirePopover>
+                        </Flyout>
+                    </Button.Flyout>
+                    <PathIcon Data="{DynamicResource IconFilter}" Width="11" Height="11" />
+                </Button>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+        <Border Theme="{StaticResource FireWashBorder}" Classes="FireWash UpperLeft" Margin="{StaticResource FireWashBleed}" />
+
+        <Grid x:Name="SongSelectRedesignRoot" RowDefinitions="Auto,Auto,*">
+
+            <!-- ══ HEADER: back · title and count · search · folder ══════════ -->
+            <Grid x:Name="SongSelectRedesignTopBar" Grid.Row="0" Margin="28,20,28,16"
+                  ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXl}">
+                <Button Grid.Column="0" x:Name="SongSelectRedesignBack" Theme="{StaticResource FireBackButton}" Classes="FireBack" VerticalAlignment="Center"
+                        Command="{Binding BackCommand}"
+                        AutomationProperties.Name="{localization:Loc PlayMode_Back}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceMd}">
+                        <PathIcon Data="{DynamicResource IconChevronLeft}" Width="11" Height="11"
+                                  Foreground="{DynamicResource FireTextSecondary}" VerticalAlignment="Center" />
+                        <TextBlock Text="{localization:Loc PlayMode_Back}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+                    <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" TextTrimming="CharacterEllipsis"
+                               Text="{localization:Loc PlayMode_SongSelect_Title}" />
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceMd}"
+                                IsVisible="{Binding !ShowFirstRun}">
+                        <TextBlock x:Name="SongSelectRedesignCount" Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" Text="{Binding CountText}" />
+                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Center"
+                                   IsVisible="{Binding IsLoading}" Text="{Binding LoadingText}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- No sort control here: the column header sorts. -->
+                <Border Grid.Column="2" Theme="{StaticResource FireFieldBorder}" Classes="FireField" Width="360" VerticalAlignment="Center"
+                        IsVisible="{Binding !ShowFirstRun}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+                        <PathIcon Grid.Column="0" Width="13" Height="13" VerticalAlignment="Center"
+                                  Foreground="{DynamicResource FireTextDim}" Data="{DynamicResource ShellIconSearch}" />
+                        <TextBox Grid.Column="1" x:Name="SongSelectRedesignSearchBox" Classes="FireFieldInput"
+                                 Text="{Binding SearchText, Mode=TwoWay}"
+                                 input:SearchBoxKeys.ClearOnEscape="True"
+                                 PlaceholderText="{localization:Loc PlayMode_SongSelect_Search}"
+                                 AutomationProperties.Name="{localization:Loc PlayMode_SongSelect_Search}" />
+                        <Button Grid.Column="2" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" VerticalAlignment="Center"
+                                IsVisible="{Binding HasSearchText}"
+                                Command="{Binding ClearSearchCommand}"
+                                ToolTip.Tip="{localization:Loc PlayMode_SongSelect_ClearSearch}"
+                                AutomationProperties.Name="{localization:Loc PlayMode_SongSelect_ClearSearch}">
+                            <PathIcon Data="{DynamicResource IconClose}" Width="9" Height="9" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <Button Grid.Column="3" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" VerticalAlignment="Center"
+                        IsVisible="{Binding !ShowFirstRun}"
+                        Command="{Binding ChooseLibraryFolderCommand}"
+                        Content="{localization:Loc PlayMode_Filter_LibraryFolder}" />
+            </Grid>
+
+            <!-- ══ What narrows the list, each removable ════════════════════ -->
+            <WrapPanel Grid.Row="1" x:Name="SongSelectRedesignChips" Orientation="Horizontal" Margin="28,0,28,12"
+                       IsVisible="{Binding HasActiveFilters}">
+                <!-- Top-aligned, so when the chips wrap the caption and Clear sit on the first line. -->
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Top" Margin="0,12,10,4"
+                           Text="{localization:Loc PlayMode_SongSelect_FiltersEyebrow}" />
+                <ItemsControl VerticalAlignment="Top" ItemsSource="{Binding ActiveFilters}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="contracts:IFilterChip">
+                            <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Margin="0,0,7,4" MaxWidth="340" Command="{Binding RemoveCommand}"
+                                    ToolTip.Tip="{localization:Loc PlayMode_SongSelect_RemoveFilter}"
+                                    AutomationProperties.Name="{Binding Label}">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+                                    <TextBlock Grid.Column="0" Theme="{StaticResource FireMonoText}" Classes="FireMono Accent" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding Label}" />
+                                    <PathIcon Grid.Column="1" Data="{DynamicResource IconClose}" Width="9" Height="9" VerticalAlignment="Center"
+                                              Foreground="{DynamicResource FireTextMuted}" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" Margin="0,12,0,4" VerticalAlignment="Top" Command="{Binding ClearFiltersCommand}"
+                        Content="{localization:Loc PlayMode_SongSelect_ClearFilters}" />
+            </WrapPanel>
+
+            <!-- ══ BODY: the table, then the song you picked ════════════════ -->
+            <Grid Grid.Row="2" x:Name="SongSelectRedesignBody" ColumnDefinitions="*,18,340" Margin="28,0,28,20"
+                  IsVisible="{Binding !ShowFirstRun}">
+                <Border Grid.Column="0" x:Name="SongSelectRedesignTable" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel" Padding="{StaticResource FirePadNone}"
+                        ClipToBounds="True">
+                    <Grid RowDefinitions="Auto,*">
+                        <!-- The header and the row template lay out through ONE SongTableLayout at the
+                             same inset (#212): the song column keeps its floor, the fixed columns give
+                             way in the layout's order, and a caption starts where its values start. -->
+                        <Border Grid.Row="0" x:Name="SongSelectRedesignColumnHeader" Background="{DynamicResource FireSurfaceSunken}"
+                                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1" Padding="18,11"
+                                IsVisible="{Binding HasRows}">
+                            <appControls:SongTablePanel Columns="{x:Static appControls:SongTableLayout.SongSelect}">
+                                <ContentControl appControls:SongTablePanel.Column="1" Content="{Binding SongColumn}" ContentTemplate="{StaticResource SongSelectColumnHeader}" />
+                                <ContentControl appControls:SongTablePanel.Column="2" Content="{Binding PathsColumn}" ContentTemplate="{StaticResource SongSelectColumnHeader}" />
+                                <ContentControl appControls:SongTablePanel.Column="3" Content="{Binding TuningColumn}" ContentTemplate="{StaticResource SongSelectColumnHeader}" />
+                                <ContentControl appControls:SongTablePanel.Column="4" Content="{Binding LengthColumn}" ContentTemplate="{StaticResource SongSelectColumnHeader}" />
+                                <ContentControl appControls:SongTablePanel.Column="5" Content="{Binding DifficultyColumn}" ContentTemplate="{StaticResource SongSelectColumnHeader}" />
+                                <ContentControl appControls:SongTablePanel.Column="6" Content="{Binding RecordColumn}" ContentTemplate="{StaticResource SongSelectColumnHeader}" />
+                            </appControls:SongTablePanel>
+                        </Border>
+
+                        <ListBox Grid.Row="1" x:Name="SongSelectRedesignList" Classes="FireList"
+                                 IsVisible="{Binding HasRows}"
+                                 ItemsSource="{Binding Rows}"
+                                 SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                                 ScrollViewer.VerticalScrollBarVisibility="Visible"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 DoubleTapped="OnRowsDoubleTapped"
+                                 AutomationProperties.Name="{localization:Loc PlayMode_SongSelect_Title}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:ISongRow">
+                                    <StackPanel>
+                                        <!-- The artist heading is part of the first row of its run: it scrolls with the list. -->
+                                        <Grid ColumnDefinitions="Auto,*" Margin="18,12,18,4" ColumnSpacing="{StaticResource FireSpaceLg}"
+                                              IsVisible="{Binding HasGroupHeader}">
+                                            <TextBlock Grid.Column="0" Classes="SongSelectGroupHeader" VerticalAlignment="Center" MaxWidth="640"
+                                                       TextTrimming="CharacterEllipsis" Text="{Binding GroupHeader}" />
+                                            <Border Grid.Column="1" Theme="{StaticResource FireRuleBorder}" Classes="FireRule" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow" Padding="18,10" ClipToBounds="True">
+                                            <appControls:SongTablePanel Columns="{x:Static appControls:SongTableLayout.SongSelect}">
+                                                <Border appControls:SongTablePanel.Column="0" Width="32" Height="32" VerticalAlignment="Center" ClipToBounds="True"
+                                                        CornerRadius="{StaticResource FireRadiusTag}" Background="{DynamicResource FireSurfaceRaised}">
+                                                    <Panel>
+                                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                   Text="{Binding Monogram}" />
+                                                        <Image AutomationProperties.AccessibilityView="Raw" Source="{Binding Cover}" Stretch="UniformToFill" />
+                                                    </Panel>
+                                                </Border>
+                                                <StackPanel appControls:SongTablePanel.Column="1" VerticalAlignment="Center" Spacing="{StaticResource FireSpaceXxs}">
+                                                    <TextBlock x:Name="SongSelectRowTitle" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding Title}" />
+                                                    <TextBlock Classes="SongSelectRowSub" TextTrimming="CharacterEllipsis" Text="{Binding Subtitle}" />
+                                                </StackPanel>
+                                                <!-- Only the paths the song HAS. -->
+                                                <fire:FireChipStrip appControls:SongTablePanel.Column="2" x:Name="SongSelectRowPaths" VerticalAlignment="Center" Initials="{Binding Paths}"
+                                                                    ToolTip.Tip="{Binding PathsSummary}"
+                                                                    AutomationProperties.Name="{Binding PathsSummary}" />
+                                                <!-- Only a tuning that is not E Standard without a capo, amber: it means work first. -->
+                                                <TextBlock appControls:SongTablePanel.Column="3" x:Name="SongSelectRowTuning" Theme="{StaticResource FireMonoText}" Classes="FireMono" Classes.Warn="{Binding TuningNeedsAttention}"
+                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding TuningNotes}" Text="{Binding TuningLabel}" />
+                                                <!-- The numbers and the record start where their captions start (#212). -->
+                                                <TextBlock appControls:SongTablePanel.Column="4" x:Name="SongSelectRowLength" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center"
+                                                           Text="{Binding LengthText}" />
+                                                <TextBlock appControls:SongTablePanel.Column="5" x:Name="SongSelectRowDifficulty" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center"
+                                                           ToolTip.Tip="{localization:Loc PlayMode_Difficulty_Tip}"
+                                                           Text="{Binding DifficultyLabel}" />
+                                                <!-- Your record: nothing at all until you have one. The panel owns the cell's
+                                                     IsVisible, so the record's own lives one level in. -->
+                                                <Panel appControls:SongTablePanel.Column="6">
+                                                    <StackPanel x:Name="SongSelectRowRecord" Orientation="Horizontal" HorizontalAlignment="Left"
+                                                                VerticalAlignment="Center" Spacing="{StaticResource FireSpaceMd}"
+                                                                IsVisible="{Binding HasBest}">
+                                                        <!-- Accuracy first, so it starts under the caption and the grades
+                                                             line up down the list; a full combo is the tail. -->
+                                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center"
+                                                                   Text="{Binding BestAccuracyLabel}" />
+                                                        <Border Theme="{StaticResource FireGradeBadgeBorder}" Classes="FireGradeBadge Row">
+                                                            <TextBlock Text="{Binding BestGradeLabel}" />
+                                                        </Border>
+                                                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Success" VerticalAlignment="Center" IsVisible="{Binding IsFullCombo}"
+                                                                ToolTip.Tip="{localization:Loc PlayMode_FullCombo_Tip}">
+                                                            <TextBlock Text="{localization:Loc PlayMode_FullCombo_Badge}" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Panel>
+                                            </appControls:SongTablePanel>
+                                        </Border>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Grid.Row="0" Grid.RowSpan="2" x:Name="SongSelectRedesignNoMatchPanel" Classes="FireEmptyState"
+                                    MaxWidth="460" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    IsVisible="{Binding ShowNoMatch}">
+                            <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker" Text="{localization:Loc PlayMode_SongSelect_NoMatchTitle}" />
+                            <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody" Text="{localization:Loc PlayMode_SongSelect_NoMatchBody}" />
+                            <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost" HorizontalAlignment="Center" Command="{Binding ClearFiltersCommand}"
+                                    Content="{localization:Loc Library_ClearSearchAndFilters}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ══ RAIL: the song you picked ════════════════════════════ -->
+                <Border Grid.Column="2" x:Name="SongSelectRedesignDetailRail" Theme="{StaticResource FireContextRailBorder}" Classes="FireContextRail"
+                        Padding="{StaticResource FirePadCard}">
+                    <Grid RowDefinitions="*,Auto">
+                        <!-- The body scrolls: the pick prompt or the song's details, then the
+                             setlist panel (#646). The panel sits UNDER the details rather than
+                             pinned to the foot as in the app's rail, because here the record must
+                             be whole at rest (TheRailBodyScrolls_AndTheBestRunPanelIsWholeAtRest)
+                             and a pinned panel took that room at 1600 × 900. -->
+                        <ScrollViewer x:Name="SongSelectRedesignRailScroll" Grid.Row="0"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                          <StackPanel x:Name="SongSelectRedesignRailStack" Spacing="{StaticResource FireSpaceXl}">
+                            <TextBlock Theme="{StaticResource FireBodyText}" Classes="FireBody Faint" TextWrapping="Wrap" IsVisible="{Binding !HasSelection}"
+                                       Text="{localization:Loc PlayMode_SongSelect_PickPrompt}" />
+
+                            <StackPanel x:Name="SongSelectRedesignDetailBody" Spacing="{StaticResource FireSpaceXl}"
+                                        IsVisible="{Binding HasSelection}">
+                                <!-- The cover beside the title, not above it: on a play screen the record
+                                     below matters more than the art, and a full-width cover pushed it
+                                     under the fold on a long title (the LongText capture). -->
+                                <Grid ColumnDefinitions="72,*" ColumnSpacing="{StaticResource FireSpaceLg}">
+                                    <Border Grid.Column="0" Width="72" Height="72" VerticalAlignment="Top" ClipToBounds="True"
+                                            CornerRadius="{StaticResource FireRadiusTag}" Background="{DynamicResource FireSurfaceRaised}">
+                                        <Panel>
+                                            <PathIcon Data="{DynamicResource IconMusicNote}" Width="22" Height="22" Foreground="{DynamicResource FireTextFaint}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Image AutomationProperties.AccessibilityView="Raw" Source="{Binding DetailCover}" Stretch="UniformToFill" />
+                                        </Panel>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+                                        <TextBlock Theme="{StaticResource FireTitleText}" Classes="FireTitle" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding SelectedRow.Title}" />
+                                        <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding SelectedRow.Artist}" />
+                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding SelectedRow.Album}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- The tuning this song expects, and whether your guitar is in it. -->
+                                <Grid x:Name="SongSelectRedesignTuning" ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceMd}"
+                                      ToolTip.Tip="{Binding ExpectedTuningNotes}">
+                                    <Border Grid.Column="0" Theme="{StaticResource FireDotBorder}" Classes="FireDot" Classes.Success="{Binding TuningIsVerified}"
+                                            Classes.Warn="{Binding TuningNeedsChange}" VerticalAlignment="Top" Margin="0,6,0,0" />
+                                    <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXxs}">
+                                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextTrimming="CharacterEllipsis" Text="{Binding ExpectedTuningLabel}" />
+                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" Text="{Binding TuningCheckLabel}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Your best: one block, which says so when there is none yet. -->
+                                <Border x:Name="SongSelectRedesignBestRunPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                                    <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                                   Text="{localization:Loc PlayMode_SongSelect_YourBest}" />
+                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" IsVisible="{Binding !HasBestRun}"
+                                                   Text="{localization:Loc PlayMode_SongSelect_Unplayed}" />
+                                        <StackPanel Spacing="{StaticResource FireSpaceRow}" IsVisible="{Binding HasBestRun}">
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceXl}">
+                                                <Border Grid.Column="0" Theme="{StaticResource FireGradeBadgeBorder}" Classes="FireGradeBadge">
+                                                    <TextBlock Text="{Binding BestGradeLabel}" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="{StaticResource FireSpaceXxs}">
+                                                    <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding BestAccuracyLabel}" />
+                                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                               Text="{localization:Loc PlayMode_SongSelect_Accuracy}" />
+                                                </StackPanel>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceRow}">
+                                                <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel" VerticalAlignment="Center"
+                                                           Text="{localization:Loc LivePlay_Score}" />
+                                                <TextBlock Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell" TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding BestScoreLabel}" />
+                                            </Grid>
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceRow}">
+                                                <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" Text="{Binding LastPlayedLabel}" />
+                                                <Border Grid.Column="1" Theme="{StaticResource FireTagBorder}" Classes="FireTag Success" IsVisible="{Binding IsBestFullCombo}"
+                                                        ToolTip.Tip="{localization:Loc PlayMode_FullCombo_Tip}">
+                                                    <TextBlock Text="{localization:Loc PlayMode_FullCombo_Badge}" />
+                                                </Border>
+                                            </Grid>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Which path to play. -->
+                                <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc SongBrowser_Col_Paths}" />
+                                    <ItemsControl ItemsSource="{Binding Arrangements}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel ItemSpacing="{StaticResource FireSpaceMd}"
+                                                           LineSpacing="{StaticResource FireSpaceMd}" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IArrangementTile">
+                                                <ToggleButton Theme="{StaticResource FireChoiceToggle}" Classes="FireChoice Card" Width="140"
+                                                              IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                              Command="{Binding SelectCommand}"
+                                                              AutomationProperties.Name="{Binding Name}"
+                                                              ToolTip.Tip="{Binding TuningLabel}">
+                                                    <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                                                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding Name}" />
+                                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding NoteCountLabel}" />
+                                                    </StackPanel>
+                                                </ToggleButton>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- SETLISTS (#646): the SAME view the app's rail hosts, on the
+                                 ISetlistPanel contract, under both states. ClipToBounds is off
+                                 because the offscreen renderer (gallery capture, goldens) drops a
+                                 clipping subtree that runs past the scroll viewport; the
+                                 ScrollViewer clips it anyway. -->
+                            <screens:SetlistPanelView x:Name="SongSelectRedesignSetlistHost" ClipToBounds="False"
+                                                      DataContext="{Binding Setlists}" />
+                          </StackPanel>
+                        </ScrollViewer>
+
+                        <Button x:Name="SongSelectRedesignPlayButton" Grid.Row="1"
+                                Theme="{StaticResource FireCtaButton}" Classes="FireCta" HorizontalAlignment="Stretch"
+                                Margin="{StaticResource FireGapTopLg}"
+                                IsEnabled="{Binding CanPlay}"
+                                Command="{Binding PlayCommand}"
+                                AutomationProperties.Name="{localization:Loc PlayMode_Menu_Play}">
+                            <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                                       Text="{localization:Loc PlayMode_Menu_Play}" />
+                        </Button>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- ══ FIRST RUN: the one place to choose a folder ═════════════ -->
+            <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Grid.Row="2" x:Name="SongSelectRedesignFirstRunPanel" Classes="FireEmptyState" MaxWidth="460"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding ShowFirstRun}">
+                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker" Text="{localization:Loc PlayMode_SongSelect_FirstRunEyebrow}" />
+                <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" TextWrapping="Wrap" TextAlignment="Center"
+                           Text="{localization:Loc PlayMode_SongSelect_FirstRunTitle}" />
+                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody" Text="{localization:Loc PlayMode_SongSelect_FirstRunBody}" />
+                <Button Theme="{StaticResource FireCtaButton}" Classes="FireCta Compact" HorizontalAlignment="Center" Command="{Binding ChooseLibraryFolderCommand}"
+                        AutomationProperties.Name="{localization:Loc PlayMode_Filter_LibraryFolder}">
+                    <TextBlock Classes="FireCtaLabel" Text="{localization:Loc PlayMode_Filter_LibraryFolder}" />
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Panel>
+</UserControl>

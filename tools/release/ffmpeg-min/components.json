@@ -1,0 +1,98 @@
+{
+  "about": "The ffmpeg components DotCharter uses: Build-MinimalFfmpeg.ps1 configures exactly these, New-Release.ps1's preflight checks the shipped ffmpeg.exe lists every one, and Infrastructure/FfmpegComponentInventoryTests pins them against the argument vectors in the code. Add a component here in the same change that starts using it.",
+  "ffmpegVersion": "8.1.3",
+  "extraVersion": "dotcharter-min1",
+  "externalLibraries": [ "libmp3lame", "libopus", "libvorbis", "zlib" ],
+  "decoders": [
+    "aac", "alac", "flac", "mp3", "mp3float", "opus", "vorbis",
+    "wmav1", "wmav2", "wmapro",
+    "pcm_s16le", "pcm_s16be", "pcm_s24le", "pcm_s24be", "pcm_s32le", "pcm_s32be",
+    "pcm_f32le", "pcm_f32be", "pcm_f64le", "pcm_u8", "pcm_alaw", "pcm_mulaw",
+    "adpcm_ms", "adpcm_ima_wav",
+    "mjpeg", "png", "bmp", "dds"
+  ],
+  "encoders": [ "pcm_s16le", "pcm_f32le", "flac", "libvorbis", "libopus", "libmp3lame", "png" ],
+  "muxers": [ "wav", "ogg", "opus", "flac", "mp3", "mp4", "ipod", "image2", "ffmetadata" ],
+  "demuxers": [ "wav", "w64", "aiff", "mp3", "ogg", "flac", "mov", "aac", "matroska", "asf", "image2", "dds_pipe", "png_pipe", "jpeg_pipe", "bmp_pipe" ],
+  "parsers": [ "aac", "flac", "mpegaudio", "opus", "vorbis", "mjpeg", "png", "bmp" ],
+  "filters": [ "abuffer", "abuffersink", "buffer", "buffersink", "aformat", "format", "aresample", "scale", "anull", "null", "acopy", "copy", "adelay", "apad" ],
+  "protocols": [ "file", "pipe" ],
+  "bsfs": [ "aac_adtstoasc" ],
+  "importExtensions": {
+    ".wav": [ "wav" ],
+    ".ogg": [ "ogg" ],
+    ".opus": [ "ogg" ],
+    ".mp3": [ "mp3" ],
+    ".flac": [ "flac" ],
+    ".m4a": [ "mov" ],
+    ".aac": [ "aac" ]
+  },
+  "callSites": [
+    {
+      "file": "DotCharter.Services/Audio/StemSeparation/Cache/FfmpegStemEncoder.cs",
+      "job": "Stem cache: encode a stem WAV to Opus 160k (.opus) or FLAC; decode a cached stem back to WAV at 48 kHz.",
+      "encoders": [ "libopus", "flac", "pcm_s16le" ],
+      "muxers": [ "opus", "flac", "wav" ],
+      "filters": [ "aresample" ]
+    },
+    {
+      "file": "DotCharter.Services/Audio/StemSeparation/Onnx/OnnxStemSeparationService.cs",
+      "job": "ONNX stem separation: transcode a source JUCE cannot read (.m4a/.aac) to stereo float WAV.",
+      "encoders": [ "pcm_f32le" ],
+      "muxers": [ "wav" ],
+      "filters": [ "aresample" ]
+    },
+    {
+      "file": "DotCharter.Services/Export/Audio/PcmAudio.cs",
+      "job": "Rocksmith export: decode or conform the song to 48 kHz stereo 16-bit WAV.",
+      "encoders": [ "pcm_s16le" ],
+      "muxers": [ "wav" ],
+      "filters": [ "aresample" ]
+    },
+    {
+      "file": "DotCharter.Services/Export/SaveCompanionService.cs",
+      "job": "EOF companion: transcode the song to Ogg Vorbis q5.",
+      "encoders": [ "libvorbis" ],
+      "muxers": [ "ogg" ]
+    },
+    {
+      "file": "DotCharter.Services/Import/Audio/ImportAudioPreparer.cs",
+      "job": "New project: bake leading/trailing silence into an Ogg Vorbis q6 working copy.",
+      "encoders": [ "libvorbis" ],
+      "muxers": [ "ogg" ],
+      "filters": [ "adelay", "apad" ]
+    },
+    {
+      "file": "DotCharter.Services/Import/Audio/AudioSilenceSplicer.cs",
+      "job": "Splice silence into the song (Vorbis, via ImportAudioPreparer.BuildEncodeArgs) and its stems (float WAV).",
+      "encoders": [ "pcm_f32le", "libvorbis" ],
+      "muxers": [ "wav", "ogg" ],
+      "filters": [ "adelay", "apad" ]
+    },
+    {
+      "file": "DotCharter.Services/Import/Audio/AudioMetadataExtractor.cs",
+      "job": "New project: read tags (ffmetadata to stdout; ffprobe only when one is on PATH) and the attached cover picture as PNG.",
+      "encoders": [ "png" ],
+      "muxers": [ "ffmetadata", "image2" ],
+      "decoders": [ "mjpeg", "png", "bmp" ],
+      "filters": [ "scale" ],
+      "protocols": [ "pipe" ]
+    },
+    {
+      "file": "DotCharter.Services/Parsing/Audio/AudioFormatConverter.cs",
+      "job": "TryRunFfmpeg, last-resort conversion by output extension: a .wem the managed and vgmstream paths could not read, to WAV.",
+      "encoders": [ "pcm_s16le" ],
+      "muxers": [ "wav" ],
+      "demuxers": [ "wav" ]
+    },
+    {
+      "file": "DotCharter.Services/Import/Youtube/YtDlpAudioDownloader.cs",
+      "job": "YouTube import: yt-dlp -x --audio-format mp3 runs ffmpeg to fix up the DASH m4a and convert the webm/m4a audio to mp3.",
+      "encoders": [ "libmp3lame" ],
+      "muxers": [ "mp3", "mp4" ],
+      "decoders": [ "aac", "opus" ],
+      "demuxers": [ "mov", "matroska" ],
+      "bsfs": [ "aac_adtstoasc" ]
+    }
+  ]
+}

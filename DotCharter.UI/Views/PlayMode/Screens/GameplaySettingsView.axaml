@@ -1,0 +1,368 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:screens="using:DotCharter.UI.Views.PlayMode.Screens"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GameplaySettingsView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- ══ SETTINGS MODAL (§6.5, Settings.dc.html) ══════════════════════
+         The last Play Mode surface on the old grammar, rebuilt on the Fire
+         layer. A 1020 × 660 modal of three regions that meet hard edges:
+         a 230 px nav rail, the content pane, and a footer.
+
+         What the mockup asked for and where it is:
+           · a DESCRIPTION under every nav item      → the rail's rows
+           · sliders with numeric readouts           → the fixed 64 px mono
+                                                       column on every one
+           · a LIVE input meter                      → `fire:FireLevelMeter`
+                                                       over the real capture
+                                                       peak (`PollGameplaySettingsMeters`)
+           · count-in as a segmented control         → `Border.FireSegment`
+           · a latency chip in the nav footer        → the real
+                                                       `MeasuredOutputLatencyMs`
+           · search                                  → `GameplaySettingsCatalog`
+
+         THE SCRIM IS `Border.FireOverlayScrim` over the whole window, and it
+         is TRANSLUCENT — an overlay covers what it covers, but a MODAL is
+         about the surface behind it, and painting that out is what made
+         every dialog in the app read as its own screen. Not to be confused
+         with the "no ground over the animated backdrop" rule, which is about
+         SCREENS: those stand on the opaque `FireOverlayFill`.
+
+         Airspace: this sits over the native Vulkan 3D panel while a run is
+         paused, so it relies on the same freeze-frame the pause menu uses —
+         an opaque scrim does not beat a child HWND.
+
+         It is still a FRONT END over existing state, exactly as the 0.16
+         overlay was: audio levels bind the shared Transport, judging binds
+         the shared Live Play, the effect toggles bind the shared
+         ProjectState, the device rows bind the app's ONE
+         `AudioSettingsViewModel` (a DI singleton, shared with the editor's
+         Settings → Audio tab, so the lists are the real enumerated
+         devices), and the keybind rows bind the live `ProjectState.Keybinds`.
+         Everything else lives on this view model and persists to the SAME
+         AppConfig fields the editor's Settings page writes.
+
+         CHANGES APPLY LIVE everywhere except the Devices section, whose own
+         rows say so: a driver / device / rate / buffer change tears the
+         engine down and rebuilds it, so it is committed by one explicit
+         action rather than once per combo row the user passes through. -->
+    <!-- Hosted by PlayModeView as the ContentTemplate body of
+         GameplaySettingsOverlayHost, which carries the IsGameplaySettingsOpen
+         gate. DEFERRED (PlayModeView.DeferredScreenHostNames): this view is
+         not constructed for the app's first frame. The six section panes are
+         views of their own (GameSettings*View), each declared below with the
+         x:Name and IsVisible gate the pane carried inline — the names are the
+         ones PlayModeView.GameplaySettingsPaneNames prewarms. Lifted out of
+         PlayModeView.axaml in #294, markup otherwise unchanged. -->
+    <Panel x:Name="GameplaySettingsOverlay">
+        <Border Theme="{StaticResource FireOverlayScrimBorder}" Classes="FireOverlayScrim" />
+
+        <Border x:Name="GameplaySettingsOverlayCard" Theme="{StaticResource FireScreenBorder}" Classes="FireScreen"
+                Width="1020" Height="660"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid ColumnDefinitions="230,*">
+
+                <!-- ══ NAV RAIL ═══════════════════════════════════════════
+                     Title lockup, six rows each carrying its one-line
+                     description, then a floor with the latency chip and the
+                     escape hatch to the full editor Settings page.
+
+                     RadioButton, not ToggleButton: a ToggleButton unchecks
+                     itself when the row that is already selected is clicked
+                     again, which would leave the rail reporting no section
+                     at all. The command parameter is a STRING because a
+                     `RelayCommand<int>` fed a literal CommandParameter
+                     throws during layout. -->
+                <Border Grid.Column="0" Theme="{StaticResource FireRailBorder}" Classes="FireRail">
+                    <Grid RowDefinitions="Auto,*,Auto">
+                        <StackPanel Grid.Row="0" Margin="10,0,10,14"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                       Text="{localization:Loc PlayMode_Nav_Play}" />
+                            <TextBlock Theme="{StaticResource FireTitleText}" Classes="FireTitle"
+                                       Text="{localization:Loc PlayMode_GameSettings_Title}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" x:Name="GameSettingsNav" VerticalAlignment="Top">
+                            <RadioButton AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_AudioSection}" Classes="FireNavRow" GroupName="GameSettingsSections"
+                                         IsChecked="{Binding Settings.IsGameSettingsAudio, Mode=OneWay}"
+                                         Command="{Binding Settings.ShowGameplaySettingsSectionCommand}"
+                                         CommandParameter="0">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               Text="{localization:Loc PlayMode_GameSettings_AudioSection}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                               Text="{localization:Loc PlayMode_GS_AudioSection_Desc}" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton AutomationProperties.Name="{localization:Loc PlayMode_GS_DevicesSection}" Classes="FireNavRow" GroupName="GameSettingsSections"
+                                         IsChecked="{Binding Settings.IsGameSettingsDevices, Mode=OneWay}"
+                                         Command="{Binding Settings.ShowGameplaySettingsSectionCommand}"
+                                         CommandParameter="1">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               Text="{localization:Loc PlayMode_GS_DevicesSection}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                               Text="{localization:Loc PlayMode_GS_DevicesSection_Desc}" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_GameplaySection}" Classes="FireNavRow" GroupName="GameSettingsSections"
+                                         IsChecked="{Binding Settings.IsGameSettingsGameplay, Mode=OneWay}"
+                                         Command="{Binding Settings.ShowGameplaySettingsSectionCommand}"
+                                         CommandParameter="2">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               Text="{localization:Loc PlayMode_GameSettings_GameplaySection}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                               Text="{localization:Loc PlayMode_GS_GameplaySection_Desc}" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_GraphicsSection}" Classes="FireNavRow" GroupName="GameSettingsSections"
+                                         IsChecked="{Binding Settings.IsGameSettingsGraphics, Mode=OneWay}"
+                                         Command="{Binding Settings.ShowGameplaySettingsSectionCommand}"
+                                         CommandParameter="3">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               Text="{localization:Loc PlayMode_GameSettings_GraphicsSection}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                               Text="{localization:Loc PlayMode_GS_GraphicsSection_Desc}" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_AppearanceSection}" Classes="FireNavRow" GroupName="GameSettingsSections"
+                                         IsChecked="{Binding Settings.IsGameSettingsAppearance, Mode=OneWay}"
+                                         Command="{Binding Settings.ShowGameplaySettingsSectionCommand}"
+                                         CommandParameter="4">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               Text="{localization:Loc PlayMode_GameSettings_AppearanceSection}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                               Text="{localization:Loc PlayMode_GS_AppearanceSection_Desc}" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton AutomationProperties.Name="{localization:Loc PlayMode_GS_KeybindsSection}" Classes="FireNavRow" GroupName="GameSettingsSections"
+                                         IsChecked="{Binding Settings.IsGameSettingsKeybinds, Mode=OneWay}"
+                                         Command="{Binding Settings.ShowGameplaySettingsSectionCommand}"
+                                         CommandParameter="5">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               Text="{localization:Loc PlayMode_GS_KeybindsSection}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                               Text="{localization:Loc PlayMode_GS_KeybindsSection_Desc}" />
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+
+                        <!-- The rail's floor. The chip carries the engine's
+                             REAL measured output latency: green while it is
+                             inside the budget, amber when it is a number
+                             that costs you something, red when there is no
+                             device at all. Nothing here is ever a
+                             placeholder figure. -->
+                        <StackPanel Grid.Row="2" Margin="10,0" Spacing="{StaticResource FireSpaceMd}">
+                            <Border x:Name="GameSettingsLatencyChipGood"
+                                    Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Success"
+                                    IsVisible="{Binding Settings.IsGameplayLatencyGood}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Success" />
+                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText Success"
+                                               Text="{Binding Settings.GameplayLatencyText}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Warn"
+                                    IsVisible="{Binding Settings.IsGameplayLatencyHigh}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn" />
+                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText Warn"
+                                               Text="{Binding Settings.GameplayLatencyText}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Danger"
+                                    IsVisible="{Binding Settings.IsGameplayLatencyUnknown}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Danger" />
+                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText Danger"
+                                               Text="{Binding Settings.GameplayLatencyText}" />
+                                </StackPanel>
+                            </Border>
+                            <Button x:Name="GameSettingsFullSettingsLink" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                    HorizontalAlignment="Left"
+                                    Command="{Binding Settings.OpenFullSettingsCommand}"
+                                    Content="{localization:Loc PlayMode_GameSettings_FullSettings}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ══ CONTENT ════════════════════════════════════════════ -->
+                <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
+
+                    <!-- Header: the section's own lockup, the search field
+                         and the explicit close control the overlay grammar
+                         requires (Esc is not a substitute — this menu is
+                         controller-navigable). -->
+                    <Border Grid.Row="0" Theme="{StaticResource FireHeaderBorder}" Classes="FireHeader">
+                        <Grid ColumnDefinitions="*,16,240,10,Auto">
+                            <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}"
+                                        VerticalAlignment="Center">
+                                <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle"
+                                           Text="{Binding Settings.GameplaySettingsSectionTitle}" />
+                                <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextWrapping="Wrap"
+                                           Text="{Binding Settings.GameplaySettingsSectionSubtitle}" />
+                            </StackPanel>
+
+                            <Border Grid.Column="2" Theme="{StaticResource FireFieldBorder}" Classes="FireField" VerticalAlignment="Center">
+                                <TextBox x:Name="GameSettingsSearchBox" Classes="FireFieldInput"
+                                         AutomationProperties.Name="{localization:Loc PlayMode_GS_SearchPlaceholder}"
+                                         PlaceholderText="{localization:Loc PlayMode_GS_SearchPlaceholder}"
+                                         Text="{Binding Settings.GameplaySettingsQuery, Mode=TwoWay}" />
+                            </Border>
+
+                            <Button Grid.Column="4" Theme="{StaticResource FireIconActionButton}" Classes="FireIconAction Close"
+                                    VerticalAlignment="Center"
+                                    Command="{Binding Settings.CloseGameplaySettingsCommand}"
+                                    ToolTip.Tip="{localization:Loc Action_Close}"
+                                    AutomationProperties.Name="{localization:Loc Action_Close}">
+                                <PathIcon Data="{DynamicResource IconClose}" />
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Body. Six section panes and the search results, all
+                         `IsVisible`-gated siblings — the panes are hidden
+                         wholesale while a query is active, so a result list
+                         never overlaps a live control.
+
+                         Every scroll region opens at its TOP
+                         (`BringIntoViewOnFocusChange=False`): focus landing
+                         mid-pane must not scroll the section kicker away. -->
+                    <Panel Grid.Row="1">
+                        <Panel IsVisible="{Binding !Settings.IsSearchingGameplaySettings}">
+
+                            <!-- ══ AUDIO ══════════════════════════════════ -->
+                            <screens:GameSettingsAudioView x:Name="GameSettingsAudioPane"
+                                                           IsVisible="{Binding Settings.IsGameSettingsAudio}" />
+
+                            <!-- ══ DEVICES ═════════════════════════════════
+                                 Bound straight to the app's ONE
+                                 `AudioSettingsViewModel`, so the lists are
+                                 the real enumerated WASAPI/ASIO devices and
+                                 the apply is the real
+                                 `ApplyAudioConfiguration` path (which
+                                 already refuses to touch the engine when
+                                 nothing routing-related changed). -->
+                            <screens:GameSettingsDevicesView x:Name="GameSettingsDevicesPane"
+                                                             IsVisible="{Binding Settings.IsGameSettingsDevices}" />
+
+                            <!-- ══ GAMEPLAY ════════════════════════════════ -->
+                            <screens:GameSettingsGameplayView x:Name="GameSettingsGameplayPane"
+                                                              IsVisible="{Binding Settings.IsGameSettingsGameplay}" />
+
+                            <!-- ══ GRAPHICS ════════════════════════════════ -->
+                            <screens:GameSettingsGraphicsView x:Name="GameSettingsGraphicsPane"
+                                                              IsVisible="{Binding Settings.IsGameSettingsGraphics}" />
+
+                            <!-- ══ APPEARANCE ══════════════════════════════ -->
+                            <screens:GameSettingsAppearanceView x:Name="GameSettingsAppearancePane"
+                                                                IsVisible="{Binding Settings.IsGameSettingsAppearance}" />
+
+                            <!-- ══ KEYBINDS ════════════════════════════════
+                                 The chords that are live DURING a run (the
+                                 game shell runs on the editor surface while
+                                 a song plays, which is what makes the
+                                 transport/loop/seek family reachable there).
+                                 They edit the live `ProjectState.Keybinds`
+                                 — the same table the editor's Keybinds tab
+                                 writes — and are saved + re-registered on
+                                 close, but only if one actually changed. -->
+                            <screens:GameSettingsKeybindsView x:Name="GameSettingsKeybindsPane"
+                                                              IsVisible="{Binding Settings.IsGameSettingsKeybinds}" />
+                        </Panel>
+
+                        <!-- ══ SEARCH RESULTS ══════════════════════════════
+                             Over the REAL catalogue (`GameplaySettingsCatalog`),
+                             which is linted against this markup in both
+                             directions — a row that exists here and not
+                             there, or the reverse, fails the gate. A hit
+                             goes SOMEWHERE, so it is a `Button.FireListRow`,
+                             not a decorative Border. -->
+                        <Grid IsVisible="{Binding Settings.IsSearchingGameplaySettings}"
+                              RowDefinitions="*">
+                            <ScrollViewer x:Name="GameSettingsResultsPane"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          BringIntoViewOnFocusChange="False"
+                                          IsVisible="{Binding Settings.HasGameplaySettingsResults}"
+                                          Padding="{StaticResource FirePadBody}">
+                                <ItemsControl ItemsSource="{Binding Settings.GameplaySettingsResults}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:GameplaySettingsHit">
+                                            <Button AutomationProperties.Name="{Binding Title}" Theme="{StaticResource FireListRowButton}" Classes="FireListRow"
+                                                    Command="{Binding $parent[ItemsControl].((vm:PlayModeViewModel)DataContext).Settings.GoToGameplaySettingCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,16,140">
+                                                    <StackPanel Grid.Column="0" Spacing="2">
+                                                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" Text="{Binding Title}" />
+                                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc Wide" TextWrapping="Wrap"
+                                                                   Text="{Binding Description}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Quiet"
+                                                               Text="{Binding SectionName}" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <!-- "Matched nothing" is its own state, with the
+                                 action that fixes it — never a blank pane. -->
+                            <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="GameSettingsNoResults" Classes="FireEmptyState"
+                                        IsVisible="{Binding Settings.HasNoGameplaySettingsResults}">
+                                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                                           Text="{localization:Loc PlayMode_GS_NoMatchKicker}" />
+                                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                           Text="{localization:Loc PlayMode_GS_NoMatchBody}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        HorizontalAlignment="Center"
+                                        Command="{Binding Settings.ClearGameplaySettingsSearchCommand}"
+                                        Content="{localization:Loc Action_Clear}" />
+                            </StackPanel>
+                        </Grid>
+                    </Panel>
+
+                    <!-- Footer: the section-scoped reset with its own
+                         consequence line, the live-apply promise, and the
+                         ONE primary action. -->
+                    <Border Grid.Row="2" Theme="{StaticResource FireFooterBorder}" Classes="FireFooter">
+                        <Grid ColumnDefinitions="Auto,16,*,16,Auto">
+                            <Button Grid.Column="0" x:Name="GameSettingsResetButton"
+                                    Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" VerticalAlignment="Center"
+                                    Command="{Binding Settings.ResetGameplaySettingsSectionCommand}"
+                                    Content="{Binding Settings.GameplaySettingsResetCaption}" />
+                            <!-- The one flexible cell of a five-column footer,
+                                 so it is the one that must TRIM: German cut
+                                 off mid-word ("…BEREICH ZUR" for
+                                 "ZURÜCK"), which reads as a broken string
+                                 rather than a shortened one. -->
+                            <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{localization:Loc PlayMode_GS_ResetScope}"
+                                       Text="{localization:Loc PlayMode_GS_ResetScope}" />
+                            <StackPanel Grid.Column="4" Orientation="Horizontal"
+                                        Spacing="{StaticResource FireSpaceLg}"
+                                        VerticalAlignment="Center">
+                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_GS_ChangesApplyLive}" />
+                                <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary"
+                                        Command="{Binding Settings.CloseGameplaySettingsCommand}"
+                                        Content="{localization:Loc PlayMode_GameSettings_Done}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+    </Panel>
+</UserControl>

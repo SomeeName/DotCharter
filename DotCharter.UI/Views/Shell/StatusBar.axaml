@@ -1,0 +1,404 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotCharter.UI.ViewModels.Application;assembly=DotCharter"
+             xmlns:diag="using:DotCharter.Tone.Diagnostics"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shell="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.StatusBar"
+             x:DataType="vm:StatusBarViewModel">
+  <!-- The shell's bottom rail. Restyled in the 0.38 shell pass: it used to be
+       ten grid columns of identically-coloured text with a 12 px right margin
+       each, so the transport read-outs, the audio state and the two message
+       counters all had exactly the same visual weight and none of them read as
+       a group. Now: one message on the left, one metric cluster on the right
+       with hairline separators between its groups, the counters as semantic
+       chips (they are the only things here that can be BAD), and the profile as
+       a pill because it is the only thing here that is clickable state.
+
+       0.50 put it on the Fire layer, from `Editor Project Settings.dc.html`:
+       30 px (from 26), a top hairline, no fill of its own, and EVERY read-out in
+       IBM Plex Mono at the ladder's quietest step — `LOADED ROCKSMITH SONG:
+       AMBER` on the left, `STOPPED 00:00.00 · M1.1 · 48 kHz` on the right. The
+       mono is the point: a status rail is data, and the clock on it changes 60
+       times a second, so a proportional face makes the whole cluster twitch. -->
+  <UserControl.Resources>
+   <ResourceDictionary>
+    <ResourceDictionary.MergedDictionaries>
+      <!-- Profile-switcher flyout content — shared with the Play Mode
+           profile chip (see ProfileSwitcherFlyout.axaml). -->
+      <ResourceInclude Source="avares://DotCharter/Views/Shell/ProfileSwitcherFlyout.axaml" />
+    </ResourceDictionary.MergedDictionaries>
+    <!-- Shared by the warning + error counters: a readable list of the
+         recent messages, so the counters aren't just clear buttons. -->
+    <DataTemplate x:Key="RecentMessagesFlyoutContent" x:DataType="vm:StatusBarViewModel">
+      <controls:FirePopover MinWidth="380" MaxHeight="400"
+                            Title="{localization:Loc StatusBar_RecentMessages}"
+                            Icon="{DynamicResource IconAlert}">
+        <controls:FirePopover.Footer>
+          <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="*,Auto">
+            <Button Grid.Column="1" Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
+                    Content="{localization:Loc StatusBar_ClearAll}"
+                    Command="{Binding ClearMessagesCommand}" />
+          </Grid>
+        </controls:FirePopover.Footer>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <ItemsControl ItemsSource="{Binding RecentMessages}"
+                        Margin="{StaticResource FirePadPopoverBody}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="diag:StatusBarMessage">
+                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="{StaticResource FireSpaceSmPlus}"
+                      Margin="0,3">
+                  <TextBlock Grid.Column="0" Text="{Binding Timestamp, StringFormat=HH:mm:ss}"
+                             Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                             VerticalAlignment="Top" />
+                  <TextBlock Grid.Column="1" Text="{Binding Level}"
+                             Theme="{StaticResource FireMonoText}" Classes="FireMono"
+                             VerticalAlignment="Top"
+                             Classes.err="{Binding IsError}" Classes.warn="{Binding IsWarning}" />
+                  <SelectableTextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap"
+                                       FontFamily="{StaticResource FireFontUi}"
+                                       FontSize="{StaticResource FireSizeCaption}"
+                                       Foreground="{DynamicResource FireTextBody}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </controls:FirePopover>
+    </DataTemplate>
+   </ResourceDictionary>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <StyleInclude Source="avares://DotCharter/Views/Shell/ShellStyles.axaml" />
+    <!-- The editor's chrome grammar: this rail's own chips and dividers, plus
+         the Fire dropdown chrome the two message flyouts and the profile
+         switcher open in. -->
+    <StyleInclude Source="avares://DotCharter/Views/Shell/ShellChromeStyles.axaml" />
+
+    <!-- Severity colours — shared by the recent-messages list and the main
+         message. Declared AFTER the shell grammar so they win over `.Faint`
+         (Avalonia resolves styles by ORDER, not by selector specificity). -->
+    <Style Selector="TextBlock.err">
+      <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="TextBlock.warn">
+      <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="TextBlock.ok">
+      <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+    </Style>
+    <!-- The glyph's geometry comes from a STYLE, not a local value — a local
+         Data would beat every class setter below and the alert could never
+         replace it. The resting glyph is never visible (Info hides it); it is
+         here so the icon always resolves. -->
+    <Style Selector="PathIcon#StatusMessageGlyph">
+      <Setter Property="Data" Value="{DynamicResource IconInfo}" />
+      <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="PathIcon.err">
+      <Setter Property="Data" Value="{DynamicResource IconAlert}" />
+      <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="PathIcon.warn">
+      <Setter Property="Data" Value="{DynamicResource IconAlert}" />
+      <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="PathIcon.ok">
+      <Setter Property="Data" Value="{DynamicResource IconCheck}" />
+      <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+    </Style>
+    <!-- #213: in a Compact window (under 1600 logical px) a running task takes the
+         room of the Snap / selection / zoom read-outs, the least urgent thing on
+         the rail. Without this the metric cluster left the message cell ~150 px
+         at 1280, the task chip kept its 160 px minimum right-aligned, and the
+         cell clipped its LEFT edge: clock and task name gone, a bare progress
+         bar left. The wrapper is what hides, because the read-outs' own
+         IsVisible is a local binding that a style setter cannot outrank. -->
+    <Style Selector=":is(Window).Compact StackPanel.StatusEditReadoutsSlot.TaskRunning">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Theme="{StaticResource FireStatusBarBorder}" Classes="FireStatusBar">
+    <Grid ColumnDefinitions="*,Auto">
+
+      <!-- Left: main message + current task with progress.
+
+           A DockPanel, NOT a horizontal StackPanel (#130). A StackPanel measures
+           its children with infinite width, so the message's ellipsis never
+           engaged and the panel drew the message and the task chip straight
+           over the metric cluster — at 1280 px always, at 1920 px whenever a
+           task ran. Here every child is measured against the width this `*`
+           column really has: the task chip docks right and is measured first
+           (its label is the part that gives way), and the message takes what
+           is left and trims. ClipToBounds keeps anything that still cannot fit
+           inside the column. -->
+      <DockPanel Grid.Column="0" x:Name="StatusMessageCell"
+                 ClipToBounds="True"
+                 Margin="{StaticResource FireGapRightMd}"
+                 VerticalAlignment="Center">
+        <!-- The task chip docks right and is measured FIRST, so it is never
+             squeezed by the message. MinWidth is its fixed parts — clock 11,
+             bar 80 and cancel ~21, three 6 px gaps, the 13 px FirePadChip each
+             side and the 1 px border (158), rounded up:
+             narrower than that, the three would overprint each other, so in a
+             cell that small the chip keeps this width, right-aligned, and the
+             cell clips its left edge instead. -->
+        <!-- The tooltip is the whole task name, so it is reachable even when the
+             label trims (#213). -->
+        <Border x:Name="StatusTaskChip" DockPanel.Dock="Right"
+                IsVisible="{Binding HasActiveTask}" Classes="ShellChip Accent"
+                HorizontalAlignment="Right" MinWidth="160"
+                ClipToBounds="True"
+                ToolTip.Tip="{Binding ActiveTaskLabel}"
+                Margin="{StaticResource FireGapLeftRow}">
+          <!-- The label fills what the glyph, the bar and the cancel button
+               leave, so it is the part that trims; a DockPanel (unlike a star
+               Grid column) is only as wide as that content, so the chip never
+               stretches over an empty run of rail. -->
+          <DockPanel VerticalAlignment="Center">
+            <PathIcon DockPanel.Dock="Left" Data="{DynamicResource IconClock}" Width="11" Height="11"
+                      Margin="{StaticResource GapRightSm}"
+                      Foreground="{DynamicResource AccentColor}" VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right" IsVisible="{Binding ActiveTaskCanCancel}"
+                    Classes="StatusChipButton"
+                    Margin="{StaticResource GapLeftSm}"
+                    Command="{Binding CancelActiveTaskCommand}"
+                    ToolTip.Tip="{localization:Loc Action_Cancel}"
+                    AutomationProperties.Name="{localization:Loc Action_Cancel}">
+              <PathIcon Data="{DynamicResource IconClose}" Width="9" Height="9"
+                        Foreground="{DynamicResource FireTextMuted}" />
+            </Button>
+            <!-- MinWidth="0": the Fluent theme's 200 px ProgressBar minimum
+                 outranks Width, and made this "80 px" bar 200 px wide. -->
+            <ProgressBar DockPanel.Dock="Right" Width="80" MinWidth="0" Height="5"
+                         Margin="{StaticResource GapLeftSm}"
+                         Minimum="0" Maximum="1"
+                         Value="{Binding ActiveTaskProgress}"
+                         IsIndeterminate="{Binding ActiveTaskIndeterminate}"
+                         VerticalAlignment="Center" />
+            <TextBlock x:Name="StatusTaskLabel" Text="{Binding ActiveTaskLabel}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="360" />
+          </DockPanel>
+        </Border>
+
+        <!-- The glyph and the message take what the chip leaves, and clip as a
+             unit: when nothing is left (a 1280 px window with a task running)
+             they vanish together rather than the 11 px glyph overflowing a
+             zero-wide slot. -->
+        <DockPanel x:Name="StatusMessageLine" ClipToBounds="True">
+          <!-- The one message, drawn by SEVERITY: an Error is FireDanger with
+               an alert glyph, a Warning FireWarning, a Success FireSuccess with a
+               check, and Info stays the rail's faint mono. Before this a failed
+               save and a finished one were the same faint text. The glyph is not
+               optional decoration: colour alone is not a signal on a rail that
+               also prints neutral read-outs in colour. -->
+          <PathIcon x:Name="StatusMessageGlyph" DockPanel.Dock="Left" Width="11" Height="11"
+                    Margin="{StaticResource FireGapRightMd}"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding HasMainMessageGlyph}"
+                    Classes.err="{Binding IsMainMessageError}"
+                    Classes.warn="{Binding IsMainMessageWarning}"
+                    Classes.ok="{Binding IsMainMessageSuccess}" />
+
+          <!-- The message and its one verb (#638, "Show" on a lossy EOF export). A star
+               column in a LEFT-aligned grid: the grid is only as wide as the text, so the
+               verb sits right after it, and a long message trims before the verb does. -->
+          <Grid ColumnDefinitions="*,Auto" HorizontalAlignment="Left">
+            <TextBlock x:Name="StatusMessageText" Grid.Column="0" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                       Classes.err="{Binding IsMainMessageError}"
+                       Classes.warn="{Binding IsMainMessageWarning}"
+                       Classes.ok="{Binding IsMainMessageSuccess}"
+                       Text="{Binding MainMessage}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+            <Button x:Name="StatusMessageActionButton" Grid.Column="1" Classes="StatusChipButton"
+                    Margin="{StaticResource GapLeftSm}" VerticalAlignment="Center"
+                    IsVisible="{Binding HasMainMessageAction}"
+                    Command="{Binding RunMainMessageActionCommand}"
+                    AutomationProperties.Name="{Binding MainMessageActionLabel}">
+              <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding MainMessageActionLabel}"
+                         TextDecorations="Underline" VerticalAlignment="Center" />
+            </Button>
+          </Grid>
+        </DockPanel>
+      </DockPanel>
+
+      <!-- Right: the metric cluster. Project | transport read-outs | audio |
+           counters | profile — separated by hairlines, not by whitespace. -->
+      <StackPanel Grid.Column="1" x:Name="StatusMetricCluster" Orientation="Horizontal"
+                  Spacing="{StaticResource FireSpaceXl}"
+                  VerticalAlignment="Center">
+
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" IsVisible="{Binding HasProject}"
+                   Text="{Binding ProjectName}"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis"
+                   MaxWidth="220" />
+        <!-- Unsaved-changes marker (same dot as the title bar's). NOT Faint:
+             like the MASK readout, live editing state must not disappear
+             into the rail. -->
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="●"
+                   IsVisible="{Binding IsProjectDirty}"
+                   VerticalAlignment="Center"
+                   ToolTip.Tip="{localization:Loc StatusBar_UnsavedChanges_Tip}" />
+        <Border Classes="StatusDivider" IsVisible="{Binding HasProject}" />
+
+        <!-- Editing-state readouts (P1-11): SNAP grid label · SEL count ·
+             ZOOM factor, plus the string-edit MASK only while one is set.
+             Plain strings refreshed through ONE coalesced Background post
+             (selection changes fire in bursts) — never per-frame bindings.
+             The MASK is not Faint on purpose: it is active modal state the
+             lane headers also draw, and it must not disappear into the rail. -->
+        <StackPanel x:Name="StatusEditReadoutsSlot" Classes="StatusEditReadoutsSlot"
+                    Classes.TaskRunning="{Binding HasActiveTask}"
+                    Orientation="Horizontal" Spacing="{StaticResource FireSpaceXl}"
+                    VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" IsVisible="{Binding ShowsEditReadouts}"
+                      Spacing="{StaticResource FireSpaceSmPlus}" VerticalAlignment="Center"
+                      ToolTip.Tip="{localization:Loc StatusBar_EditReadouts_Tip}">
+            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding SnapLabel}" VerticalAlignment="Center" />
+            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding SelectionLabel}" VerticalAlignment="Center" />
+            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding ZoomLabel}" VerticalAlignment="Center" />
+            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding MaskLabel}" VerticalAlignment="Center"
+                       IsVisible="{Binding HasStringMask}" />
+          </StackPanel>
+          <Border Classes="StatusDivider" IsVisible="{Binding ShowsEditReadouts}" />
+        </StackPanel>
+
+        <!-- The transport group is ONE fact read left to right, so it shares one
+             gap; the mockup's `STOPPED 00:00.00 · M1.1` is a single field. The
+             editor's, so it shows where the editor is (IsEditorSurface). -->
+        <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSmPlus}"
+                    VerticalAlignment="Center" IsVisible="{Binding IsEditorSurface}">
+          <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding PlaybackStatus}" VerticalAlignment="Center" />
+          <!-- The clock is the one figure here that changes 60 times a second;
+               the whole rail is monospace so its width never twitches. -->
+          <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding PositionLabel}" VerticalAlignment="Center" />
+          <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding MeasureLabel}" VerticalAlignment="Center" />
+          <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding BpmLabel}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Border Classes="StatusDivider" IsVisible="{Binding IsEditorSurface}" />
+
+        <!-- The tone the RIG is actually built as, while something drives it.
+             Present only then, so the rail does not carry a permanently empty
+             field. Until 0.57 the only reader of the applied tone was the 3D
+             highway HUD, which in the editor needs the 3D preview panel open AND
+             a Play Mode setting on — so charting in the 2D timeline with the tone
+             preview running, a switch that fired and a switch that silently found
+             no preset looked exactly the same. Mono like every read-out here, and
+             the approximation mark is a suffix rather than colour: an approximated
+             tone plays, it is just not what the package specified. -->
+        <StackPanel Orientation="Horizontal" IsVisible="{Binding HasActiveTone}"
+                    Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center"
+                    ToolTip.Tip="{localization:Loc StatusBar_ActiveTone_Tip}">
+          <PathIcon Data="{DynamicResource IconAmp}" Width="10" Height="10"
+                    Foreground="{DynamicResource FireTextMuted}" VerticalAlignment="Center" />
+          <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding ActiveToneName}"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis" MaxWidth="180" />
+          <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="~" VerticalAlignment="Center"
+                     IsVisible="{Binding ActiveToneApproximated}"
+                     ToolTip.Tip="{localization:Loc StatusBar_ActiveTone_Approximated}" />
+        </StackPanel>
+        <Border Classes="StatusDivider" IsVisible="{Binding HasActiveTone}" />
+
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding AudioStatus}" VerticalAlignment="Center" />
+
+        <!-- ⚠ chart-lint warnings (live audit #7). These chips used to count
+             the WARN/ERROR log lines since launch, so the badge climbed
+             during pure library browsing (every browsed PSARC's parse
+             warnings appended). They now show the CURRENT arrangement's
+             validation issues and click through to the Issues tab; the
+             session log kept its own neutral chip below. -->
+        <Button IsVisible="{Binding HasWarnings}"
+                Classes="StatusChipButton"
+                Command="{Binding ShowChartIssuesCommand}"
+                ToolTip.Tip="{localization:Loc StatusBar_WarningsTooltip}"
+                AutomationProperties.Name="{localization:Loc StatusBar_WarningsTooltip}">
+          <!-- The counters are the only things on this rail that can be BAD, so
+               they are the only things that carry colour (the mockup's amber
+               `⚠ 10`). No chip chrome: a 30 px pill is the whole rail. -->
+          <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+            <PathIcon Data="{DynamicResource IconAlert}" Width="10" Height="10"
+                      Foreground="{DynamicResource FireWarning}" VerticalAlignment="Center" />
+            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" Text="{Binding WarningCount}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <!-- ⛔ chart-lint issues at Important severity — same click-through. -->
+        <Button IsVisible="{Binding HasErrors}"
+                Classes="StatusChipButton"
+                Command="{Binding ShowChartIssuesCommand}"
+                ToolTip.Tip="{localization:Loc StatusBar_ErrorsTooltip}"
+                AutomationProperties.Name="{localization:Loc StatusBar_ErrorsTooltip}">
+          <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+            <PathIcon Data="{DynamicResource IconCloseCircle}" Width="10" Height="10"
+                      Foreground="{DynamicResource FireDanger}" VerticalAlignment="Center" />
+            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Danger" Text="{Binding ErrorCount}" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <!-- Session log tail — the recent-messages flyout the counters used to
+             open. NEUTRAL (Faint, no count) on purpose: log warnings accumulate
+             during ordinary browsing, and a climbing amber number over them
+             read as "your chart is getting worse". -->
+        <Button IsVisible="{Binding HasRecentLogMessages}"
+                Classes="StatusChipButton"
+                ToolTip.Tip="{localization:Loc StatusBar_SessionLog_Tip}"
+                AutomationProperties.Name="{localization:Loc StatusBar_SessionLog_Tip}">
+          <Button.Flyout>
+            <shell:PrewarmableFlyout Placement="TopEdgeAlignedRight">
+              <ContentControl ContentTemplate="{StaticResource RecentMessagesFlyoutContent}" Content="{Binding}" />
+            </shell:PrewarmableFlyout>
+          </Button.Flyout>
+          <PathIcon Data="{DynamicResource IconPulse}" Width="10" Height="10"
+                    Foreground="{DynamicResource FireTextMuted}" VerticalAlignment="Center" />
+        </Button>
+
+        <Border Classes="StatusDivider" />
+
+        <!-- Active player profile — flyout switches or creates profiles.
+             All gameplay data (scores, stats, progress) follows the
+             selection; the editor is profile-agnostic. -->
+        <Button Classes="StatusChipButton"
+                ToolTip.Tip="{localization:Loc Profile_Switcher_Tip}"
+                AutomationProperties.Name="{localization:Loc Profile_Switcher_Tip}">
+          <Button.Flyout>
+            <shell:PrewarmableFlyout Placement="TopEdgeAlignedRight">
+              <ContentControl ContentTemplate="{StaticResource ProfileSwitcherFlyoutContent}" Content="{Binding}" />
+            </shell:PrewarmableFlyout>
+          </Button.Flyout>
+          <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}" VerticalAlignment="Center">
+            <!-- Chip: avatar when set, accent dot otherwise. The ring is the
+                 accent hairline (R4) — the one saturated edge on this bar. -->
+            <Panel Width="14" Height="14" VerticalAlignment="Center">
+              <Ellipse Width="14" Height="14"
+                       Stroke="{DynamicResource FireAccentBorderFaint}" StrokeThickness="1" />
+              <Ellipse Width="9" Height="9"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Fill="{Binding ActiveProfileBrush}"
+                       IsVisible="{Binding !HasActiveAvatar}" />
+              <Ellipse Width="14" Height="14" IsVisible="{Binding HasActiveAvatar}">
+                <Ellipse.Fill>
+                  <ImageBrush Source="{Binding ActiveProfileAvatar}" Stretch="UniformToFill" />
+                </Ellipse.Fill>
+              </Ellipse>
+            </Panel>
+            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono"
+                       Text="{Binding ActiveProfileName}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="140" />
+          </StackPanel>
+        </Button>
+
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.RigToneImportReviewPanel"
+             x:DataType="contracts:IRigToneImportReview"
+             x:CompileBindings="True">
+
+    <!-- The Tone Designer's "from tone rig" review, drawn over the designer's card while it is
+         open (the designer hosts it in a ContentControl, so a closed review is no control at all).
+         The chain the rig became, slot by slot with a tick to leave gear out, then every loss by
+         name, then Accept: a new tone or the edited one replaced, one undo step. Lifted into its
+         own view because ToneDesignerDialogView.axaml sits at its size budget. -->
+    <Panel x:Name="RigImportOverlay" Background="{DynamicResource OverlayScrim}">
+        <Border x:Name="RigImportCard" Width="640" MaxHeight="560" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="{DynamicResource AppBackground}" BorderBrush="{DynamicResource FireBorderStrong}" BorderThickness="1"
+                CornerRadius="12" Padding="20" BoxShadow="{DynamicResource FireShadowScreen}">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Spacing="{DynamicResource FireSpaceSmPlus}">
+                    <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc RigImport_Title}" />
+                    <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" TextWrapping="Wrap"
+                               Text="{localization:Loc RigImport_Subtitle}" />
+                    <TextBlock Theme="{DynamicResource DlgValueText}" Classes="DlgValue" x:Name="RigImportSummary" Text="{Binding Summary}" />
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom" Spacing="{DynamicResource FireSpaceSmPlus}" Margin="{DynamicResource FireGapTopSm}">
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" x:Name="RigImportRefused"
+                            IsVisible="{Binding IsRefused}">
+                        <TextBlock TextWrapping="Wrap" Text="{Binding RefusedReason}" />
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource FireSpaceMd}" IsVisible="{Binding CanReplace}">
+                        <RadioButton x:Name="RigImportAsNew" GroupName="RigImportTarget" IsChecked="{Binding AddAsNew, Mode=TwoWay}"
+                                     Content="{localization:Loc RigImport_AsNew}" />
+                        <RadioButton x:Name="RigImportReplace" AutomationProperties.Name="{localization:Loc RigImport_ReplaceName}" GroupName="RigImportTarget" IsChecked="{Binding ReplaceEdited, Mode=TwoWay}"
+                                     Content="{Binding ReplaceLabel}" />
+                    </StackPanel>
+                    <DockPanel>
+                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" VerticalAlignment="Center"
+                                   Text="{localization:Loc RigImport_Working}" IsVisible="{Binding IsBusy}" />
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions" HorizontalAlignment="Right">
+                            <Button x:Name="RigImportCancel" Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" />
+                            <Button Theme="{DynamicResource PrimaryButton}" Classes="Primary" x:Name="RigImportAccept" Content="{localization:Loc RigImport_Accept}"
+                                    Command="{Binding AcceptCommand}" />
+                        </StackPanel>
+                    </DockPanel>
+                </StackPanel>
+
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="{DynamicResource FireSpaceSmPlus}">
+                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{localization:Loc RigImport_Chain}" />
+                        <ItemsControl x:Name="RigImportRows" ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IRigToneImportRow">
+                                    <Grid ColumnDefinitions="Auto,120,*,Auto" ColumnSpacing="{DynamicResource FireSpaceMd}" Margin="0,2">
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding Include, Mode=TwoWay}" IsEnabled="{Binding CanToggle}"
+                                                  AutomationProperties.Name="{Binding Gear}"
+                                                  ToolTip.Tip="{localization:Loc RigImport_IncludeTip}" />
+                                        <TextBlock Grid.Column="1" Theme="{DynamicResource DlgRowMetaText}" Classes="DlgRowMeta"
+                                                   VerticalAlignment="Center" Text="{Binding Slot}" />
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <TextBlock Theme="{DynamicResource DlgValueText}" Classes="DlgValue" Text="{Binding Gear}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{Binding From}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="3" Theme="{DynamicResource DlgRowMetaText}" Classes="DlgRowMeta"
+                                                   VerticalAlignment="Center" Text="{Binding Match}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{localization:Loc RigImport_Losses}" />
+                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{localization:Loc RigImport_NoLosses}"
+                                   IsVisible="{Binding !HasLosses}" />
+                        <ItemsControl x:Name="RigImportLosses" ItemsSource="{Binding Losses}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock TextWrapping="Wrap" Margin="0,1" Text="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Panel>
+</UserControl>

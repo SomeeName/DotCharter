@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundBulkCardView"
+             x:DataType="viewModels:InspectorViewModel">
+
+    <!-- The Sound tab's SELECTION section (#601) for several sounds: what the selection is,
+         what it applies to, the bulk fret / string / length verbs and the two "apply to all"
+         verbs the tab's footer used to carry. The rail entry names the section, so the first line
+         is the scope sentence, not a heading. A view, not a keyed DataTemplate: a template body
+         is built only at its first measure, so the section prewarm (HiddenSubtreePrewarmer)
+         would realize an empty presenter. -->
+    <StackPanel Spacing="{StaticResource SpaceSm}">
+        <TextBlock Text="{Binding AppliesToLabel}"
+                   FontSize="{StaticResource FontSizeXs}"
+                   Foreground="{DynamicResource TextDim}" />
+        <!-- A multi-selection gets a shape SUMMARY, never an
+             ambiguous diagram over eight different shapes. -->
+        <TextBlock Text="{Binding SelectionShapeSummary}"
+                   FontFamily="{StaticResource FireFontMono}"
+                   FontSize="{StaticResource FontSizeXs}"
+                   Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding BendSummary}"
+                   FontSize="{StaticResource FontSizeXs}"
+                   Foreground="{DynamicResource TextMuted}"
+                   IsVisible="{Binding ShowBendSummary}" TextWrapping="Wrap" />
+
+        <!-- The bulk verbs. NOT new commands: these are the
+             SelectedNoteMutation factories that until now
+             existed ONLY as keybinds, in no menu and no
+             palette — a user who never opens the Keybinds tab
+             could not discover that they exist. This is the one
+             state where a per-field editor is meaningless
+             anyway, so it is where they belong. -->
+        <Grid Classes="FieldRow" ColumnDefinitions="Auto,*">
+            <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_Fret}"
+                       Theme="{StaticResource LabelText}" Classes="Label FieldLabel" />
+            <WrapPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="−12"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding BulkFretCommand}" CommandParameter="-12" />
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="−1"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding BulkFretCommand}" CommandParameter="-1" />
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="+1"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding BulkFretCommand}" CommandParameter="1" />
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="+12"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding BulkFretCommand}" CommandParameter="12" />
+            </WrapPanel>
+        </Grid>
+        <Grid Classes="FieldRow" ColumnDefinitions="Auto,*">
+            <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_String}"
+                       Theme="{StaticResource LabelText}" Classes="Label FieldLabel" />
+            <WrapPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="−1"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding BulkStringCommand}" CommandParameter="-1"
+                        ToolTip.Tip="{localization:Loc Inspector_Bulk_StringTip}" />
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="+1"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding BulkStringCommand}" CommandParameter="1"
+                        ToolTip.Tip="{localization:Loc Inspector_Bulk_StringTip}" />
+            </WrapPanel>
+        </Grid>
+        <Grid Classes="FieldRow" ColumnDefinitions="Auto,*">
+            <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_NoteLength}"
+                       Theme="{StaticResource LabelText}" Classes="Label FieldLabel" />
+            <WrapPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="−"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding StepSustainCommand}" CommandParameter="-1"
+                        AutomationProperties.Name="{localization:Loc Inspector_LengthStepDownTip}"
+                        ToolTip.Tip="{localization:Loc Inspector_LengthStepDownTip}" />
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="+"
+                        Margin="{StaticResource GapChip}"
+                        Command="{Binding StepSustainCommand}" CommandParameter="1"
+                        AutomationProperties.Name="{localization:Loc Inspector_LengthStepUpTip}"
+                        ToolTip.Tip="{localization:Loc Inspector_LengthStepUpTip}" />
+            </WrapPanel>
+        </Grid>
+        <!-- Bulk verbs only: each technique section clears itself (#118). -->
+        <WrapPanel x:Name="SoundBulkVerbs" ItemSpacing="{StaticResource SpaceSm}" LineSpacing="{StaticResource SpaceXs}"
+                   Margin="{StaticResource GapTopXs}">
+            <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc Inspector_ApplyToAll}"
+                    Command="{Binding ApplyNoteValuesToAllCommand}"
+                    ToolTip.Tip="{localization:Loc Inspector_ApplyToAllTip}" />
+            <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc Inspector_Chord_ApplyToAll}"
+                    Command="{Binding ApplyChordValuesToAllCommand}"
+                    ToolTip.Tip="{localization:Loc Inspector_Chord_ApplyToAllTip}" />
+        </WrapPanel>
+    </StackPanel>
+
+</UserControl>

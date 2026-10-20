@@ -1,0 +1,578 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:editorViews="using:DotCharter.UI.Views.Editor"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Preview3DView"
+             x:DataType="viewModels:MainWindowViewModel">
+
+    <!-- The "Toggle 3D Preview" header was removed: the side-tab already
+         hides the entire panel (Is3DPreviewActive on MainWindowViewModel).
+         ProjectState.Is3DPreviewVisible still gates the viewport below; startup
+         forces it back on (MainWindowLayoutController.RestoreOnLoad). -->
+    <UserControl.Styles>
+        <!-- The chart editor's workspace grammar (0.51). It carries this view's
+             own editor strip — `Border.HudBar` + `TextBlock.HudLabel` /
+             `HudStat`, which used to be declared right here on the app ladder —
+             and it is included by the VIEW rather than reached from MainWindow
+             (which includes it only on its own pane header, #412), because the pop-out button re-parents this single
+             instance into a plain Window that never sees a window-scoped style.
+             The in-game HUD below keeps its own vocabulary on purpose: that is
+             game chrome, not editor chrome. -->
+        <StyleInclude Source="avares://DotCharter/Views/Editor/EditorWorkspaceStyles.axaml" />
+
+        <!-- ===== In-game HUD vocabulary (gameplay presentation only) ===== -->
+        <!-- Dominant score figure: monospace so a climbing score never reflows
+             the bar. -->
+        <Style Selector="TextBlock.GameScore">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeHero}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="LineHeight" Value="{StaticResource LineHeightHudFigure}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- Secondary stat figures (accuracy, hits/misses): mono, subordinate to
+             the score. -->
+        <Style Selector="TextBlock.GameStat">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeLg}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- Tiny caption over a stat. -->
+        <Style Selector="TextBlock.GameCaption">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMicro}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- Subordinate context text (current section). -->
+        <Style Selector="TextBlock.GameContext">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- Compact multiplier chip. -->
+        <Style Selector="Border.MultChip">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+            <Setter Property="Padding" Value="9,3" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.MultChip > TextBlock">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentHover}" />
+        </Style>
+        <!-- Quiet transport icon buttons: no chrome until hover, sized so they
+             never compete with the score. -->
+        <Style Selector="Button.GameIcon, ToggleButton.GameIcon">
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="MinWidth" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.GameIcon:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+        </Style>
+        <!-- Outlined warning chips — deliberately quieter than a filled block. -->
+        <Style Selector="Border.GameWarn">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.GameWarn.Warn">
+            <Setter Property="BorderBrush" Value="{DynamicResource WarningColor}" />
+        </Style>
+        <Style Selector="Border.GameWarn.Warn > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Border.GameWarn.Danger">
+            <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+        </Style>
+        <Style Selector="Border.GameWarn.Danger > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <!-- ===== Rock meter (performance stakes, opt-in) =====
+             Zone colors are token-based (Success → Warning → Danger); the
+             classes flip from the SAME coalesced 30 Hz tick that publishes the
+             value. Declaration order matters: Danger after Warn so it wins
+             when both flags are set. -->
+        <Style Selector="ProgressBar.RockMeter">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="MinHeight" Value="8" />
+        </Style>
+        <Style Selector="ProgressBar.RockMeter.Warn">
+            <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+        </Style>
+        <Style Selector="ProgressBar.RockMeter.Danger">
+            <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+        </Style>
+        <!-- Critical emphasis: a STATIC danger frame, state-driven like the
+             zones — deliberately no style animation on this hideable surface
+             (a hidden control's style clocks keep ticking). -->
+        <Style Selector="Border.RockMeterFrame">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+            <Setter Property="Padding" Value="2" />
+        </Style>
+        <Style Selector="Border.RockMeterFrame.Critical">
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+            <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+        </Style>
+
+        <!-- ===== Crowd meter (0.28 Band night HUD) =====
+             Room enthusiasm 0..1: neutral rides the accent, a hot crowd goes
+             Success, a cold one Warning. Zone classes flip on the same
+             coalesced 30 Hz tick as the value — state-driven, no style
+             animations (hideable surface). Order: Hot before Cold so a
+             (impossible) both-set state stays visibly cold. -->
+        <Style Selector="ProgressBar.CrowdMeter">
+            <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="MinHeight" Value="8" />
+        </Style>
+        <Style Selector="ProgressBar.CrowdMeter.Hot">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+        </Style>
+        <Style Selector="ProgressBar.CrowdMeter.Cold">
+            <Setter Property="Foreground" Value="{DynamicResource WarningColor}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- The HUD is a sibling row, NOT an overlay: the 3D canvas is a
+         NativeControlHost, so Avalonia content placed over it would be
+         hidden behind the native swapchain (airspace). -->
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+        <!-- Row 0 top bar. Editor mode keeps the practice / live-play toolbar
+             verbatim; a game run swaps in the immersive HUD Border below. The
+             two Borders share this one Grid cell with mutually-exclusive
+             IsVisible (only one is ever laid out), so the editor tree stays
+             byte-for-byte unchanged. A sibling row, NOT an overlay (airspace). -->
+        <Border Grid.Row="0" Classes="HudBar"
+                IsVisible="{Binding !IsGameplayPresentation}">
+            <Grid ColumnDefinitions="Auto,12,Auto,Auto,Auto,Auto,Auto,*,Auto,8,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                    <!-- Practice toggles (editor only). -->
+                    <StackPanel Orientation="Horizontal" Spacing="4"
+                                IsVisible="{Binding !IsGameplayPresentation}">
+                        <ToggleButton AutomationProperties.Name="{localization:Loc LivePlay_Toggle}" Classes="HudAction"
+                                                                            IsChecked="{Binding LivePlay.IsActive, Mode=TwoWay}"
+                                      ToolTip.Tip="{localization:Loc LivePlay_Toggle_Tip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <PathIcon Data="{DynamicResource IconTune}" Width="12" Height="12" />
+                                <TextBlock Text="{localization:Loc LivePlay_Toggle}" FontSize="{StaticResource FontSizeSm}" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton AutomationProperties.Name="{localization:Loc LivePlay_Monitor}" Classes="HudAction"
+                                                                            IsChecked="{Binding LivePlay.ShowDetectionMonitor, Mode=TwoWay}"
+                                      ToolTip.Tip="{localization:Loc LivePlay_Monitor_Tip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <PathIcon Data="{DynamicResource IconPulse}" Width="12" Height="12" />
+                                <TextBlock Text="{localization:Loc LivePlay_Monitor}" FontSize="{StaticResource FontSizeSm}" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0"
+                            IsVisible="{Binding LivePlay.IsActive}">
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Score}" />
+                    <TextBlock Classes="HudStat" FontWeight="SemiBold" Text="{Binding LivePlay.Score}" />
+                </StackPanel>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0"
+                            IsVisible="{Binding LivePlay.IsActive}">
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Streak}" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.Streak}" />
+                    <TextBlock Classes="HudLabel" Text="{Binding LivePlay.Multiplier, StringFormat=x{0}}"
+                               Foreground="{DynamicResource AccentHover}" />
+                </StackPanel>
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0"
+                            IsVisible="{Binding LivePlay.IsActive}">
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Accuracy}" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.AccuracyPercent, StringFormat={}{0:0.0}%}" />
+                </StackPanel>
+                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" Margin="0,0,14,0"
+                            IsVisible="{Binding LivePlay.IsActive}">
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_HitsMisses}" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.Hits}"
+                               Foreground="{DynamicResource SuccessColor}" />
+                    <TextBlock Classes="HudLabel" Text="/" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.Misses}"
+                               Foreground="{DynamicResource DangerColor}" />
+                    <TextBlock Classes="HudLabel" Text="{Binding LivePlay.TotalSounds, StringFormat=/ {0}}" />
+                </StackPanel>
+                <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="6"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding LivePlay.IsActive}">
+                    <TextBlock FontWeight="Bold" FontSize="{StaticResource FontSizeLg}"
+                               VerticalAlignment="Center"
+                               Text="{Binding LivePlay.LastFeedback}"
+                               Classes.hit="{Binding LivePlay.LastWasHit}"
+                               Classes.miss="{Binding !LivePlay.LastWasHit}">
+                        <TextBlock.Styles>
+                            <Style Selector="TextBlock.hit">
+                                <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+                            </Style>
+                            <Style Selector="TextBlock.miss">
+                                <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+                            </Style>
+                        </TextBlock.Styles>
+                    </TextBlock>
+                    <!-- EARLY/LATE rides beside the verdict. Blank for an on-time
+                         hit, and blank for anything with no honest attack time
+                         (miss, CQT pull-verify) — see LiveTiming.Classify. -->
+                    <TextBlock FontWeight="SemiBold" FontSize="{StaticResource FontSizeSm}"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource WarningColor}"
+                               Text="{Binding LivePlay.LastTimingLabel}"
+                               IsVisible="{Binding LivePlay.LastTimingLabel,
+                                           Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="8" Classes="HudLabel"
+                           Text="{Binding LivePlay.StatusHint}"
+                           IsVisible="{Binding LivePlay.StatusHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                <!-- Quick toggles for the Vulkan eye candy — the same flags
+                     as Settings → Graphics, surfaced where the effect is. -->
+                <DropDownButton Grid.Column="10" Classes="HudAction"
+                                Content="{localization:Loc Preview3D_Effects}"
+                                ToolTip.Tip="{localization:Loc Preview3D_Effects_Tip}">
+                    <DropDownButton.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Spacing="6" MinWidth="200">
+                                <CheckBox Content="{localization:Loc Settings_Graphics_NoteHitExplosions}"
+                                          IsChecked="{Binding ProjectState.EnableNoteHitExplosions, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_Graphics_HighwayNearFade}"
+                                          IsChecked="{Binding ProjectState.EnableHighwayNearFade, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_Graphics_ShowlightBeams}"
+                                          IsChecked="{Binding ProjectState.EnableShowlightBeams, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_Graphics_ShowlightFog}"
+                                          IsChecked="{Binding ProjectState.EnableShowlightFog, Mode=TwoWay}" />
+                            </StackPanel>
+                        </Flyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+            </Grid>
+        </Border>
+
+        <!-- ===== In-game HUD (gameplay presentation only) =====
+             Game chrome, not editor chrome: a glass bar where the score is the
+             dominant figure, the multiplier a compact chip, and Pause / Quit
+             quiet icon buttons that never compete with the score. Diagnostics
+             (detection-load chip) collapse to a discoverable glyph unless the
+             detection monitor is open. Sibling of the editor Border above in
+             the same Grid cell (airspace: strip lives ABOVE the highway). -->
+        <Border Grid.Row="0"
+                IsVisible="{Binding IsGameplayPresentation}"
+                Background="{DynamicResource PanelGlass}"
+                BorderBrush="{DynamicResource BorderSubtle}"
+                BorderThickness="0,0,0,1"
+                Padding="12,5">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <!-- LEFT: quiet transport + subordinate context. -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                            Spacing="{StaticResource SpaceXs}" VerticalAlignment="Center">
+                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle GameIcon"
+                            Command="{Binding PauseGameplayRunCommand}"
+                            AutomationProperties.Name="{localization:Loc Gameplay_Pause_Tip}"
+                            ToolTip.Tip="{localization:Loc Gameplay_Pause_Tip}">
+                        <PathIcon Data="{DynamicResource IconPause}" Width="14" Height="14" />
+                    </Button>
+                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle GameIcon"
+                            Command="{Binding EndGameplayRunCommand}"
+                            AutomationProperties.Name="{localization:Loc Gameplay_EndRun_Tip}"
+                            ToolTip.Tip="{localization:Loc Gameplay_EndRun_Tip}">
+                        <PathIcon Data="{DynamicResource IconStop}" Width="14" Height="14" />
+                    </Button>
+                    <Border Width="1" Background="{DynamicResource BorderSubtle}" Margin="4,6" />
+                    <ToggleButton Classes="Subtle GameIcon"
+                                  IsChecked="{Binding IsSheetMusicVisible, Mode=TwoWay}"
+                                  AutomationProperties.Name="{localization:Loc Gameplay_Notation_Tip}"
+                                  ToolTip.Tip="{localization:Loc Gameplay_Notation_Tip}">
+                        <PathIcon Data="{DynamicResource IconSheetMusic}" Width="14" Height="14" />
+                    </ToggleButton>
+                    <!-- Subordinate run context (current section). -->
+                    <TextBlock Classes="GameContext" Margin="8,0,0,0"
+                               Text="{Binding ProjectState.CurrentSectionDisplay}" />
+                </StackPanel>
+
+                <!-- CENTER: mid-run alerts. Dead input is a critical device
+                     alarm (always shown); tuning drift is a game-relevant nudge;
+                     detection-load is a DIAGNOSTIC — a full chip only with the
+                     monitor open, otherwise a discoverable warning glyph. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            Spacing="{StaticResource SpaceSm}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border Classes="GameWarn Danger" IsVisible="{Binding LivePlay.IsInputSilent}">
+                        <TextBlock Text="{localization:Loc LivePlay_NoInputSignal}" />
+                    </Border>
+                    <Panel IsVisible="{Binding LivePlay.IsInputStarved}" VerticalAlignment="Center">
+                        <Border Classes="GameWarn Warn" IsVisible="{Binding LivePlay.ShowDetectionMonitor}">
+                            <TextBlock Text="{localization:Loc LivePlay_InputStarved}" />
+                        </Border>
+                        <PathIcon Data="{DynamicResource IconAlert}" Width="15" Height="15"
+                                  VerticalAlignment="Center"
+                                  Foreground="{DynamicResource WarningColor}"
+                                  IsVisible="{Binding !LivePlay.ShowDetectionMonitor}"
+                                  ToolTip.Tip="{localization:Loc LivePlay_InputStarved}" />
+                    </Panel>
+                    <Border Classes="GameWarn Warn" IsVisible="{Binding LivePlay.HasTuningDrift}">
+                        <TextBlock Text="{Binding LivePlay.TuningDriftHint}" />
+                    </Border>
+                </StackPanel>
+
+                <!-- RIGHT: score cluster — the dominant figure. -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                            Spacing="{StaticResource SpaceLg}"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding LivePlay.IsActive}">
+                    <!-- Crowd meter (0.28 Band night): how the room feels about
+                         the playing. Armed by every Play Mode gameplay run,
+                         collapsed everywhere else; same coalesced 30 Hz channel
+                         as the score — never the raw 250 Hz playhead. -->
+                    <StackPanel VerticalAlignment="Center" Spacing="{StaticResource SpaceXxs}"
+                                IsVisible="{Binding LivePlay.Meters.IsCrowdMeterActive}"
+                                ToolTip.Tip="{localization:Loc PlayMode_CrowdMeter_HudTip}">
+                        <TextBlock Classes="GameCaption" HorizontalAlignment="Right"
+                                   Text="{localization:Loc PlayMode_CrowdMeter_HudCaption}" />
+                        <ProgressBar Classes="CrowdMeter" Width="110"
+                                     Classes.Hot="{Binding LivePlay.Meters.IsCrowdHot}"
+                                     Classes.Cold="{Binding LivePlay.Meters.IsCrowdCold}"
+                                     Minimum="0" Maximum="1"
+                                     Value="{Binding LivePlay.Meters.CrowdEnthusiasm, Mode=OneWay}" />
+                    </StackPanel>
+                    <!-- Rock meter (performance stakes, opt-in): compact energy
+                         bar LEFT of the score cluster. Hidden entirely unless a
+                         run armed it (off/LAN-sync/Riff-Repeater = collapsed).
+                         Value + zone flags ride the same coalesced 30 Hz
+                         channel as the score — never the raw 250 Hz playhead. -->
+                    <StackPanel VerticalAlignment="Center" Spacing="{StaticResource SpaceXxs}"
+                                IsVisible="{Binding LivePlay.Meters.IsRockMeterActive}"
+                                ToolTip.Tip="{localization:Loc PlayMode_RockMeter_HudTip}">
+                        <TextBlock Classes="GameCaption" HorizontalAlignment="Right"
+                                   Text="{localization:Loc PlayMode_RockMeter_HudCaption}" />
+                        <Border Classes="RockMeterFrame"
+                                Classes.Critical="{Binding LivePlay.Meters.IsRockEnergyCritical}">
+                            <ProgressBar Classes="RockMeter" Width="130"
+                                         Classes.Warn="{Binding LivePlay.Meters.IsRockEnergyWarn}"
+                                         Classes.Danger="{Binding LivePlay.Meters.IsRockEnergyDanger}"
+                                         Minimum="0" Maximum="1"
+                                         Value="{Binding LivePlay.Meters.RockEnergy, Mode=OneWay}" />
+                        </Border>
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center" Spacing="{StaticResource SpaceXxs}">
+                        <TextBlock Classes="GameCaption" HorizontalAlignment="Right"
+                                   Text="{localization:Loc LivePlay_Accuracy}" />
+                        <TextBlock Classes="GameStat" HorizontalAlignment="Right"
+                                   Text="{Binding LivePlay.AccuracyPercent, StringFormat={}{0:0.0}%}" />
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center" Spacing="{StaticResource SpaceXxs}">
+                        <TextBlock Classes="GameCaption" HorizontalAlignment="Right"
+                                   Text="{localization:Loc LivePlay_HitsMisses}" />
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXxs}"
+                                    HorizontalAlignment="Right">
+                            <TextBlock Classes="GameStat" Foreground="{DynamicResource SuccessColor}"
+                                       Text="{Binding LivePlay.Hits}" />
+                            <TextBlock Classes="GameStat" Foreground="{DynamicResource TextMuted}" Text="/" />
+                            <TextBlock Classes="GameStat" Foreground="{DynamicResource DangerColor}"
+                                       Text="{Binding LivePlay.Misses}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <!-- Score multiplier as a compact chip. -->
+                    <Border Classes="MultChip" ToolTip.Tip="{localization:Loc LivePlay_Streak}">
+                        <TextBlock Text="{Binding LivePlay.Multiplier, StringFormat=×{0}}" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center" Spacing="{StaticResource SpaceXxs}">
+                        <TextBlock Classes="GameCaption" HorizontalAlignment="Right"
+                                   Text="{localization:Loc LivePlay_Score}" />
+                        <TextBlock Classes="GameScore" HorizontalAlignment="Right"
+                                   Text="{Binding LivePlay.Score}" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Practice suite strip: A/B loop with count-in, speed ladder,
+             dynamic difficulty, hit-window tightness, latency calibration
+             and per-song bests. A sibling row (airspace). -->
+        <Border Grid.Row="1" Classes="HudBar"
+                IsVisible="{Binding IsPracticeStripVisible}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Loop}" Margin="0,0,2,0" />
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.SetLoopStartCommand}"
+                            Content="{localization:Loc LivePlay_LoopA}"
+                            ToolTip.Tip="{localization:Loc LivePlay_LoopA_Tip}" />
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.SetLoopEndCommand}"
+                            IsEnabled="{Binding LivePlay.LoopStartArmed}"
+                            Content="{localization:Loc LivePlay_LoopB}"
+                            ToolTip.Tip="{localization:Loc LivePlay_LoopB_Tip}" />
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.ClearLoopCommand}"
+                            IsEnabled="{Binding LivePlay.LoopActive}"
+                            Content="✕"
+                            ToolTip.Tip="{localization:Loc LivePlay_LoopClear_Tip}"
+                            AutomationProperties.Name="{localization:Loc LivePlay_LoopClear_Tip}" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.LoopLabel}"
+                               IsVisible="{Binding LivePlay.LoopActive}" Margin="4,0,0,0" />
+                    <Border Background="{DynamicResource AccentHover}" CornerRadius="{StaticResource RadiusXs}" Padding="6,1"
+                            VerticalAlignment="Center" Margin="4,0,0,0"
+                            IsVisible="{Binding LivePlay.IsCountingIn}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock FontSize="{StaticResource FontSizeXs}"
+                                       Text="{localization:Loc LivePlay_CountIn}" />
+                            <TextBlock FontSize="{StaticResource FontSizeXs}" FontWeight="Bold"
+                                       Text="{Binding LivePlay.CountInRemaining}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Width="1" Background="{DynamicResource BorderSubtle}" Margin="8,1" />
+
+                    <ToggleButton Classes="HudAction"
+                                  IsChecked="{Binding LivePlay.IsSpeedLadderEnabled, Mode=TwoWay}"
+                                  Content="{localization:Loc LivePlay_SpeedLadder}"
+                                  ToolTip.Tip="{localization:Loc LivePlay_SpeedLadder_Tip}" />
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Speed}" />
+                    <TextBlock Classes="HudStat"
+                               Text="{Binding LivePlay.CurrentSpeedPercent, StringFormat={}{0}%}" />
+                    <ToggleButton Classes="HudAction"
+                                  IsChecked="{Binding LivePlay.IsDynamicDifficultyOn, Mode=TwoWay}"
+                                  IsEnabled="{Binding LivePlay.CanUseDynamicDifficulty}"
+                                  Content="{localization:Loc LivePlay_DynDiff}"
+                                  ToolTip.Tip="{localization:Loc LivePlay_DynDiff_Tip}" />
+                    <!-- A chart with no notes cannot be levelled: the toggle is disabled and says why (#323).
+                         A one-level chart rides a ladder generated per run, and says that (#295). -->
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_DynDiff_Unavailable}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_Unavailable_Tip}"
+                               IsVisible="{Binding !LivePlay.CanUseDynamicDifficulty}" />
+                    <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_DynDiff_Generated}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_Generated_Tip}"
+                               IsVisible="{Binding LivePlay.IsDynamicDifficultyGenerated}" />
+                    <!-- A song with no ladder history starts where the player usually plays, with a way back to 0 (#295). -->
+                    <TextBlock x:Name="DynDiffFromHistoryText" Classes="HudLabel" Text="{localization:Loc LivePlay_DynDiff_FromHistory}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_FromHistory_Tip}"
+                               IsVisible="{Binding LivePlay.IsStartingFromHistory}" />
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.HistoryStartPercent, StringFormat={}{0}%}"
+                               ToolTip.Tip="{localization:Loc LivePlay_DynDiff_FromHistory_Tip}"
+                               IsVisible="{Binding LivePlay.IsStartingFromHistory}" />
+                    <Button x:Name="DynDiffStartAtZeroButton" Classes="HudAction"
+                            Command="{Binding LivePlay.StartLadderAtBottomCommand}"
+                            Content="{localization:Loc LivePlay_DynDiff_StartAtZero}"
+                            ToolTip.Tip="{localization:Loc LivePlay_DynDiff_StartAtZero_Tip}"
+                            IsVisible="{Binding LivePlay.IsStartingFromHistory}" />
+                    <ComboBox SelectedIndex="{Binding LivePlay.HitWindowIndex, Mode=TwoWay}"
+                              FontSize="{StaticResource FontSizeSm}" Padding="8,2" MinWidth="90"
+                              ToolTip.Tip="{localization:Loc LivePlay_HitWindow_Tip}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_HitWindow}">
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Lenient}" />
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Normal}" />
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Strict}" />
+                    </ComboBox>
+                    <Button Classes="HudAction"
+                            Command="{Binding LivePlay.CalibrateLatencyCommand}"
+                            Content="{localization:Loc LivePlay_Calibrate}"
+                            ToolTip.Tip="{localization:Loc LivePlay_Calibrate_Tip}" />
+                    <ToggleButton AutomationProperties.Name="{localization:Loc Gameplay_Notation}" Classes="HudAction"
+                                  IsChecked="{Binding IsSheetMusicVisible, Mode=TwoWay}"
+                                  ToolTip.Tip="{localization:Loc Gameplay_Notation_Tip}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Data="{DynamicResource IconSheetMusic}" Width="12" Height="12" />
+                            <TextBlock Text="{localization:Loc Gameplay_Notation}"
+                                       FontSize="{StaticResource FontSizeSm}" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <TextBlock Classes="HudLabel" Text="{Binding LivePlay.CalibrationStatus}"
+                               IsVisible="{Binding LivePlay.CalibrationStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+                    <TextBlock Classes="HudStat" Text="{Binding LivePlay.PassSummary}"
+                               IsVisible="{Binding LivePlay.PassSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <DropDownButton Padding="8,2" FontSize="{StaticResource FontSizeSm}"
+                                    IsVisible="{Binding !!LivePlay.MissedRecently.Count}"
+                                    Content="{localization:Loc LivePlay_Missed_Title}">
+                        <DropDownButton.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedRight">
+                                <ItemsControl ItemsSource="{Binding LivePlay.MissedRecently}" MinWidth="160">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{Binding}" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       FontSize="{StaticResource FontSizeXs}"
+                                                       Foreground="{DynamicResource DangerColor}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Flyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Best}" />
+                        <TextBlock Classes="HudStat" Text="{Binding LivePlay.BestScore}" />
+                        <TextBlock Classes="HudStat"
+                                   Text="{Binding LivePlay.BestAccuracyPercent, StringFormat=({0:0.0}%)}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Classes="HudLabel" Text="{localization:Loc LivePlay_Mastery}" />
+                        <TextBlock Classes="HudStat" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentHover}"
+                                   Text="{Binding LivePlay.MasteryPercent, StringFormat={}{0:0.0}%}" />
+                    </StackPanel>
+                    <controls:PracticeProgressGraph Width="110" Height="22"
+                                                    VerticalAlignment="Center"
+                                                    ToolTip.Tip="{localization:Loc LivePlay_Progress_Tip}"
+                                                    Sessions="{Binding LivePlay.ProfileSessions}"
+                                                    Version="{Binding LivePlay.ProfileVersion}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Rocksmith-style section strip / riff-repeater picker: per-section
+             density blocks with live accuracy heat, click a section to loop
+             it, with the playhead sweeping across. -->
+        <controls:LivePlaySectionGraph Grid.Row="2"
+                                       Height="34"
+                                       Margin="8,4"
+                                       IsVisible="{Binding LivePlay.IsActive}"
+                                       LivePlay="{Binding LivePlay}"
+                                       SectionsVersion="{Binding LivePlay.SectionsVersion}" />
+
+        <!-- Detection monitor: everything the analyzer hears, newest first, and
+             how sure the detector was per string (#314) — LiveDetectionMonitorView.
+             A sibling row like the HUD — never an overlay (airspace). -->
+        <Border Grid.Row="3" Classes="HudBar"
+                IsVisible="{Binding LivePlay.ShowDetectionMonitor}"
+                MaxHeight="170">
+            <editorViews:LiveDetectionMonitorView DataContext="{Binding LivePlay}" />
+        </Border>
+
+        <Grid Grid.Row="4">
+            <!-- The viewport control (Preview3DComposedCanvas) is created in
+                 code-behind. Only ONE may ever exist — the singleton renderer
+                 owns one composed image pool. -->
+            <Panel x:Name="ViewportHost"
+                   IsVisible="{Binding ProjectState.Is3DPreviewVisible}" />
+
+            <TextBlock Text="{localization:Loc Preview3D_Disabled}"
+                       IsVisible="{Binding !ProjectState.Is3DPreviewVisible}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextDim}"
+                       FontSize="{StaticResource FontSizeTitle}"
+                       FontWeight="SemiBold" />
+        </Grid>
+    </Grid>
+</UserControl>

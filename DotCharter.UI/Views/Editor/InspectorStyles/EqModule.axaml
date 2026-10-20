@@ -1,0 +1,337 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the inspector grammar — see `Views/Editor/InspectorStyles.axaml`,
+         which merges this file and its siblings IN ORDER. The EQ module (`EQ and Filters.dc.html`) — plot well, band chip row,
+         band editor, its segmented controls and parameter rows. -->
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         THE EQ MODULE (`EQ and Filters.dc.html`, the MIXER TAB module).
+
+         It lives here rather than in `EqModuleView.axaml`'s own
+         `UserControl.Styles` for the reason this whole file exists: the module
+         is hosted by `MixerInspectorView`, which already includes this
+         grammar, and a second copy of the ladder inside one view is how two
+         surfaces that should look identical drift.
+
+         It REUSES `Slider.MixerSlider` verbatim — the EQ's freq/gain/Q/trim
+         tracks are mixer rows and must sit on the same 24 px, 5 px-track,
+         14 px-thumb geometry as every fader above them. Only what the mockup
+         adds is new below.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <Style Selector="TextBlock.EqEyebrow">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentPale}" />
+    </Style>
+
+    <!-- The "n/6 active" badge. Hairline box, mono, muted — it is a READOUT,
+         not a control, and must not read as something to press. -->
+    <Style Selector="Border.EqCountBadge">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+        <Setter Property="Padding" Value="6,2" />
+    </Style>
+    <Style Selector="TextBlock.EqCountBadgeText">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+
+    <!-- The preset select. Every colour is stated at TEMPLATE level, not on the
+         control: Fluent's ComboBox theme paints its own background/border/
+         foreground onto the inner parts from its resource keys, so a
+         control-level `Background` is simply not what gets drawn — the first
+         render of this module came out as a WHITE pill on a black card for
+         exactly that reason. -->
+    <Style Selector="ComboBox.EqPresetPicker">
+        <Setter Property="MaxWidth" Value="168" />
+        <Setter Property="MinWidth" Value="96" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Padding" Value="9,0" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ComboBox.EqPresetPicker /template/ Border#Background">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="ComboBox.EqPresetPicker:pointerover /template/ Border#Background">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderHover}" />
+    </Style>
+    <Style Selector="ComboBox.EqPresetPicker /template/ ContentPresenter#ContentPresenter">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="ComboBox.EqPresetPicker /template/ PathIcon#DropDownGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+
+    <!-- The power toggle. 24 px square, same as the mockup's; CHECKED is the
+         resting state (the section is on), so the AMBER "bypassed" look is the
+         unchecked one — the opposite of most toggles here, and deliberately so:
+         bypassed is the state worth noticing. -->
+    <Style Selector="ToggleButton.EqPower">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="MinWidth" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!-- Same template-level rule as the picker above, and it bit here first: a
+         checked ToggleButton's ContentPresenter takes its fill from the theme's
+         accent, so the control-level `Background` below was ignored and the
+         power button rendered as a solid violet square in every state. -->
+    <Style Selector="ToggleButton.EqPower /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+    </Style>
+    <Style Selector="ToggleButton.EqPower:checked /template/ ContentPresenter,
+                     ToggleButton.EqPower:checked:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+    </Style>
+    <Style Selector="ToggleButton.EqPower:checked">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+    </Style>
+    <Style Selector="ToggleButton.EqPower PathIcon.EqPowerGlyph">
+        <Setter Property="Width" Value="11" />
+        <Setter Property="Height" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="ToggleButton.EqPower:checked PathIcon.EqPowerGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+    </Style>
+
+    <!-- The plot well. `ClipToBounds` is on the control itself; the Border owns
+         the frame and the sunken fill so the curve has something to sit in at
+         every height the pane can take. -->
+    <Style Selector="Border.EqPlotWell">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
+    <Style Selector="Border.EqBypassTag">
+        <Setter Property="Margin" Value="0,6,7,0" />
+        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="TextBlock.EqBypassTagText">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNanoSm}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+
+    <!-- The engine's reason, when there is no EQ to drive. It WRAPS and it has a
+         width bound (the Grid row is the full module width), because this repo's
+         own rule is that wrapping text with no width bound is sliced silently —
+         and this sentence is ~40% longer in German. -->
+    <Style Selector="TextBlock.EqUnavailable">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+        <Setter Property="Margin" Value="2,0" />
+    </Style>
+
+    <!-- ── the band chip row ──────────────────────────────────────────── -->
+    <Style Selector="Button.EqChip">
+        <Setter Property="Height" Value="26" />
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.EqChip.selected">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+    </Style>
+    <!-- A band that is OFF is DIM, never hidden — the row is a fixed six, and a
+         chip that vanished would move the other five under the pointer. -->
+    <Style Selector="Button.EqChip.EqBandOff">
+        <Setter Property="Opacity" Value="0.5" />
+    </Style>
+    <Style Selector="Button.EqChip:pointerover">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <Style Selector="Button.EqChip TextBlock.EqChipLabel">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.EqChip.selected TextBlock.EqChipLabel">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+
+    <!-- The dot IS the bypass control, so it is a real Button with a real hit
+         area rather than an Ellipse with a gesture on it. Its fill comes from
+         the band's identity token, bound per item. -->
+    <Style Selector="Button.EqChipDot">
+        <Setter Property="Width" Value="9" />
+        <Setter Property="Height" Value="9" />
+        <Setter Property="MinWidth" Value="9" />
+        <Setter Property="MinHeight" Value="9" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!-- An OFF band's dot is hollow: the identity colour survives on the ring so
+         the chip still says WHICH band it is, and only the fill goes. -->
+    <Style Selector="Button.EqChip.EqBandOff Button.EqChipDot">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- ── the selected band's editor ─────────────────────────────────── -->
+    <!-- The band editor's edge is TINTED with the band's own identity colour
+         (the mockup's `1px solid <band>33`), which is why this style states no
+         BorderBrush: the view binds it per band, and a setter here would win. -->
+    <Style Selector="Border.EqBandCard">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+        <Setter Property="Padding" Value="10,9" />
+    </Style>
+    <Style Selector="Ellipse.EqBandDot">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Height" Value="8" />
+    </Style>
+    <Style Selector="TextBlock.EqBandTitle">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- SOLO / RESET. Mono micro-caps, hairline, no fill at rest — they sit on
+         the band header and must not compete with the band's own colour. -->
+    <Style Selector="Button.EqMicroButton, ToggleButton.EqMicroToggle">
+        <Setter Property="Height" Value="18" />
+        <Setter Property="MinHeight" Value="18" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="7,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNanoSm}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.EqMicroToggle:checked">
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+
+    <!-- ── the segmented controls (type picker, routing) ──────────────── -->
+    <Style Selector="Border.EqSegTrack">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="Padding" Value="2" />
+    </Style>
+    <Style Selector="Button.EqSegItem">
+        <Setter Property="Height" Value="20" />
+        <Setter Property="MinHeight" Value="20" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Margin" Value="1,0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNanoSm}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.EqSegItem.selected">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Button.EqSegItem:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+    </Style>
+
+    <!-- ── the parameter rows ─────────────────────────────────────────── -->
+    <!-- The two rails, as fixed widths on the CELLS. Same rule (and the same
+         reason) as `TextBlock.MixerLabel`/`MixerValue` above: a GridLength is
+         not a double, so a shared number has to live on something that takes
+         one. Narrower than the mixer's because this card is inset. -->
+    <Style Selector="Grid.EqParamRow">
+        <Setter Property="MinHeight" Value="24" />
+    </Style>
+    <Style Selector="TextBlock.EqParamLabel">
+        <Setter Property="Width" Value="42" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- 74, not 66: the German slope "12 dB/Okt." needs 69 px (UI sweep, de-DE). -->
+    <Style Selector="TextBlock.EqParamValue">
+        <Setter Property="Width" Value="74" />
+        <Setter Property="TextAlignment" Value="Right" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- "no gain on this type" — the note that REPLACES a slider rather than
+         disabling one, so nothing on the row can be dragged to no effect. -->
+    <Style Selector="TextBlock.EqParamNote">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style Selector="Grid.EqFooter">
+        <Setter Property="MinHeight" Value="26" />
+    </Style>
+</Styles>

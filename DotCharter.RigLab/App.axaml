@@ -1,0 +1,27 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:DotCharter.Tone.UI"
+             x:Class="DotCharter.RigLab.App"
+             RequestedThemeVariant="Default">
+
+    <Application.DataTemplates>
+        <!-- The rig's editors render their view models through the same
+             name-based locator DotCharter uses (ViewModels.X -> Views.X). -->
+        <ui:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- The production palette, shared with DotCharter and the gallery. -->
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Styles/ColorTokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <!-- The design system without DotCharter's app chrome. -->
+        <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/RigTheme.axaml" />
+    </Application.Styles>
+</Application>

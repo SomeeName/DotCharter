@@ -1,0 +1,175 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.ToneCreatorDialogView"
+             x:DataType="contracts:IToneCreatorScreen"
+             x:CompileBindings="True">
+
+    <!-- The Tone designer's AI tone creator. Grammar: Views/Dialogs/DialogStyles.axaml.
+         Its own hosted dialog, opened over the designer, so the designer's open cost does not grow.
+         The body scrolls in the star row, so the footer stays put at 1280x720. The DotCharter-rig
+         scope is shown greyed with its reason printed: a rig cannot be saved as a Rocksmith tone. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconAmp}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_ToneCreator_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" TextWrapping="Wrap"
+                                   Text="{localization:Loc Dialog_ToneCreator_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="CreatorBody">
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" RowDefinitions="Auto,Auto">
+                            <TextBlock Grid.Row="0" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_ToneCreator_Describe}" />
+                            <TextBox x:Name="DescriptionInput" Grid.Row="1" dlgv:FocusOnOpen.IsTarget="True"
+                                     Text="{Binding Description, Mode=TwoWay}" MaxLength="{Binding MaxLength}"
+                                     AcceptsReturn="True" TextWrapping="Wrap" MinLines="2" MaxLines="5"
+                                     PlaceholderText="{localization:Loc Dialog_ToneCreator_Placeholder}"
+                                     AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_Describe}" />
+                        </Grid>
+
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,360">
+                            <TextBlock VerticalAlignment="Top" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_ToneCreator_Scope}" />
+                            <StackPanel x:Name="ScopePanel" Grid.Column="1" Spacing="{DynamicResource SpaceSm}">
+                                <RadioButton GroupName="ToneCreatorScope" IsChecked="{Binding IsRocksmithGearOnly, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_ScopeRocksmith}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_ToneCreator_ScopeRocksmith}" />
+                                </RadioButton>
+                                <RadioButton x:Name="RigScope" GroupName="ToneCreatorScope" IsChecked="{Binding IsDotCharterRig, Mode=TwoWay}"
+                                             IsEnabled="{Binding CanUseDotCharterRig}"
+                                             AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_ScopeRig}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_ToneCreator_ScopeRig}" />
+                                </RadioButton>
+                                <TextBlock x:Name="RigScopeReason" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                           IsVisible="{Binding !CanUseDotCharterRig}" Text="{Binding DotCharterRigReason}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,360">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_ToneCreator_EvidenceLabel}" />
+                                <TextBlock x:Name="EvidenceNote" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                           Text="{Binding SongEvidenceText}" />
+                            </StackPanel>
+                            <CheckBox x:Name="EvidenceCheck" Grid.Column="1" VerticalAlignment="Center"
+                                      IsChecked="{Binding UseSongEvidence, Mode=TwoWay}" IsEnabled="{Binding CanUseSongEvidence}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_EvidenceLabel}" />
+                        </Grid>
+
+                        <Grid Margin="{DynamicResource GapTopMd}" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <TextBlock x:Name="CreatorStatus" Grid.Column="0" Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" IsVisible="{Binding HasStatus}" Text="{Binding Status}" />
+                            <Button x:Name="CreateButton" Grid.Column="1" Classes="DlgChip" Content="{localization:Loc Dialog_ToneCreator_Create}"
+                                    Command="{Binding CreateCommand}" IsVisible="{Binding !IsBusy}" />
+                            <Button Grid.Column="1" Classes="DlgChip" Content="{localization:Loc Dialog_ToneCreator_Stop}"
+                                    Command="{Binding StopCommand}" IsVisible="{Binding IsBusy}" />
+                        </Grid>
+                        <Grid x:Name="CheckRow" Margin="{DynamicResource GapTopMd}" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <TextBlock x:Name="CheckReason" Grid.Column="0" Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" IsVisible="{Binding !CanCheck}"
+                                       Text="{Binding CheckUnavailableReason}" />
+                            <Button x:Name="CheckButton" Grid.Column="1" Classes="DlgChip" Content="{localization:Loc Dialog_ToneCreator_Check}"
+                                    ToolTip.Tip="{localization:Loc Dialog_ToneCreator_CheckTip}" Command="{Binding CheckCommand}"
+                                    IsVisible="{Binding !IsBusy}" AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_Check}" />
+                        </Grid>
+                        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Margin="{DynamicResource GapTopMd}" />
+
+                        <!-- The audio check's provenance: who judged the kept tone (Rocksmith itself, or the clone only and
+                             why), then one line per round. -->
+                        <StackPanel x:Name="CheckPanel" IsVisible="{Binding HasCheckResult}" Margin="{DynamicResource GapTopMd}"
+                                    Spacing="{DynamicResource SpaceSm}">
+                            <TextBlock x:Name="CheckJudge" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" TextWrapping="Wrap"
+                                       Text="{Binding CheckJudgeText}" />
+                            <ItemsControl x:Name="CheckRoundList" ItemsSource="{Binding CheckRounds}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel x:Name="ProposalPanel" IsVisible="{Binding HasProposal}" Margin="{DynamicResource GapTopMd}"
+                                    Spacing="{DynamicResource SpaceSm}">
+                            <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                       Text="{localization:Loc Dialog_ToneCreator_Proposal}" />
+                            <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame">
+                                <ItemsControl x:Name="ProposalRowList" ItemsSource="{Binding ProposalRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IToneProposalRow">
+                                            <Grid ColumnDefinitions="130,*" ColumnSpacing="12" Margin="10,4">
+                                                <TextBlock Grid.Column="0" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Role}" />
+                                                <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{Binding Gear}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                            <TextBlock x:Name="RationaleText" TextWrapping="Wrap" FontStyle="Italic" Text="{Binding Rationale}" />
+                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{Binding EvidenceNote}" />
+                            <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceSm}">
+                                <ToggleButton x:Name="AuditionToggle" Classes="DlgLink" IsChecked="{Binding IsAuditioning, Mode=TwoWay}"
+                                              IsEnabled="{Binding CanAudition}" Content="{localization:Loc Dialog_ToneCreator_Audition}"
+                                              AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_Audition}" />
+                                <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" VerticalAlignment="Center"
+                                           IsVisible="{Binding !CanAudition}" Text="{Binding AuditionUnavailableReason}" />
+                            </StackPanel>
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox x:Name="RefineInput" Grid.Column="0" Text="{Binding RefineText, Mode=TwoWay}"
+                                         PlaceholderText="{localization:Loc Dialog_ToneCreator_RefinePlaceholder}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_RefineName}" />
+                                <Button x:Name="RefineButton" Grid.Column="1" Classes="DlgChip" Content="{localization:Loc Dialog_ToneCreator_Refine}"
+                                        Command="{Binding RefineCommand}" />
+                            </Grid>
+
+                            <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource GapTopMd}"
+                                       Text="{localization:Loc Dialog_ToneCreator_AcceptInto}" />
+                            <RadioButton x:Name="ReplaceChoice" GroupName="ToneCreatorTarget" IsChecked="{Binding IsReplaceEdited, Mode=TwoWay}"
+                                         IsEnabled="{Binding CanReplaceEdited}" AutomationProperties.Name="{Binding ReplaceEditedText}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" TextWrapping="Wrap" Text="{Binding ReplaceEditedText}" />
+                            </RadioButton>
+                            <RadioButton x:Name="NewToneChoice" GroupName="ToneCreatorTarget" IsChecked="{Binding IsSaveAsNew, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_SaveNew}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_ToneCreator_SaveNew}" />
+                            </RadioButton>
+                            <StackPanel Margin="28,0,0,0" Spacing="{DynamicResource SpaceSm}" IsVisible="{Binding IsSaveAsNew}">
+                                <TextBox x:Name="NewToneNameInput" Text="{Binding NewToneName, Mode=TwoWay}" MaxWidth="360" HorizontalAlignment="Left"
+                                         MinWidth="240" AutomationProperties.Name="{localization:Loc Dialog_ToneCreator_NewName}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{Binding NewToneSlotText}" />
+                            </StackPanel>
+                            <CheckBox x:Name="PlaceCheck" IsChecked="{Binding PlaceAtPlayhead, Mode=TwoWay}"
+                                      AutomationProperties.Name="{Binding PlaceAtPlayheadText}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding PlaceAtPlayheadText}" />
+                            </CheckBox>
+                            <TextBlock x:Name="AcceptReason" Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap"
+                                       IsVisible="{Binding HasAcceptUnavailableReason}" Text="{Binding AcceptUnavailableReason}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button x:Name="AcceptButton" Classes="DlgAction Primary" Content="{localization:Loc Dialog_ToneCreator_Accept}"
+                                Command="{Binding AcceptCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,322 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.ChartQualityReportDialogView"
+             x:DataType="contracts:IChartQualityReportScreen"
+             x:CompileBindings="True"
+             ScrollsToEofRoundTrip="{Binding FocusEofRoundTrip}"
+             HasVerdict="{Binding HasVerdict}">
+
+    <!-- Tools ▸ Chart quality report (#292). The verdict first, then the arrangements,
+         then every finding grouped by severity, each row in the export dialog's finding
+         grammar (dot, place, message, Go to, Fix) plus the check that reported it.
+         Grammar: Views/Dialogs/DialogStyles.axaml. The list scrolls with the body (#214),
+         so it takes the height the window has. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconCheck}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_QualityReport_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_QualityReport_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer x:Name="QualityBody" Grid.Row="1" Classes="DialogBody">
+                    <StackPanel Margin="{DynamicResource GapRightLg}">
+
+                        <!-- The checks run off the UI thread (#690): the dialog opens at once with this
+                             row, and on a recheck it shows above the previous report, whose Go to and Fix wait. -->
+                        <StackPanel x:Name="CheckingRow" IsVisible="{Binding IsChecking}" Margin="{DynamicResource GapBottomMd}">
+                            <ProgressBar x:Name="CheckingBar" IsIndeterminate="True" Margin="{DynamicResource GapBottomSm}" />
+                            <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="CheckingText" Classes="DlgHint" Margin="0"
+                                       Text="{localization:Loc Dialog_QualityReport_Checking}" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel x:Name="ReportBody" IsVisible="{Binding HasVerdict}">
+
+                            <!-- The verdict: green when nothing stops the export, red when something does. -->
+                            <Border x:Name="VerdictReady" IsVisible="{Binding IsReady}"
+                                    Background="{DynamicResource DlgOkFill}" BorderBrush="{DynamicResource DlgOkStroke}"
+                                    BorderThickness="1" CornerRadius="{DynamicResource RadiusSm}"
+                                    Padding="{DynamicResource PaddingRow}" Margin="{DynamicResource GapBottomMd}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <PathIcon Grid.Column="0" Width="16" Height="16" Data="{DynamicResource IconCheck}"
+                                              Foreground="{DynamicResource SuccessColor}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Verdict}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextPrimary}" FontWeight="SemiBold"
+                                               FontSize="{DynamicResource FontSizeMd}" TextWrapping="Wrap" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Counts}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextMuted}" FontSize="{DynamicResource FontSizeSm}" />
+                                </Grid>
+                            </Border>
+                            <Border x:Name="VerdictBlocked" IsVisible="{Binding !IsReady}"
+                                    Background="{DynamicResource DlgErrorFill}" BorderBrush="{DynamicResource DlgErrorStroke}"
+                                    BorderThickness="1" CornerRadius="{DynamicResource RadiusSm}"
+                                    Padding="{DynamicResource PaddingRow}" Margin="{DynamicResource GapBottomMd}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <PathIcon Grid.Column="0" Width="16" Height="16" Data="{DynamicResource IconAlert}"
+                                              Foreground="{DynamicResource DangerColor}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Verdict}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextPrimary}" FontWeight="SemiBold"
+                                               FontSize="{DynamicResource FontSizeMd}" TextWrapping="Wrap" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Counts}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextMuted}" FontSize="{DynamicResource FontSizeSm}" />
+                                </Grid>
+                            </Border>
+
+                            <!-- One line per arrangement: name, estimated difficulty, what was found. -->
+                            <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{localization:Loc Dialog_QualityReport_Arrangements}" />
+                            <ItemsControl x:Name="ArrangementList" ItemsSource="{Binding Arrangements}"
+                                          Margin="{DynamicResource GapBottomMd}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IQualityArrangementSummary">
+                                        <Grid ColumnDefinitions="8,*,Auto,Auto" ColumnSpacing="10" Margin="0,3">
+                                            <Panel Grid.Column="0" VerticalAlignment="Center">
+                                                <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningColor}" />
+                                                <Ellipse Width="8" Height="8" Fill="{DynamicResource SuccessColor}"
+                                                         IsVisible="{Binding IsClean}" />
+                                                <Ellipse Width="8" Height="8" Fill="{DynamicResource DangerColor}"
+                                                         IsVisible="{Binding HasErrors}" />
+                                            </Panel>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextPrimary}"
+                                                       FontSize="{DynamicResource FontSizeSm}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Difficulty}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextMuted}" FontSize="{DynamicResource FontSizeSm}" />
+                                            <TextBlock Grid.Column="3" Text="{Binding Counts}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextDim}" FontSize="{DynamicResource FontSizeSm}"
+                                                       MinWidth="180" TextAlignment="Right" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Audio: on request, because it decodes the song. -->
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="{DynamicResource GapBottomMd}">
+                                <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="AudioStatusText" Grid.Column="0" Classes="DlgHint" VerticalAlignment="Center"
+                                           Text="{Binding AudioStatus}" TextWrapping="Wrap" />
+                                <Button x:Name="VerifyAudioButton" Grid.Column="1" Theme="{DynamicResource FireGhostButton}"
+                                        Classes="FireGhost Compact" Height="{DynamicResource FireFieldHeight}"
+                                        VerticalAlignment="Center"
+                                        Content="{localization:Loc Dialog_QualityReport_VerifyAudio}"
+                                        AutomationProperties.Name="{localization:Loc Dialog_QualityReport_VerifyAudio}"
+                                        ToolTip.Tip="{localization:Loc Dialog_QualityReport_VerifyAudioTip}"
+                                        IsEnabled="{Binding CanVerifyAudio}"
+                                        Command="{Binding VerifyAudioCommand}" />
+                            </Grid>
+                            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}"
+                                         Margin="{DynamicResource GapBottomMd}" />
+
+                            <!-- Easier difficulty levels (#397): listed on request; what stops the export always shows. -->
+                            <Grid x:Name="EasierLevelsRow" ColumnDefinitions="Auto,*" ColumnSpacing="12"
+                                  Margin="{DynamicResource GapBottomMd}" IsVisible="{Binding HasEasierLevelFindings}">
+                                <CheckBox x:Name="ShowEasierLevelsBox" Grid.Column="0" VerticalAlignment="Center"
+                                          Content="{localization:Loc Dialog_QualityReport_ShowEasierLevels}"
+                                          AutomationProperties.Name="{localization:Loc Dialog_QualityReport_ShowEasierLevels}"
+                                          ToolTip.Tip="{localization:Loc Dialog_QualityReport_ShowEasierLevelsTip}"
+                                          IsChecked="{Binding ShowEasierLevels, Mode=TwoWay}" />
+                                <TextBlock Theme="{DynamicResource DlgHintText}" Grid.Column="1" Classes="DlgHint" VerticalAlignment="Center"
+                                           Text="{Binding EasierLevelsNote}" TextWrapping="Wrap" />
+                            </Grid>
+
+                            <!-- The findings, by severity. -->
+                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{localization:Loc Dialog_QualityReport_NoFindings}"
+                                       Margin="{DynamicResource GapBottomMd}" IsVisible="{Binding !HasFindings}" />
+                            <ItemsControl x:Name="GroupList" ItemsSource="{Binding Groups}" IsVisible="{Binding HasFindings}"
+                                          IsEnabled="{Binding !IsChecking}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IQualityFindingGroup">
+                                        <StackPanel Margin="{DynamicResource GapBottomMd}">
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="{DynamicResource GapBottomSm}">
+                                                <Panel Grid.Column="0" VerticalAlignment="Center">
+                                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource TextDim}" />
+                                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource DangerColor}"
+                                                             IsVisible="{Binding IsBlocking}" />
+                                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningColor}"
+                                                             IsVisible="{Binding IsImportant}" />
+                                                </Panel>
+                                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Grid.Column="1" Classes="DlgSectionLabel" Text="{Binding Title}"
+                                                           Margin="0" VerticalAlignment="Center" />
+                                            </Grid>
+                                            <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame">
+                                                <ItemsControl ItemsSource="{Binding Items}" Grid.IsSharedSizeScope="True">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IQualityFinding">
+                                                            <Grid ColumnSpacing="8" Margin="4,3">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="200" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="QualitySource" />
+                                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="QualityGoTo" />
+                                                                    <ColumnDefinition Width="Auto" SharedSizeGroup="QualityFix" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0" Text="{Binding Location}"
+                                                                           Foreground="{DynamicResource TextMuted}"
+                                                                           FontSize="{DynamicResource FontSizeSm}"
+                                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding Message}"
+                                                                           Foreground="{DynamicResource TextPrimary}"
+                                                                           FontSize="{DynamicResource FontSizeSm}"
+                                                                           VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                                <TextBlock Grid.Column="2" Text="{Binding Source}"
+                                                                           Foreground="{DynamicResource TextDim}"
+                                                                           FontSize="{DynamicResource FontSizeXs}"
+                                                                           VerticalAlignment="Center" />
+                                                                <Button Grid.Column="3" Classes="DlgLink" VerticalAlignment="Center"
+                                                                        Content="{localization:Loc Dialog_Export_GoTo}"
+                                                                        ToolTip.Tip="{localization:Loc Dialog_Export_JumpTip}"
+                                                                        AutomationProperties.Name="{localization:Loc Dialog_Export_JumpTip}"
+                                                                        IsVisible="{Binding HasTime}"
+                                                                        Command="{Binding JumpCommand}" />
+                                                                <Button Grid.Column="4" Classes="DlgLink" VerticalAlignment="Center"
+                                                                        Content="{localization:Loc Dialog_Export_Fix}"
+                                                                        ToolTip.Tip="{Binding FixDescription}"
+                                                                        AutomationProperties.Name="{Binding FixDescription}"
+                                                                        IsVisible="{Binding HasFix}"
+                                                                        Command="{Binding FixCommand}" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Border>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                        </StackPanel>
+
+                        <!-- The Editor on Fire round trip (#638): what an EOF export of this chart would
+                             approximate or drop, one group per kind, each place named with its bar.beat
+                             and time. The first few per kind until Show all; the whole list opens as
+                             text (with Copy). Never part of the verdict above. Closed until the user
+                             opens it or exports to EOF (#685): the export it runs is computed only
+                             while it is open, off the UI thread, behind the busy row. -->
+                        <Border x:Name="EofRoundTripSection" DataContext="{Binding EofRoundTrip}"
+                                Margin="{DynamicResource GapBottomMd}">
+                            <Expander x:Name="EofRoundTripExpander" x:DataType="contracts:IEofRoundTripSection"
+                                      Margin="0"
+                                      AutomationProperties.Name="{localization:Loc Dialog_QualityReport_EofTitle}"
+                                      IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
+                                <!-- The header toggle is what takes focus; its face is a panel, which UIA names
+                                     "Avalonia.Controls.StackPanel" (#311). -->
+                                <Expander.Styles>
+                                    <Style Selector="Expander /template/ ToggleButton#ExpanderHeader">
+                                        <Setter Property="AutomationProperties.Name" Value="{localization:Loc Dialog_QualityReport_EofTitle}" />
+                                    </Style>
+                                </Expander.Styles>
+                                <Expander.Header>
+                                    <StackPanel Margin="{DynamicResource PaddingRow}">
+                                        <TextBlock Text="{localization:Loc Dialog_QualityReport_EofTitle}" TextWrapping="Wrap" />
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Margin="0"
+                                                   FontWeight="Normal" TextWrapping="Wrap"
+                                                   Text="{localization:Loc Dialog_QualityReport_EofHint}" />
+                                    </StackPanel>
+                                </Expander.Header>
+                                <StackPanel>
+                                    <ProgressBar x:Name="EofBusyBar" IsIndeterminate="True" IsVisible="{Binding IsBusy}"
+                                                 Margin="{DynamicResource GapBottomSm}" />
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="{DynamicResource GapBottomSm}">
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="EofSummaryText" Grid.Column="0"
+                                                   Classes="DlgHint" Margin="0" VerticalAlignment="Center"
+                                                   Text="{Binding Summary}" TextWrapping="Wrap" />
+                                        <CheckBox x:Name="EofShowAllBox" Grid.Column="1" VerticalAlignment="Center"
+                                                  Content="{localization:Loc Dialog_QualityReport_EofShowAll}"
+                                                  AutomationProperties.Name="{localization:Loc Dialog_QualityReport_EofShowAll}"
+                                                  IsVisible="{Binding CanShowAll}"
+                                                  IsChecked="{Binding ShowAll, Mode=TwoWay}" />
+                                        <Button x:Name="EofOpenListButton" Grid.Column="2" Theme="{DynamicResource FireGhostButton}"
+                                                Classes="FireGhost Compact" Height="{DynamicResource FireFieldHeight}"
+                                                VerticalAlignment="Center"
+                                                Content="{localization:Loc Dialog_QualityReport_EofOpenList}"
+                                                AutomationProperties.Name="{localization:Loc Dialog_QualityReport_EofOpenList}"
+                                                ToolTip.Tip="{localization:Loc Dialog_QualityReport_EofOpenListTip}"
+                                                IsVisible="{Binding HasGroups}"
+                                                Command="{Binding OpenListCommand}" />
+                                    </Grid>
+                                    <ItemsControl x:Name="EofGroupList" ItemsSource="{Binding Groups}" IsVisible="{Binding HasGroups}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IEofLossGroup">
+                                                <StackPanel Margin="{DynamicResource GapBottomSm}">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="{DynamicResource GapBottomSm}">
+                                                        <Panel Grid.Column="0" VerticalAlignment="Center">
+                                                            <Ellipse Width="8" Height="8" Fill="{DynamicResource WarningColor}" />
+                                                            <Ellipse Width="8" Height="8" Fill="{DynamicResource DangerColor}"
+                                                                     IsVisible="{Binding IsDropped}" />
+                                                        </Panel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource TextPrimary}" FontWeight="SemiBold"
+                                                                   FontSize="{DynamicResource FontSizeSm}" TextWrapping="Wrap" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding Count}" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource TextMuted}" FontSize="{DynamicResource FontSizeXs}" />
+                                                    </Grid>
+                                                    <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame">
+                                                        <StackPanel>
+                                                            <ItemsControl ItemsSource="{Binding Items}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="contracts:IEofLossPlace">
+                                                                        <Grid ColumnDefinitions="300,*,Auto" ColumnSpacing="8" Margin="4,3">
+                                                                            <!-- A long arrangement name trims; the bar.beat and
+                                                                                 time after it never do (a star column in a
+                                                                                 left-aligned grid is only as wide as its text). -->
+                                                                            <Grid Grid.Column="0" ColumnDefinitions="*,Auto" HorizontalAlignment="Left"
+                                                                                  VerticalAlignment="Center">
+                                                                                <TextBlock Grid.Column="0" Text="{Binding Subject}"
+                                                                                           ToolTip.Tip="{Binding Subject}"
+                                                                                           Foreground="{DynamicResource TextMuted}"
+                                                                                           FontSize="{DynamicResource FontSizeSm}"
+                                                                                           TextTrimming="CharacterEllipsis" />
+                                                                                <TextBlock Grid.Column="1" Text="{Binding Where}"
+                                                                                           IsVisible="{Binding HasTime}"
+                                                                                           Margin="{DynamicResource GapLeftSm}"
+                                                                                           Foreground="{DynamicResource TextMuted}"
+                                                                                           FontSize="{DynamicResource FontSizeSm}" />
+                                                                            </Grid>
+                                                                            <TextBlock Grid.Column="1" Text="{Binding Detail}"
+                                                                                       Foreground="{DynamicResource TextPrimary}"
+                                                                                       FontSize="{DynamicResource FontSizeSm}"
+                                                                                       VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                                            <Button Grid.Column="2" Classes="DlgLink" VerticalAlignment="Center"
+                                                                                    Content="{localization:Loc Dialog_Export_GoTo}"
+                                                                                    ToolTip.Tip="{localization:Loc Dialog_Export_JumpTip}"
+                                                                                    AutomationProperties.Name="{localization:Loc Dialog_Export_JumpTip}"
+                                                                                    IsVisible="{Binding HasTime}"
+                                                                                    Command="{Binding JumpCommand}" />
+                                                                        </Grid>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Margin="4,3"
+                                                                       Text="{Binding MoreNote}" IsVisible="{Binding HasMore}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Expander>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                Content="{localization:Loc Dialog_QualityReport_Recheck}"
+                                Command="{Binding RecheckCommand}" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

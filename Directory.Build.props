@@ -1,0 +1,82 @@
+<Project>
+  <!--
+    Zero-warning policy (owner directive, 2026-07-17): every warning is a build
+    error for the DotCharter.* projects. The condition scopes it by project-name
+    prefix so it does NOT leak into the JuceSharp submodule (its projects build
+    under this root too and have their own conventions) or other projects outside that prefix.
+
+    GenerateDocumentationFile is required for the compiler to report IDE0005
+    (unused usings) at build time; CS1591 (missing XML comment) is opted out —
+    the policy is zero warnings, not mandatory doc comments. Rider/ReSharper
+    inspections that never reach the compiler (redundant qualifiers etc.) are
+    raised via .editorconfig severities instead and can only glow in the IDE.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('DotCharter'))">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    The public-build switch (#824). DotCharterContestedFeatures=false (a release
+    passes it: New-Release.ps1 -ContestedFeatures:$false) leaves CONTESTED_FEATURES
+    undefined, which makes DotCharter.Services.ContestedFeatures.Enabled a false
+    const: the YouTube audio download is not registered, its menu row
+    and palette entry are never built and yt-dlp is not listed. Default true.
+    docs/agents/services/contested-features.md says what the switch covers.
+  -->
+  <PropertyGroup>
+    <DotCharterContestedFeatures Condition="'$(DotCharterContestedFeatures)' == ''">true</DotCharterContestedFeatures>
+  </PropertyGroup>
+  <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('DotCharter')) And '$(DotCharterContestedFeatures)' != 'false'">
+    <DefineConstants>$(DefineConstants);CONTESTED_FEATURES</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    Optional plugins (docs/agents/services/contested-features.md, "Optional plugins").
+    A plugin is a folder plugins/<name>/ (git-ignored) with its project file at the
+    top; its assembly is named after that file. DotCharter.UI references every such
+    project and declares it ([assembly: PluginAssembly]), DotCharter.Services and
+    DotCharter.Tone open their internals to every project under plugins/.
+    DotCharterPlugins=false ignores plugins/ even when something is there, so one
+    checkout builds both variants (tools/agent/Invoke-Gate.ps1 -Public;
+    tools/release/New-Release.ps1 publishes the public assets with it and refuses a
+    payload carrying a plugin, unless -WithPlugins asks for the plugin build, which
+    refuses a payload WITHOUT them). Default true.
+  -->
+  <PropertyGroup>
+    <DotCharterPlugins Condition="'$(DotCharterPlugins)' == ''">true</DotCharterPlugins>
+  </PropertyGroup>
+
+
+  <!--
+    Banned APIs (docs/agents/ui/target-architecture.md § 4). A project opts in
+    with one property in its csproj:
+
+      DotCharterBannedApis=true              BannedSymbols.txt (file, process,
+                                             network, SQLite, GetFolderPath)
+      DotCharterBannedPresentationApis=true  + BannedSymbols.Presentation.txt
+                                             (the audio engine class and its
+                                             catch-all interface)
+
+    A hit is RS0030, an error under TreatWarningsAsErrors. On today for
+    DotCharter.Presentation, DotCharter.Presentation.Fakes and (since
+    2026-09-19) DotCharter.UI. The UI's exemptions (App*.cs, Program.cs,
+    Platform/, plus a shrink-only debt list) are the RS0030 sections in
+    .editorconfig, never a #pragma — the
+    PresentationSourceRulesTests count those and require zero.
+    Item conditions are evaluated after every property, so a property set in
+    the csproj body is visible here.
+  -->
+  <ItemGroup Condition="'$(DotCharterBannedApis)' == 'true'">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(DotCharterBannedPresentationApis)' == 'true'">
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.Presentation.txt" />
+  </ItemGroup>
+</Project>

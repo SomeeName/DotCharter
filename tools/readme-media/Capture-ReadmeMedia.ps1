@@ -1,0 +1,130 @@
+<#
+.SYNOPSIS
+    Takes the raw README shots of the PUBLIC DotCharter build: full-window PNGs of one app launch
+    over the demo content, into -OutDir. Edit-readme-media (Edit-ReadmeMedia.py) turns them into
+    docs/media/.
+
+.DESCRIPTION
+    1. -Generate (default on) writes the demo content: the test DemoSet_isAWorthwhileChart... under
+       DOTCHARTER_README_DEMO_DIR (see DotCharter.Tests/Tools/ReadmeMedia), a chart project plus
+       a library of .dcsong packages.
+    2. Launches the build against a FRESH isolated data root (never the real profile), with the
+       perf autopilot in HOLD mode loading the demo project, muted (autopilot volume 0 plus the
+       per-process session mute of AppMute.ps1).
+    3. Drives it by UI Automation names and posted mouse messages, and reads the window with
+       PrintWindow. The window sits on the NON-primary monitor; nothing here takes the foreground,
+       moves the real mouse or touches any other process. Only the PID it started is ended.
+
+    The click coordinates are measured on a 1920x1080 window of the build at the time of writing;
+    a UI change that moves a button means re-measuring them, which is the point of keeping the
+    raw shots reviewable.
+
+    Needs: a built public variant (tools/agent/Invoke-Gate.ps1 -Public -Build), a second monitor.
+#>
+param(
+    [string]$OutDir = (Join-Path ([System.IO.Path]::GetTempPath()) 'dc-readme-raw'),
+    [string]$DemoDir = 'C:\DemoSongs',
+    [string]$Exe = (Join-Path $PSScriptRoot '..\..\DotCharter.UI\bin\Debug\net10.0\DotCharter.exe'),
+    [switch]$SkipGenerate
+)
+$ErrorActionPreference = 'Stop'
+$root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+Import-Module (Join-Path $PSScriptRoot 'AppDriver.psm1') -Force
+
+if (-not $SkipGenerate) {
+    $env:DOTCHARTER_README_DEMO_DIR = $DemoDir
+    & (Join-Path $root 'tools\agent\Invoke-Gate.ps1') -Public -FilterClass '*ReadmeDemoContentTests'
+    if ($LASTEXITCODE -ne 0) { throw 'Demo content generation failed.' }
+}
+$Exe = (Resolve-Path $Exe).Path
+$project = Join-Path $DemoDir 'DotCharter Demo\DotCharter Demo.rscp'
+if (-not (Test-Path $project)) { throw "No demo project at $project (run without -SkipGenerate)." }
+
+# A fresh data root, seeded: onboarding done, English, the demo library, one profile called "Some".
+$data = Join-Path ([System.IO.Path]::GetTempPath()) ('dc-readme-data-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force (Join-Path $data 'Roaming\DotCharter') | Out-Null
+@{ OnboardingCompleted = $true; OnboardingCompletedVersion = '0.71.0'; LanguageCulture = 'en-US'
+   PsarcLibraryPath = (Join-Path $DemoDir 'library') } | ConvertTo-Json |
+    Set-Content (Join-Path $data 'Roaming\DotCharter\appconfig.json')
+$id = 'f015f607-e402-435b-8837-85b7c7eafec6'
+@{ ActiveProfileId = $id; Profiles = @(@{ Id = $id; Name = 'Some'; AccentColor = '#4F8EF7'; AvatarFileName = ''
+   MyTuningId = ''; IsDefault = $true; CreatedUtc = '2026-10-15T12:00:00Z'; LastUsedUtc = '2026-10-15T12:00:00Z' }) } |
+    ConvertTo-Json -Depth 5 | Set-Content (Join-Path $data 'Roaming\DotCharter\player-profiles.json')
+
+New-Item -ItemType Directory -Force $OutDir | Out-Null
+$p = Start-DemoApp -Exe $Exe -DataRoot $data -OutDir $OutDir -Environment @{
+    DOTCHARTER_UI_AUTOPILOT = 'perf'; DOTCHARTER_AUTOPILOT_PROJECT = $project; DOTCHARTER_AUTOPILOT_HOLD = '1'
+    DOTCHARTER_3D_HIDE_STATS = '1' }
+Remove-Item Env:DOTCHARTER_UI_AUTOPILOT, Env:DOTCHARTER_AUTOPILOT_PROJECT, Env:DOTCHARTER_AUTOPILOT_HOLD, Env:DOTCHARTER_3D_HIDE_STATS -ErrorAction SilentlyContinue
+try {
+    function Step([string]$what, [scriptblock]$do, [double]$settle = 2) { & $do; Start-Sleep -Seconds $settle }
+    Start-Sleep -Seconds 16
+    & (Join-Path $PSScriptRoot 'AppMute.ps1') -ProcessId $p.Id | Out-Null
+
+    # ---- Editor ---------------------------------------------------------------------------
+    # The song map (bottom of the timeline) seeks: x 1262 is the solo, x 1010 the second chorus.
+    Step 'seek solo' { Send-DemoClick 1262 470 }
+    Step 'select the bend' { Send-DemoClick 495 369 }
+    [void](Get-DemoShot 'hero')
+    Step 'bend editor' { Send-DemoClick 104 637 }
+    Send-DemoMove 1000 700; Start-Sleep -Milliseconds 800
+    [void](Get-DemoShot 'bend')
+    Step 'select the vibrato note' { Send-DemoClick 1367 369 }
+    Step 'techniques' { Send-DemoClick 104 606 }
+    Send-DemoMove 1000 700; Start-Sleep -Milliseconds 800
+    [void](Get-DemoShot 'technique')
+    Step 'seek chorus' { Send-DemoClick 1010 470 }
+    Step 'chord shapes tab' { Invoke-DemoElement -Name 'Chord shapes' }
+    Send-DemoMove 1000 700; Start-Sleep -Milliseconds 800
+    [void](Get-DemoShot 'chords')
+    Step 'back to the sound tab' { Send-DemoClick 117 538 }
+    # The toolbar's right-hand buttons move whenever one is added: press the chat toggle by name.
+    Step 'AI chat pane' { Invoke-DemoElement -Name 'Toggle AI chat panel' } 3
+    Step 'chat list' { Send-DemoClick 1700 124 } 2
+    Step 'open the saved chat' { Send-DemoClick 1700 230 } 3
+    [void](Get-DemoShot 'chat')
+
+    # ---- Seven-string arrangement ---------------------------------------------------------
+    Step 'close chat' { Invoke-DemoElement -Name 'Toggle AI chat panel' } 2
+    # The first click after the pane closed is often swallowed: retry until the popover is up.
+    foreach ($try in 1..4) {
+        Send-DemoMove 820 61; Start-Sleep -Milliseconds 400
+        Send-DemoClick 820 61; Start-Sleep -Seconds 2
+        if (Find-DemoElement -Name 'Manage arrangements' -Contains) { break }
+    }
+    Step 'arrangement list' { Send-DemoClick 840 166 } 1.5
+    [void](Get-DemoShot 'seven-list')
+    Step 'pick Seven' { Invoke-DemoElement -Name 'Seven' } 1.5
+    Send-DemoKey -Vk 27
+    Start-Sleep -Seconds 1
+    Step 'seek the chorus' { Send-DemoClick 1010 470 } 2
+    [void](Get-DemoShot 'seven')
+
+    # ---- Library page ------------------------------------------------------------------------
+    Step 'library' { Send-DemoClick 45 125 } 4
+    [void](Get-DemoShot 'library')
+
+    # ---- Song Select, Play Mode ----------------------------------------------------------------
+    Step 'home' { Send-DemoClick 45 70 } 4
+    Step 'play tile' { Send-DemoClick 1675 152 } 4
+    Step 'select the demo song' { Send-DemoClick 400 330 } 2
+    [void](Get-DemoShot 'songselect')
+    Step 'play' { Send-DemoClick 1700 749 } 4
+    [void](Get-DemoShot 'getready')
+    Step 'start' { Send-DemoClick 280 1031 } 0.5
+    1..40 | ForEach-Object { [void](Get-DemoShot ('play-{0:D2}' -f $_)); Start-Sleep -Milliseconds 400 }
+    Step 'pause' { Send-DemoKey -Vk 27 } 2
+    [void](Get-DemoShot 'pause')
+
+    # ---- Rig ---------------------------------------------------------------------------------------
+    Step 'rig' { Send-DemoClick 1100 600 } 4
+    Step 'tone browser' { Send-DemoClick 325 83 } 2
+    Step 'a neutral tone' { Send-DemoClick 760 935 } 3
+    Step 'close the browser' { Send-DemoClick 1533 190 } 2
+    Step 'select the amp' { Send-DemoClick 516 790 } 2
+    [void](Get-DemoShot 'rig')
+}
+finally {
+    Stop-DemoApp -Process $p
+}
+"raw shots in $OutDir"

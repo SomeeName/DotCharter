@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.GuitarRolesView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:GuitarRolesViewModel">
+    <!-- Guitar roles (#260): the guitar stem played as Lead (centre) and Rhythm
+         (sides), in the Mixer inspector's Stems card, over
+         StemMixerViewModel.GuitarRoles. Its own view so a second host (Play
+         Mode's stem strips) can take it as one element. The caption saying
+         it is an approximation from the stereo image is ALWAYS shown; the line
+         under it is the reason the switch is disabled, the progress, or the
+         measured split. With no view model (a host built without localization)
+         the whole view stays hidden: FallbackValue=False. -->
+    <StackPanel x:Name="GuitarRolesRoot" Spacing="{StaticResource FireSpaceXxs}"
+                IsVisible="{Binding IsShown, FallbackValue=False}">
+        <CheckBox x:Name="GuitarRolesToggle"
+                  IsChecked="{Binding IsOn, Mode=TwoWay}"
+                  IsEnabled="{Binding CanToggle}"
+                  Content="{localization:Loc Mixer_GuitarRoles}"
+                  ToolTip.Tip="{localization:Loc Mixer_GuitarRoles_Tip}"
+                  AutomationProperties.Name="{localization:Loc Mixer_GuitarRoles}" />
+        <TextBlock x:Name="GuitarRolesCaption" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                   Text="{localization:Loc Mixer_GuitarRoles_Caption}" />
+        <TextBlock x:Name="GuitarRolesStatus" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                   Text="{Binding Status}"
+                   IsVisible="{Binding HasStatus}" />
+    </StackPanel>
+</UserControl>

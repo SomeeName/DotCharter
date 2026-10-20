@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.KeyboardShortcutsDialogView"
+             x:DataType="contracts:IKeyboardShortcutsScreen"
+             x:CompileBindings="True">
+
+    <!-- Help ▸ Keyboard Shortcuts (live audit #13). READ-ONLY and GENERATED:
+         the rows come from CommandCatalog on every open, so a rebind shows
+         here immediately and nothing hand-written can drift. Rebinding lives
+         in Settings ▸ Keybinds. Grammar: Views/Dialogs/DialogStyles.axaml
+         (included once by DialogContainerView); the width is the ladder's Md
+         step, like every dialog since the width-ladder pass. -->
+    <!-- Hosted by Views/Shell/DialogHost, whose scrim does not dismiss:
+         Esc and the Close primary do. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconKeyboard}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_Shortcuts_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc Dialog_Shortcuts_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Search. Synchronous filter on purpose: ~100 plain rows,
+                     not a realized-container list (see the view model). -->
+                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="1" Classes="DlgRow" ColumnDefinitions="*,180">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_Shortcuts_Search}" />
+                    <TextBox VerticalAlignment="Center" Grid.Column="1"
+                             Text="{Binding FilterText, Mode=TwoWay}"
+                             PlaceholderText="{localization:Loc Dialog_Shortcuts_SearchWatermark}"
+                             AutomationProperties.Name="{localization:Loc Dialog_Shortcuts_Search}" />
+                </Grid>
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="460">
+                    <StackPanel>
+                        <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding HasNoMatches}">
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                       Text="{localization:Loc Dialog_Shortcuts_NoMatches}" />
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding Groups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IShortcutGroup">
+                                    <StackPanel>
+                                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{Binding Name}" />
+                                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                            <ItemsControl ItemsSource="{Binding Rows}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="contracts:IShortcutRow">
+                                                        <Grid ColumnDefinitions="*,232"
+                                                              Margin="{DynamicResource GapTopXs}">
+                                                            <TextBlock Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                                       Text="{Binding Title}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       ToolTip.Tip="{Binding Title}" />
+                                                            <TextBlock Theme="{DynamicResource DlgChordText}" Grid.Column="1" Classes="DlgChord"
+                                                                       Text="{Binding Chord}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Border>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <!-- Footer meta: where to CHANGE a bind — this dialog is
+                             deliberately read-only. -->
+                        <TextBlock Theme="{DynamicResource DlgHintText}" Grid.Column="0" Classes="DlgHint" VerticalAlignment="Center"
+                                   Text="{localization:Loc Dialog_Shortcuts_RebindHint}" />
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="1" Classes="DlgActions">
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                    Command="{Binding CloseCommand}" IsDefault="True" IsCancel="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

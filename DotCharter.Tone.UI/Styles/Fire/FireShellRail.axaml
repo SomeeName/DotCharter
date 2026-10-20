@@ -1,0 +1,144 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The Graphite workbench's ACTIVITY RAIL: the app's top-level
+         destinations down the left edge, icon over caption, 76 px wide.
+
+         It is deliberately NOT the 54 px icon rail this shell carried until
+         0.50. That one was not navigation — six of its eight icons toggled
+         PANELS, which the View menu and the tool rail already do — and the
+         reason it went was that it spent the one axis the editor cannot spare
+         on controls that were duplicates. Everything here is a DESTINATION;
+         the panel toggles stay where they went. -->
+    <Styles.Resources>
+
+        <!-- TargetType is ToggleButton, which a RadioButton satisfies. Both
+             wear it: the destinations are RadioButtons (a ToggleButton
+             unchecks itself when the current one is clicked again, and the
+             rail would then light nothing until the next real switch), while
+             the rig is a genuine two-state toggle over `IsPedalboardOpen`. -->
+        <ControlTheme x:Key="FireRailToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+            <Setter Property="Height" Value="56" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid x:CompileBindings="False" Margin="6,0">
+                        <!-- The selected marker is a bar against the rail's OWN
+                             left edge, outside the row's rounded fill, so the
+                             lit destination reads from the window edge rather
+                             than from the row's tint alone. -->
+                        <Border x:Name="Bar" Width="3" Height="26"
+                                Margin="-6,0,0,0"
+                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                CornerRadius="{StaticResource FireRadiusBar}"
+                                Background="Transparent" />
+                        <Border x:Name="Fill"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                TextElement.Foreground="{DynamicResource FireTextMuted}"
+                                CornerRadius="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderBrush="{DynamicResource FireFocusRowBorder}"
+                            BorderThickness="{StaticResource FireBorderHairline}"
+                            Background="{DynamicResource FireFocusRowFill}"
+                            CornerRadius="{StaticResource FireRadiusRow}" />
+                </FocusAdornerTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Fill">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#Fill">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentPaper}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#Bar">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^:disabled /template/ Border#Fill">
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextFaint}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Border families are ControlThemes (#240): a Border wears
+             Theme="{StaticResource <Family>Border}" AND its class, and every
+             rule here is gated on that class. UI/BorderControlThemeTests. -->
+        <ControlTheme x:Key="FireActivityRailBorder" TargetType="Border">
+            <!-- The rail's ground is the CHROME surface, not `FireRailFill`. That one
+                 is a purple-tinted translucent gradient from the Play Mode mockups
+                 (#1B1F25 → #0D0F13) and it is not themeable, so under Graphite the rail
+                 would have read purple over a neutral app. `FireSurfaceChrome` is one
+                 of the tokens a preset carries, which is what makes the rail follow the
+                 theme the whole app is on. -->
+            <Style Selector="^.FireActivityRail">
+                <Setter Property="Width" Value="76" />
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChrome}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,0,1,0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireRailRuleBorder" TargetType="Border">
+            <!-- Separates the destinations from the tools below them. -->
+            <Style Selector="^.FireRailRule">
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Margin" Value="16,8" />
+                <Setter Property="Background" Value="{DynamicResource FireBorderSeam}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireRailCaptionText" TargetType="TextBlock">
+            <!-- The caption. Small, barely tracked, never uppercase: these are place
+                 NAMES, and the Graphite ladder dropped the shouty tracking everywhere
+                 else in the same pass. -->
+            <Style Selector="^.FireRailCaption">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+        <!-- Panel families are ControlThemes too (#428): a global `StackPanel.X` /
+             `Grid.X` rule was attached to EVERY StackPanel / Grid of the app
+             (1,649 and 2,009 on the prewarmed shell), worn or not. A panel wears
+             Theme="{StaticResource <Family>Panel|Grid}" AND its class. The old
+             CHILD rules (`Grid.FirePopoverRow > TextBlock`, …) were attached to
+             every child of every Grid / StackPanel; their one setter is now a
+             local value on the children that had it. UI/StyleIncludeScopeTests. -->
+        <ControlTheme x:Key="FireRailStackPanel" TargetType="StackPanel">
+            <!-- The stack inside one rail row: glyph over caption, nothing else. -->
+            <Style Selector="^.FireRailStack">
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceXxs}" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <Style Selector="RadioButton.FireRailItem">
+        <Setter Property="Theme" Value="{DynamicResource FireRailToggle}" />
+    </Style>
+
+
+    <Style Selector="PathIcon.FireRailGlyph">
+        <Setter Property="Width" Value="19" />
+        <Setter Property="Height" Value="19" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+</Styles>

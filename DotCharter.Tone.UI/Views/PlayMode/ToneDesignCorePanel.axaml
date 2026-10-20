@@ -1,0 +1,505 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:playMode="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:conv="using:DotCharter.Tone.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.ToneDesignCorePanel"
+             x:Name="ToneDesignCorePanelRoot"
+             x:DataType="vm:ToneDesignCoreViewModel">
+    <!-- "Design a tone" — the AI designer, the RIGHT-HAND COLUMN of the rig's
+         Tones view (RigTonesView). Reference:
+         docs/agents/ui/pedalboard/ai-tone-design.md.
+
+         This is the CORE panel, shared by DotCharter and RigLab: the prompt, the
+         conversation and the answer. A host adds its own blocks through
+         ExtrasTemplate (DotCharter's ToneDesignPanel puts "Match from audio" and
+         "Match by section" there — both need the charting stack); RigLab adds
+         none, and the slot is then never realized.
+
+         IT READS LIKE A CONVERSATION (2026-09-27). Top to bottom: what you asked
+         (a "You" bubble per request), the model's answer as ONE card — its name,
+         how sure it is, the chain as chips, why it chose it, what the validator
+         adjusted, what it downloaded from TONE3000 and the three things you can
+         do with it — and under the whole thread the COMPOSER, pinned to the
+         bottom of the column where a message box is expected: the status line,
+         the box, and the one button that sends it. Before a result the box is
+         the prompt and the button is Design; after one it is the refinement and
+         the button is Tweak, so there is only ever one box to type into.
+
+         TWO REGIONS, AND THE COMPOSER NEVER SCROLLS AWAY. The thread scrolls
+         (ToneDesignScroll, the column's only scroller); the composer is a fixed
+         row under it. The status line has a reserved height, so "Asking…",
+         "12.4 s · local" and "Saved" replace each other without moving the box.
+
+         THREE TYPE ROLES AND NO OTHERS (W4): `RigRoleTitle`, `RigRoleLabel` and
+         `RigRoleBody` (`.Strong` for a row's own name). No FontSize and no
+         LetterSpacing at a call site in this file; `UI/RigTypographyRoleTests`
+         fails the gate if a fourth appears. A tag's or a pill's text is the
+         tag's own face.
+
+         THE CHAMFER IS THE PRIMARY ACTION AND NOTHING ELSE: one per block (the
+         composer's send, the answer's Hear it), `.Body` so it reads as a verb and
+         not a heading; every other action is a framed `FireGhost Compact`.
+
+         "CHATGPT (COPY & PASTE)" (2026-09-28): a second way to send, for a
+         player with a chat subscription and no API key. The composer's "Use
+         ChatGPT" toggle opens a block under the send row: copy the prompt the
+         box would send, paste the chat's whole answer, Import. The answer lands
+         in the same card and the same thread. With NO provider configured the
+         setup banner offers the same door, and the body then comes up with the
+         block open and no Design button (nobody could answer it).
+
+         The BODY still lives in a ContentControl's ContentTemplate. A template is
+         not instantiated until the host is MEASURED, and Avalonia skips
+         MeasureCore for an invisible element — so a collapsed panel has no body
+         subtree at all rather than a hidden one. Pinned by
+         Perf/ToneDesignUiPerfSmokeTests. -->
+
+    <!-- The designer's own rules that a ControlTheme cannot hold or no theme lint
+         covers (#242): scoped to this panel — and to the host's ExtrasTemplate
+         blocks it presents (ToneDesignPanel's match blocks) — instead of every
+         StackPanel / TextBox / PathIcon / TextBlock in the app. -->
+    <UserControl.Styles>
+        <Style Selector="StackPanel.FireToneThread">
+            <Setter Property="Margin" Value="{StaticResource FirePadToneThread}" />
+        </Style>
+        <!-- The composer's box: two lines tall before a word is typed, so it reads
+             as a message box and does not jump when the first line wraps. A STYLE
+             and not an attribute on purpose: the box lives in the panel's body
+             TEMPLATE, where a `{DynamicResource}` attribute binds at Template
+             priority and `TextBox.FireFieldInput`'s own `MinHeight=0` style setter
+             beat it (measured: MinHeight 0, the box 18 px tall). -->
+        <Style Selector="TextBox.FireFieldInput.FireTonePrompt">
+            <Setter Property="MinHeight" Value="{StaticResource FireTonePromptMinHeight}" />
+        </Style>
+        <!-- The copy & paste route's paste box: the prompt's floor, a ceiling of its
+             own (see `FireToneReplyMaxHeight`), and Enter is a newline — a pasted
+             answer is several paragraphs. A style for the same reason as the prompt's:
+             it lives in the body template. -->
+        <Style Selector="TextBox.FireFieldInput.FireToneReply">
+            <Setter Property="MinHeight" Value="{StaticResource FireTonePromptMinHeight}" />
+            <Setter Property="MaxHeight" Value="{StaticResource FireToneReplyMaxHeight}" />
+            <Setter Property="AcceptsReturn" Value="True" />
+        </Style>
+        <Style Selector="PathIcon.FireToneGlyph">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        </Style>
+        <Style Selector="Border.FireMatchBlock.Worse TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+        </Style>
+    </UserControl.Styles>
+    <Border x:Name="ToneDesignRoot" Theme="{StaticResource FireToneDesignerBorder}" Classes="FireToneDesigner">
+        <Grid RowDefinitions="Auto,*">
+
+            <!-- The header: what this column is. It opens and closes from the
+                 Tones view's "AI designer" toggle, which owns IsExpanded; the
+                 header is a title, not a second door onto that boolean. -->
+            <Border x:Name="ToneDesignHeader" Grid.Row="0" Theme="{StaticResource FireToneDesignerHeadBorder}" Classes="FireToneDesignerHead">
+                <Grid ColumnDefinitions="Auto,*">
+                    <Border Grid.Column="0" Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent" VerticalAlignment="Center">
+                        <TextBlock Text="{localization:Loc ToneDesign_Kicker}" />
+                    </Border>
+                    <TextBlock Grid.Column="1" Theme="{StaticResource RigRoleTitleText}" Classes="RigRoleTitle" VerticalAlignment="Center"
+                               Margin="{StaticResource FireGapLeftSm}"
+                               Text="{localization:Loc ToneDesign_Title}" />
+                </Grid>
+            </Border>
+
+            <ContentControl Grid.Row="1" x:Name="ToneDesignBodyHost"
+                            IsVisible="{Binding IsExpanded}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            Content="{Binding}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate DataType="vm:ToneDesignCoreViewModel">
+                        <Panel>
+                            <!-- NOT CONFIGURED: one sentence and the door that
+                                 fixes it. Nothing else is offered — a capability
+                                 the app cannot honour must never look live. -->
+                            <Border x:Name="ToneDesignSetupBanner"
+                                    Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Accent"
+                                    Margin="{StaticResource FirePadRowLg}"
+                                    VerticalAlignment="Top"
+                                    MinHeight="{DynamicResource FireRigEmptyStateHeight}"
+                                    IsVisible="{Binding ShowSetupBanner}">
+                                <StackPanel Spacing="{StaticResource FireSpaceSm}"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                               Text="{localization:Loc ToneDesign_NotConfigured}" />
+                                    <!-- The two doors: fix it in Settings, or go
+                                         round it by copy & paste — which needs
+                                         no provider at all. -->
+                                    <WrapPanel ItemSpacing="{StaticResource FireSpaceSm}"
+                                               LineSpacing="{StaticResource FireSpaceSm}">
+                                        <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                Content="{localization:Loc ToneDesign_OpenSettings}"
+                                                Command="{Binding OpenSettingsTabCommand}" />
+                                        <Button x:Name="ToneDesignUseManual" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                Content="{localization:Loc ToneDesign_Manual_Use}"
+                                                ToolTip.Tip="{localization:Loc ToneDesign_Manual_Toggle_Tip}"
+                                                IsVisible="{Binding IsManualAvailable}"
+                                                Command="{Binding OpenManualCommand}" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid x:Name="ToneDesignBody" RowDefinitions="*,Auto"
+                                  IsVisible="{Binding ShowBody}">
+
+                                <!-- ══ THE THREAD ══════════════════════════════ -->
+                                <ScrollViewer Grid.Row="0" x:Name="ToneDesignScroll"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Visible"
+                                              AllowAutoHide="False">
+                                    <StackPanel x:Name="ToneDesignThread"
+                                                Classes="FireToneThread"
+                                                Spacing="{StaticResource FireSpaceMd}">
+
+                                        <!-- Nothing asked yet: say what to ask for. -->
+                                        <TextBlock x:Name="ToneDesignIntro" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                   IsVisible="{Binding ShowIntro}"
+                                                   Text="{localization:Loc ToneDesign_Subtitle}" />
+
+                                        <!-- The conversation so far. A request is a
+                                             "You" bubble; an answer the thread has
+                                             moved past is one line; the NEWEST
+                                             answer is the card below, so it draws
+                                             no row of its own. -->
+                                        <ItemsControl x:Name="ToneDesignTurns" ItemsSource="{Binding Turns}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Spacing="{StaticResource FireSpaceMd}" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="vm:ToneDesignTurnViewModel">
+                                                    <Panel>
+                                                        <Border Theme="{StaticResource FireToneTurnBorder}" Classes="FireToneTurn" IsVisible="{Binding IsUser}">
+                                                            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                                                           Text="{localization:Loc ToneDesign_You}" />
+                                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong" Text="{Binding Text}" />
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding IsEarlierAnswer}"
+                                                              Margin="{StaticResource FireGapLeftMd}">
+                                                            <TextBlock Grid.Column="0" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Accent"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="{localization:Loc ToneDesign_Kicker}" />
+                                                            <TextBlock Grid.Column="1" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                                       VerticalAlignment="Center"
+                                                                       Margin="{StaticResource FireGapLeftSm}"
+                                                                       Text="{Binding Text}" />
+                                                        </Grid>
+                                                    </Panel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Border x:Name="ToneDesignError" Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Danger"
+                                                IsVisible="{Binding HasError}">
+                                            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{Binding ErrorText}" />
+                                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                        HorizontalAlignment="Left"
+                                                        Content="{localization:Loc ToneDesign_OpenSettings}"
+                                                        Command="{Binding OpenSettingsTabCommand}"
+                                                        IsVisible="{Binding ErrorOffersSettings}" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- ══ THE ANSWER ══════════════════════════
+                                             One card: name and confidence, the
+                                             chain, why, what was adjusted, what was
+                                             downloaded, and what to do with it. -->
+                                        <Border x:Name="ToneDesignResult" Theme="{StaticResource FireToneAnswerBorder}" Classes="FireToneAnswer"
+                                                IsVisible="{Binding ShowResult}">
+                                            <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                                                <StackPanel DataContext="{Binding Result}"
+                                                            x:DataType="vm:ToneDesignResultViewModel"
+                                                            Spacing="{StaticResource FireSpaceMd}">
+
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                                                            <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Accent"
+                                                                       Text="{localization:Loc ToneDesign_Kicker}" />
+                                                            <TextBlock x:Name="ToneDesignResultName"
+                                                                       Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong"
+                                                                       Text="{Binding ToneName}" />
+                                                        </StackPanel>
+                                                        <Border Grid.Column="1" Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Accent"
+                                                                VerticalAlignment="Top"
+                                                                Margin="{StaticResource FireGapLeftMd}"
+                                                                ToolTip.Tip="{localization:Loc ToneDesign_Confidence}">
+                                                            <StackPanel Orientation="Horizontal"
+                                                                        Spacing="{StaticResource FireSpaceXs}">
+                                                                <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Small" VerticalAlignment="Center" />
+                                                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Accent"
+                                                                           VerticalAlignment="Center"
+                                                                           Text="{Binding ConfidenceText}" />
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <!-- The chain, one chip per unit in
+                                                         signal order, each lit in its
+                                                         family's colour — the same
+                                                         identity the board draws. -->
+                                                    <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                                        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                                                   Text="{localization:Loc ToneDesign_Chain}" />
+                                                        <ItemsControl x:Name="ToneDesignChain"
+                                                                      ItemsSource="{Binding ChainSteps}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel ItemSpacing="{StaticResource FireSpaceXs}"
+                                                                               LineSpacing="{StaticResource FireSpaceXs}" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate DataType="vm:ToneChainStep">
+                                                                    <Border Theme="{StaticResource FireToneStepBorder}" Classes="FireToneStep">
+                                                                        <StackPanel Orientation="Horizontal"
+                                                                                    Spacing="{StaticResource FireSpaceXs}">
+                                                                            <Border Theme="{StaticResource FireToneStepDotBorder}" Classes="FireToneStepDot"
+                                                                                    Background="{Binding TokenKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                                                            <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                                                       VerticalAlignment="Center"
+                                                                                       Text="{Binding Name}" />
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+
+                                                    <!-- Why: half of the answer, so it is
+                                                         shown, not folded behind a link. -->
+                                                    <StackPanel Spacing="{StaticResource FireSpaceXs}"
+                                                                IsVisible="{Binding HasRationale}">
+                                                        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                                                   Text="{localization:Loc ToneDesign_Rationale}" />
+                                                        <TextBlock x:Name="ToneDesignRationale" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                                   Text="{Binding Rationale}" />
+                                                    </StackPanel>
+
+                                                    <StackPanel Spacing="{StaticResource FireSpaceXs}"
+                                                                IsVisible="{Binding HasWarnings}">
+                                                        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Warn"
+                                                                   Text="{localization:Loc ToneDesign_Warnings}" />
+                                                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{Binding WarningsText}" />
+                                                    </StackPanel>
+
+                                                    <!-- A capture the design fetched from
+                                                         TONE3000 is credited here, author
+                                                         and licence, the way the capture
+                                                         browser credits a download. -->
+                                                    <Grid ColumnDefinitions="Auto,*"
+                                                          IsVisible="{Binding HasDownloadedCaptures}">
+                                                        <PathIcon Grid.Column="0" Classes="FireToneGlyph"
+                                                                  VerticalAlignment="Top"
+                                                                  Data="{DynamicResource IconDownload}" />
+                                                        <TextBlock Grid.Column="1" x:Name="ToneDesignDownloadedCaptures"
+                                                                   Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                                   Margin="{StaticResource FireGapLeftSm}"
+                                                                   Text="{Binding DownloadedCapturesText}" />
+                                                    </Grid>
+                                                </StackPanel>
+
+                                                <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+                                                <WrapPanel x:Name="ToneDesignActions"
+                                                           ItemSpacing="{StaticResource FireSpaceSm}"
+                                                           LineSpacing="{StaticResource FireSpaceSm}">
+                                                    <Button x:Name="ToneDesignHearIt" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
+                                                            Content="{localization:Loc ToneDesign_HearIt}"
+                                                            Command="{Binding HearItCommand}" />
+                                                    <Button x:Name="ToneDesignSave" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                            Content="{localization:Loc ToneDesign_Save}"
+                                                            Command="{Binding SaveToneCommand}" />
+                                                    <Button x:Name="ToneDesignDiscard" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                            Content="{localization:Loc ToneDesign_Discard}"
+                                                            Command="{Binding DiscardCommand}" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- The HOST's blocks (see the header). A
+                                             template rather than a control, so a
+                                             collapsed panel realizes none of it; and
+                                             invisible while there is none, so it is
+                                             never templated at all. The rule parts
+                                             them from the conversation above: they
+                                             are other ways INTO an answer, not part
+                                             of this one. -->
+                                        <!-- …and only while a provider is set up: the
+                                             body is also on screen for the copy &
+                                             paste route alone, and the host's blocks
+                                             were built for a configured designer. -->
+                                        <StackPanel Spacing="{StaticResource FireSpaceMd}"
+                                                    IsVisible="{Binding IsConfigured}">
+                                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule"
+                                                    IsVisible="{Binding ExtrasTemplate, RelativeSource={RelativeSource AncestorType=playMode:ToneDesignCorePanel}, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            <ContentControl x:Name="ToneDesignExtrasHost"
+                                                            Content="{Binding}"
+                                                            ContentTemplate="{Binding ExtrasTemplate, RelativeSource={RelativeSource AncestorType=playMode:ToneDesignCorePanel}}"
+                                                            IsVisible="{Binding ExtrasTemplate, RelativeSource={RelativeSource AncestorType=playMode:ToneDesignCorePanel}, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <!-- ══ THE COMPOSER ════════════════════════════
+                                     Pinned under the thread: the box, then ONE row
+                                     under it — what is happening (or why the button
+                                     is grey) on the left, Cancel and the send button
+                                     on the right. The row is as tall as the button,
+                                     so progress, cost and "saved" replace each other
+                                     without moving anything, and an idle composer
+                                     has no empty status band. -->
+                                <Border Grid.Row="1" x:Name="ToneDesignComposer" Theme="{StaticResource FireToneComposerBorder}" Classes="FireToneComposer">
+                                    <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                        <!-- ONE box: the prompt until there is an
+                                             answer, the refinement after. Enter
+                                             sends. -->
+                                        <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField Tall">
+                                            <Panel>
+                                                <TextBox x:Name="ToneDesignPrompt"
+                                                         Classes="FireFieldInput Multiline FireTonePrompt"
+                                                         TextWrapping="Wrap"
+                                                         IsVisible="{Binding !HasResult}"
+                                                         Text="{Binding Description, Mode=TwoWay}"
+                                                         PlaceholderText="{localization:Loc ToneDesign_PromptHint}"
+                                                         AutomationProperties.Name="{localization:Loc ToneDesign_PromptHint}">
+                                                    <TextBox.KeyBindings>
+                                                        <KeyBinding Gesture="Enter" Command="{Binding DesignCommand}" />
+                                                    </TextBox.KeyBindings>
+                                                </TextBox>
+                                                <TextBox x:Name="ToneDesignTweak"
+                                                         Classes="FireFieldInput Multiline FireTonePrompt"
+                                                         TextWrapping="Wrap"
+                                                         IsVisible="{Binding HasResult}"
+                                                         Text="{Binding TweakText, Mode=TwoWay}"
+                                                         PlaceholderText="{localization:Loc ToneDesign_TweakHint}"
+                                                         AutomationProperties.Name="{localization:Loc ToneDesign_TweakHint}">
+                                                    <TextBox.KeyBindings>
+                                                        <KeyBinding Gesture="Enter" Command="{Binding TweakCommand}" />
+                                                    </TextBox.KeyBindings>
+                                                </TextBox>
+                                            </Panel>
+                                        </Border>
+
+                                        <!-- A DISABLED CONTROL STATES ITS REASON OR
+                                             IS NOT RENDERED, and Design is the block's
+                                             own VERB — so it stays, and the line
+                                             beside it says why it is grey. -->
+                                        <Grid x:Name="ToneDesignSendRow" ColumnDefinitions="*,Auto,Auto,Auto"
+                                              MinHeight="{StaticResource FireToneStatusHeight}">
+                                            <!-- Two lines at most, so no status can
+                                                 outgrow the button beside it and push
+                                                 the box up; the full line is its
+                                                 tooltip. -->
+                                            <TextBlock Grid.Column="0" x:Name="ToneDesignStatus"
+                                                       Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                                       VerticalAlignment="Center"
+                                                       MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                       Margin="{StaticResource FireGapRightMd}"
+                                                       ToolTip.Tip="{Binding Status}"
+                                                       Text="{Binding Status}"
+                                                       IsVisible="{Binding HasStatus}" />
+                                            <TextBlock Grid.Column="0" x:Name="ToneDesignNeedsPrompt"
+                                                       Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                                       VerticalAlignment="Center"
+                                                       MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                       Margin="{StaticResource FireGapRightMd}"
+                                                       IsVisible="{Binding ShowPromptHint}"
+                                                       Text="{localization:Loc ToneDesign_NeedsPrompt}" />
+                                            <!-- The second way to send: opens the copy &
+                                                 paste block under this row. -->
+                                            <ToggleButton Grid.Column="1" x:Name="ToneDesignManualToggle"
+                                                          Theme="{StaticResource FireGhostToggle}" Classes="FireGhost Compact"
+                                                          VerticalAlignment="Center"
+                                                          Margin="{StaticResource FireGapRightMd}"
+                                                          IsVisible="{Binding IsManualAvailable}"
+                                                          IsChecked="{Binding IsManualOpen, Mode=TwoWay}"
+                                                          Content="{localization:Loc ToneDesign_Manual_Toggle}"
+                                                          ToolTip.Tip="{localization:Loc ToneDesign_Manual_Toggle_Tip}" />
+                                            <Button Grid.Column="2" x:Name="ToneDesignCancel" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                    VerticalAlignment="Center"
+                                                    Margin="{StaticResource FireGapRightMd}"
+                                                    Content="{localization:Loc ToneDesign_Cancel}"
+                                                    Command="{Binding CancelCommand}"
+                                                    IsVisible="{Binding IsRunning}" />
+                                            <Panel Grid.Column="3" VerticalAlignment="Center">
+                                                <Button x:Name="ToneDesignRun" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
+                                                        Content="{localization:Loc ToneDesign_Design}"
+                                                        IsVisible="{Binding ShowDesignButton}"
+                                                        Command="{Binding DesignCommand}" />
+                                                <Button x:Name="ToneDesignRefine" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
+                                                        Content="{localization:Loc ToneDesign_Tweak}"
+                                                        IsVisible="{Binding ShowTweakButton}"
+                                                        Command="{Binding TweakCommand}" />
+                                            </Panel>
+                                        </Grid>
+
+                                        <!-- ══ CHATGPT (COPY & PASTE) ══════════════════
+                                             Compact on purpose, because it sits in
+                                             the PINNED composer and every pixel it
+                                             takes comes out of the thread: the
+                                             title with step 1's button, the paste
+                                             box (its placeholder is step 2) at a
+                                             low cap, and Import with the error
+                                             beside it. The instructions are the
+                                             buttons' tooltips. A bad paste says so
+                                             HERE and touches nothing else. -->
+                                        <Border x:Name="ToneDesignManual" Theme="{StaticResource FireToneManualBorder}" Classes="FireToneManual"
+                                                IsVisible="{Binding IsManualOpen}">
+                                            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Accent"
+                                                               VerticalAlignment="Center"
+                                                               Margin="{StaticResource FireGapRightMd}"
+                                                               Text="{localization:Loc ToneDesign_Manual_Title}" />
+                                                    <Button Grid.Column="1" x:Name="ToneDesignCopyPrompt"
+                                                            Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                            VerticalAlignment="Center"
+                                                            Content="{localization:Loc ToneDesign_Manual_Copy}"
+                                                            ToolTip.Tip="{localization:Loc ToneDesign_Manual_Step1}"
+                                                            Command="{Binding CopyPromptCommand}" />
+                                                </Grid>
+                                                <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField Tall">
+                                                    <TextBox x:Name="ToneDesignReply"
+                                                             Classes="FireFieldInput Multiline FireToneReply"
+                                                             TextWrapping="Wrap"
+                                                             Text="{Binding ReplyText, Mode=TwoWay}"
+                                                             PlaceholderText="{localization:Loc ToneDesign_Manual_Step2}"
+                                                             AutomationProperties.Name="{localization:Loc ToneDesign_Manual_Step2}" />
+                                                </Border>
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" x:Name="ToneDesignManualError"
+                                                               Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Danger"
+                                                               VerticalAlignment="Center"
+                                                               Margin="{StaticResource FireGapRightMd}"
+                                                               IsVisible="{Binding HasManualError}"
+                                                               Text="{Binding ManualErrorText}" />
+                                                    <Button Grid.Column="1" x:Name="ToneDesignImport"
+                                                            Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                            VerticalAlignment="Top"
+                                                            Content="{localization:Loc ToneDesign_Manual_Import}"
+                                                            Command="{Binding ImportReplyCommand}" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Panel>
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+        </Grid>
+    </Border>
+</UserControl>

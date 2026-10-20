@@ -1,0 +1,283 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.ChordShapesView"
+             x:DataType="contracts:IChordShapesScreen"
+             x:CompileBindings="True">
+
+    <!--
+        The Chord shapes list (#486): one row per chord TEMPLATE, so the shared
+        shape every chord and hand shape points at is visible as a thing of its
+        own. Hosted as the inspector's Chord shapes tab and, on the fake, in the
+        gallery. Every verb on a row is one undo step and goes through
+        Services/Editing/ChordShapes/ChordShapeEdits.
+
+        It is also the chord-shape PALETTE (#477): a click on a row's chord
+        diagram (or its Place button, or a tile of the recent strip) places that
+        whole chord at the pen; with sounds selected it reshapes each of them onto
+        it. One undo step either way, through ChordShapePlacement.
+
+        Structure (#567): a compact PINNED header (summary, the filter, the
+        recent strip with Repeat previous chord beside it) over the SHAPE LIST,
+        the only thing that scrolls, with its scrollbar always drawn while there
+        is more to see. What a verb did goes to the app's status rail, never a
+        line in here. Shapes are drawn by ChordDiagramControl, a chord chart
+        (o / x above the nut, the first fret named, a finger number in each
+        dot), not by the editor's ChordBoxControl. A pane dragged wide lays the
+        rows out in columns (AdaptiveColumnsPanel).
+    -->
+    <Grid RowDefinitions="Auto,*" Background="{DynamicResource FireSurfaceChrome}">
+
+        <!-- #601: the pinned row every Inspector tab shares — the bar surface on one hairline. -->
+        <Border Grid.Row="0" x:Name="ChordShapesHeader" Padding="{StaticResource FirePadListRowDense}"
+                Background="{DynamicResource FireSurfaceBar}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <!-- The summary and the filter share one line where the pane is wide
+                     enough, and wrap to two where it is not. -->
+                <WrapPanel x:Name="ChordShapesSummaryLine" Orientation="Horizontal"
+                           ItemSpacing="{StaticResource FireSpaceLg}" LineSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock x:Name="ChordShapesSummary" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding Summary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding Summary}" ToolTip.Tip="{localization:Loc ChordShapes_PlaceHint}" />
+
+                    <Border Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment" HorizontalAlignment="Left">
+                        <WrapPanel x:Name="ChordShapesFilters" Orientation="Horizontal">
+                            <RadioButton x:Name="ChordShapesFilterAll" Classes="FireSegmentItem Dense"
+                                         GroupName="ChordShapesFilter"
+                                         IsChecked="{Binding IsShowingAll, Mode=OneWay}"
+                                         Command="{Binding ShowAllCommand}"
+                                         Content="{Binding AllFilterLabel}"
+                                         AutomationProperties.Name="{Binding AllFilterLabel}" />
+                            <RadioButton x:Name="ChordShapesFilterDuplicates" Classes="FireSegmentItem Dense"
+                                         GroupName="ChordShapesFilter"
+                                         IsChecked="{Binding IsShowingDuplicates, Mode=OneWay}"
+                                         Command="{Binding ShowDuplicatesCommand}"
+                                         Content="{Binding DuplicatesFilterLabel}"
+                                         AutomationProperties.Name="{Binding DuplicatesFilterLabel}"
+                                         ToolTip.Tip="{localization:Loc ChordShapes_Filter_Duplicates_Tip}" />
+                            <RadioButton x:Name="ChordShapesFilterMissing" Classes="FireSegmentItem Dense"
+                                         GroupName="ChordShapesFilter"
+                                         IsChecked="{Binding IsShowingMissingFingering, Mode=OneWay}"
+                                         Command="{Binding ShowMissingFingeringCommand}"
+                                         Content="{Binding MissingFingeringFilterLabel}"
+                                         AutomationProperties.Name="{Binding MissingFingeringFilterLabel}" />
+                        </WrapPanel>
+                    </Border>
+                </WrapPanel>
+
+                <!-- Repeat previous chord and the recent strip on ONE line: the shapes
+                     placed last, newest first, one click each, scrolling sideways. The
+                     tiles are the list's own rows, so a rename or a merge shows here too. -->
+                <Grid x:Name="ChordShapesRecentPanel" ColumnDefinitions="Auto,*"
+                      ColumnSpacing="{StaticResource FireSpaceSm}" IsVisible="{Binding HasRows}">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                   TextWrapping="NoWrap" IsVisible="{Binding HasRecentRows}"
+                                   Text="{localization:Loc ChordShapes_Recent}" />
+                        <Button x:Name="ChordShapesRepeatPrevious" Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                                HorizontalAlignment="Left"
+                                Content="{localization:Loc Keybind_RepeatPreviousChord}"
+                                AutomationProperties.Name="{localization:Loc Keybind_RepeatPreviousChord}"
+                                ToolTip.Tip="{localization:Loc ChordShapes_RepeatPrevious_Tip}"
+                                Command="{Binding RepeatPreviousChordCommand}" />
+                    </StackPanel>
+                    <ScrollViewer Grid.Column="1" x:Name="ChordShapesRecentScroll" IsVisible="{Binding HasRecentRows}"
+                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="ChordShapesRecent" ItemsSource="{Binding RecentRows}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IChordShapeRow">
+                                    <Button Theme="{StaticResource FirePresetCardButton}" Classes="FirePresetCard"
+                                            Padding="{StaticResource FirePadTag}" VerticalAlignment="Top"
+                                            Command="{Binding PlaceCommand}"
+                                            AutomationProperties.Name="{Binding Name}"
+                                            ToolTip.Tip="{Binding Name}">
+                                        <ctl:ChordDiagramControl Width="52" Height="48"
+                                                                 Chord="{Binding DiagramChord}"
+                                                                 Template="{Binding Diagram}"
+                                                                 StringCount="{Binding StringCount}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="1" x:Name="ChordShapesEmpty" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                   Margin="{StaticResource FirePadListRowDense}"
+                   IsVisible="{Binding !HasRows}" Text="{Binding EmptyText}" />
+
+        <!-- The one scroll region. The bar is always drawn while the list is longer
+             than the pane (Avalonia auto-hides it otherwise, and nothing said the
+             list went on). -->
+        <ScrollViewer Grid.Row="1" x:Name="ChordShapesScroll" IsVisible="{Binding HasRows}"
+                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                      AllowAutoHide="False">
+            <ItemsControl x:Name="ChordShapesRows" ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ctl:AdaptiveColumnsPanel MinColumnWidth="340" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="contracts:IChordShapeRow">
+                        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow"
+                                Padding="{StaticResource FirePadListRowDense}"
+                                Classes.Unavailable="{Binding IsUnused}">
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceMd}" RowSpacing="{StaticResource FireSpaceXs}">
+                                <!-- The diagram IS the palette's button: a click places this
+                                     shape at the pen, or reshapes the selection onto it. -->
+                                <Button Grid.Column="0" Grid.Row="0" x:Name="ChordShapePlaceBox"
+                                        Theme="{StaticResource FirePresetCardButton}" Classes="FirePresetCard"
+                                        Padding="{StaticResource FirePadTag}" VerticalAlignment="Top"
+                                        Command="{Binding PlaceCommand}"
+                                        AutomationProperties.Name="{Binding FretsText}"
+                                        ToolTip.Tip="{localization:Loc ChordShapes_Place_Tip}">
+                                    <ctl:ChordDiagramControl Width="84" Height="82"
+                                                             Chord="{Binding DiagramChord}"
+                                                             Template="{Binding Diagram}"
+                                                             StringCount="{Binding StringCount}" />
+                                </Button>
+                                <StackPanel Grid.Column="1" Grid.Row="0" Spacing="{StaticResource FireSpaceXs}">
+                                    <!-- The title, its tags and its use counts flow as one line where
+                                         they fit, so the text beside the diagram stays no taller than the
+                                         diagram. A named shape: the name, its frets beside it. An unnamed
+                                         one: its frets ARE its title, muted, never "(no name)". A long name
+                                         takes the line and trims; the rest wraps under it. -->
+                                    <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource FireSpaceSm}"
+                                               LineSpacing="{StaticResource FireSpaceXs}">
+                                        <TextBlock x:Name="ChordShapeTitle" VerticalAlignment="Center" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                   TextWrapping="NoWrap" IsVisible="{Binding !IsUnnamed}" ToolTip.Tip="{Binding Name}">
+                                            <Run Text="{Binding Name}" />
+                                            <Run Text="  " />
+                                            <Run Text="{Binding FretsText}" FontFamily="{StaticResource FireFontMono}"
+                                                 FontSize="{StaticResource FireSizeMono}" Foreground="{DynamicResource FireTextMuted}" />
+                                        </TextBlock>
+                                        <TextBlock x:Name="ChordShapeUnnamedTitle" Theme="{StaticResource FireMonoText}" Classes="FireMono"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="{StaticResource FireSizeRow}" TextTrimming="CharacterEllipsis"
+                                                   IsVisible="{Binding IsUnnamed}" Text="{Binding Name}" />
+                                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag"
+                                                Classes.Danger="{Binding IsFingeringMissing}"
+                                                Classes.Warn="{Binding IsFingeringSuggested}">
+                                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="NoWrap"
+                                                       Text="{Binding FingerStateText}" />
+                                        </Border>
+                                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent"
+                                                IsVisible="{Binding IsArpeggio}">
+                                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="NoWrap"
+                                                       Text="{localization:Loc ChordTemplate_Arpeggio}" />
+                                        </Border>
+                                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Warn"
+                                                IsVisible="{Binding IsDuplicate}">
+                                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="NoWrap"
+                                                       Text="{Binding DuplicateText}" />
+                                        </Border>
+                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                   VerticalAlignment="Center" Text="{Binding LevelUsesText}" />
+                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding AllUsesText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                   Text="{Binding AllUsesText}" />
+                                    </WrapPanel>
+
+                                    <!-- The verbs: one compact button row, Place first and lit.
+                                         They wrap at a narrow pane. -->
+                                    <WrapPanel x:Name="ChordShapeActions" Orientation="Horizontal"
+                                               ItemSpacing="{StaticResource FireSpaceXs}" LineSpacing="{StaticResource FireSpaceXs}">
+                                        <Button Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
+                                                Padding="{StaticResource FirePadTag}" MinHeight="24"
+                                                Content="{localization:Loc ChordShapes_Place}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_Place}"
+                                                ToolTip.Tip="{localization:Loc ChordShapes_Place_Tip}"
+                                                Command="{Binding PlaceCommand}" />
+                                        <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                                                Padding="{StaticResource FirePadTag}" MinHeight="24"
+                                                Content="{localization:Loc ChordShapes_SelectUses}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_SelectUses}"
+                                                ToolTip.Tip="{localization:Loc ChordShapes_SelectUses_Tip}"
+                                                Command="{Binding SelectUsesCommand}" />
+                                        <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                                                Padding="{StaticResource FirePadTag}" MinHeight="24"
+                                                Content="{localization:Loc ChordShapes_NextUse}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_NextUse}"
+                                                ToolTip.Tip="{localization:Loc ChordShapes_NextUse_Tip}"
+                                                Command="{Binding NextUseCommand}" />
+                                        <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                                                Padding="{StaticResource FirePadTag}" MinHeight="24"
+                                                Content="{localization:Loc ChordShapes_Rename}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_Rename}"
+                                                IsVisible="{Binding !IsRenaming}"
+                                                Command="{Binding BeginRenameCommand}" />
+                                        <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                                                Padding="{StaticResource FirePadTag}" MinHeight="24"
+                                                Content="{localization:Loc ChordShapes_MergeInto}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_MergeInto}"
+                                                ToolTip.Tip="{localization:Loc ChordShapes_MergeInto_Tip}"
+                                                IsVisible="{Binding IsDuplicate}"
+                                                Command="{Binding ChooseMergeTargetCommand}" />
+                                        <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                                                Padding="{StaticResource FirePadTag}" MinHeight="24"
+                                                Content="{localization:Loc ChordShapes_Split}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_Split}"
+                                                ToolTip.Tip="{localization:Loc ChordShapes_Split_Tip}"
+                                                IsVisible="{Binding CanSplitSelection}"
+                                                Command="{Binding SplitSelectionCommand}" />
+                                    </WrapPanel>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1" Spacing="{StaticResource FireSpaceXs}">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
+                                          IsVisible="{Binding IsRenaming}">
+                                        <TextBox Grid.Column="0" Text="{Binding NameDraft}"
+                                                 AutomationProperties.Name="{localization:Loc ChordShapes_NameBox}" />
+                                        <Button Grid.Column="1" Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
+                                                Content="{localization:Loc ChordShapes_RenameApply}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_RenameApply}"
+                                                Command="{Binding CommitRenameCommand}" />
+                                        <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                                Content="{localization:Loc ChordShapes_RenameCancel}"
+                                                AutomationProperties.Name="{localization:Loc ChordShapes_RenameCancel}"
+                                                Command="{Binding CancelRenameCommand}" />
+                                    </Grid>
+
+                                    <!-- "Merge into…" opens INLINE under the row (no popup to restyle)
+                                         and lists only templates with the same frets in the same
+                                         arpeggio flavour. -->
+                                    <ItemsControl ItemsSource="{Binding MergeTargets}"
+                                                  IsVisible="{Binding IsChoosingMergeTarget}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="{StaticResource FireSpaceXs}" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IChordShapeMergeTarget">
+                                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                                        HorizontalAlignment="Left"
+                                                        Content="{Binding Label}"
+                                                        AutomationProperties.Name="{Binding Label}"
+                                                        Command="{Binding MergeCommand}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

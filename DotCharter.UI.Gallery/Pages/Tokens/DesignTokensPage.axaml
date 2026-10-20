@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="DotCharter.UI.Gallery.Pages.Tokens.DesignTokensPage"
+             Background="{DynamicResource AppBackground}">
+
+    <ScrollViewer>
+        <StackPanel Margin="{StaticResource PaddingCardLg}" Spacing="{StaticResource SpaceXl}">
+
+            <!-- ── Colour tokens ─────────────────────────────────────────── -->
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <TextBlock x:Name="ColorHeading"
+                           FontSize="{StaticResource FontSizeHeading}"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <TextBlock Text="Read from Styles/ColorTokens.axaml at runtime — this list is never hard-coded."
+                           FontSize="{StaticResource FontSizeXs}"
+                           Foreground="{DynamicResource TextDim}" />
+                <WrapPanel x:Name="ColorSwatches" ItemWidth="180" />
+            </StackPanel>
+
+            <!-- ── Type scale ────────────────────────────────────────────── -->
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <TextBlock x:Name="TypeHeading"
+                           FontSize="{StaticResource FontSizeHeading}"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <StackPanel x:Name="TypeScale" Spacing="{StaticResource SpaceXs}" />
+            </StackPanel>
+
+            <!-- ── Spacing ───────────────────────────────────────────────── -->
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <TextBlock x:Name="SpacingHeading"
+                           FontSize="{StaticResource FontSizeHeading}"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <StackPanel x:Name="SpacingBars" Spacing="{StaticResource SpaceXs}" />
+            </StackPanel>
+
+            <!-- ── Buttons ───────────────────────────────────────────────── -->
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <TextBlock Text="Buttons"
+                           FontSize="{StaticResource FontSizeHeading}"
+                           Foreground="{DynamicResource TextPrimary}" />
+
+                <TextBlock Text="Enabled" FontSize="{StaticResource FontSizeXs}"
+                           Foreground="{DynamicResource TextDim}" />
+                <WrapPanel x:Name="ButtonsEnabled" />
+
+                <TextBlock Text="Disabled" FontSize="{StaticResource FontSizeXs}"
+                           Foreground="{DynamicResource TextDim}" />
+                <WrapPanel x:Name="ButtonsDisabled" />
+            </StackPanel>
+
+            <!-- ── Inputs ────────────────────────────────────────────────── -->
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <TextBlock Text="Inputs"
+                           FontSize="{StaticResource FontSizeHeading}"
+                           Foreground="{DynamicResource TextPrimary}" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource SpaceLg}">
+                    <StackPanel Grid.Column="0" Spacing="{StaticResource SpaceSm}">
+                        <TextBlock Text="Enabled" FontSize="{StaticResource FontSizeXs}"
+                                   Foreground="{DynamicResource TextDim}" />
+                        <TextBox Text="Song title"
+                                 AutomationProperties.Name="Song title" />
+                        <ComboBox SelectedIndex="0" HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="Arrangement">
+                            <ComboBoxItem>Lead</ComboBoxItem>
+                            <ComboBoxItem>Rhythm</ComboBoxItem>
+                            <ComboBoxItem>Bass</ComboBoxItem>
+                        </ComboBox>
+                        <ToggleSwitch Content="Metronome" AutomationProperties.Name="Metronome" />
+                        <Slider Minimum="0" Maximum="100" Value="60" AutomationProperties.Name="Volume" />
+                        <CheckBox Content="Loop section" AutomationProperties.Name="Loop section" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="{StaticResource SpaceSm}">
+                        <TextBlock Text="Disabled" FontSize="{StaticResource FontSizeXs}"
+                                   Foreground="{DynamicResource TextDim}" />
+                        <TextBox Text="Song title" IsEnabled="False"
+                                 AutomationProperties.Name="Song title (disabled)" />
+                        <ComboBox SelectedIndex="0" IsEnabled="False" HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="Arrangement (disabled)">
+                            <ComboBoxItem>Lead</ComboBoxItem>
+                        </ComboBox>
+                        <ToggleSwitch Content="Metronome" IsEnabled="False"
+                                      AutomationProperties.Name="Metronome (disabled)" />
+                        <Slider Minimum="0" Maximum="100" Value="60" IsEnabled="False"
+                                AutomationProperties.Name="Volume (disabled)" />
+                        <CheckBox Content="Loop section" IsEnabled="False"
+                                  AutomationProperties.Name="Loop section (disabled)" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,143 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.FailedScreenView"
+             x:DataType="contracts:IFailedScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Failed, redesigned.
+
+        A terminal card, deliberately short: three choices and no grid. What it
+        adds over the shipped one is HOW FAR you got — the section, the elapsed
+        time against the song's length, and the accuracy up to the fall. Without
+        those, "retry from section" is a guess rather than a considered choice.
+
+        The retry-from-section verb DISAPPEARS on a chart with no sections
+        (IsVisible, never a disabled button that cannot say why), and the card
+        then reads as two choices rather than one dead one.
+    -->
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+        <Border Theme="{StaticResource FireOverlayScrimBorder}" Classes="FireOverlayScrim" />
+
+        <Grid x:Name="FailedRedesignRoot">
+            <!--
+                A fractional ceiling, not a literal one: this card is the other
+                figure screen, and at a fixed pixel size it covered 5.3 % of a
+                1080p window and 1.3 % of a 4K one. The card keeps its DESIGN
+                width — every column and German string in it is tuned to that —
+                and the Viewbox scales the picture instead of re-flowing it.
+            -->
+            <Viewbox x:Name="FailedRedesignFrame"
+                     Stretch="Uniform" StretchDirection="UpOnly"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     MaxWidth="{Binding $parent[Panel].Bounds,
+                         Converter={x:Static conv:ViewportFractionConverter.Instance},
+                         ConverterParameter=Width:0.40}"
+                     MaxHeight="{Binding $parent[Panel].Bounds,
+                         Converter={x:Static conv:ViewportFractionConverter.Instance},
+                         ConverterParameter=Height:0.78}">
+            <Border x:Name="FailedRedesignCard" Theme="{StaticResource FireOverlayCardBorder}" Classes="FireOverlayCard"
+                    Width="{StaticResource FireDialogWidthMd}"
+                    Padding="{StaticResource FirePadPanelLg}">
+                <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+                    <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Classes="FireSectionHeader">
+                        <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_RockMeter_FailTitle}" />
+                        <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextWrapping="Wrap"
+                                   Text="{Binding SongTitle}" />
+                    </StackPanel>
+
+                    <!-- how far you got -->
+                    <Border x:Name="FailedRedesignProgressPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                        <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                            <Grid ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceRow}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc SongBrowser_Cap_Path}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="260"
+                                           Text="{Binding ArrangementName}" />
+                            </Grid>
+
+                            <ProgressBar Classes="FireMeter Danger" Minimum="0" Maximum="1"
+                                         Value="{Binding Progress}" />
+
+                            <Grid ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceRow}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding ProgressLabel}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding AccuracyLabel}" />
+                            </Grid>
+
+                            <Grid x:Name="FailedRedesignSectionRow" ColumnDefinitions="Auto,*"
+                                  IsVisible="{Binding HasSection}"
+                                  ColumnSpacing="{StaticResource FireSpaceRow}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_Hud_Section}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                           HorizontalAlignment="Right"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding SectionLabel}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                               Text="{localization:Loc PlayMode_RockMeter_FailHint}" />
+
+                    <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                        <Button x:Name="FailedRedesignRetrySection" Theme="{StaticResource FireCtaButton}" Classes="FireCta"
+                                HorizontalAlignment="Stretch"
+                                IsVisible="{Binding HasSection}"
+                                Command="{Binding RetrySectionCommand}">
+                            <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                                       Text="{localization:Loc PlayMode_RockMeter_RetrySection}" />
+                        </Button>
+
+                        <!-- With no section to retry, Restart is the way on and
+                             takes the lit action; otherwise it is the outline
+                             second choice under Retry. A Button has ONE theme and
+                             this one swaps family on a binding, so the theme
+                             follows the class through two styles scoped to this
+                             button alone (#240). -->
+                        <Button x:Name="FailedRedesignRestart"
+                                Classes.FireCta="{Binding !HasSection}"
+                                Classes.FireOutlineCta="{Binding HasSection}"
+                                HorizontalAlignment="Stretch"
+                                Command="{Binding RestartCommand}">
+                            <Button.Styles>
+                                <Style Selector="Button.FireCta">
+                                    <Setter Property="Theme" Value="{StaticResource FireCtaButton}" />
+                                </Style>
+                                <Style Selector="Button.FireOutlineCta">
+                                    <Setter Property="Theme" Value="{StaticResource FireOutlineCtaButton}" />
+                                </Style>
+                            </Button.Styles>
+                            <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                                       Text="{localization:Loc PlayMode_RockMeter_RestartSong}" />
+                        </Button>
+
+                        <Button x:Name="FailedRedesignQuit" Theme="{StaticResource FireGhostButton}" Classes="FireGhost"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                IsCancel="True"
+                                Command="{Binding QuitCommand}"
+                                Content="{localization:Loc PlayMode_RockMeter_Quit}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            </Viewbox>
+        </Grid>
+    </Panel>
+</UserControl>

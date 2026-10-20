@@ -1,0 +1,18 @@
+# MSBuild auto-response file: these switches are applied to every command-line
+# build in this repo (MSBuild walks up from the working directory to find it).
+#
+# -nodeReuse:false
+#   MSBuild's default is to keep its worker nodes ALIVE after a build finishes,
+#   idling for ~15 minutes in case another build follows. On a solution this
+#   size that is a dozen "Microsoft .NET Host" processes holding ~100 MB each,
+#   and they OUTLIVE the shell that started them -- a release pack left nine
+#   orphaned nodes (~900 MB) whose parent had already exited. It looks exactly
+#   like a process leak in the app, which is what it kept being reported as.
+#
+#   The cost is roughly a second of extra start-up per build. That is a fair
+#   price for a build that leaves nothing behind, and it means neither a script,
+#   nor CI, nor an agent has to remember to pass the flag.
+#
+#   Note this does NOT affect Rider's in-IDE builds: those go through its own
+#   build host, which manages (and shuts down) its own nodes.
+-nodeReuse:false

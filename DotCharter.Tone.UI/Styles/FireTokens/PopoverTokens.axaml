@@ -1,0 +1,192 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire token layer — see `Styles/FireTokens.axaml`, which
+         merges this file and its siblings IN ORDER. Every literal in `Play Menus.dc.html` — the popover fills and edges, the
+         SELECT face, chips / rows / empties, slider fills and the steps the
+         base ladder was missing. -->
+
+    <Styles.Resources>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             ONE POPOVER — every literal in `Play Menus.dc.html`, transcribed.
+
+             This block exists because the first pass at these panels was
+             rejected for not being the mockup: it APPROXIMATED, reaching for
+             the nearest existing rung instead of the drawn value. A hairline at
+             .08 where the source says .11, a 26 px chip where the source says
+             a 34 px select, a flat accent where the source draws a two-stop
+             gradient — each is invisible in isolation and together they are a
+             different design.
+
+             So the rule for this block is: **a value here is the mockup's, in
+             the mockup's own units, and a comment carries the CSS it came
+             from.** Where a Fire rung already holds that exact value it is
+             reused and named in the comment instead of being duplicated:
+             `.03`=FireSurfaceRaised, `.035`=FireSurfaceChip, `.06`=FireBorderHair,
+             `.07`=FireBorderSeam, `.08`=FireBorder, `.12`=FireBorderStrong,
+             slider track `.10`=FireSurfaceTrack, accent `.22`=FireAccentTint,
+             `#7ab6ff .35`=FireAccentBar, `.50`=FireAccentBorder.
+             ══════════════════════════════════════════════════════════════════ -->
+
+        <!-- ─── Popover fills + edges ─────────────────────────────────────── -->
+        <!-- The card edge, `1px solid rgba(255,255,255,.1)`. NOT `FireBorder`
+             (.08) — the popover floats over the editor, and .08 loses its edge
+             against the chart. -->
+        <SolidColorBrush x:Key="FirePopoverBorder" Color="#1AFFFFFF" />
+        <!-- `border-top: 1px solid rgba(255,255,255,.055)` — the hairline
+             BETWEEN sections, deliberately fainter than the head's .07 seam. -->
+        <SolidColorBrush x:Key="FirePopoverSectionRule" Color="#0EFFFFFF" />
+        <!-- `rgba(255,255,255,.09)` — the meter's unlit segment and the
+             profile grid's button edge. -->
+        <SolidColorBrush x:Key="FirePopoverHairline" Color="#17FFFFFF" />
+        <!-- `rgba(255,255,255,.028)` — one VST3 slot's ground. Below every rung
+             on the surface ladder: a slot is a row inside a card inside a
+             popover, three levels down. -->
+        <SolidColorBrush x:Key="FirePopoverSlotFill" Color="#07FFFFFF" />
+
+        <!-- ─── The SELECT (`select()` in the mockup) ─────────────────────── -->
+        <!-- `background: rgba(0,0,0,.36)` — a field on a popover is SUNKEN, not
+             raised: the card is already lit from the top. -->
+        <SolidColorBrush x:Key="FirePopoverFieldFill" Color="#5C000000" />
+        <!-- `1px solid rgba(255,255,255,.11)`, and `rgba(167,139,250,.65)` while
+             the dropdown is open. -->
+        <SolidColorBrush x:Key="FirePopoverFieldBorder" Color="#1CFFFFFF" />
+        <SolidColorBrush x:Key="FirePopoverFieldBorderOpen" Color="#A67AB6FF" />
+        <!-- `box-shadow: 0 0 0 3px rgba(139,92,246,.16)` — the open select's
+             focus halo. -->
+        <SolidColorBrush x:Key="FirePopoverFieldRing" Color="#295E9FF2" />
+        <!-- The options panel: `background:#232830`. FLAT and OPAQUE — it is a
+             second popup HWND over the first, so anything it lets through is
+             the desktop. -->
+        <SolidColorBrush x:Key="FirePopoverOptionsFill" Color="#232830" />
+        <!-- `rgba(139,92,246,.3)` — the picked option's wash. -->
+        <SolidColorBrush x:Key="FirePopoverOptionPicked" Color="#4D5E9FF2" />
+
+        <!-- ─── Chips, rows, empties ─────────────────────────────────────── -->
+        <!-- `rgba(139,92,246,.24)` — an ON chip and the active profile row. -->
+        <SolidColorBrush x:Key="FirePopoverChipOnFill" Color="#3D5E9FF2" />
+        <!-- `rgba(139,92,246,.2)` — the CURRENT history step. -->
+        <SolidColorBrush x:Key="FirePopoverRowPicked" Color="#335E9FF2" />
+        <!-- `rgba(167,139,250,.4)` — the picked row's edge and the dashed
+             "+ Add VST3…" outline. (.42 on the profile row rounds to the same
+             byte, so it is one token.) -->
+        <SolidColorBrush x:Key="FirePopoverEdgeSoft" Color="#667AB6FF" />
+        <!-- `background: rgba(0,0,0,.24)` inside `1px dashed rgba(255,255,255,.11)`
+             — the empty state. The dash is a sibling Rectangle: an Avalonia
+             Border has BorderBrush and BorderThickness and nothing else. -->
+        <SolidColorBrush x:Key="FirePopoverEmptyFill" Color="#3D000000" />
+        <!-- `rgba(255,255,255,.14)` / `rgba(255,255,255,.16)` — an idle history
+             dot, and the ring around a profile avatar. -->
+        <SolidColorBrush x:Key="FirePopoverDotIdle" Color="#24FFFFFF" />
+        <SolidColorBrush x:Key="FirePopoverAvatarRing" Color="#29FFFFFF" />
+        <!-- `box-shadow: 0 0 9px 1px rgba(167,139,250,.9)` on the CURRENT step's
+             dot only. -->
+        <BoxShadows x:Key="FirePopoverDotGlow">0 0 9 1 #E67AB6FF</BoxShadows>
+        <!-- `box-shadow: 0 3px 9px rgba(0,0,0,.75)` under a slider knob — what
+             lifts a 14 px white disc off a 4 px track. -->
+        <BoxShadows x:Key="FirePopoverThumbShadow">0 3 9 0 #BF000000</BoxShadows>
+        <!-- The mockup's `box-shadow:0 30px 70px -26px rgba(0,0,0,.95)` on the
+             CARD is deliberately NOT ported and must not be added. `OverlayPopups`
+             is off, so a popover is its own `PopupImpl` HWND, and on this app's
+             composition settings a shadow's feather falls outside the presenter
+             and renders flat BLACK — the halo two separate releases shipped. The
+             card's own gradient and its 1 px edge are what lift it instead. -->
+        <!-- `text-shadow`-free by the same rule; the only shadow inside a
+             popover is the one above, drawn INSIDE a 20 px thumb slot. -->
+
+        <!-- ─── The one text step the Fire ladder was missing ─────────────── -->
+        <!-- `#5d5675`: the ESC cap, an empty state's hint and a section's
+             explanatory line. It sits BETWEEN `FireTextFaint` (#687080) and
+             `FireTextDim` (#7a8390) and the mockup uses all three. -->
+        <SolidColorBrush x:Key="FireTextQuiet" Color="#5D5675" />
+
+        <!-- ─── Slider fills ─────────────────────────────────────────────────
+             `linear-gradient(90deg,#3c7bd1,COL)`, one per row. The left stop is
+             always the deep accent; the right stop is what the row is ABOUT, so
+             three sliders in one panel are told apart without reading a label.
+             They are four separate brushes rather than one parametrized one
+             because a `LinearGradientBrush` cannot take a bound stop. -->
+        <LinearGradientBrush x:Key="FirePopoverFillSong" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#3C7BD1" />
+            <GradientStop Offset="1" Color="#5E9FF2" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="FirePopoverFillGuitar" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#3C7BD1" />
+            <GradientStop Offset="1" Color="#4ADE80" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="FirePopoverFillMidi" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#3C7BD1" />
+            <GradientStop Offset="1" Color="#4A90E0" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="FirePopoverFillPitch" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#3C7BD1" />
+            <GradientStop Offset="1" Color="#F0A54A" />
+        </LinearGradientBrush>
+        <!-- `linear-gradient(100deg,#3c7bd1,#5e9ff2)` — the lefty switch when
+             it is ON, and the "Add" profile button. 100deg is 10° off the
+             horizontal; at 38 × 21 and 60 × 34 that is a visible tilt. -->
+        <LinearGradientBrush x:Key="FirePopoverAccentAction" StartPoint="0%,100%" EndPoint="98%,0%">
+            <GradientStop Offset="0" Color="#3C7BD1" />
+            <GradientStop Offset="1" Color="#5E9FF2" />
+        </LinearGradientBrush>
+
+        <!-- ─── Radii the ladder was missing ─────────────────────────────── -->
+        <CornerRadius x:Key="FireRadiusChip">7</CornerRadius>       <!-- chip + icon button -->
+        <CornerRadius x:Key="FireRadiusHair">2</CornerRadius>       <!-- a 4 px slider track -->
+        <CornerRadius x:Key="FireRadiusMeterBar">1</CornerRadius>   <!-- a 3 px meter segment -->
+
+        <!-- ─── Sizes ─────────────────────────────────────────────────────── -->
+        <x:Double x:Key="FirePopoverChipHeight">26</x:Double>       <!-- chip + icon button -->
+        <x:Double x:Key="FirePopoverSlotHeight">36</x:Double>       <!-- a VST3 slot, and "+ Add VST3…" -->
+        <x:Double x:Key="FirePopoverGridHeight">32</x:Double>       <!-- one cell of the profile 2×2 -->
+        <x:Double x:Key="FirePopoverBadgeSize">20</x:Double>        <!-- the head's icon chip -->
+        <x:Double x:Key="FirePopoverAvatarSize">26</x:Double>
+        <x:Double x:Key="FirePopoverLabelColumn">92</x:Double>      <!-- a slider row's label -->
+        <x:Double x:Key="FirePopoverValueColumn">52</x:Double>      <!-- …and its mono readout -->
+        <x:Double x:Key="FirePopoverTrackHeight">4</x:Double>
+        <x:Double x:Key="FirePopoverThumbSize">14</x:Double>
+        <x:Double x:Key="FirePopoverSwitchWidth">38</x:Double>
+        <x:Double x:Key="FirePopoverSwitchHeight">21</x:Double>
+        <x:Double x:Key="FirePopoverSwitchKnob">17</x:Double>
+        <x:Double x:Key="FirePopoverIndexColumn">13</x:Double>      <!-- a VST3 slot's 1/2/3 -->
+        <x:Double x:Key="FirePopoverGripSize">10</x:Double>         <!-- the ⠇ drag grip -->
+
+        <!-- ─── Spacing steps the ladder was missing ─────────────────────── -->
+        <x:Double x:Key="FirePopoverGapHair">3</x:Double>         <!-- empty title → hint -->
+        <x:Double x:Key="FirePopoverGapTight">5</x:Double>        <!-- M/S pair, 2×2 grid, chain column -->
+        <x:Double x:Key="FirePopoverGapControl">7</x:Double>      <!-- between two controls in a row -->
+        <x:Double x:Key="FirePopoverGap">9</x:Double>             <!-- head lockup, section interior -->
+        <x:Double x:Key="FirePopoverGapSlider">13</x:Double>      <!-- label → track → value -->
+
+        <!-- ─── Insets ────────────────────────────────────────────────────── -->
+        <Thickness x:Key="FirePadPopoverEmpty">13</Thickness>
+        <Thickness x:Key="FirePadPopoverField">10,0</Thickness>     <!-- select interior -->
+        <Thickness x:Key="FirePadPopoverOptions">5</Thickness>      <!-- options panel interior -->
+        <Thickness x:Key="FirePadPopoverOption">9,7</Thickness>     <!-- one option row -->
+        <Thickness x:Key="FirePadPopoverChip">10,0</Thickness>
+        <Thickness x:Key="FirePadPopoverSlot">9,0,6,0</Thickness>   <!-- a VST3 slot: grip left, button right -->
+        <Thickness x:Key="FirePadPopoverList">7</Thickness>         <!-- the history list's interior -->
+        <Thickness x:Key="FirePadPopoverListRow">9,8</Thickness>    <!-- one history / profile row -->
+        <Thickness x:Key="FirePadPopoverProfiles">8</Thickness>
+        <Thickness x:Key="FirePadPopoverInput">11,0</Thickness>
+        <Thickness x:Key="FirePadPopoverAdd">14,0</Thickness>
+
+        <!-- ─── Tracking ─────────────────────────────────────────────────────
+             Avalonia's `LetterSpacing` is in DIPs, the mockup's is in `em`, so
+             every one of these is `em × the size it is used at` — which is why
+             there are eight of them and not one. Getting this wrong is the
+             single most visible miss on a mono readout: `−14.2 dB PEAK` at the
+             eyebrow's 2.3 is 11 px wider than the row it sits in. -->
+        <x:Double x:Key="FireTrackPopoverKick">1.98</x:Double>      <!-- .22em @ 9   section kicker -->
+        <x:Double x:Key="FireTrackPopoverEsc">1.44</x:Double>       <!-- .16em @ 9   the ESC cap -->
+        <x:Double x:Key="FireTrackPopoverNote">0.9</x:Double>       <!-- .10em @ 9   LIVE / 3 SLOTS / ON -->
+        <x:Double x:Key="FireTrackPopoverChord">0.95</x:Double>     <!-- .10em @ 9.5 the footer's shortcut -->
+        <x:Double x:Key="FireTrackPopoverTune">0.84</x:Double>      <!-- .08em @ 10.5 IN TUNE -->
+        <x:Double x:Key="FireTrackPopoverMeta">0.76</x:Double>      <!-- .08em @ 9.5 a select's meta -->
+        <x:Double x:Key="FireTrackPopoverPeak">0.63</x:Double>      <!-- .06em @ 10.5 −14.2 dB PEAK -->
+        <x:Double x:Key="FireTrackPopoverStat">0.57</x:Double>      <!-- .06em @ 9.5 M97 · 18H PLAYED -->
+        <x:Double x:Key="FireTrackPopoverValue">0.23</x:Double>     <!-- .02em @ 11.5 1.00x / 0 st -->
+        <x:Double x:Key="FireTrackPopoverTiny">0.19</x:Double>      <!-- .02em @ 9.5 slot index, 4s ago -->
+    </Styles.Resources>
+</Styles>

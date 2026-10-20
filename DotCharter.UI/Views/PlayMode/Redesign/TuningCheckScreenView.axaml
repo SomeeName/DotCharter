@@ -1,0 +1,346 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.TuningCheckScreenView"
+             x:DataType="contracts:ITuningCheckScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Get Ready (the tuning check), redesigned.
+
+        FULL-BLEED, four regions: header / path rail / the tuner in the centre /
+        the run's settings on the right, over a pinned footer. This screen keeps
+        its full-bleed shape deliberately — it is the densest screen in the app
+        and it already measures 100 % of the window at every resolution, so
+        scaling it would be a zoom rather than a fix.
+
+        The three decisions are separated instead of stacked: what you PLAY
+        (the path rail), whether you are IN TUNE (the centre), and HOW IT PLAYS
+        (the right rail). The shipped screen interleaves all three down one
+        column, which is why the tuner — the one thing that is live — reads as
+        another settings row.
+
+        A tuner with nothing to check says so. No input and no path are both
+        ordinary states, and six dead string rows is how a capability the app
+        cannot honour ends up looking live.
+    -->
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+        <Border Theme="{StaticResource FireWashBorder}" Classes="FireWash UpperLeft" Margin="{StaticResource FireWashBleed}" />
+
+        <Grid x:Name="TuningCheckRedesignRoot" RowDefinitions="Auto,*,Auto">
+
+            <!-- ══ HEADER ═══════════════════════════════════════════════════ -->
+            <Border x:Name="TuningCheckRedesignHeader" Grid.Row="0" Theme="{StaticResource FireHeaderBorder}" Classes="FireHeader">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSection}">
+                    <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Grid.Column="0" Classes="FireSectionHeader">
+                        <StackPanel Theme="{StaticResource FireKickerPanel}" Classes="FireKicker">
+                            <Border Theme="{StaticResource FireKickerRuleBorder}" Classes="FireKickerRule" />
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                       Text="{localization:Loc PlayMode_GetReady_Eyebrow}" />
+                        </StackPanel>
+                        <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding SongTitle}" />
+                        <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" IsVisible="{Binding HasArtist}"
+                                   Text="{Binding Artist}" />
+                        <!-- SETLIST (#646): where it stands, and the songs skipped on the
+                             way here because they were no longer in the library. -->
+                        <TextBlock x:Name="TuningCheckRedesignSetlistProgress" Theme="{StaticResource FireMonoText}" Classes="FireMono Accent"
+                                   TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding Setlist.IsRunning}"
+                                   Text="{Binding Setlist.ProgressLabel}" />
+                        <TextBlock x:Name="TuningCheckRedesignSetlistSkipped" Theme="{StaticResource FireStatusText}" Classes="FireStatusText Warn"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding Setlist.HasSkippedNote}"
+                                   Text="{Binding Setlist.SkippedNote}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" MaxWidth="380"
+                                Spacing="{StaticResource FireSpaceSm}">
+                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                   Text="{localization:Loc PlayMode_GetReady_Tuner_Expected}" />
+                        <TextBlock Theme="{StaticResource FireTitleText}" Classes="FireTitle" TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding TuningNotes}"
+                                   Text="{Binding TuningLabel}" />
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Success" HorizontalAlignment="Left"
+                                IsVisible="{Binding HasBest}">
+                            <TextBlock TextTrimming="CharacterEllipsis" MaxWidth="320"
+                                       Text="{Binding BestLabel}" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+
+                <!-- ══ PATH RAIL ════════════════════════════════════════════ -->
+                <Border x:Name="TuningCheckRedesignPathRail" Grid.Column="0" Theme="{StaticResource FireRailBorder}" Classes="FireRail"
+                        Width="{DynamicResource FireContextRailWidth}">
+                    <Grid RowDefinitions="Auto,*">
+                        <TextBlock Grid.Row="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   Text="{localization:Loc PlayMode_GetReady_Path_Title}" />
+                        <ScrollViewer Grid.Row="1" Margin="{StaticResource FireGapTopLg}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Paths}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IPathTile">
+                                        <ToggleButton Theme="{StaticResource FireChoiceToggle}" Classes="FireChoice Card"
+                                                      HorizontalAlignment="Stretch"
+                                                      Margin="{StaticResource FireGapTopSm}"
+                                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                      Command="{Binding SelectCommand}"
+                                                      AutomationProperties.Name="{Binding Name}">
+                                            <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                                                <TextBlock Theme="{StaticResource FireLaneLabelText}" Classes="FireLaneLabel"
+                                                           TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding TypeLabel}" />
+                                                <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding Name}" />
+                                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                           TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding NoteCountLabel}" />
+                                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Success"
+                                                           IsVisible="{Binding HasRecord}"
+                                                           TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding RecordLabel}" />
+                                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                           IsVisible="{Binding !HasRecord}"
+                                                           Text="{localization:Loc PlayMode_GetReady_Path_Unplayed}" />
+                                            </StackPanel>
+                                        </ToggleButton>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- ══ THE TUNER ════════════════════════════════════════════ -->
+                <Grid Grid.Column="1" Margin="{StaticResource FirePadScreen}">
+
+                    <StackPanel x:Name="TuningCheckRedesignTunerPanel"
+                                IsVisible="{Binding HasTunerCheck}"
+                                VerticalAlignment="Top"
+                                Spacing="{StaticResource FireSpaceSection}">
+
+                        <Grid ColumnDefinitions="*,Auto,Auto"
+                              ColumnSpacing="{StaticResource FireSpaceRow}">
+                            <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Grid.Column="0" Classes="FireSectionHeader">
+                                <StackPanel Theme="{StaticResource FireKickerPanel}" Classes="FireKicker">
+                                    <Border Theme="{StaticResource FireKickerRuleBorder}" Classes="FireKickerRule" />
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                               Text="{localization:Loc PlayMode_GetReady_Tuner_Eyebrow}" />
+                                </StackPanel>
+                                <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" TextTrimming="CharacterEllipsis"
+                                           Text="{Binding VerifiedLabel}" />
+                            </StackPanel>
+                            <Button x:Name="TuningCheckRedesignRestartTuner" Grid.Column="1"
+                                    Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" VerticalAlignment="Center"
+                                    Command="{Binding RestartTunerCommand}"
+                                    Content="{localization:Loc PlayMode_GuidedTuning_Restart}" />
+                            <Button x:Name="TuningCheckRedesignSkipTuner" Grid.Column="2"
+                                    Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link" VerticalAlignment="Center"
+                                    ToolTip.Tip="{localization:Loc PlayMode_GetReady_Tuner_SkipCheck_Consequence}"
+                                    Command="{Binding SkipTunerCommand}"
+                                    Content="{localization:Loc PlayMode_GetReady_Tuner_SkipCheck}" />
+                        </Grid>
+
+                        <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Success" HorizontalAlignment="Left"
+                                IsVisible="{Binding AllVerified}">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="{StaticResource FireSpaceMd}">
+                                <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Success" />
+                                <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText Success"
+                                           Text="{localization:Loc PlayMode_GetReady_Tuner_Verified}" />
+                            </StackPanel>
+                        </Border>
+
+                        <ItemsControl x:Name="TuningCheckRedesignStrings" ItemsSource="{Binding Strings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:ITunerString">
+                                    <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                                        <Grid ColumnDefinitions="72,*,120,72"
+                                              ColumnSpacing="{StaticResource FireSpaceRow}">
+                                            <TextBlock Grid.Column="0" Theme="{StaticResource FireTitleText}" Classes="FireTitle"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding Name}" />
+
+                                            <Panel Grid.Column="1" VerticalAlignment="Center">
+                                                <ProgressBar Classes="FireMeter Success"
+                                                             Minimum="0" Maximum="100"
+                                                             IsVisible="{Binding IsVerified}"
+                                                             Value="{Binding NeedlePercent}" />
+                                                <ProgressBar Classes="FireMeter Warn"
+                                                             Minimum="0" Maximum="100"
+                                                             IsVisible="{Binding IsOff}"
+                                                             Value="{Binding NeedlePercent}" />
+                                                <ProgressBar Classes="FireMeter" Minimum="0" Maximum="100"
+                                                             IsVisible="{Binding IsAwaiting}"
+                                                             Value="{Binding NeedlePercent}" />
+                                            </Panel>
+
+                                            <TextBlock Grid.Column="2" Theme="{StaticResource FireStatusText}" Classes="FireStatusText"
+                                                       HorizontalAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding StateText}" />
+
+                                            <TextBlock Grid.Column="3" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding CentsLabel}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="TuningCheckRedesignNoCheckPanel" Classes="FireEmptyState"
+                                IsVisible="{Binding !HasTunerCheck}">
+                        <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                                   Text="{localization:Loc PlayMode_GetReady_Tuner_Eyebrow}" />
+                        <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                   Text="{localization:Loc PlayMode_GetReady_Tuner_NoCheck}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- ══ HOW IT PLAYS ═════════════════════════════════════════ -->
+                <Border x:Name="TuningCheckRedesignSettingsRail" Grid.Column="2"
+                        Theme="{StaticResource FireContextRailBorder}" Classes="FireContextRail"
+                        Width="{DynamicResource FireContextRailWidth}">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+                            <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Classes="FireSectionHeader">
+                                <StackPanel Theme="{StaticResource FireKickerPanel}" Classes="FireKicker">
+                                    <Border Theme="{StaticResource FireKickerRuleBorder}" Classes="FireKickerRule" />
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                               Text="{localization:Loc PlayMode_GetReady_HowItPlays}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceRow}"
+                                  RowSpacing="{StaticResource FireSpaceRow}">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_Speed}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding SpeedLabel}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_ScrollSpeed}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding ScrollSpeedLabel}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_HitWindow}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding HitWindowLabel}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_BackingTrack_Title}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                           Text="{Binding BackingLabel}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_SongTone_Label}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                           Text="{Binding ToneLabel}" />
+                            </Grid>
+
+                            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                                <CheckBox x:Name="TuningCheckRedesignMute" Classes="FireCheckBox"
+                                          IsChecked="{Binding MuteMyInstrument, Mode=TwoWay}"
+                                          AutomationProperties.Name="{localization:Loc PlayMode_BackingTrack_Mute}"
+                                          Content="{localization:Loc PlayMode_BackingTrack_Mute}" />
+                                <CheckBox x:Name="TuningCheckRedesignTones" Classes="FireCheckBox"
+                                          IsChecked="{Binding UseInGameTones, Mode=TwoWay}"
+                                          AutomationProperties.Name="{localization:Loc PlayMode_InGameTones_Title}"
+                                          Content="{localization:Loc PlayMode_InGameTones_Title}" />
+                            </StackPanel>
+
+                            <!-- the input, and whether it is open at all -->
+                            <Border x:Name="TuningCheckRedesignInputPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                                <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                                    <Grid ColumnDefinitions="Auto,*"
+                                          ColumnSpacing="{StaticResource FireSpaceMd}">
+                                        <Panel Grid.Column="0" VerticalAlignment="Center">
+                                            <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Success"
+                                                    IsVisible="{Binding IsInputOpen}" />
+                                            <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn"
+                                                    IsVisible="{Binding !IsInputOpen}" />
+                                        </Panel>
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                                   VerticalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_GetReady_Input}" />
+                                    </Grid>
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding InputLabel}" />
+                                    <ProgressBar Classes="FireMeter Thin" Minimum="0" Maximum="1"
+                                                 Value="{Binding InputLevel}" />
+                                    <TextBlock Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                               TextTrimming="CharacterEllipsis"
+                                               Text="{Binding InputLevelLabel}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Button x:Name="TuningCheckRedesignOpenRig" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding OpenRigCommand}"
+                                    Content="{localization:Loc PlayMode_AmpFx}" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- ══ FOOTER ═══════════════════════════════════════════════════ -->
+            <Border x:Name="TuningCheckRedesignFooter" Grid.Row="2" Theme="{StaticResource FireFooterBorder}" Classes="FireFooter">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto"
+                      ColumnSpacing="{StaticResource FireSpaceRow}">
+                    <Button Grid.Column="0" Theme="{StaticResource FireBackButton}" Classes="FireBack" IsCancel="True"
+                            Command="{Binding BackCommand}"
+                            AutomationProperties.Name="{localization:Loc PlayMode_Back}"
+                            Content="{localization:Loc PlayMode_Back}" />
+                    <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                            ToolTip.Tip="{localization:Loc PlayMode_GetReady_SaveDefault_Consequence}"
+                            Command="{Binding SaveAsDefaultCommand}"
+                            Content="{localization:Loc PlayMode_GetReady_SaveDefault}" />
+
+                    <TextBlock Grid.Column="2" Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint" HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               Text="{localization:Loc PlayMode_GetReady_Hint_Tuner}" />
+
+                    <TextBlock Grid.Column="3" Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint" VerticalAlignment="Center"
+                               Text="{localization:Loc PlayMode_GetReady_Hint_Back}" />
+
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint" VerticalAlignment="Center"
+                               Text="{localization:Loc PlayMode_GetReady_Hint_Start}" />
+
+                    <Button x:Name="TuningCheckRedesignStart" Grid.Column="5" Theme="{StaticResource FireCtaButton}" Classes="FireCta"
+                            MinWidth="300" IsEnabled="{Binding CanStart}"
+                            Command="{Binding StartCommand}">
+                        <!-- The ENTER hint lives in the footer beside ESC BACK, not
+                             inside the chamfer-clipped CTA. -->
+                        <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                                   Text="{localization:Loc PlayMode_Start}" />
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+    </Panel>
+</UserControl>

@@ -1,0 +1,368 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.EditorSettingsView"
+             x:DataType="contracts:IEditorSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > Editor: the rules the chart editor applies while you edit,
+        what a normal paste brings in, the defaults a new project starts with,
+        and how a Guitar Pro file is imported.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <ctl:MasonryPanel Classes="SettingsFlow" Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_ChartEditing}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_ChartEditingSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.fastInput}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_FastChartingInput}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_FastChartingInput}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_FastChartingInput}"
+                                      IsChecked="{Binding UseFastChartingInput, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.syncHandShape}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SyncHandShapeToChord}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SyncHandShapeToChord}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SyncHandShapeToChord}"
+                                      IsChecked="{Binding SyncHandShapeToChordTemplate, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.syncAnchor}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SyncAnchorToFingering}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SyncAnchorToFingering}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SyncAnchorToFingering}"
+                                      IsChecked="{Binding SyncAnchorToChordFingering, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.suppressDoubleStop}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SuppressDoubleStopNames}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SuppressDoubleStopNames}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SuppressDoubleStopNames}"
+                                      IsChecked="{Binding SuppressDoubleStopChordNames, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.keepPowerChords}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding SuppressDoubleStopChordNames}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_KeepPowerChordNames}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_KeepPowerChordNames}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_KeepPowerChordNames}"
+                                      IsChecked="{Binding KeepPowerChordNames, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.musicalChordNames}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_MusicalChordNames}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_MusicalChordNames}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_MusicalChordNames}"
+                                      IsChecked="{Binding MusicalChordNames, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.tappedHarmonicOffset}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_TappedHarmonicFretOffset}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_TappedHarmonicFretOffset}" />
+                        </StackPanel>
+                        <NumericUpDown VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_TappedHarmonicFretOffset}"
+                                       Value="{Binding TappedHarmonicFretOffset, Mode=TwoWay}" Minimum="0" Maximum="24" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.lyricWordGap}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_LyricSpanWordGap}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_LyricSpanWordGap}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_LyricSpanWordGap}"
+                                      IsChecked="{Binding LyricSpanWordGap, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.lyricPhraseGap}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding LyricSpanWordGap}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_LyricSpanPhraseGap}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_LyricSpanPhraseGap}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_LyricSpanPhraseGap}"
+                                      IsChecked="{Binding LyricSpanPhraseGap, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.minNoteDistance}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_MinNoteDistance}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_MinNoteDistance}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_MinNoteDistance}"
+                                  SelectedIndex="{Binding MinNoteDistanceModeIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Settings_MinNoteDistanceMilliseconds}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_MinNoteDistanceMeasure}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_MinNoteDistanceBeat}" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.minNoteDistanceMs}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding IsMinNoteDistanceInMilliseconds}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Milliseconds}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_Milliseconds}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                            <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_Milliseconds}"
+                                           Value="{Binding MinNoteDistanceMs, Mode=TwoWay}" Minimum="0" Maximum="1000" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                       Text="{localization:Loc Settings_UnitMilliseconds}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.minNoteDistanceDivisor}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding !IsMinNoteDistanceInMilliseconds}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_FractionDenominator}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_FractionDenominator}" />
+                        </StackPanel>
+                        <NumericUpDown VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_FractionDenominator}"
+                                       Value="{Binding MinNoteDistanceDivisor, Mode=TwoWay}" Minimum="1" Maximum="1024" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.group.1}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_CopyPaste_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_CopyPaste_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.paste}"
+                          Classes="FormRow" ColumnDefinitions="*">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_PasteIncludesLabel}" />
+                            <UniformGrid Columns="3" Margin="0,12,0,0">
+                                <CheckBox Content="{localization:Loc Settings_PasteIncludeNotes}" AutomationProperties.Name="{localization:Loc Settings_PasteIncludeNotes}" ToolTip.Tip="{localization:Loc Settings_Tip_PasteIncludeNotes}"
+                                          IsChecked="{Binding PasteIncludeNotes, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_PasteIncludeChords}" AutomationProperties.Name="{localization:Loc Settings_PasteIncludeChords}" ToolTip.Tip="{localization:Loc Settings_Tip_PasteIncludeChords}"
+                                          IsChecked="{Binding PasteIncludeChords, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_PasteIncludeHandShapes}" AutomationProperties.Name="{localization:Loc Settings_PasteIncludeHandShapes}" ToolTip.Tip="{localization:Loc Settings_Tip_PasteIncludeHandShapes}"
+                                          IsChecked="{Binding PasteIncludeHandShapes, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_PasteIncludeFretAnchors}" AutomationProperties.Name="{localization:Loc Settings_PasteIncludeFretAnchors}" ToolTip.Tip="{localization:Loc Settings_Tip_PasteIncludeFretAnchors}"
+                                          IsChecked="{Binding PasteIncludeFretAnchors, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_PasteIncludeEvents}" AutomationProperties.Name="{localization:Loc Settings_PasteIncludeEvents}" ToolTip.Tip="{localization:Loc Settings_Tip_PasteIncludeEvents}"
+                                          IsChecked="{Binding PasteIncludeEvents, Mode=TwoWay}" />
+                                <CheckBox Content="{localization:Loc Settings_PasteIncludeTones}" AutomationProperties.Name="{localization:Loc Settings_PasteIncludeTones}" ToolTip.Tip="{localization:Loc Settings_Tip_PasteIncludeTones}"
+                                          IsChecked="{Binding PasteIncludeTones, Mode=TwoWay}" />
+                            </UniformGrid>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.group.2}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_NewProject}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_NewProjectDescription}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.charterName}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_DefaultCharterName}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_DefaultCharterName}" />
+                        </StackPanel>
+                        <TextBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_DefaultCharterName}"
+                                 Text="{Binding DefaultCharterName, Mode=TwoWay}"
+                                 PlaceholderText="{localization:Loc Settings_DefaultCharterNameWatermark}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.silencePadding}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SilencePadding}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SilencePadding}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SilencePadding}"
+                                      IsChecked="{Binding PadSilenceOnNewProject, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.leadingSilence}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding PadSilenceOnNewProject}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_LeadingSilence}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_LeadingSilence}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                            <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_LeadingSilence}"
+                                           Value="{Binding LeadingSilenceSeconds, Mode=TwoWay}" Minimum="0" Maximum="600" Increment="1" FormatString="0.##" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                       Text="{localization:Loc Settings_Seconds}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.trailingSilence}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding PadSilenceOnNewProject}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_TrailingSilence}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_TrailingSilence}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                            <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_TrailingSilence}"
+                                           Value="{Binding TrailingSilenceSeconds, Mode=TwoWay}" Minimum="0" Maximum="600" Increment="1" FormatString="0.##" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                       Text="{localization:Loc Settings_Seconds}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.group.3}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Import_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Import_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpShortNotes}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpTruncateShortNotes}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpTruncateShortNotes}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpTruncateShortNotes}"
+                                      IsChecked="{Binding GpImportTruncateShortNotes, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpShortChords}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpTruncateShortChords}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpTruncateShortChords}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpTruncateShortChords}"
+                                      IsChecked="{Binding GpImportTruncateShortChords, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpShortRests}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpPreserveShortRests}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpPreserveShortRests}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpPreserveShortRests}"
+                                      IsChecked="{Binding GpImportPreserveShortRests, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.latinLookup}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_OnlineLatinNameLookup}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_OnlineLatinNameLookup}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_OnlineLatinNameLookup}"
+                                      IsChecked="{Binding OnlineLatinNameLookup, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpBeatText}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpBeatTextTechniques}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpBeatTextTechniques}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpBeatTextTechniques}"
+                                      IsChecked="{Binding GpImportBeatTextTechniques, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpMarkers}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpMarkersToSections}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpMarkersToSections}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpMarkersToSections}"
+                                      IsChecked="{Binding GpImportMarkersToSections, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpTimeSignatures}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpImportTimeSignatures}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpImportTimeSignatures}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpImportTimeSignatures}"
+                                      IsChecked="{Binding GpImportTimeSignatures, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpMidBeatTempo}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpDropMidBeatTempo}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpDropMidBeatTempo}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpDropMidBeatTempo}"
+                                      IsChecked="{Binding GpImportDropMidBeatTempoChanges, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=editor.gpSlideIn}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpSlideInDistance}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpSlideInDistance}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                            <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_GpSlideInDistance}"
+                                           Value="{Binding GpImportSlideInFretDistance, Mode=TwoWay}" Minimum="1" Maximum="3" Increment="1" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                       Text="{localization:Loc Settings_GpSlideInDistanceUnit}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+        </ctl:MasonryPanel>
+    </ScrollViewer>
+</UserControl>

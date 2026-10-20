@@ -1,0 +1,148 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ═══════════════════════════════════════════════════════════
+         Color tokens (single source of truth).
+         MERGED into App.axaml's Application.Resources, so they stay at
+         Application scope: ThemeService writes app.Resources[key] and that
+         top-level entry SHADOWS the one merged from here, which is what keeps
+         runtime theme switching working across this split.
+         DotCharter.UI.Gallery merges the SAME dictionary, so a screen designed
+         there renders on the production palette.
+         The brush layer lives in Theme.axaml.
+         ═══════════════════════════════════════════════════════════ -->
+
+    <!-- Surfaces -->
+    <Color x:Key="AppBackgroundColor">#111317</Color>
+    <Color x:Key="PanelBackgroundColor">#15181D</Color>
+    <Color x:Key="CardBackgroundColor">#181A1E</Color>
+    <Color x:Key="SurfaceElevatedColor">#232830</Color>
+    <Color x:Key="SurfaceHoverColor">#191D23</Color>
+    <Color x:Key="SurfaceHoverStrongColor">#272D36</Color>
+    <Color x:Key="SurfaceActiveColor">#323946</Color>
+    <Color x:Key="SurfaceStrongColor">#3C4552</Color>
+
+    <!-- Toolbar gradient stops -->
+    <Color x:Key="ToolbarTopColor">#181B21</Color>
+    <Color x:Key="ToolbarBottomColor">#131519</Color>
+
+    <!-- Borders -->
+    <Color x:Key="BorderDefaultColor">#2F3236</Color>
+    <Color x:Key="BorderSubtleColor">#24272B</Color>
+    <Color x:Key="BorderStrongColor">#3A3E44</Color>
+    <Color x:Key="BorderDeepColor">#0A0C10</Color>
+
+    <!-- Text -->
+    <Color x:Key="TextPrimaryColor">#E8EBEF</Color>
+    <Color x:Key="TextSecondaryColor">#AEB6C1</Color>
+    <Color x:Key="TextMutedColor">#929BA8</Color>
+    <!-- 4.6:1 on PanelBackground — the previous #71717A sat at ~3.6:1,
+         below WCAG AA for the captions/help text that use this token. -->
+    <Color x:Key="TextDimColor">#7A8390</Color>
+    <Color x:Key="TextOnAccentColor">#0A1522</Color>
+
+    <!-- Accent -->
+    <Color x:Key="AccentColorValue">#7AB6FF</Color>
+    <!-- Fluent's accent family, derived from the accent (Theming/FluentAccent);
+         the theme service rewrites them whenever the accent changes. -->
+    <Color x:Key="SystemAccentColor">#7AB6FF</Color>
+    <Color x:Key="SystemAccentColorLight1">#95C5FF</Color>
+    <Color x:Key="SystemAccentColorLight2">#AFD3FF</Color>
+    <Color x:Key="SystemAccentColorLight3">#CAE2FF</Color>
+    <Color x:Key="SystemAccentColorDark1">#6292CC</Color>
+    <Color x:Key="SystemAccentColorDark2">#496D99</Color>
+    <Color x:Key="SystemAccentColorDark3">#314966</Color>
+    <Color x:Key="AccentHoverColor">#A8CEFF</Color>
+    <Color x:Key="AccentSubtleColor">#1E2733</Color>
+    <Color x:Key="AccentGradientEndColor">#5E9FF2</Color>
+    <Color x:Key="AccentGradientEndHoverColor">#7AB6FF</Color>
+    <Color x:Key="AccentSelectedColor">#25313F</Color>
+    <Color x:Key="AccentSelectedHoverColor">#2D3B4C</Color>
+    <Color x:Key="AccentFaintColor">#337AB6FF</Color>
+
+    <!-- Amp-sim rig accents (pedalboard / tone browser). Warm amp-orange
+         for the signal path + active-preset emphasis, cool teal for the
+         secondary highlight — a pro amp-sim (BIAS-FX-style) palette. -->
+    <Color x:Key="AmpOrangeColor">#E8873A</Color>
+    <Color x:Key="AmpOrangeBrightColor">#F0A24E</Color>
+    <Color x:Key="AmpOrangeFaintColor">#33E8873A</Color>
+    <Color x:Key="AmpTealColor">#3FB8C8</Color>
+    <Color x:Key="RigPanelColor">#1E2024</Color>
+    <Color x:Key="RigStrokeColor">#2A2D31</Color>
+    <Color x:Key="RigBackdropTopColor">#17181B</Color>
+    <Color x:Key="RigBackdropBottomColor">#0E0F11</Color>
+    <!-- Pedal/amp chassis chrome: screws, recessed control panels, the
+         amp faceplate gradient and the top bevel highlight. Fixed
+         BIAS-FX-style rig colours (deliberately NOT theme tokens). -->
+    <Color x:Key="RigScrewShadowColor">#55000000</Color>
+    <Color x:Key="RigRecessColor">#33000000</Color>
+    <Color x:Key="RigBevelHighlightColor">#26FFFFFF</Color>
+    <Color x:Key="AmpFaceTopColor">#2C2F37</Color>
+    <Color x:Key="AmpFaceBottomColor">#141519</Color>
+    <Color x:Key="AmpPowerLampColor">#FFB347</Color>
+
+    <!-- Status -->
+    <Color x:Key="SuccessColorValue">#10B981</Color>
+    <Color x:Key="WarningColorValue">#F59E0B</Color>
+    <Color x:Key="WarningFaintColor">#1AF59E0B</Color>
+    <Color x:Key="WarningCheckedBgColor">#92400E</Color>
+    <Color x:Key="DangerColorValue">#EF4444</Color>
+    <Color x:Key="DangerCheckedBgColor">#7F1D1D</Color>
+    <Color x:Key="DangerBgColor">#2A1012</Color>
+    <Color x:Key="DangerBorderColor">#4C1518</Color>
+    <Color x:Key="DangerHoverBgColor">#3A161A</Color>
+    <Color x:Key="InfoColorValue">#60A5FA</Color>
+    <Color x:Key="WaveformAccentColor">#2563EB</Color>
+
+    <!-- Chart-renderer tokens (shared between 2D timeline and 3D fretboard) -->
+    <Color x:Key="ChartString1Color">#FF3333</Color>
+    <Color x:Key="ChartString2Color">#FFD700</Color>
+    <Color x:Key="ChartString3Color">#3388FF</Color>
+    <Color x:Key="ChartString4Color">#FF8C00</Color>
+    <Color x:Key="ChartString5Color">#22CC22</Color>
+    <Color x:Key="ChartString6Color">#9933FF</Color>
+    <Color x:Key="ChartStringExtraColor">#C8C8C8</Color>
+
+    <Color x:Key="ChartPhraseColor">#FBBF24</Color>
+    <Color x:Key="ChartPhraseBgColor">#501E293B</Color>
+    <Color x:Key="ChartSectionColor">#A536B2</Color>
+    <Color x:Key="ChartPhraseEventColor">#B37636</Color>
+
+    <Color x:Key="ChartHandShapeBgColor">#2038BDF8</Color>
+    <Color x:Key="ChartHandShapeBarColor">#0284C7</Color>
+    <Color x:Key="ChartHandShapeArpeggioColor">#C040FF</Color>
+    <Color x:Key="ChartEditTargetColor">#FF4FA3</Color>
+    <Color x:Key="ChartAnchorFhpColor">#3C2590E8</Color>
+
+    <!-- Timeline CHROME (the ruler strip, the floor under the lanes,
+         the frame and the tick labels). These five were the last zinc
+         greys in the editor: #18181B beside a Fire menu bar reads as a
+         warm-grey slab pasted onto a violet-dark app, and the ruler is
+         the widest single block of it on screen. Moved onto the same
+         family as the surfaces around them in 0.51 — still real theme
+         tokens, so a community pack still overrides them, and still
+         SEPARATE from the Fire layer (which is fixed art direction, not
+         a switchable palette). The notes, strings and playhead below are
+         deliberately untouched: those are DATA colours. -->
+    <Color x:Key="ChartTopMarginBgColor">#131519</Color>
+    <Color x:Key="ChartBottomMarginBgColor">#0D0F13</Color>
+    <Color x:Key="ChartBorderColor">#24272B</Color>
+    <Color x:Key="ChartMinimapBorderColor">#929BA8</Color>
+    <Color x:Key="ChartMeasureColor">#929BA8</Color>
+    <Color x:Key="ChartHoverColor">#3CFFFFFF</Color>
+    <Color x:Key="ChartCursorColor">#A0FFFFFF</Color>
+    <Color x:Key="ChartPlayheadColor">#E11D48</Color>
+    <Color x:Key="ChartMutedColor">#3F3F46</Color>
+    <Color x:Key="ChartWaveformInactiveColor">#333B82F6</Color>
+    <Color x:Key="ChartWaveformPrimaryColor">#5B46BC</Color>
+    <Color x:Key="ChartWaveformSecondaryColor">#463888</Color>
+
+    <!-- Window chrome -->
+    <Color x:Key="CloseButtonColor">#E81123</Color>
+
+    <!-- Overlays & scrims (with alpha) -->
+    <Color x:Key="OverlayScrimColor">#AA000000</Color>
+    <Color x:Key="OverlayScrimStrongColor">#E0000000</Color>
+    <Color x:Key="OverlayScrimSoftColor">#33000000</Color>
+    <Color x:Key="MenuFocusBarrierColor">#01000000</Color>
+</ResourceDictionary>

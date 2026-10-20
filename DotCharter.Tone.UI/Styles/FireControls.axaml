@@ -1,0 +1,65 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         THE "FIRE" DESIGN LAYER — the tokens the four shared CUSTOM-DRAWN
+         controls need, that the base ladder in `FireTokens.axaml` does not
+         carry.
+
+         Its own file rather than an addition to `FireTokens.axaml` for one
+         concrete reason: the two are authored concurrently, and two blocks
+         appended to one `<Styles.Resources>` merge cleanly in git while
+         producing a DUPLICATE `x:Key` — which builds clean and then crashes
+         the whole app at `App.Initialize()`. Merged dictionaries resolve
+         last-wins instead, so a second file cannot do that.
+
+         What is here, and nothing else:
+
+         1. THE EIGHT GEAR-CATEGORY IDENTITY COLOURS. Section 01 of the
+            owner's Implementation Spec ("GEAR CATEGORY IDENTITY · USED IN THE
+            RIG, GEAR LIST AND TONE CHIPS") lists them as FIXED, DO NOT
+            REASSIGN — the same standing the six string colours have. They are
+            the arc colour of a `FireKnob`, and they are reached through
+            `FireUnitState.Category`, never as a brush a caller picks: a knob
+            that took a `Color` could be given the wrong identity.
+            `DotCharter.Tests/UI/FireUnitIdentityTests` pins every one of the
+            eight values against the spec and fails if a hue is reassigned.
+
+         2. THE KNOB DIAL. `radial-gradient(circle at 34% 26%, #2f3236,
+            #15181d 70%)` + a 1px rgba(255,255,255,.14) rim, straight out of
+            `Amp and FX Rig.dc.html`. It lives here rather than in the control
+            so the recipe is in the dictionary with every other colour, and so
+            the control carries no literal hex at all.
+
+         SIZES ARE NOT TOKENS HERE. A custom-drawn control's geometry is code
+         (`FireKnobGeometry`, `FireLevelScale`, `FireProgressGeometry`) — the
+         same call `KnobMath` already made for the pedalboard. Only colour goes
+         through the dictionary.
+
+         The controls: `DotCharter.UI/Controls/Fire/`.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Styles.Resources>
+
+        <!-- ─── Gear-category identity · FIXED, DO NOT REASSIGN ─────────────── -->
+        <SolidColorBrush x:Key="FireUnitDynamics" Color="#8FA3BD" />
+        <SolidColorBrush x:Key="FireUnitAmps" Color="#F0A54A" />
+        <SolidColorBrush x:Key="FireUnitCabinets" Color="#C98F5E" />
+        <SolidColorBrush x:Key="FireUnitDrive" Color="#E05A5A" />
+        <SolidColorBrush x:Key="FireUnitEq" Color="#4ADE80" />
+        <SolidColorBrush x:Key="FireUnitModulation" Color="#E879B9" />
+        <SolidColorBrush x:Key="FireUnitDelay" Color="#3EC9C0" />
+        <SolidColorBrush x:Key="FireUnitUtility" Color="#A78BFA" />
+
+        <!-- ─── The knob dial ──────────────────────────────────────────────── -->
+        <RadialGradientBrush x:Key="FireDialFill"
+                             Center="34%,26%" GradientOrigin="34%,26%"
+                             RadiusX="70%" RadiusY="70%">
+            <GradientStop Offset="0" Color="#2F3236" />
+            <GradientStop Offset="1" Color="#15181D" />
+        </RadialGradientBrush>
+        <SolidColorBrush x:Key="FireDialRim" Color="#24FFFFFF" />       <!-- rgba(255,255,255,.14) -->
+        <SolidColorBrush x:Key="FireDialRimHover" Color="#3DFFFFFF" />  <!-- .24 — the hover state -->
+
+    </Styles.Resources>
+</Styles>

@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.AiToneGenerateDialogView"
+             x:DataType="contracts:IAiToneGenerateScreen"
+             x:CompileBindings="True">
+
+    <!-- Grammar: Views/Dialogs/DialogStyles.axaml. Hosted by Views/Shell/DialogHost,
+         which focuses `NotesInput` on open (FocusOnOpen) — keep the x:Name.
+         Enter starts a new line (AcceptsReturn), so Generate is reached with Tab. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconAmp}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_AiToneGenerate_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_AiToneGenerate_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="1" Classes="DlgRow Last" RowDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                               Text="{localization:Loc Dialog_AiToneGenerate_Label}" />
+                    <TextBox x:Name="NotesInput" Grid.Row="1" dlgv:FocusOnOpen.IsTarget="True"
+                             Text="{Binding Notes, Mode=TwoWay}"
+                             MaxLength="{Binding MaxLength}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinLines="4" MaxLines="8"
+                             PlaceholderText="{localization:Loc Dialog_AiToneGenerate_Placeholder}"
+                             AutomationProperties.Name="{localization:Loc Dialog_AiToneGenerate_Name}" />
+                    <TextBlock x:Name="LengthNote" Grid.Row="2" HorizontalAlignment="Right"
+                               Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                               Text="{Binding LengthText}" />
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Generate}"
+                                Command="{Binding GenerateCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

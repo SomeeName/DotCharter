@@ -1,0 +1,701 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+        xmlns:panels="clr-namespace:DotCharter.UI.Views.Panels;assembly=DotCharter"
+        xmlns:shellViews="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
+        xmlns:editorViews="clr-namespace:DotCharter.UI.Views.Editor;assembly=DotCharter"
+        xmlns:controls="using:DotCharter.UI.Controls"
+        xmlns:sheetControls="clr-namespace:DotCharter.UI.Controls.Sheet;assembly=DotCharter"
+        xmlns:behaviors="clr-namespace:DotCharter.UI.Input.Behaviors;assembly=DotCharter"
+        xmlns:settingsView="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+        xmlns:converters="using:DotCharter.UI.Converters"
+        xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+        xmlns:locsvc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
+        xmlns:dock="clr-namespace:Dock.Avalonia.Controls;assembly=Dock.Avalonia"
+        xmlns:docking="clr-namespace:DotCharter.UI.Docking;assembly=DotCharter"
+        xmlns:cmdpalette="clr-namespace:DotCharter.UI.Views.CommandPalette;assembly=DotCharter"
+        xmlns:playModeViews="using:DotCharter.Tone.UI.Views.PlayMode"
+        xmlns:playModeVm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+        xmlns:appViewModels="using:DotCharter.UI.ViewModels.Application"
+        x:Class="DotCharter.UI.Views.MainWindow"
+        x:DataType="viewModels:MainWindowViewModel"
+        Title="{Binding WindowTitle, FallbackValue=DotCharter}"
+        Icon="avares://DotCharter/Assets/app-icon.ico"
+        Width="1440" Height="900"
+        Background="{DynamicResource AppBackground}"
+        RequestedThemeVariant="Dark"
+        ExtendClientAreaToDecorationsHint="True"
+        WindowDecorations="BorderOnly"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        behaviors:ClickOutsideToBlurBehavior.Enabled="True"
+        DragDrop.AllowDrop="True">
+
+    <!-- Theme.axaml is included once at Application scope (App.axaml) so all
+         windows — including floated dock HostWindows — share one style set.
+         The DockableView DataTemplate lives there too for the same reason. -->
+
+    <!-- NO Window.Styles here (#412). A style at window scope is attached to every
+         control of its target type in Play Mode, the song browser, Settings and every
+         prewarmed dialog, worn or not: EditorWorkspaceStyles here put ~54,000 value
+         frames on controls that never wear a workspace class. The workspace
+         grammar is included on the two editor elements that wear it (the timeline's
+         DockPanel and the 3D preview's pane header) — MainWindowStyleScopeTests. -->
+
+    <!-- RootScaler applies the global UI-scale (accessibility) as a real
+         LayoutTransform so the shell reflows at the chosen factor. It is set in
+         code-behind from UiScaleController; identity (1.0) is a no-op.
+         FlowDirection follows the active language (RTL packs flip the shell);
+         LTR is the default for the built-in languages, so that too is a no-op. -->
+    <LayoutTransformControl x:Name="RootScaler">
+    <Grid x:Name="WindowRootGrid" RowDefinitions="*, Auto"
+          FlowDirection="{Binding IsRightToLeft, Source={x:Static locsvc:LocalizationService.Instance}, Converter={x:Static converters:BoolConverters.ToFlowDirection}}">
+    <Grid x:Name="ShellRootGrid" Grid.Row="0">
+
+        <!-- Keyboard-focus sink: a Window is a focus SCOPE, not a focusable
+             element, so Window.Focus() cannot anchor keyboard input. When the
+             focused control disappears (Play Mode screen switches), focus
+             lands HERE so key events (Esc!) keep routing. Zero-size, paints
+             nothing, tab-skipped. -->
+        <Control x:Name="FocusSink" Focusable="True" Width="0" Height="0"
+                 IsTabStop="False" HorizontalAlignment="Left" VerticalAlignment="Top" />
+
+        <!-- ACTIVITY RAIL + title bar + main content.
+
+             A 54 px icon rail ran down this edge until 0.50 and was removed for
+             a good reason that still holds: it was not navigation. Six of its
+             eight icons toggled PANELS, which the View menu and the tool rail's
+             right-hand icons already do — three ways to open the inspector is
+             two too many — and it spent the one axis the editor cannot spare on
+             duplicates.
+
+             `ActivityRailView` is the Graphite workbench's rail and it is the
+             opposite shape: every row is a DESTINATION and the panel toggles
+             stayed where they went. It spans both rows so the window edge reads
+             as one column from the title bar down to the status rail, which is
+             what makes the layout a workbench rather than a title bar with a
+             sidebar under it. -->
+        <!-- Row 0's height is BOUND rather than fixed at 38: a hidden title
+             bar in a fixed row still reserves its 38 px, and a full-bleed
+             surface would then sit under a 38 px band of nothing. -->
+        <Grid x:Name="TitleContentGrid" ColumnDefinitions="Auto, *">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="{Binding TitleBarRowHeight}" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <shellViews:ActivityRailView x:Name="ActivityRail"
+                                         Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
+                                         IsVisible="{Binding IsActivityRailVisible}" />
+
+            <!-- THE WINDOW CHROME: the title bar, the back bar and the window caption,
+                 one at a time in this row (#654). Its own view and so its own
+                 namescope: code reaches the rows through this element
+                 (`WindowChrome.TitleBarRow`, `WindowChrome.MainMenuBarHost`). -->
+            <shellViews:WindowChromeView x:Name="WindowChrome" Grid.Row="0" Grid.Column="1" />
+
+            <DockPanel Grid.Row="1" Grid.Column="1" LastChildFill="True">
+                <!-- Toolbar is chart-editor only. Named so the post-first-frame
+                     prewarm can realize it while Play Mode owns the window (see
+                     HiddenShellSurfaces) — otherwise its first layout is charged
+                     to the user's first switch into the editor. -->
+                <!-- …and a ContentTemplate body since #194, with the gate on the
+                     HOST: hidden at boot, never measured, so the toolbar (and the
+                     six popover views it declares) is not built in front of the
+                     first frame. -->
+                <ContentControl x:Name="EditorToolbarHost" DockPanel.Dock="Top"
+                                IsVisible="{Binding IsToolbarVisible}" Content="{Binding}">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate x:DataType="viewModels:MainWindowViewModel">
+                            <shellViews:ToolbarView x:Name="EditorToolbar" />
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
+
+                <!-- Top-level views are stacked in this Grid and toggled via
+                     IsVisible (the ChartEditor's NativeControlHost 3D preview
+                     must be removed from layout to actually disappear, and a
+                     visible sibling can never paint over that native HWND).
+                     The two deferred hosts below are built after first frame
+                     and prewarmed at Opacity 0 (see PrewarmTopLevelViews), so
+                     switching to them later is still a cheap flip. -->
+                <Grid ClipToBounds="True">
+                    <!-- Columns: the editor, the AI chat splitter and the AI chat
+                         column (#559). Both side widths are 0 until the pane shows;
+                         MainWindowLayoutController writes them. -->
+                    <Grid x:Name="MainSplitGrid" ColumnDefinitions="*,0,0"
+                          IsVisible="{Binding IsChartEditorVisible}">
+                        <Grid.RowDefinitions>
+                            <!-- Row 0 contains timeline + fixed-height minimap
+                                 stacked via DockPanel. The minimap is docked
+                                 to the bottom at a fixed 52 px and the timeline
+                                 fills the remaining space, so when the splitter
+                                 below trades pixels with the dock the timeline
+                                 (not the minimap) absorbs the change. -->
+                            <!-- Keep row MinHeights small so the bottom dock (which
+                                 hosts the 3D preview) actually shrinks together with
+                                 the window. Larger MinHeights cause the dock row to
+                                 overflow past the bottom of the window when the user
+                                 makes the window shorter, which visually looks like
+                                 the fretboard "anchors" to the top-left and falls
+                                 off the bottom. -->
+                            <!-- Default split: the timeline gets 2/5 of the
+                                 height, the bottom dock (inspector + 3D
+                                 preview) 3/5 — EditorSplitDefaults, the one
+                                 source startup, the layout controller and
+                                 View ▸ Reset Layout all read (#232).
+                                 The MinHeights below are the markup's starting
+                                 values only: MainWindowShellLayout.
+                                 ApplyEditorRowFloors re-derives row 0's, row 2's
+                                 and SheetSplitGrid's timeline row's on every size
+                                 change (EditorRowFloors, #211) — the dock gets a
+                                 300 px floor the Inspector can show a body in,
+                                 and on a short window the timeline gives way to
+                                 pay for it, from 360 px down to 270. -->
+                            <RowDefinition Height="{x:Static shellViews:EditorSplitDefaults.TimelineRow}" MinHeight="120" />
+                            <RowDefinition Height="6" />
+                            <RowDefinition Height="{x:Static shellViews:EditorSplitDefaults.DockRow}" MinHeight="80" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" LastChildFill="True">
+                            <!-- The chart editor's WORKSPACE grammar (track rail, minimap
+                                 frame, song-map caption): scoped to the timeline column,
+                                 never the window (#412, see the note above Window). -->
+                            <DockPanel.Styles>
+                                <StyleInclude Source="avares://DotCharter/Views/Editor/EditorWorkspaceStyles.axaml" />
+                            </DockPanel.Styles>
+                            <!-- The minimap strip. Its FRAME is markup (a Fire
+                                 chrome fill with a seam on the top edge); the
+                                 notes, waveform and viewport rectangle inside
+                                 are drawn by MinimapOverviewControl and take
+                                 their colours from Theming/ChartTheme, which is
+                                 a separate user-switchable palette on purpose.
+                                 The hairline used to be a second, full-size
+                                 ZIndex'd Border stacked over the control — it
+                                 is the frame's own BorderThickness now, which
+                                 is one element less in the timeline's layout
+                                 for exactly the same line of pixels. -->
+                            <!-- SONG MAP (Chart Editor.dc.html). The strip is a
+                                 fixed 52 px: a 118 px caption cell continuing the
+                                 timeline's gutter down past the ruler, then the
+                                 map itself.
+
+                                 THE POINTER HANDLERS MOVED ONTO THE INNER BORDER
+                                 and that is not tidiness. `MinimapDragController`
+                                 maps a seek as `e.GetPosition(sender).X /
+                                 sender.Bounds.Width` over the WHOLE song, so on
+                                 the outer frame the caption's 118 px would be
+                                 part of that width — every seek would land early,
+                                 by 118/W of the song, and the viewport rectangle
+                                 would sit 118 px right of where it belongs. As
+                                 the inner border it is the map's own box and the
+                                 mapping is correct by construction. It needs the
+                                 transparent Background to be hit-testable at all;
+                                 the frame's fill still shows through it. -->
+                            <Border DockPanel.Dock="Bottom"
+                                    Classes="MinimapFrame"
+                                    Height="52"
+                                    IsVisible="{Binding IsMinimapShown}">
+                                <Grid ColumnDefinitions="118,*">
+                                    <Border Grid.Column="0" Classes="SongMapCaption">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                                       Text="{localization:Loc Timeline_SongMap}" />
+                                            <TextBlock Classes="SongMapFacts"
+                                                       Text="{Binding SongMapFacts}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="1"
+                                            Background="Transparent"
+                                            PointerPressed="Minimap_PointerPressed"
+                                            PointerMoved="Minimap_PointerMoved"
+                                            PointerReleased="Minimap_PointerReleased"
+                                            PointerCaptureLost="Minimap_PointerCaptureLost"
+                                            Cursor="Hand">
+                                        <controls:MinimapOverviewControl x:Name="MinimapOverview"
+                                                                         IsHitTestVisible="False"
+                                                                         Editor="{Binding ChartEditor}"
+                                                                         PixelsPerMs="{Binding ProjectState.PixelsPerMs}"
+                                                                         WaveformData="{Binding ProjectState.WaveformData}"
+                                                                         ShowWaveform="{Binding ProjectState.ShowWaveform}"
+                                                                         TotalTimeMs="{Binding ProjectState.TotalAudioLengthMs}" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <!-- Sheet music above / timeline below, separated by a
+                                 draggable splitter. Row heights are driven from
+                                 code-behind (UpdateSheetRowLayout): pixel height for
+                                 the sheet (persisted in AppConfig.LayoutSheetHeight),
+                                 0 when the pane is hidden so no dead space remains. -->
+                            <Grid x:Name="SheetSplitGrid">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="0" />
+                                    <RowDefinition Height="0" />
+                                    <!-- The charting timeline must never be squeezed
+                                         into a sliver by the sheet strip + bottom dock.
+                                         360 px keeps the full event ribbon (~170 px),
+                                         six usable string lanes (>=22 px each) and the
+                                         time ruler (~40 px) visible at the same time.
+                                         On a SHORT window it gives way to the bottom
+                                         dock, down to 270 px (EditorRowFloors, #211);
+                                         the lint reads this 360 as the tall value. -->
+                                    <RowDefinition Height="*" MinHeight="360" />
+                                </Grid.RowDefinitions>
+
+                                <!-- Sheet Music dock area — a second DockControl so
+                                     the pane can be tabbed/floated/closed like the
+                                     bottom tools. Stays visible (as the redock drop
+                                     target) while the pane floats. -->
+                                <!-- No bottom border here: the GridSplitter below already
+                                     paints a BorderDefault line, so a border would double it. -->
+                                <!-- Named for the prewarm: this is a gated CHILD
+                                     of MainSplitGrid, and the prewarmer does not
+                                     recurse into nested hidden subtrees, so
+                                     realizing the editor leaves the sheet dock
+                                     cold. It is one View-menu toggle away. -->
+                                <Border Grid.Row="0" x:Name="SheetMusicDock"
+                                        IsVisible="{Binding IsSheetMusicVisible}">
+                                    <Panel>
+                                        <dock:DockControl x:Name="TopDock" />
+                                        <Border IsVisible="{Binding IsSheetMusicFloating}"
+                                    Classes="DockHomeCard"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Padding="{StaticResource FirePadCard}"
+                                    CornerRadius="{StaticResource FireRadiusRow}"
+                                    Background="{DynamicResource FireSurfaceCard}"
+                                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="1">
+                                <StackPanel Spacing="{StaticResource FireSpaceRow}" HorizontalAlignment="Center">
+                                    <TextBlock Text="{localization:Loc Dock_Floating_SheetMusic}" HorizontalAlignment="Center"
+                                               Foreground="{DynamicResource FireTextDim}" />
+                                    <Button x:Name="DockSheetMusicHomeButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" HorizontalAlignment="Center"
+                                            Content="{localization:Loc Dock_Floating_DockBack}" />
+                                </StackPanel>
+                            </Border>
+                                    </Panel>
+                                </Border>
+
+                                <GridSplitter Grid.Row="1"
+                                              Height="6"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch"
+                                              Background="{DynamicResource BorderDefault}"
+                                              ResizeDirection="Rows"
+                                              IsVisible="{Binding IsSheetSplitterVisible}" />
+
+                                <Panel Grid.Row="2">
+                            <ContentControl x:Name="TimelineSlot"
+                                            HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Stretch">
+                            <Grid x:Name="TimelineGrid"
+                                  MinHeight="80"
+                              Background="{DynamicResource CardBackground}"
+                              Focusable="True"
+                              IsTabStop="False"
+                              KeyDown="Timeline_KeyDown"
+                              PointerPressed="Timeline_PointerPressed"
+                              PointerWheelChanged="Timeline_PointerWheelChanged"
+                              ClipToBounds="True"
+                              ColumnDefinitions="118,*"
+                              RowDefinitions="Auto,*,*">
+                            <!-- THE GUTTER (Chart Timeline.reference.png). One
+                                 caption per ribbon row, one row per string
+                                 (a tick in that string's colour + its NOTE NAME,
+                                 which a drop tuning changes, + a dim string
+                                 number, LOW/HIGH on the outer two), then TIME.
+
+                                 Custom-drawn, because every caption has to land
+                                 on the renderer's own lane Y — and those reflow
+                                 with the visible-row count, the string count and
+                                 the two vertical flips. It reads them off
+                                 ChartRenderer.GutterLayout rather than deriving
+                                 a second copy; a caption one pixel off its lane
+                                 names the wrong string.
+
+                                 Its 118 px is the design's own width, and it
+                                 is NOT free: the renderer is column 1, and both
+                                 StackedTracksView and the SONG MAP caption cell
+                                 mirror the same 118 so a stacked row's chart
+                                 lines up with this one time-for-time. Move one,
+                                 move all three in the same change. -->
+                            <Border Grid.Row="1" Grid.Column="0" Classes="TrackRail">
+                                <controls:TimelineGutterControl x:Name="TimelineGutter"
+                                                                Renderer="{Binding #MainChartRenderer}"
+                                                                Editor="{Binding ChartEditor}"
+                                                                TransposeSemitones="{Binding LivePlay.TransposeSemitones}" />
+                            </Border>
+                            <controls:ChartRenderer x:Name="MainChartRenderer"
+                                                    Focusable="True"
+                                                    Grid.Row="1"
+                                                    Grid.Column="1"
+                                                    ClipToBounds="True"
+                                                    Editor="{Binding ChartEditor}"
+                                                    Transport="{Binding Transport}"
+                                                    PixelsPerMs="{Binding ProjectState.PixelsPerMs}"
+                                                    WaveformData="{Binding ProjectState.WaveformData}"
+                                                    ShowWaveform="{Binding ProjectState.ShowWaveform}" />
+                            <!-- Marquee rubber band: hit-test-invisible Avalonia
+                                 layer over the GL timeline; pointer moves only
+                                 invalidate this control, never the GL scene. -->
+                            <controls:MarqueeSelectionOverlay Grid.Row="1"
+                                                              Grid.Column="1"
+                                                              Renderer="{Binding #MainChartRenderer}" />
+                            <!-- LAUNCH CARD (P1-6) — the editor's empty-state
+                                 door. Content-aware (IsEditorLaunchCardVisible:
+                                 no chart content AND no audio), so a GP import
+                                 with a chart and no audio shows the chart,
+                                 covered by nothing.
+
+                                 Lifted into its own view 2026-09-12: its verb
+                                 row drew outside the card in de-DE, and the
+                                 shell window cannot be Show()n in the headless
+                                 session, so the containment test had nowhere to
+                                 live while this markup was inline. See
+                                 Views/Shell/EditorLaunchCardView.axaml. -->
+                            <shellViews:EditorLaunchCardView
+                                    Grid.Row="1" Grid.Column="1"
+                                    x:Name="EditorLaunchCard"
+                                    IsVisible="{Binding IsEditorLaunchCardVisible}" />
+                            <!-- Deferred host: StackedTracksView is only
+                                 needed once the user toggles stacked
+                                 timelines on; building it eagerly cost
+                                 ~90 ms of window construction. MainWindow
+                                 code-behind fills this host on the first
+                                 IsStackedTracksVisible=true. -->
+                            <ContentControl x:Name="StackedTracksHost"
+                                            Grid.Row="2"
+                                            Grid.Column="0"
+                                            Grid.ColumnSpan="2"
+                                            HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Stretch"
+                                            IsVisible="{Binding IsStackedTracksVisible}" />
+                        </Grid>
+                            </ContentControl>
+                            <!-- Shown while the timeline floats in its own window. -->
+                            <StackPanel x:Name="TimelinePlaceholder"
+                                        IsVisible="False"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Spacing="10">
+                                <PathIcon Data="{DynamicResource IconOpenInNew}" Width="22" Height="22"
+                                          Opacity="0.5" Foreground="{DynamicResource TextMuted}"
+                                          HorizontalAlignment="Center" />
+                                <TextBlock Text="{localization:Loc Pane_PoppedOut_Hint}"
+                                           Foreground="{DynamicResource TextMuted}" FontSize="{StaticResource FontSizeSm}"
+                                           HorizontalAlignment="Center" />
+                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle" HorizontalAlignment="Center"
+                                        Content="{localization:Loc Pane_BringBack}"
+                                        Click="TimelineRestore_Click" />
+                            </StackPanel>
+                            <!-- The AI chart pass review (#506): non-modal, over the timeline's
+                                 top-right corner, so the marks it publishes stay in view. -->
+                            <shellViews:AiChartReviewView x:Name="AiChartReviewOverlay"
+                                                          DataContext="{Binding ShellDialogs.AiChart.Review}"
+                                                          HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                          Margin="{StaticResource PaddingCardSm}" />
+                            <!-- Chart from audio's merge card (#647): the same corner, the same
+                                 non-modal contract; a draft is decided phrase by phrase. -->
+                            <shellViews:DraftMergeReviewView x:Name="DraftMergeOverlay"
+                                                             DataContext="{Binding ShellDialogs.DraftMerge}"
+                                                             HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                             Margin="{StaticResource PaddingCardSm}" />
+                                </Panel>
+                            </Grid>
+                        </DockPanel>
+
+                        <!-- Splitter between upper region (timeline+minimap) and bottom dock -->
+                        <GridSplitter Grid.Row="1" x:Name="DockRowSplitter"
+                                      Height="6"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      Background="{DynamicResource BorderDefault}"
+                                      ResizeDirection="Rows"
+                                      ResizeBehavior="PreviousAndNext"
+                                      IsVisible="{Binding IsDockRowSplitterVisible}" />
+
+                        <!-- Docking bottom area. Inspector is a dockable tool
+                             (can be dragged/floated); 3D Preview is a fixed
+                             panel because its NativeControlHost (Vulkan) cannot
+                             be re-parented by the docking system without
+                             breaking the swapchain. -->
+                        <Grid x:Name="InspectorSplitGrid"
+                              Grid.Row="2"
+                              MinHeight="0"
+                              IsVisible="{Binding IsBottomDockVisible}">
+                            <!-- The Inspector column never goes under the dock's MinWidth: a
+                                 narrower cell (a 1280 px window with the AI chat open) arranged
+                                 the dock past its left edge. -->
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="320" />
+                                <ColumnDefinition Width="6" />
+                                <ColumnDefinition Width="2*" />
+                            </Grid.ColumnDefinitions>
+                            <dock:DockControl Grid.Column="0"
+                                              Grid.ColumnSpan="{Binding InspectorColumnSpan}"
+                                              x:Name="BottomDock"
+                                              MinWidth="320" />
+                            <!-- While the Inspector floats, its spot says so and offers the way
+                                 back (DockLayoutController.DockPaneHome). A card, not a cover: the
+                                 rest of the dock stays a drop target for dragging it home. -->
+                            <Border Grid.Column="0" Grid.ColumnSpan="{Binding InspectorColumnSpan}" IsVisible="{Binding IsInspectorFloating}"
+                                    Classes="DockHomeCard"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Padding="{StaticResource FirePadCard}"
+                                    CornerRadius="{StaticResource FireRadiusRow}"
+                                    Background="{DynamicResource FireSurfaceCard}"
+                                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="1">
+                                <StackPanel Spacing="{StaticResource FireSpaceRow}" HorizontalAlignment="Center">
+                                    <TextBlock Text="{localization:Loc Dock_Floating_Inspector}" HorizontalAlignment="Center"
+                                               Foreground="{DynamicResource FireTextDim}" />
+                                    <Button x:Name="DockInspectorHomeButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" HorizontalAlignment="Center"
+                                            Content="{localization:Loc Dock_Floating_DockBack}" />
+                                </StackPanel>
+                            </Border>
+                            <!-- The same visible seam as the sheet strip's splitter: on the
+                                 transparent default the Inspector and the 3D preview read as
+                                 two loose panels with nothing to grab between them. -->
+                            <GridSplitter Grid.Column="1" x:Name="InspectorPreviewSplitter"
+                                          Width="6"
+                                          HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch"
+                                          Background="{DynamicResource BorderDefault}"
+                                          ResizeDirection="Columns"
+                                          ResizeBehavior="PreviousAndNext"
+                                          IsVisible="{Binding AreBothBottomPanelsVisible}" />
+                            <Border Grid.Column="{Binding PreviewColumnStart}"
+                                    Grid.ColumnSpan="{Binding PreviewColumnSpan}"
+                                    Background="{DynamicResource FireSurfaceChrome}"
+                                    BorderBrush="{DynamicResource FireBorderSeam}"
+                                    BorderThickness="1,1,0,0"
+                                    IsVisible="{Binding Is3DPreviewActive}">
+                                <Grid RowDefinitions="Auto,*">
+                                    <!-- Header mirrors the dock tool chrome; the pop-out
+                                         action moves the single Preview3DView instance
+                                         into its own window (the Vulkan surface is
+                                         recreated against the new HWND). Hidden during a
+                                         game run: the immersive HUD owns the strip, and a
+                                         "3D preview" pane title reads as editor chrome. -->
+                                    <Border Grid.Row="0" Classes="PaneHeader"
+                                            IsVisible="{Binding !IsGameplayPresentation}">
+                                        <!-- The workspace grammar on the header ONLY: the
+                                             Preview3DView below includes its own copy (for the
+                                             floated pane), and one control must not get both. -->
+                                        <Border.Styles>
+                                            <StyleInclude Source="avares://DotCharter/Views/Editor/EditorWorkspaceStyles.axaml" />
+                                        </Border.Styles>
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Classes="PaneTitle"
+                                                       Text="{localization:Loc Menu_Panel3DPreview}" />
+                                            <!-- Cursor is set INLINE, not by the grammar:
+                                                 EditorWorkspaceStyles is held to the same
+                                                 no-Cursor lint as the other three converted
+                                                 grammars (building a Cursor resolves
+                                                 ICursorFactory, i.e. needs a platform). -->
+                                            <Button Grid.Column="1" Classes="PaneAction"
+                                                    Cursor="Hand"
+                                                    Click="Preview3DPopOut_Click"
+                                                    ToolTip.Tip="{localization:Loc Pane_PopOut}"
+                                                    AutomationProperties.Name="{localization:Loc Pane_PopOut}">
+                                                <PathIcon Data="{DynamicResource IconOpenInNew}"
+                                                          Width="11" Height="11" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                    <ContentControl Grid.Row="1" x:Name="Preview3DSlot">
+                                        <editorViews:Preview3DView x:Name="Preview3DPane" />
+                                    </ContentControl>
+                                    <StackPanel Grid.Row="1" x:Name="Preview3DPlaceholder"
+                                                IsVisible="False"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                Spacing="10">
+                                        <PathIcon Data="{DynamicResource IconOpenInNew}" Width="22" Height="22"
+                                                  Opacity="0.5" Foreground="{DynamicResource TextMuted}"
+                                                  HorizontalAlignment="Center" />
+                                        <TextBlock Text="{localization:Loc Pane_PoppedOut_Hint}"
+                                                   Foreground="{DynamicResource TextMuted}" FontSize="{StaticResource FontSizeSm}" />
+                                        <Button Theme="{StaticResource SubtleButton}" Classes="Subtle" HorizontalAlignment="Center"
+                                                Content="{localization:Loc Pane_BringBack}"
+                                                Click="Preview3DRestore_Click" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <!-- The AI chat pane (#559), the full height beside the timeline and
+                             the bottom dock. A dock of its own, so it floats and redocks like
+                             the other panes; the splitter is the same visible seam as theirs. -->
+                        <GridSplitter Grid.Column="1" Grid.RowSpan="3" x:Name="AiChatSplitter"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      Background="{DynamicResource BorderDefault}"
+                                      ResizeDirection="Columns"
+                                      ResizeBehavior="PreviousAndNext"
+                                      IsVisible="{Binding IsAiChatVisible}" />
+                        <Panel Grid.Column="2" Grid.RowSpan="3" x:Name="AiChatDockHost"
+                               IsVisible="{Binding IsAiChatVisible}">
+                            <dock:DockControl x:Name="SideDock" />
+                            <Border IsVisible="{Binding IsAiChatFloating}"
+                                    Classes="DockHomeCard"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Padding="{StaticResource FirePadCard}"
+                                    CornerRadius="{StaticResource FireRadiusRow}"
+                                    Background="{DynamicResource FireSurfaceCard}"
+                                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="1">
+                                <StackPanel Spacing="{StaticResource FireSpaceRow}" HorizontalAlignment="Center">
+                                    <TextBlock Text="{localization:Loc Dock_Floating_AiChat}" HorizontalAlignment="Center"
+                                               Foreground="{DynamicResource FireTextDim}" />
+                                    <Button x:Name="DockAiChatHomeButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" HorizontalAlignment="Center"
+                                            Content="{localization:Loc Dock_Floating_DockBack}" />
+                                </StackPanel>
+                            </Border>
+                        </Panel>
+                    </Grid>
+
+                    <!-- Hidden top-level views. The hosts are EMPTY here on
+                         purpose: PlayModeView, the Library (LibraryView) and the
+                         settings shell are the heaviest subtrees in the window
+                         and inflating them inside InitializeComponent was a
+                         measurable chunk of the startup "window constructed"
+                         phase. MainWindow code-behind builds them after the
+                         first frame or on first show, whichever comes first
+                         (EnsurePlayModeViewCreated / EnsureTopLevelViewsCreated);
+                         the prewarm pass then realizes templates off the
+                         user's critical path. -->
+                    <!-- Play Mode surface: grew from the 0.11.0 skeleton into
+                         a ~1000-line multi-screen game shell, so it defers
+                         like the others. Filled by EnsurePlayModeViewCreated —
+                         immediately when Play Mode is the boot surface
+                         (AppConfig.StartInPlayMode), otherwise from the
+                         Background-priority prewarm or the first switch. -->
+                    <ContentControl x:Name="PlayModeHost"
+                                    IsVisible="{Binding IsPlayModeVisible}"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch" />
+
+                    <Grid x:Name="SongBrowserHost"
+                          IsVisible="{Binding IsSongBrowserVisible}" />
+
+                    <ContentControl x:Name="SettingsHost"
+                                    IsVisible="{Binding IsSettingsVisible}"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch" />
+
+                    <!-- HOME. A `ScreenHost` over `IHomeScreen`, like Settings —
+                         it is a screen on the target architecture, not a view
+                         the ViewLocator finds. Deferred and prewarmed with the
+                         other two hosts. -->
+                    <ContentControl x:Name="HomeHost"
+                                    IsVisible="{Binding IsHomeVisible}"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch" />
+                </Grid>
+            </DockPanel>
+
+            <!-- Amp & FX rig overlay (chart editor) — the SAME control Play Mode's
+                 rig overlay shows, over the SAME chain singleton, so a tone dialled
+                 in the editor is the tone in a run.
+
+                 Until v0.43 this hosted the retired PedalboardView through the
+                 ViewLocator, which is the whole reason the app looked like it had
+                 two pedalboards: the Fire rig lived as markup nested inside
+                 PlayModeView, so it was not a type this overlay could name. It is
+                 its own view now, and this is the same one line Play Mode uses.
+
+                 **IT LIVES IN ROW 1, NOT OVER THE WHOLE WINDOW, AND THAT IS THE
+                 POINT.** It sat in WindowRootGrid at Grid.Row="0" Grid.RowSpan="2"
+                 until v0.48.6 — i.e. over TitleBarRow as well — and the rig paints
+                 the fully opaque FireOverlayFill, so opening it put an opaque,
+                 hit-testable surface on top of TitleBarDragArea. With
+                 WindowDecorations="BorderOnly" that strip is the ONLY thing that
+                 moves the window, so the window stopped being movable for as long
+                 as the rig was open ("almost like it's fullscreen but it isn't").
+                 Row 1 is also what Play Mode's copy has always had — its host is
+                 inside this same content area, which is why that one never had the
+                 bug. The row collapses to 0 in borderless fullscreen, so the rig
+                 still owns the whole screen there.
+                 `Perf/TitleBarDragUiPerfSmokeTests` hit-tests both directions.
+
+                 NO card chrome around it and no outer ScrollViewer: the rig draws
+                 its own FireScreen frame, its own 18 px inset and its own header ✕
+                 (which raises CloseRequested — the host closes itself), so a
+                 wrapper card would be a second title bar and a second close button
+                 for one surface. Collapses (IsVisible=false) when shut, so it costs
+                 nothing while closed. -->
+            <Panel x:Name="PedalboardOverlay" Grid.Row="1" Grid.Column="1" ZIndex="550"
+                   IsVisible="{Binding ToneRig.IsPedalboardOpen}">
+                <!-- The gate is on the PANEL, not on the rig. The rig VIEW is the
+                     ContentTemplate body of a host (#194): built when a layout pass
+                     reaches the presenter, so its ~450 elements are no longer
+                     constructed and styled inside `new MainWindow()` (windowCtor=).
+                     The content is the rig SCREEN, which DeferredRigScreen keeps
+                     null until the overlay opens or the prewarm asks, and a null
+                     content builds nothing. MainWindowPrewarm.HiddenShellSurfaces
+                     builds the body after EnsureRigScreen(); the drain lays it out
+                     after first paint. -->
+                <ContentControl x:Name="ShellRigScreenHost" Content="{Binding ToneRig.AmpFxRig}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate x:DataType="playModeVm:AmpFxRigViewModel">
+                            <playModeViews:AmpFxRigView />
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
+            </Panel>
+        </Grid>
+
+        <!-- Named so the post-first-frame prewarm can reach it: it owns the ~32
+             deferred dialog views, whose first layout is otherwise charged to
+             the first open (see SchedulePrewarmOfHiddenSurfaces). -->
+        <shellViews:DialogContainerView x:Name="DialogContainer"
+                                        IsHitTestVisible="True" />
+    </Grid>
+
+    <!-- Full-width status bar pinned to the bottom of the window. Spans the
+         sidebar so there is no visible seam between the bar and the side
+         tab strip (matches modern JetBrains aesthetic). -->
+    <!-- The status rail is workbench chrome: it carries the project, the
+         selection readouts and the lint counts, none of which Home or a run has
+         anything to say about. The gate sits on the HOST, whose context is the
+         shell; the rail itself is the host's ContentTemplate body (#194), so it
+         is not built in front of the first frame on a full-bleed boot. -->
+    <ContentControl x:Name="StatusBarHost" Grid.Row="1" Content="{Binding StatusBar}"
+                    IsVisible="{Binding IsShellChromeVisible}"
+                    HorizontalContentAlignment="Stretch">
+        <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="appViewModels:StatusBarViewModel">
+                <shellViews:StatusBar x:Name="StatusBarView" />
+            </DataTemplate>
+        </ContentControl.ContentTemplate>
+    </ContentControl>
+
+    <!-- Drag-over affordance: shown while files hover over the window. -->
+    <Border x:Name="DropOverlay" Grid.Row="0" Grid.RowSpan="2"
+            IsVisible="False" IsHitTestVisible="False"
+            Background="{DynamicResource OverlayScrim}" ZIndex="500">
+        <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="{DynamicResource CardBackground}"
+                BorderBrush="{DynamicResource AccentColor}" BorderThickness="2"
+                CornerRadius="{StaticResource RadiusLg}" Padding="40,28">
+            <StackPanel Spacing="8">
+                <PathIcon Data="{DynamicResource IconDownload}" Width="30" Height="30"
+                          HorizontalAlignment="Center"
+                          Foreground="{DynamicResource AccentColor}" />
+                <TextBlock Text="{localization:Loc DropOverlay_Hint}" FontSize="{StaticResource FontSizeLg}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimary}" />
+            </StackPanel>
+        </Border>
+    </Border>
+
+    <!-- Command palette (Ctrl+Shift+P) — a scrimmed overlay spanning the whole
+         window, above every other layer. Collapses itself (IsVisible bound to
+         its VM's IsOpen) when shut, so it costs nothing while closed.
+         x:Name is load-bearing: the gate is on the view's CONTENT (its own
+         `Grid x:Name="Scrim"`, in another namescope this window cannot reach),
+         so HiddenShellSurfaces() has to name the view and ask
+         HiddenSubtreePrewarmer.HiddenContentOf for the scrim. Without a name
+         the whole ListBox-backed palette realized on the first Ctrl+Shift+P. -->
+    <cmdpalette:CommandPaletteView x:Name="CommandPaletteOverlay"
+                                   Grid.Row="0" Grid.RowSpan="2"
+                                   DataContext="{Binding CommandPalette}" ZIndex="600" />
+    </Grid>
+    </LayoutTransformControl>
+</Window>

@@ -1,0 +1,148 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.AlignToRecordingDialogView"
+             x:DataType="contracts:IAlignToRecordingScreen"
+             x:CompileBindings="True">
+
+    <!-- Tempo map ▸ Align to recording (#784). Grammar: Views/Dialogs/DialogStyles.axaml.
+         Range and anchors first, then Analyze; the per-section result takes the STAR row
+         so a long song scrolls inside it and the footer stays put at 1280x720 (#725).
+         A low-confidence row is offered unticked and prints its score in the warning colour.
+         No view-scoped styles: the row's look is set on the row (#428). -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconPulse}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_AlignToRecording_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" TextWrapping="Wrap"
+                                   Text="{localization:Loc Dialog_AlignToRecording_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1" IsEnabled="{Binding !IsBusy}">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_AlignToRecording_Source_Label}" />
+                        <TextBlock x:Name="SourceValue" Theme="{DynamicResource DlgValueText}" Grid.Column="1" Classes="DlgValue"
+                                   VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding SourceText}" ToolTip.Tip="{Binding SourceText}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                        <TextBlock VerticalAlignment="Top" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_AlignToRecording_Range_Label}" />
+                        <StackPanel x:Name="RangePanel" Grid.Column="1" Spacing="{DynamicResource SpaceSm}">
+                            <RadioButton GroupName="AlignToRecordingRange" IsChecked="{Binding IsWholeSong, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_AlignToRecording_Range_Whole}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_AlignToRecording_Range_Whole}" />
+                            </RadioButton>
+                            <Grid ColumnDefinitions="*,110" ColumnSpacing="8">
+                                <RadioButton Grid.Column="0" GroupName="AlignToRecordingRange" IsChecked="{Binding IsFromBar, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Dialog_AlignToRecording_Range_FromBar}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_AlignToRecording_Range_FromBar}" />
+                                </RadioButton>
+                                <NumericUpDown x:Name="FromBarInput" Grid.Column="1" Value="{Binding FromBar}"
+                                               Minimum="1" Maximum="{Binding BarCount}" Increment="1" FormatString="0"
+                                               AutomationProperties.Name="{localization:Loc Dialog_AlignToRecording_Range_FromBar}" />
+                            </Grid>
+                            <RadioButton GroupName="AlignToRecordingRange" IsChecked="{Binding IsLoopRegion, Mode=TwoWay}"
+                                         IsEnabled="{Binding HasLoopRegion}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_AlignToRecording_Range_Loop}">
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_AlignToRecording_Range_Loop}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding LoopRegionText}" />
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,320">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_AlignToRecording_Anchors_Label}" />
+                            <TextBlock x:Name="AnchorsNote" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                       Text="{Binding AnchorsText}" />
+                        </StackPanel>
+                        <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding KeepAnchors}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_AlignToRecording_Anchors_Label}" />
+                    </Grid>
+                </StackPanel>
+
+                <Grid Grid.Row="2" Margin="{DynamicResource GapTopLg}" RowDefinitions="Auto,*,Auto">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <TextBlock x:Name="StatusNote" Grid.Column="0" Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" IsVisible="{Binding !StatusIsProblem}"
+                                   Text="{Binding StatusText}" />
+                        <TextBlock x:Name="ProblemNote" Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource WarningColor}" FontSize="{DynamicResource FontSizeSm}"
+                                   IsVisible="{Binding StatusIsProblem}" Text="{Binding StatusText}" />
+                        <Button x:Name="AnalyzeButton" Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                Content="{localization:Loc Dialog_AlignToRecording_Analyze}"
+                                Command="{Binding AnalyzeCommand}" IsVisible="{Binding !IsBusy}" />
+                        <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsVisible="{Binding IsBusy}" />
+                    </Grid>
+                    <ProgressBar Grid.Row="1" IsIndeterminate="True" IsVisible="{Binding IsBusy}" VerticalAlignment="Top"
+                                 Margin="{DynamicResource GapTopMd}" />
+
+                    <Border x:Name="SectionList" Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="1" Classes="DlgListFrame"
+                            Margin="{DynamicResource GapTopMd}" IsVisible="{Binding HasResult}">
+                        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Sections}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IAlignSectionRow">
+                                        <Border BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1"
+                                                Padding="{DynamicResource PaddingRow}">
+                                            <Grid ColumnDefinitions="Auto,*,120,Auto,Auto" ColumnSpacing="12">
+                                                <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsApplied}"
+                                                          IsEnabled="{Binding CanApply}"
+                                                          AutomationProperties.Name="{Binding Title}" />
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Title}"
+                                                           Foreground="{DynamicResource TextPrimary}" FontSize="{DynamicResource FontSizeMd}"
+                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+                                                <ProgressBar Grid.Column="2" VerticalAlignment="Center" Minimum="0" Maximum="1"
+                                                             Value="{Binding Confidence}" />
+                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" MinWidth="44" TextAlignment="Right"
+                                                           Foreground="{DynamicResource TextPrimary}" FontSize="{DynamicResource FontSizeSm}"
+                                                           IsVisible="{Binding !IsLow}" Text="{Binding ConfidenceText}" />
+                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" MinWidth="44" TextAlignment="Right"
+                                                           Foreground="{DynamicResource WarningColor}" FontSize="{DynamicResource FontSizeSm}"
+                                                           IsVisible="{Binding IsLow}" Text="{Binding ConfidenceText}" />
+                                                <TextBlock Grid.Column="4" VerticalAlignment="Center" MinWidth="72" TextAlignment="Right"
+                                                           Foreground="{DynamicResource TextDim}" FontSize="{DynamicResource FontSizeSm}"
+                                                           Text="{Binding ShiftText}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <TextBlock x:Name="SummaryNote" Grid.Row="2" Theme="{DynamicResource DlgHintText}" Classes="DlgHint" TextWrapping="Wrap"
+                               Text="{Binding SummaryText}" IsVisible="{Binding HasResult}" />
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button x:Name="ApplyButton" Classes="DlgAction Primary" Content="{localization:Loc Action_Apply}"
+                                Command="{Binding ApplyCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

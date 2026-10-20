@@ -1,0 +1,7 @@
+T:System.IO.File;File I/O belongs in Services or a Platform/ adapter (target-architecture.md § 4)
+T:System.IO.Directory;File I/O belongs in Services or a Platform/ adapter (target-architecture.md § 4)
+T:System.Diagnostics.Process;Start processes through IShellLauncher (target-architecture.md § 2.2)
+N:Microsoft.Data.Sqlite;Database access belongs in Services (target-architecture.md § 4)
+T:System.Net.Http.HttpClient;Network access belongs in Services (target-architecture.md § 4)
+M:System.Environment.GetFolderPath(System.Environment.SpecialFolder);Paths come from Services (WritablePaths), not the OS (target-architecture.md § 4)
+M:System.Environment.GetFolderPath(System.Environment.SpecialFolder,System.Environment.SpecialFolderOption);Paths come from Services (WritablePaths), not the OS (target-architecture.md § 4)

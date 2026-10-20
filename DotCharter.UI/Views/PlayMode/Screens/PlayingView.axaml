@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.PlayingView"
+             x:DataType="vm:PlayModeViewModel">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter/Views/PlayMode/PlayModeThemes.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- The Playing screen: shown only if the user navigates back to Play Mode
+         mid-run. Hosted by PlayModeView, which declares this view with the
+         IsPlayingScreen gate. Lifted out of PlayModeView.axaml in #294, markup
+         unchanged. -->
+    <Border Theme="{StaticResource GlassPanelBorder}" x:Name="PlayingScreenRoot"
+            Classes="GlassPanel" MinWidth="380" MaxWidth="620"
+            HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid>
+            <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc PlayMode_Nav_Play}" Classes="Eyebrow"
+                           HorizontalAlignment="Center" />
+                <TextBlock Theme="{StaticResource ScreenTitleText}" Text="{Binding FlowSongTitle}" Classes="ScreenTitle"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+                <Border Theme="{StaticResource HeaderRuleBorder}" Classes="HeaderRule" HorizontalAlignment="Center" />
+                <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{localization:Loc PlayMode_Playing_Hint}"
+                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                           Classes="ScreenSubtitle" Margin="{StaticResource GapTopXs}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

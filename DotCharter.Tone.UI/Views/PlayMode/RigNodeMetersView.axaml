@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="using:DotCharter.Tone.UI.Controls.Fire"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigNodeMetersView"
+             x:DataType="vm:RigNodeMetersViewModel">
+    <!-- Each half: the caption with its reading at the right end of the same line, the meter
+         under both. The reading sat BESIDE the meter in a horizontal StackPanel, which measures
+         with infinite width, so the 40-segment meter kept its full natural width and pushed
+         "-74.6 dBFS" into the other half, where the output meter painted over it and its own
+         reading was clipped at the card's edge (live capture, 2026-09-24). A meter DRAWS at its
+         natural width (32 segments = 190 px), so that width, not its bounds, is what fits a half. -->
+    <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceXl}">
+        <StackPanel Spacing="{StaticResource FireSpaceSm}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" TextWrapping="Wrap" Text="{localization:Loc Rig_ModuleInput}" />
+                <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Bottom"
+                           Text="{Binding InputDb, StringFormat={}{0:0.0} dBFS}" IsVisible="{Binding HasReading}" />
+            </Grid>
+            <fire:FireLevelMeter LevelDb="{Binding InputDb}" MinimumDb="-60" MaximumDb="6" SegmentCount="32"
+                MinBarHeight="12" MaxBarHeight="12" HorizontalAlignment="Left"
+                AutomationProperties.Name="{localization:Loc Rig_ModuleInput}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceSm}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" TextWrapping="Wrap" Text="{localization:Loc Rig_ModuleOutput}" />
+                <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Bottom"
+                           Text="{Binding OutputDb, StringFormat={}{0:0.0} dBFS}" IsVisible="{Binding HasReading}" />
+            </Grid>
+            <fire:FireLevelMeter LevelDb="{Binding OutputDb}" MinimumDb="-60" MaximumDb="6" SegmentCount="32"
+                MinBarHeight="12" MaxBarHeight="12" HorizontalAlignment="Left"
+                AutomationProperties.Name="{localization:Loc Rig_ModuleOutput}" />
+        </StackPanel>
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" TextWrapping="Wrap"
+            Text="{localization:Loc Rig_ModuleMeterUnavailable}" IsVisible="{Binding !HasReading}" />
+        <!-- the unit's pre/post spectrum (#299), under the meters in every editor -->
+        <views:RigNodeSpectrumView Grid.Row="2" Grid.ColumnSpan="2" Margin="{StaticResource FireGapTopMd}"
+            DataContext="{Binding Spectrum}" IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </Grid>
+</UserControl>

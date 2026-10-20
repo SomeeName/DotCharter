@@ -1,0 +1,139 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:conv="using:DotCharter.Tone.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigRoutingConsoleView"
+             x:DataType="vm:RigDockUnit">
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+            <fire:FireKnob Height="112" IsCompact="True" HardwareStyle="True" Margin="{StaticResource FireGapTag}"
+                           IsEnabled="{Binding IsControlActive}" ToolTip.Tip="{Binding InactiveHint}"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}"
+                           Maximum="{Binding Maximum}" DefaultValue="{Binding Default}"
+                           Step="{Binding Step}" Label="{Binding DisplayName}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel Classes="FireEnclosureChoice">
+                <TextBlock Text="{Binding DisplayName}" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+    <!-- The ROUTING family (splitter / merger): the tone-rig design's split
+         console — a summary with the Series / Dual / Triple choice on the
+         left, one mix strip per lane on the right. The strips are the board's
+         own lane mixers, which are the merger's parameters. -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <!-- SCALE TO FIT THE DOCK ROW (lane E, 2026-09-13). The face is laid
+             out at its NATURAL size and the whole thing is scaled once, the way
+             RigPedalEditorView's enclosure already was — so at 1920x1080 it is
+             shrunk into the row instead of being cut by it, and at 3840x2160 it
+             GROWS to use a row that has ~5x the area. `TargetHeight` has to be
+             the scroller's viewport because a ScrollViewer offers its content
+             infinite height and the vertical fit would otherwise never engage;
+             the WIDTH binds on its own now that the horizontal bar is Disabled.
+             Stretch, not Left: the scale comes from the face's NATURAL size, but
+             a face with a star column has to be ARRANGED at the slot the
+             transform leaves it or its sliders collapse to their content.
+             `MaxScale` is the breakpointed `FireRigFaceMaxScale` token. -->
+        <fire:RigScaleToFit x:Name="RigFaceFit"
+                            TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                            MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <Grid ColumnDefinitions="220,14,*" x:Name="RigRoutingConsole" IsVisible="{Binding HasRouting}">
+
+                    <Border Grid.Column="0" Theme="{StaticResource FireSubpanelBorder}" Classes="FireSubpanel" VerticalAlignment="Top">
+                        <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                            <fire:RigArtworkImage ModuleTypeId="{Binding Node.ModuleTypeId}" Width="64" Height="64" HorizontalAlignment="Left" />
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_SignalRouting}" />
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" Text="{Binding Routing.ModeName}" />
+                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Bottom" Text="{Binding Routing.ModeKind}" />
+                            </StackPanel>
+                            <Border Theme="{StaticResource FireModeStripBorder}" Classes="FireModeStrip" x:Name="RigRoutingModes">
+                                <StackPanel Orientation="Horizontal">
+                                    <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton Compact" IsChecked="{Binding Routing.IsSerial, Mode=OneWay}"
+                                                  Command="{Binding Routing.RoutingSerialCommand}">
+                                        <TextBlock Text="{localization:Loc Rig_Routing_Series}" />
+                                    </ToggleButton>
+                                    <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton Compact" IsChecked="{Binding Routing.IsDual, Mode=OneWay}"
+                                                  Command="{Binding Routing.RoutingSplit2Command}">
+                                        <TextBlock Text="{localization:Loc Rig_Routing_Dual}" />
+                                    </ToggleButton>
+                                    <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton Compact" IsChecked="{Binding Routing.IsTriple, Mode=OneWay}"
+                                                  Command="{Binding Routing.RoutingSplit3Command}">
+                                        <TextBlock Text="{localization:Loc Rig_Routing_Triple}" />
+                                    </ToggleButton>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" Text="{localization:Loc Rig_Editor_RoutingHint}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Theme="{StaticResource FireSubpanelBorder}" Classes="FireSubpanel">
+                        <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Theme="{StaticResource FireSubpanelTitleText}" Classes="FireSubpanelTitle" Text="{localization:Loc Rig_Editor_LaneMix}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding Routing.LaneSummary}" />
+                            </Grid>
+                            <ItemsControl x:Name="RigRoutingLanes" ItemsSource="{Binding Routing.Lanes}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RigBoardLane">
+                                        <Border Theme="{StaticResource FireLaneStripBorder}" Classes="FireLaneStrip" Margin="{StaticResource FireGapTag}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                                                  IsEnabled="{Binding Mixer.CanMix}">
+                                                <Border Theme="{StaticResource FireLaneBadgeBorder}" Classes="FireLaneBadge" VerticalAlignment="Center"
+                                                        Background="{Binding TokenKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}">
+                                                    <TextBlock Text="{Binding Label}" />
+                                                </Border>
+                                                <Grid Grid.Column="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center" Text="{localization:Loc Rig_LaneLevel}" />
+                                                    <Slider Grid.Column="1" Classes="FireSlider" Minimum="0" Maximum="2" Value="{Binding Mixer.Level.Value, Mode=TwoWay}"
+                                                            AutomationProperties.Name="{localization:Loc Rig_LaneLevel}" />
+                                                    <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center" MinWidth="64" Text="{Binding Mixer.LevelText}" />
+                                                </Grid>
+                                                <Grid Grid.Column="3" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center" Text="{localization:Loc Rig_LanePan}" />
+                                                    <Slider Grid.Column="1" Classes="FireSlider" Minimum="-1" Maximum="1" Value="{Binding Mixer.Pan.Value, Mode=TwoWay}"
+                                                            AutomationProperties.Name="{localization:Loc Rig_LanePan}" />
+                                                    <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center" MinWidth="40" Text="{Binding Mixer.PanText}" />
+                                                </Grid>
+                                                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+                                                    <ToggleButton Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Content="{localization:Loc Rig_LaneMuteShort}"
+                                                                  IsEnabled="{Binding Mixer.CanMuteSolo}" IsChecked="{Binding Mixer.IsMuted, Mode=TwoWay}"
+                                                                  ToolTip.Tip="{localization:Loc Rig_LaneMute}" AutomationProperties.Name="{localization:Loc Rig_LaneMute}" />
+                                                    <ToggleButton Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Content="{localization:Loc Rig_LaneSoloShort}"
+                                                                  IsEnabled="{Binding Mixer.CanMuteSolo}" IsChecked="{Binding Mixer.IsSoloed, Mode=TwoWay}"
+                                                                  ToolTip.Tip="{localization:Loc Rig_LaneSolo}" AutomationProperties.Name="{localization:Loc Rig_LaneSolo}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" IsVisible="{Binding !Routing.LaneCount}" Text="{localization:Loc Rig_Editor_NoLanes}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- every native parameter of the junction, for the ones the strips
+                     do not name (the merger's Average / Sum mode) -->
+                <Expander Header="{localization:Loc Rig_Editor_AllParameters}" IsVisible="{Binding Node.HasParamControls}">
+                    <ItemsControl ItemsSource="{Binding EnclosureControls}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </Expander>
+                <TextBlock Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody" IsVisible="{Binding ShowsNoControlsNote}" Text="{localization:Loc Rig_Dock_NoControls}" />
+                <TextBlock Theme="{StaticResource FireEditorFootnoteText}" Classes="FireEditorFootnote" Text="{localization:Loc Rig_Editor_Hint}" />
+                <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel"><views:RigNodeMetersView DataContext="{Binding Meters}" /></Border>
+            </StackPanel>
+        </fire:RigScaleToFit>
+    </ScrollViewer>
+</UserControl>

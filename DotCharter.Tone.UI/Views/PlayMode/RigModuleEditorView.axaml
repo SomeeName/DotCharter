@@ -1,0 +1,185 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:editors="clr-namespace:DotCharter.Tone.UI.Views.PlayMode.RigEditors;assembly=DotCharter.Tone.UI"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigModuleEditorView"
+             x:DataType="vm:RigDockUnit">
+    <!-- The selected module's editor: a HOST that opens one editor FAMILY per
+         unit (RigDockUnit.Family, folded by RigArtwork.FamilyFor from the
+         tone-rig design): the amp face, the cabinet console, the routing
+         console, the specialised racks, or the generic pedal enclosure. The
+         family views live in RigEditors/ and RigEditorTemplateSelector builds
+         the one that applies, so a cabinet never constructs the amp face.
+
+         Lints that read "the editor" read this file AND RigEditors/*.axaml —
+         see DotCharter.Tests/Infrastructure/RigEditorViews. -->
+    <UserControl.Resources>
+        <editors:RigEditorTemplateSelector x:Key="RigEditorTemplates" />
+    </UserControl.Resources>
+    <!-- The editor's own rules that are not ControlThemes (descendant selectors,
+         the enclosure grid, the EQ fader): scoped to this view and the family
+         editors it opens, instead of every control of their type in the app (#242). -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter.Tone.UI/Views/PlayMode/RigModuleEditorStyles.axaml" />
+    </UserControl.Styles>
+    <!-- Every family view built so far stays IN this panel, hidden, with a
+         null DataContext; the code-behind shows the one the unit needs.
+         Re-attaching a detached view re-styles its whole subtree (60–125 ms
+         on a family change); flipping IsVisible costs the layout alone. -->
+    <Grid ColumnDefinitions="*,Auto">
+        <Panel Grid.Column="0" x:Name="RigEditorFamilyHost" />
+        <!-- The side rack, shared by every family: the unit's status panel and,
+             folded, the performance macros, the control assignment editor and
+             the MIDI input. Beside the editor rather than under it, so nothing
+             is stretched across the dock. -->
+        <!-- THE DETAILS COLUMN (the AmpliTube layout, 2026-09-27): the stage is
+             the gear alone; the gear bar's DETAILS toggle
+             (AmpFxRigViewModel.IsDetailsOpen, pushed onto RigDockUnit.ShowsDetails)
+             opens this column beside it. An editor hosted on its own keeps the
+             default and shows it. -->
+        <Border Grid.Column="1" x:Name="RigEditorRack" Theme="{StaticResource FireEditorRackBorder}" Classes="FireEditorRack"
+                IsVisible="{Binding ShowsDetails}">
+            <!-- Rest-visible, like every family view's own scroller: the rack is
+                 854 px of panels in a dock row that is routinely half that, and an
+                 auto-hidden bar made the cut edge read as the editor being drawn
+                 UNDER the footer strip (owner, 2026-09-12). -->
+            <ScrollViewer x:Name="RigEditorRackScroll"
+                          VerticalScrollBarVisibility="Visible" AllowAutoHide="False"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                    <!-- the column's head: DETAILS over the unit's name -->
+                    <StackPanel x:Name="RigDetailsHead" Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Details}" />
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" Text="{Binding DisplayName}"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}" />
+                    </StackPanel>
+
+                    <!-- ══ THE PEDAL FAMILY'S EXTRAS: the capture and its library, every
+                         exact value, lyrics, the signal meters (RigPedalDetailsView). The
+                         other families draw their own file and meter panels on the stage. -->
+                    <views:RigPedalDetailsView IsVisible="{Binding IsPedalFamily}" />
+
+                    <!-- ══ THE UNIT PANEL ════════════════════════════════════
+                         Three things a knob and a picker cannot say, and one
+                         file failure nothing said at all. It lives in the
+                         SHARED rack rather than in a family view on purpose:
+                         every one of them is a property of the NODE, not of the
+                         face, so an amp, a cab and a pedal must all be able to
+                         show it and none of them should have to re-declare it.
+                         Every row hides itself when the module has nothing to
+                         report, and the panel hides when they all do — so this
+                         is invisible on the ~95 modules it does not apply to
+                         and costs them one collapsed Border. -->
+                    <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack" x:Name="RigUnitPanel"
+                            IsVisible="{Binding HasUnitPanel}">
+                        <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Unit_Status}" />
+
+                            <!-- A TRANSPORT: named states the ENGINE can move on
+                                 its own (the looper auto-closes its take), so
+                                 these are buttons over a POLLED value and never
+                                 a picker bound two-way to the last write. -->
+                            <ItemsControl x:Name="RigUnitTransport" ItemsSource="{Binding TransportParams}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PedalTransportParamViewModel">
+                                        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding DisplayName}" />
+                                            <Border Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment" HorizontalAlignment="Left">
+                                                <ItemsControl ItemsSource="{Binding States}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal"
+                                                                        Spacing="{StaticResource FireSpaceXxs}" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:PedalTransportStateViewModel">
+                                                            <ToggleButton Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem Dense"
+                                                                          Content="{Binding Label}"
+                                                                          IsChecked="{Binding IsActive, Mode=OneWay}"
+                                                                          Command="{Binding SelectCommand}"
+                                                                          AutomationProperties.Name="{Binding Label}" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Border>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- A one-shot TRIGGER. It shows no state because it
+                                 HAS none to show: the engine performs the action
+                                 and answers its resting value. -->
+                            <ItemsControl x:Name="RigUnitMomentary" ItemsSource="{Binding MomentaryParams}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PedalMomentaryParamViewModel">
+                                        <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" HorizontalAlignment="Left"
+                                                Margin="{StaticResource FireGapTopSm}"
+                                                Content="{Binding ActionLabel}"
+                                                Command="{Binding TriggerCommand}"
+                                                AutomationProperties.Name="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- The ABI v34 detector key. Offered ONLY where the
+                                 catalogue flag says the module accepts one — the
+                                 engine REJECTS a key on every other type. -->
+                            <StackPanel x:Name="RigUnitSidechain" Spacing="{StaticResource FireSpaceXs}"
+                                        IsVisible="{Binding Node.SupportsSidechain}">
+                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{localization:Loc Rig_Sidechain}" />
+                                <ComboBox Classes="FireCombo" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding Node.SidechainOptions}"
+                                          SelectedItem="{Binding Node.SelectedSidechainOption, Mode=TwoWay}"
+                                          AutomationProperties.Name="{localization:Loc Rig_Sidechain}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:RigSidechainOption">
+                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Per-node latency, hidden at zero: most modules add
+                                 none, and printing "0 smp" on all of them buries
+                                 the handful that do. -->
+                            <TextBlock x:Name="RigUnitLatency" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       IsVisible="{Binding Node.HasLatency}" Text="{Binding Node.LatencyText}" />
+
+                            <!-- A file the engine REFUSED. It keeps the previous
+                                 one, so without this line the picker simply looks
+                                 like it did nothing. -->
+                            <TextBlock x:Name="RigUnitFileError" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       IsVisible="{Binding FileParam.HasLoadError}"
+                                       Text="{Binding FileParam.LoadError}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Controllers & MIDI: the performance macros, the control
+                         assignment editor and the MIDI input, FOLDED by default.
+                         They are set up once per rig, not every time a unit is
+                         touched, and open they were 854 px of rack beside every
+                         unit — the dock read as a settings page. -->
+                    <Expander x:Name="RigEditorControllers" Classes="Compact"
+                              Header="{localization:Loc Rig_Editor_ControllersMidi}"
+                              IsExpanded="False" HorizontalAlignment="Stretch">
+                        <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                            <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack">
+                                <views:RigPerformanceControlsView DataContext="{Binding Controls}" />
+                            </Border>
+                            <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack">
+                                <views:RigControlAssignmentView DataContext="{Binding Assignments}" />
+                            </Border>
+                            <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack">
+                                <views:RigMidiControlsView DataContext="{Binding MidiControls}" />
+                            </Border>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</UserControl>

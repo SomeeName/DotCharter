@@ -1,0 +1,637 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:conv="using:DotCharter.Tone.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigTonesView"
+             x:DataType="vm:AmpFxRigViewModel">
+    <!-- ══ THE RIG'S TONES MODE ═════════════════════════════════════════════
+         Its own view since 2026-09-27: it was 690 lines inline in
+         AmpFxRigView, and "never put a big screen inline in another screen"
+         (root AGENTS.md) is the rule it had broken. AmpFxRigView hosts ONE of
+         these (x:Name="RigTonesMode") as a SIBLING of the canvas body in the
+         same cell, gated on IsTonesMode, so leaving the mode returns the canvas
+         and the module editor exactly as they were — by construction, not by
+         restoring state (W4). Reference:
+         docs/agents/ui/pedalboard/presets-and-nam-captures.md.
+
+         LAYOUT, top to bottom:
+           · the CHAIN STRIP — the live chain, read-only (editing it is the
+             canvas's job);
+           · the TONE BROWSER, one FirePanel:
+               head    Tones · count · search ········ Overwrite Delete
+                       [Save as new…]  [AI designer]  ✕
+               body    SIDEBAR (fixed) │ CARD GRID (scrolls) │ DESIGNER column
+           The designer is a column of its own with its own thread scroller —
+           two scrollers SIDE BY SIDE, never one inside the other — and it folds
+           away (the head's "AI designer" toggle) to give the grid its width.
+
+         THE SIDEBAR IS WHERE A NARROW LIST BESIDE THE LIBRARY GOES. It holds
+         the category rail today; a setlist section belongs UNDER the rail, in
+         `RigTonesSidebar`, at the same fixed width
+         (FireRigToneSidebarWidth), so the grid never moves when it arrives.
+
+         Everything the tests and the prewarmer reach by name kept its name:
+         RigChainStrip, RigChainChips, RigToneBrowser, RigToneBrowserBody,
+         RigBrowserHead, RigBrowserActions, RigBrowserSave/Overwrite/Delete,
+         RigBrowserSearch, RigBrowserClose, RigTonesBody, RigBrowserBody,
+         RigBrowserRail, RigTonesScroll, RigBrowserCardHost, RigBrowserCards,
+         RigToneDesignPanel and the Nam* names. `RigToneBrowser` repeats the
+         IsTonesMode gate on purpose: MainWindowPrewarm and PlayModeView reach
+         this surface through HiddenNamedDescendants("RigToneBrowser"), which
+         reads the NAMED control's own flag. -->
+
+    <UserControl.Resources>
+        <!-- The NAM capture browser's two row templates, their own dictionary so this
+             view stays inside its size budget (#242, as AmpFxRigView's tile and lane
+             templates did for #240). -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Views/PlayMode/RigNamRowTemplates.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid x:Name="RigTonesLayout" RowDefinitions="Auto,*">
+
+        <!-- THE CHAIN STRIP. Read-only: editing the chain is the canvas's job
+             and this mode is about tones. A WrapPanel rather than a horizontal
+             scroller: a long chain is better wrapped than hidden behind a bar. -->
+        <Border Grid.Row="0" x:Name="RigChainStrip" Theme="{StaticResource FireHeaderBorder}" Classes="FireHeader"
+                Padding="{StaticResource FirePadBar}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                        Spacing="{StaticResource FireSpaceSm}">
+                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" VerticalAlignment="Center"
+                           Text="{localization:Loc Rig_TonesMode_ChainKicker}" />
+                <ItemsControl x:Name="RigChainChips" VerticalAlignment="Center"
+                              ItemsSource="{Binding Chain}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PedalNodeViewModel">
+                            <Border Theme="{StaticResource FireChainChipBorder}" Classes="FireChainChip"
+                                    Classes.Active="{Binding IsSelected}"
+                                    fire:FireUnitState.Category="{Binding FireCategory}"
+                                    Margin="{StaticResource FireGapTag}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                                    <Border Theme="{StaticResource FireToneStepDotBorder}" Classes="FireToneStepDot"
+                                            Background="{Binding FireTokenKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                    <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" VerticalAlignment="Center"
+                                               Text="{Binding DisplayName}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" VerticalAlignment="Center"
+                           IsVisible="{Binding !HasChain}"
+                           Text="{localization:Loc Rig_TonesMode_ChainEmpty}" />
+            </StackPanel>
+        </Border>
+
+        <!-- THE TONE BROWSER. ClipToBounds because a Border does not clip, and
+             anything that asks for more than this row would otherwise be drawn
+             out of it and over the footer's tuner strip. -->
+        <Border Grid.Row="1" x:Name="RigToneBrowser"
+                Theme="{StaticResource FirePanelBorder}" Classes="FirePanel"
+                ClipToBounds="True"
+                IsVisible="{Binding IsTonesMode}">
+            <Grid x:Name="RigToneBrowserBody" RowDefinitions="Auto,*"
+                  DataContext="{Binding Rig.Browser}"
+                  x:DataType="vm:PresetBrowserViewModel">
+
+                <!-- ── THE HEAD ────────────────────────────────────────────
+                     Title and count, the search, then everything that ACTS,
+                     right-aligned: the selected tone's own menu (Overwrite /
+                     Delete — only for the player's own tone, since a control that
+                     acts on an absent selection is not drawn), Save as new…, the
+                     designer's toggle and the close. The menu appears LEFT of
+                     Save, growing into the spacer, so nothing that was already on
+                     screen moves when a user tone is picked. Overwrite and Delete
+                     are a menu rather than two buttons because two more captions
+                     do not fit the head at 1280 px in German, and they are the
+                     two rarest, one of them destructive.
+
+                     The title block is exactly as wide as the sidebar under it, so
+                     the search box starts on the card grid's left edge; the search
+                     column is capped and a spacer column takes the rest, so the box
+                     never floats to the middle of a wide head. -->
+                <Grid Grid.Row="0" x:Name="RigBrowserHead"
+                      Margin="{StaticResource FireGapRowMd}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" MinWidth="140" MaxWidth="372" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                Width="{DynamicResource FireRigToneSidebarWidth}"
+                                Spacing="{StaticResource FireSpaceSm}">
+                        <TextBlock Theme="{StaticResource RigRoleTitleText}" Classes="RigRoleTitle" VerticalAlignment="Center"
+                                   Text="{localization:Loc PresetBrowser_Title}" />
+                        <!-- The count of cards on screen: a fixed-width badge, so
+                             100 → 7 does not pull the search box sideways. -->
+                        <Border x:Name="RigBrowserCount" Theme="{StaticResource FireTagBorder}" Classes="FireTag" MinWidth="40"
+                                VerticalAlignment="Center" IsVisible="{Binding ShowsToneCount}">
+                            <TextBlock HorizontalAlignment="Center" Text="{Binding Cards.Count}" />
+                        </Border>
+                    </StackPanel>
+
+                    <Border Grid.Column="1" Theme="{StaticResource FireFieldBorder}" Classes="FireField"
+                            VerticalAlignment="Center"
+                            Margin="{StaticResource FireGapLeftLg}">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Path Classes="FireHeaderIcon" Data="{DynamicResource IconRigSearch}" />
+                            <TextBox Grid.Column="1" x:Name="RigBrowserSearch" Classes="FireFieldInput"
+                                     Margin="{StaticResource FireGapLeftSm}"
+                                     Text="{Binding SearchText}"
+                                     PlaceholderText="{localization:Loc PresetBrowser_Search}"
+                                     AutomationProperties.Name="{localization:Loc PresetBrowser_Search}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- SPILLOVER (ABI v37), beside the tones it is about: a delay
+                         or reverb the next tone drops keeps ringing instead of
+                         being cut. Rig-wide and persisted (RigConfig.RigSpillover);
+                         disabled with its reason in the tooltip when no engine
+                         can honour it. Its own Auto column right after the search
+                         and LEFT of the spacer: the tone menu appearing eats the
+                         spacer, so the switch never moves, and it is never
+                         squeezed by the spacer at 1280 px. -->
+                    <CheckBox Grid.Column="2" Classes="FireCheckBox" x:Name="RigSpilloverToggle"
+                              VerticalAlignment="Center"
+                              Margin="{StaticResource FireGapLeftLg}"
+                              IsChecked="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.Spillover, Mode=TwoWay}"
+                              IsEnabled="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.CanToggleSpillover}"
+                              ToolTip.Tip="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.SpilloverTip}"
+                              ToolTip.ShowOnDisabled="True"
+                              AutomationProperties.Name="{localization:Loc Rig_Spillover}"
+                              Content="{localization:Loc Rig_Spillover}" />
+
+                    <StackPanel Grid.Column="4" x:Name="RigBrowserActions"
+                                Orientation="Horizontal" VerticalAlignment="Center"
+                                Margin="{StaticResource FireGapLeftLg}"
+                                Spacing="{StaticResource FireSpaceSm}">
+                        <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                x:Name="RigBrowserToneMenu"
+                                IsVisible="{Binding CanOverwrite}"
+                                Content="···"
+                                ToolTip.Tip="{localization:Loc PresetBrowser_ToneActions}"
+                                AutomationProperties.Name="{localization:Loc PresetBrowser_ToneActions}">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuItem x:Name="RigBrowserOverwrite"
+                                              Header="{localization:Loc PresetBrowser_Overwrite}"
+                                              Command="{Binding OverwriteCommand}" />
+                                    <MenuItem x:Name="RigBrowserDelete"
+                                              Header="{localization:Loc PresetBrowser_Ctx_Delete}"
+                                              Command="{Binding DeleteCommand}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
+                                x:Name="RigBrowserSave"
+                                Command="{Binding BeginSaveAsNewCommand}"
+                                Content="{localization:Loc PresetBrowser_SaveAsNew}" />
+                    </StackPanel>
+
+                    <!-- The designer's door: pressed while the column is open.
+                         Only drawn when the host built a designer at all. -->
+                    <ToggleButton Grid.Column="5" x:Name="RigToneDesignToggle" Theme="{StaticResource FireGhostToggle}" Classes="FireGhost Compact"
+                                  VerticalAlignment="Center"
+                                  Margin="{StaticResource FireGapLeftMd}"
+                                  IsVisible="{Binding Designer, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                  IsChecked="{Binding Designer.IsExpanded, Mode=TwoWay, FallbackValue=False}"
+                                  ToolTip.Tip="{localization:Loc ToneDesign_Toggle_Tip}"
+                                  AutomationProperties.Name="{localization:Loc ToneDesign_Toggle}">
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                            <PathIcon Width="14" Height="14" Data="{DynamicResource IconSparkles}" />
+                            <TextBlock VerticalAlignment="Center" Text="{localization:Loc ToneDesign_Toggle}" />
+                        </StackPanel>
+                    </ToggleButton>
+
+                    <!-- The DataContext here is the BROWSER, but the open flag
+                         lives on the pedalboard, which is where the header's
+                         preset pill toggles it too. -->
+                    <Button Grid.Column="6" Theme="{StaticResource FireOverlayCloseButton}" Classes="FireOverlayClose"
+                            x:Name="RigBrowserClose"
+                            VerticalAlignment="Center"
+                            Margin="{StaticResource FireGapLeftMd}"
+                            Command="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.ToggleBrowserCommand}"
+                            Content="✕"
+                            ToolTip.Tip="{localization:Loc Action_Close}"
+                            AutomationProperties.Name="{localization:Loc Action_Close}" />
+                </Grid>
+
+                <!-- ── THE BODY: sidebar │ grid │ designer ────────────────── -->
+                <Grid Grid.Row="1" x:Name="RigTonesColumns" ColumnDefinitions="*,Auto">
+                    <Border Grid.Column="0" x:Name="RigTonesBody">
+                        <Grid x:Name="RigBrowserBody" ColumnDefinitions="Auto,*">
+
+                            <!-- THE SIDEBAR: a fixed column. The category rail is
+                                 its first section; a setlist list goes UNDER it,
+                                 as a second section of the same width. -->
+                            <StackPanel Grid.Column="0" x:Name="RigTonesSidebar"
+                                        Width="{DynamicResource FireRigToneSidebarWidth}"
+                                        Spacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                           Margin="{StaticResource FireGapLeftMd}"
+                                           Text="{localization:Loc PresetBrowser_CategoryLabel}" />
+                                <!-- A ListBox, not toggle buttons: the rail IS a
+                                     single selection over `SelectedRail`, and a
+                                     ListBox gets arrow-key navigation for free.
+                                     NON-VIRTUALIZED and both bars Disabled: a
+                                     VirtualizingStackPanel in a scroller that
+                                     cannot scroll realizes what fits a viewport
+                                     that never grows, and silently dropped rows. -->
+                                <ListBox x:Name="RigBrowserRail"
+                                         Classes="FireList DenseRows ToneRail"
+                                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ItemsSource="{Binding Rail}"
+                                         SelectedItem="{Binding SelectedRail}"
+                                         AutomationProperties.Name="{localization:Loc PresetBrowser_CategoryLabel}">
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel />
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:PresetRailRow">
+                                            <!-- The Border is load-bearing: every
+                                                 `ListBox.FireList` hover/selection
+                                                 setter targets a descendant
+                                                 `Border.FireListRow`. -->
+                                            <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow"
+                                                    Classes.FireToneRailEmpty="{Binding IsEmpty}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding Label}" />
+                                                    <TextBlock Grid.Column="1" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                                               VerticalAlignment="Center"
+                                                               Margin="{StaticResource FireGapLeftSm}"
+                                                               Text="{Binding CountText}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+
+                            <!-- THE GRID: the library's one scroller. The bar
+                                 stays up (an auto-hidden bar is how a cut grid
+                                 once read as the end of the list). -->
+                            <ScrollViewer Grid.Column="1" x:Name="RigTonesScroll"
+                                          Margin="{StaticResource FireGapLeftLg}"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Visible"
+                                          AllowAutoHide="False">
+                                <Panel Margin="{StaticResource FireGapRightMd}">
+                                    <!-- THE SETLISTS (the rail's "Setlists" row): its own
+                                         view, Views/PlayMode/RigSetlistPanel, over the
+                                         browser. It takes the grid's place the way the
+                                         capture panel does, so it gets the grid's width. -->
+                                    <views:RigSetlistPanel x:Name="RigSetlists" VerticalAlignment="Top"
+                                                           IsVisible="{Binding IsSetlistsSelected}" />
+                                    <Panel x:Name="RigBrowserCardHost"
+                                           VerticalAlignment="Top"
+                                           IsVisible="{Binding ShowCards}">
+                                        <!-- NOT virtualized (owner: a virtualized grid lags on
+                                             scroll). ChunkedWrapPanel is a WrapPanel that, while
+                                             hidden, lets the startup prewarm lay the cards out a
+                                             chunk per dispatcher turn instead of all in one (#253). -->
+                                        <ItemsControl x:Name="RigBrowserCards" ItemsSource="{Binding Cards}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <controls:ChunkedWrapPanel Orientation="Horizontal" ChunkSize="3" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:PresetCardViewModel">
+                                                    <!-- A CARD is three things (owner, 2026-09-27: "way
+                                                         too much text for each tone"): the NAME, one quiet
+                                                         line saying what it is (category, Mine, Edited),
+                                                         and the chain as colour bars. The description and
+                                                         the chain spelled out are the card's tooltip. -->
+                                                    <Button AutomationProperties.Name="{Binding Name}" Theme="{StaticResource FirePresetCardButton}" Classes="FirePresetCard"
+                                                            Classes.Record="{Binding IsSelected}"
+                                                            Width="{DynamicResource FireRigToneCardWidth}"
+                                                            MinHeight="{DynamicResource FireRigToneCardMinHeight}"
+                                                            Margin="{StaticResource FireGapTag}"
+                                                            Command="{Binding $parent[ItemsControl].((vm:PresetBrowserViewModel)DataContext).ApplyCardCommand}"
+                                                            CommandParameter="{Binding}">
+                                                        <ToolTip.Tip>
+                                                            <StackPanel Spacing="{StaticResource FireSpaceXs}" MaxWidth="320">
+                                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong" TextWrapping="Wrap" Text="{Binding Name}" />
+                                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap"
+                                                                           IsVisible="{Binding HasDescription}"
+                                                                           Text="{Binding Description}" />
+                                                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" TextWrapping="Wrap"
+                                                                           Text="{Binding ChainSummary}" />
+                                                            </StackPanel>
+                                                        </ToolTip.Tip>
+                                                        <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                                            <TextBlock x:Name="RigToneCardName"
+                                                                       Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong"
+                                                                       MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                                       Text="{Binding Name}" />
+                                                            <StackPanel Orientation="Horizontal"
+                                                                        Spacing="{StaticResource FireSpaceXs}">
+                                                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" VerticalAlignment="Center"
+                                                                           Text="{Binding CategoryLabel}" />
+                                                                <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent" VerticalAlignment="Center"
+                                                                        IsVisible="{Binding IsUser}">
+                                                                    <TextBlock Text="{localization:Loc PresetBrowser_BadgeUser}" />
+                                                                </Border>
+                                                                <!-- EDITED: this card is the tone on
+                                                                     the rig and the rig has moved
+                                                                     since — the header's badge, said
+                                                                     on the card it is about. -->
+                                                                <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Warn" VerticalAlignment="Center">
+                                                                    <Border.IsVisible>
+                                                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                                            <Binding Path="IsActive" />
+                                                                            <Binding Path="$parent[UserControl].((vm:AmpFxRigViewModel)DataContext).IsEdited" />
+                                                                        </MultiBinding>
+                                                                    </Border.IsVisible>
+                                                                    <TextBlock Text="{localization:Loc Rig_Edited}" />
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <!-- the chain, as colour: one bar a unit -->
+                                                            <ItemsControl ItemsSource="{Binding ModuleGlyphs}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <StackPanel Orientation="Horizontal"
+                                                                                    Spacing="{StaticResource FireSpaceXxs}" />
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:PresetModuleGlyph">
+                                                                        <Border Theme="{StaticResource FireToneCardStepBorder}" Classes="FireToneCardStep"
+                                                                                Background="{Binding TokenKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Panel>
+
+                                    <!-- EMPTY: says WHY — the search, an empty My
+                                         Tones, or nothing in this slice — and a
+                                         search that matched nothing can be cleared
+                                         from here. -->
+                                    <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="RigBrowserEmpty" Classes="FireEmptyState"
+                                                IsVisible="{Binding ShowNoCards}">
+                                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong" HorizontalAlignment="Center"
+                                                   TextAlignment="Center"
+                                                   Text="{Binding EmptyText}" />
+                                        <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" HorizontalAlignment="Center"
+                                                IsVisible="{Binding IsSearching}"
+                                                Command="{Binding ClearSearchCommand}"
+                                                Content="{localization:Loc PresetBrowser_ClearSearch}" />
+                                    </StackPanel>
+
+                                    <Panel IsVisible="{Binding IsNamCapturesSelected}">
+                                        <Grid RowDefinitions="Auto,Auto,*,Auto"
+                                              DataContext="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.Browser.NamBrowser}"
+                                              x:DataType="vm:NamCaptureBrowserViewModel">
+
+                                            <!-- Online/Library · search · gear · architecture · sign-in -->
+                                            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto"
+                                                  ColumnSpacing="{StaticResource FireSpaceSm}"
+                                                  Margin="{DynamicResource FireGapBottomSm}">
+                                                <Border Grid.Column="0" Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <ToggleButton Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem Dense"
+                                                                      x:Name="NamOnlineTab"
+                                                                      IsChecked="{Binding IsOnlineView, Mode=OneWay}"
+                                                                      Command="{Binding ShowOnlineCommand}">
+                                                            <TextBlock Text="{localization:Loc Nam_OnlineTab}" />
+                                                        </ToggleButton>
+                                                        <ToggleButton Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem Dense"
+                                                                      x:Name="NamLibraryTab"
+                                                                      IsChecked="{Binding IsLibraryView, Mode=OneWay}"
+                                                                      Command="{Binding ShowLibraryCommand}">
+                                                            <TextBlock Text="{localization:Loc Nam_LibraryTab}" />
+                                                        </ToggleButton>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <Border Grid.Column="1" Theme="{StaticResource FireFieldBorder}" Classes="FireField"
+                                                        VerticalAlignment="Center">
+                                                    <!-- PlaceholderText is not a name: it is gone the
+                                                         moment there is any text in the box. -->
+                                                    <TextBox Classes="FireFieldInput"
+                                                             x:Name="NamSearchBox" MinWidth="140"
+                                                             Text="{Binding SearchText, Mode=TwoWay}"
+                                                             AutomationProperties.Name="{localization:Loc Nam_SearchPlaceholder}"
+                                                             PlaceholderText="{localization:Loc Nam_SearchPlaceholder}">
+                                                        <TextBox.KeyBindings>
+                                                            <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                                                        </TextBox.KeyBindings>
+                                                    </TextBox>
+                                                </Border>
+
+                                                <ComboBox Grid.Column="2" Classes="FireCombo" MinWidth="120"
+                                                          VerticalAlignment="Center"
+                                                          AutomationProperties.Name="{localization:Loc Nam_GearFilter}"
+                                                          ToolTip.Tip="{localization:Loc Nam_GearFilter}"
+                                                          ItemsSource="{Binding GearOptions}"
+                                                          SelectedItem="{Binding SelectedGear, Mode=TwoWay}" />
+
+                                                <!-- TONE3000 has NO "all" architecture: omitting it returns
+                                                     A1 + Custom and hides every A2-only capture, so A2 is
+                                                     only reachable by asking. Online view only — the local
+                                                     library has no architecture. -->
+                                                <ComboBox Grid.Column="3" Classes="FireCombo" MinWidth="110"
+                                                          VerticalAlignment="Center"
+                                                          IsVisible="{Binding IsOnlineView}"
+                                                          AutomationProperties.Name="{localization:Loc Nam_Architecture}"
+                                                          ToolTip.Tip="{Binding ArchitectureHint}"
+                                                          ItemsSource="{Binding ArchitectureOptions}"
+                                                          SelectedItem="{Binding SelectedArchitecture, Mode=TwoWay}" />
+
+                                                <Button Grid.Column="4" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary"
+                                                        x:Name="NamSearchButton"
+                                                        Content="{localization:Loc Nam_Search}"
+                                                        Command="{Binding SearchCommand}"
+                                                        IsVisible="{Binding IsOnlineView}" />
+
+                                                <StackPanel Grid.Column="5" Orientation="Horizontal"
+                                                            Spacing="{StaticResource FireSpaceSm}"
+                                                            VerticalAlignment="Center">
+                                                    <!-- 160 px held "Signed in as " and about four
+                                                         characters of the name — in English; the German
+                                                         prefix is longer still. This is the only place
+                                                         the app says WHO is signed in, so it gets room
+                                                         and trims only past a real handle. -->
+                                                    <TextBlock x:Name="NamSignedInLabel" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                               Text="{Binding SignedInLabel}"
+                                                               IsVisible="{Binding IsSignedIn}"
+                                                               MaxWidth="320" TextTrimming="CharacterEllipsis" />
+                                                    <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                            Content="{localization:Loc Nam_SignIn}"
+                                                            Command="{Binding SignInCommand}"
+                                                            IsVisible="{Binding IsSignedOut}"
+                                                            IsEnabled="{Binding IsConfigured}" />
+                                                    <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                            Content="{localization:Loc Nam_SignOut}"
+                                                            Command="{Binding SignOutCommand}"
+                                                            IsVisible="{Binding IsSignedIn}" />
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- Hints: client id, the 48 kHz policy, last status -->
+                                            <StackPanel Grid.Row="1" Spacing="{StaticResource FireSpaceXxs}">
+                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                           Text="{localization:Loc Nam_NotConfigured}"
+                                                           IsVisible="{Binding IsNotConfigured}"
+                                                           TextWrapping="Wrap" />
+                                                <!-- Setup right where the user hits the wall, so nobody
+                                                     has to go and edit appconfig.json. -->
+                                                <Grid IsVisible="{Binding IsNotConfigured}"
+                                                      ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="{StaticResource FireSpaceXs}">
+                                                    <Border Grid.Column="0" Theme="{StaticResource FireFieldBorder}" Classes="FireField"
+                                                            VerticalAlignment="Center">
+                                                        <TextBox Classes="FireFieldInput" MinWidth="140"
+                                                                 x:Name="NamClientIdBox"
+                                                                 Text="{Binding ClientIdEntry, Mode=TwoWay}"
+                                                                 AutomationProperties.Name="{localization:Loc Tone3000_ClientIdLabel}"
+                                                                 PlaceholderText="{localization:Loc Tone3000_ClientIdLabel}" />
+                                                    </Border>
+                                                    <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                            Content="{localization:Loc Tone3000_SaveClientId}"
+                                                            Command="{Binding SaveClientIdCommand}" />
+                                                </Grid>
+                                                <!-- Captures are 48 kHz-native and dry-bypass at other rates. -->
+                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                           Text="{localization:Loc Nam_RateHint}"
+                                                           TextWrapping="Wrap" />
+                                                <!-- What the current architecture EXCLUDES — the whole
+                                                     reason A2 captures looked absent. It was a ToolTip on
+                                                     the picker and nothing else, i.e. reachable only by
+                                                     hovering, which is the one gesture a keyboard or
+                                                     screen-reader user does not have. -->
+                                                <TextBlock x:Name="NamArchitectureHint" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                           Text="{Binding ArchitectureHint}"
+                                                           IsVisible="{Binding IsOnlineView}"
+                                                           TextWrapping="Wrap" />
+                                                <!-- Why "Load into rig" is greyed. Same reason, same
+                                                     predicate — it used to exist ONLY as a tooltip on a
+                                                     Border wrapped round the disabled button. -->
+                                                <TextBlock x:Name="NamLoadDisabledHint" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                           Text="{localization:Loc Nam_LoadDisabledHint}"
+                                                           IsVisible="{Binding !CanLoadIntoRig}"
+                                                           TextWrapping="Wrap" />
+                                                <!-- A network search has a busy state now. It had none:
+                                                     the primary stayed live-looking and every further
+                                                     click was swallowed by `if (IsSearching) return;`. -->
+                                                <TextBlock x:Name="NamSearchingHint" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                           Text="{localization:Loc Nam_Searching}"
+                                                           IsVisible="{Binding IsSearching}"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                           Text="{Binding StatusMessage}"
+                                                           IsVisible="{Binding HasStatus}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+
+                                            <!-- Online results -->
+                                            <Grid Grid.Row="2" IsVisible="{Binding IsOnlineView}">
+                                                <!-- Search needs a sign-in: the live API rejects anonymous
+                                                     requests, so this is a CTA rather than an error row.
+                                                     The pending query re-runs after a successful sign-in. -->
+                                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Classes="FireEmptyState"
+                                                            IsVisible="{Binding ShowSignInCta}">
+                                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                               Text="{localization:Loc Nam_SignInCta}"
+                                                               MaxWidth="320" TextWrapping="Wrap"
+                                                               TextAlignment="Center" />
+                                                    <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary"
+                                                            x:Name="NamSignInCta"
+                                                            HorizontalAlignment="Center"
+                                                            Content="{localization:Loc Nam_SignIn}"
+                                                            Command="{Binding SignInCommand}" />
+                                                </StackPanel>
+
+                                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Classes="FireEmptyState"
+                                                            IsVisible="{Binding ShowOnlineEmpty}">
+                                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                               Text="{localization:Loc Nam_OnlineEmpty}"
+                                                               TextWrapping="Wrap" TextAlignment="Center" />
+                                                </StackPanel>
+
+                                                <!-- NOT A SCROLL REGION (W4). It was one inside the
+                                                     drawer's card scroller and it is one inside the
+                                                     Tones mode's RigTonesScroll, and either way the
+                                                     wheel lands on whichever the pointer is over
+                                                     while the outer extent lies about the content.
+                                                     A page of TONE3000 results grows and the mode's
+                                                     one scroller carries it. -->
+                                                <Panel IsVisible="{Binding HasResults}" VerticalAlignment="Top">
+                                                    <ItemsControl x:Name="NamResultList" ItemsSource="{Binding Results}"
+                                                                  ItemTemplate="{StaticResource RigNamToneRowTemplate}" />
+                                                </Panel>
+                                            </Grid>
+
+                                            <!-- Local library -->
+                                            <Grid Grid.Row="2" IsVisible="{Binding IsLibraryView}">
+                                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Classes="FireEmptyState"
+                                                            IsVisible="{Binding !HasLibraryRows}">
+                                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                               Text="{localization:Loc Nam_LibraryEmpty}"
+                                                               TextWrapping="Wrap" TextAlignment="Center" />
+                                                </StackPanel>
+                                                <!-- …and the local library list, same rule. -->
+                                                <Panel IsVisible="{Binding HasLibraryRows}" VerticalAlignment="Top">
+                                                    <ItemsControl x:Name="NamLibraryList" ItemsSource="{Binding LibraryRows}"
+                                                                  ItemTemplate="{StaticResource RigNamLibraryRowTemplate}" />
+                                                </Panel>
+                                            </Grid>
+
+                                            <!-- TONE3000 API terms: "Powered by TONE3000", linked. -->
+                                            <views:Tone3000CreditView Grid.Row="3" Margin="{StaticResource FireGapTopSm}" />
+                                        </Grid>
+                                    </Panel>
+                                </Panel>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <!-- ── THE DESIGNER ─────────────────────────────────────
+                         The host's design panel (DotCharter's ToneDesignPanel or
+                         RigLab's ToneDesignCorePanel, through the host's
+                         DataTemplate), a column at the breakpointed
+                         FireRigToneDesignerWidth — never a literal: a fixed
+                         pixel column is a different share of every screen — and
+                         never MORE than the library can spare: the code-behind
+                         narrows it (RigTonesSizing.DesignerWidth) on a small
+                         window so the grid keeps room for a whole card. It is
+                         laid out only while open, and the head's toggle is its
+                         door. -->
+                    <ContentControl Grid.Column="1"
+                                    x:Name="RigToneDesignPanel"
+                                    Width="{DynamicResource FireRigToneDesignerWidth}"
+                                    Margin="{StaticResource FireGapLeftLg}"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    IsVisible="{Binding Designer.IsExpanded, FallbackValue=False}"
+                                    Content="{Binding ToneDesign}" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

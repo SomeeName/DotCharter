@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:dialogVms="clr-namespace:DotCharter.UI.ViewModels.Dialogs;assembly=DotCharter">
+    <!-- ONE history row, shared by the Undo and Redo popovers.
+
+         `Play Menus.dc.html` draws it as: a 6 px dot (glowing on the CURRENT
+         step), the action, the step in mono, and a 52 px right-aligned mono
+         stamp. Declared once because two hand-written copies of a four-cell row
+         is exactly how the two lists drift apart — and they DID, for six
+         releases, in the markup this replaces.
+
+         The lit state comes from `HistoryPreviewItem.IsCurrent`, carried on the
+         item. Deriving it in the markup would mean binding into the collection
+         by INDEX, which resolves against an empty list on every refresh (this
+         repo's own rule, linted by `UI/IssueDotSeverityTests`). -->
+    <DataTemplate x:Key="FirePopoverHistoryRow" x:DataType="dialogVms:HistoryPreviewItem">
+        <Button AutomationProperties.Name="{Binding Description}" Theme="{StaticResource FirePopoverHistoryRowButton}" Classes="FirePopoverHistoryRow" Classes.Current="{Binding IsCurrent}">
+            <Grid ColumnDefinitions="Auto,*,Auto,52"
+                  ColumnSpacing="{StaticResource FireSpaceMd}">
+                <!-- The glow is on the BORDER: Avalonia puts `BoxShadow` on a
+                     Border and AVLN2000s on anything else, so the dot is an
+                     Ellipse inside one. -->
+                <Border Grid.Column="0" Classes="FirePopoverDotGlow"
+                        Width="{StaticResource FireDotSize}"
+                        Height="{StaticResource FireDotSize}"
+                        CornerRadius="{StaticResource FireRadiusPill}"
+                        VerticalAlignment="Center">
+                    <Ellipse Classes="FirePopoverDot" />
+                </Border>
+                <TextBlock Grid.Column="1" Classes="FirePopoverHistoryName"
+                           Text="{Binding Description}" />
+                <TextBlock Grid.Column="2" Theme="{StaticResource FirePopoverStepText}" Classes="FirePopoverStep"
+                           Text="{Binding Step, StringFormat=#\{0\}}" />
+                <TextBlock Grid.Column="3" Theme="{StaticResource FirePopoverStampText}" Classes="FirePopoverStamp"
+                           Text="{Binding Time}" />
+            </Grid>
+        </Button>
+    </DataTemplate>
+</ResourceDictionary>

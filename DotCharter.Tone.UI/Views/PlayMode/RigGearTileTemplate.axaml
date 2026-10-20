@@ -1,0 +1,43 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+                    xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+                    xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI">
+    <!-- ONE gear tile of the browser grid (RigGearItem): the gear's own faceplate
+         (a non-interactive preview, every knob at its default) on a dark plate,
+         the IN RIG mark, the star and the + over its corners, the name under it. -->
+    <DataTemplate x:Key="RigGearTileTemplate" x:DataType="vm:RigGearItem">
+        <Button Theme="{StaticResource FireGearTileButton}" Classes="FireGearTile" Classes.selected="{Binding IsSelected}"
+                fire:FireUnitState.Category="{Binding Category}"
+                AutomationProperties.Name="{Binding DisplayName}"
+                ToolTip.Tip="{Binding SubLabel}"
+                Command="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).SelectGearCommand}"
+                CommandParameter="{Binding}">
+            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                <Panel Classes="FireGearTileArt">
+                    <fire:RigFaceplateView IsInteractive="False" DecodeWidth="240"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           ModuleTypeId="{Binding Card.ModuleTypeId}" />
+                    <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Success FireGearTileBadge" IsVisible="{Binding IsInRig}">
+                        <TextBlock Text="{localization:Loc Rig_InRig}" />
+                    </Border>
+                    <ToggleButton Theme="{StaticResource FireGearStarToggle}" Classes="FireGearStar FireGearTileStar"
+                                  IsChecked="{Binding IsFavorite, Mode=OneWay}"
+                                  Command="{Binding ToggleFavoriteCommand}"
+                                  CommandParameter="{Binding ModuleTypeId}"
+                                  Content="★"
+                                  ToolTip.Tip="{localization:Loc Rig_Gear_ToggleFavorite}"
+                                  AutomationProperties.Name="{localization:Loc Rig_Gear_ToggleFavorite}" />
+                    <Button Theme="{StaticResource FireGearAddButton}" Classes="FireGearAdd FireGearTileAdd"
+                            IsVisible="{Binding CanAdd}"
+                            Command="{Binding AddCommand}"
+                            CommandParameter="{Binding}"
+                            Content="+"
+                            ToolTip.Tip="{localization:Loc Rig_Gear_AddToRig}"
+                            AutomationProperties.Name="{localization:Loc Rig_Gear_AddToRig}" />
+                </Panel>
+                <TextBlock Theme="{StaticResource FireGearTileNameText}" Classes="FireGearTileName" Text="{Binding DisplayName}" />
+            </StackPanel>
+        </Button>
+    </DataTemplate>
+</ResourceDictionary>

@@ -1,0 +1,418 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. Sections: Status pill, Marks (tags / badges / chips), Meters. -->
+
+    <Styles.Resources>
+        <!-- Border families are ControlThemes (#240): a Border wears
+             Theme="{StaticResource <Family>Border}" AND its class, and every
+             rule here is gated on that class. UI/BorderControlThemeTests. -->
+        <ControlTheme x:Key="FireStatusPillBorder" TargetType="Border">
+            <!-- ══ Status pill ═════════════════════════════════════════════════════
+                 A glowing dot beside mono caps text, both in the state colour, on a
+                 faint tint with a matching border. The rail floor's latency readout,
+                 the top bar's GUITAR CONNECTED / DAY STREAK, "TUNE TO DROP D". -->
+            <Style Selector="^.FireStatusPill">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPill}" />
+                <!-- The spec floors a chip at 30 px so a row of them sits on one line
+                     whatever their captions are; without it a one-word chip shrank to
+                     its text and a strip of chips came out ragged. -->
+                <Setter Property="MinHeight" Value="{StaticResource FireChipHeight}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.FireStatusPill.Success">
+                <Setter Property="Background" Value="{DynamicResource FireSuccessTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireSuccessBorder}" />
+            </Style>
+            <Style Selector="^.FireStatusPill.Warn">
+                <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+            </Style>
+            <Style Selector="^.FireStatusPill.Danger">
+                <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+            </Style>
+            <Style Selector="^.FireStatusPill.Accent">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+            </Style>
+            <!-- Bare = no chrome, just dot + text (the top bar's inline readouts). -->
+            <Style Selector="^.FireStatusPill.Bare">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+            </Style>
+            <!-- From FireRigStage.axaml (#242): the rig's own rule on this family, last so it
+                 still wins as the global rule did. -->
+            <!-- the map caption's transient chips (insert point, undo): a pill, one line high -->
+            <Style Selector="^.FireStatusPill.FireMapChip">
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Height" Value="28" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireDotBorder" TargetType="Border">
+            <Style Selector="^.FireDot">
+                <Setter Property="Width" Value="{StaticResource FireDotSize}" />
+                <Setter Property="Height" Value="{StaticResource FireDotSize}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccent}" />
+            </Style>
+            <Style Selector="^.FireDot.Success">
+                <Setter Property="Background" Value="{DynamicResource FireSuccess}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowSuccess}" />
+            </Style>
+            <Style Selector="^.FireDot.Warn">
+                <Setter Property="Background" Value="{DynamicResource FireWarning}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowWarning}" />
+            </Style>
+            <Style Selector="^.FireDot.Danger">
+                <Setter Property="Background" Value="{DynamicResource FireDanger}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowDanger}" />
+            </Style>
+            <!-- The legend dot for a NON-judgement (the timing meter's untimed hits):
+                 no glow, because the glow is what makes the others read as signals. -->
+            <Style Selector="^.FireDot.Neutral">
+                <Setter Property="Background" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="BoxShadow" Value="none" />
+            </Style>
+            <Style Selector="^.FireDot.Small">
+                <Setter Property="Width" Value="{StaticResource FireDotSizeSm}" />
+                <Setter Property="Height" Value="{StaticResource FireDotSizeSm}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireTagBorder" TargetType="Border">
+            <!-- A category tag on a row (WARMUP / REPERTOIRE / TECHNIQUE), a tuning
+                 label, an arrangement letter. Outline by default. -->
+            <Style Selector="^.FireTag">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.FireTag.Accent">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+            </Style>
+            <Style Selector="^.FireTag.Warn">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+            </Style>
+            <Style Selector="^.FireTag.Danger">
+                <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+            </Style>
+            <!-- The single-LETTER tag: the song list's `L R B V` arrangement chips.
+                 A fixed square, because these repeat down a 2,000-row list and letters
+                 have different advance widths — `I` and `W` would otherwise make every
+                 row's chip cluster a different length and the columns to their right
+                 would stop lining up. Padding is dropped in favour of the fixed box so
+                 the glyph centres in it. -->
+            <Style Selector="^.FireTag.Square">
+                <Setter Property="Width" Value="{StaticResource FireTagSquareSize}" />
+                <Setter Property="Height" Value="{StaticResource FireTagSquareSize}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+            </Style>
+            <!-- The one FILLED tag: "NOW". Accent ground, ink text, lit. -->
+            <Style Selector="^.FireTag.Now">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccentSoft}" />
+            </Style>
+            <!-- From FireRigUnitsAndGear.axaml (#242): the rig's own rule on this family, last so it
+                 still wins as the global rule did. -->
+            <!-- "IN RIG" is a SUCCESS tag: it says the thing you wanted is already
+                 there. The neutral tag it wore read as a disabled marker. -->
+            <Style Selector="^.FireTag.Success">
+                <Setter Property="Background" Value="{DynamicResource FireSuccessTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireSuccessBorder}" />
+            </Style>
+            <!-- From FireRigStage.axaml (#242): the rig's own rule on this family, last so it
+                 still wins as the global rule did. -->
+            <Style Selector="^.FireGearTileBadge">
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+                <Setter Property="Margin" Value="2" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireBadgeBorder" TargetType="Border">
+            <!-- A count badge on a nav row. -->
+            <Style Selector="^.FireBadge">
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadBadge}" />
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireGradeBadgeBorder" TargetType="Border">
+            <!-- The grade medal: a big Chakra letter in a tinted square. Session
+                 History draws it at 64 px beside the run's figures; Song Library at 44
+                 beside the best score. Neutral by default — the LETTER is the
+                 information, so the tint only turns amber/red when the run says so. -->
+            <Style Selector="^.FireGradeBadge">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceRaised}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPanel}" />
+                <Setter Property="Width" Value="64" />
+                <Setter Property="Height" Value="64" />
+            </Style>
+            <Style Selector="^.FireGradeBadge.Small">
+                <Setter Property="Width" Value="44" />
+                <Setter Property="Height" Value="44" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+            </Style>
+            <!-- In a list row: the LETTER alone, no box (a bordered medal on every row outweighed
+                 the song titles, screenshot review 2026-09-24), and no taller than the row's cover
+                 tile, so a played song's row is the same height as an unplayed one. -->
+            <Style Selector="^.FireGradeBadge.Row">
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMedalBorder" TargetType="Border">
+            <!-- A rank medal disc (LAN Scoreboard's podium). The board ROWS use
+                 `Border.FireBadge`-sized rank text; a podium card carries the place as
+                 a filled disc, and the three places are three different metals — which
+                 is the one place in these mockups where colour is not the accent hue.
+                 Sized by the caller (the winner's disc is larger than the runners'). -->
+            <Style Selector="^.FireMedal">
+                <Setter Property="Width" Value="30" />
+                <Setter Property="Height" Value="30" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Background" Value="{DynamicResource FireMedalSilverFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireMedalSilverBorder}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.FireMedal.Gold">
+                <Setter Property="Width" Value="34" />
+                <Setter Property="Height" Value="34" />
+                <Setter Property="Background" Value="{DynamicResource FireWarning}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarning}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowWarning}" />
+            </Style>
+            <Style Selector="^.FireMedal.Bronze">
+                <Setter Property="Width" Value="28" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="Background" Value="{DynamicResource FireMedalBronzeFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireMedalBronzeBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireAvatarBorder" TargetType="Border">
+            <Style Selector="^.FireAvatar">
+                <Setter Property="Width" Value="26" />
+                <Setter Property="Height" Value="26" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="Background" Value="{DynamicResource FireAvatarFill}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMarkBorder" TargetType="Border">
+            <!-- The app mark is the SHIPPED ICON — `Assets/app-icon.png`, the amber
+                 guitar pick with a dark chart highway. Use the shared asset for the
+                 product identity. This Border is only the glow host; the transparent
+                 image carries the mark's silhouette. -->
+            <Style Selector="^.FireMark">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+                <!-- No glow: the mark used to sit in a violet halo (FireGlowMark),
+                     which read as a smeared icon on the dark top bar rather than a
+                     lit badge (owner, 2026-09-08). The PNG has its own badge shape. -->
+                <Setter Property="Width" Value="28" />
+                <Setter Property="Height" Value="28" />
+            </Style>
+            <!-- The mark is a 256 px PNG drawn at 28 px. Avalonia's default bitmap
+                 scaling samples one source pixel in nine at that ratio, which is the
+                 jagged edge the owner reported on the Play Mode header. RenderOptions
+                 cannot be set from a Style (AVLN2000), so every app-icon Image carries
+                 RenderOptions.BitmapInterpolationMode="HighQuality" inline;
+                 AppMarkRenderingTests lints that. -->
+            <Style Selector="^.FireMark.Hero">
+                <Setter Property="Width" Value="74" />
+                <Setter Property="Height" Value="74" />
+                <Setter Property="CornerRadius" Value="20" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireShadowPanel}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireColumnBorder" TargetType="Border">
+            <Style Selector="^.FireColumn">
+                <Setter Property="CornerRadius" Value="5,5,0,0" />
+                <Setter Property="Background" Value="{DynamicResource FireColumnFill}" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+            </Style>
+            <Style Selector="^.FireColumn.Success">
+                <Setter Property="Background" Value="{DynamicResource FireSuccess}" />
+            </Style>
+            <Style Selector="^.FireColumn.Danger">
+                <Setter Property="Background" Value="{DynamicResource FireDanger}" />
+            </Style>
+            <Style Selector="^.FireColumn.Mini">
+                <Setter Property="CornerRadius" Value="2" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireStatusText" TargetType="TextBlock">
+            <Style Selector="^.FireStatusText">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style Selector="^.FireStatusText.Success">
+                <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+            </Style>
+
+            <Style Selector="^.FireStatusText.Warn">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+
+            <Style Selector="^.FireStatusText.Danger">
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+
+            <Style Selector="^.FireStatusText.Accent">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- ══ Marks: tags, badges, chips ══════════════════════════════════════ -->
+
+    <Style Selector="Border.FireTag > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="Border.FireTag.Accent > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector="Border.FireTag.Warn > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="Border.FireTag.Danger > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+    </Style>
+    <Style Selector="Border.FireTag.Square > TextBlock">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="LetterSpacing" Value="0" />
+    </Style>
+
+    <Style Selector="Border.FireTag.Now > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccentInk}" />
+    </Style>
+
+    <Style Selector="Border.FireBadge > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccentInk}" />
+    </Style>
+
+    <Style Selector="Border.FireGradeBadge > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeStatLg}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.FireGradeBadge.Small > TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeStat}" />
+    </Style>
+    <Style Selector="Border.FireGradeBadge.Row > TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+    </Style>
+
+    <Style Selector="Border.FireMedal > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireMedalSilver}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.FireMedal.Gold > TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireMedalGoldInk}" />
+    </Style>
+    <Style Selector="Border.FireMedal.Bronze > TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireMedalBronze}" />
+    </Style>
+
+    <Style Selector="Border.FireAvatar > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ══ Meters ══════════════════════════════════════════════════════════ -->
+
+    <!-- A meter bound to a FRACTION.
+         A track-and-fill pair of Borders needs the fill's WIDTH in pixels, which is
+         what the mockups' inline `width:64%` compiles to — but every real meter
+         in this app is a `ProgressBar` bound to a 0-1 double (goal progress,
+         mastery, per-section accuracy, technique clean rate) and there is no
+         fraction→width converter. So the Fire meter is that same control
+         repainted: Fluent paints `PART_Indicator` with `Foreground`, which is
+         the whole retheme, and there is NO template override — so the PART
+         contract, indeterminate mode and the accessibility peer are untouched.
+         A screen binds the number that actually exists instead of inventing a
+         pixel width. -->
+    <Style Selector="ProgressBar.FireMeter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceTrack}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccent}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="MinHeight" Value="{StaticResource FireTrackHeight}" />
+        <Setter Property="Height" Value="{StaticResource FireTrackHeight}" />
+        <!-- Fluent's ProgressBar theme carries `MinWidth="200"`, and Avalonia
+             CLAMPS a measured width up to MinWidth. Every Fire meter lives in a
+             FIXED value column (80/90/110 px), so without this the bar simply
+             renders 200 px wide and draws straight over the figure beside it —
+             which is exactly how the Stats weak-spot rows shipped, with the
+             amber track running through "100 %". Same clamp that made the
+             arrangement dialog's 48 px tuning fields render at 64. -->
+        <Setter Property="MinWidth" Value="0" />
+    </Style>
+    <Style Selector="ProgressBar.FireMeter.Thin">
+        <Setter Property="MinHeight" Value="{StaticResource FireMeterHeight}" />
+        <Setter Property="Height" Value="{StaticResource FireMeterHeight}" />
+        <Setter Property="CornerRadius" Value="2" />
+    </Style>
+    <Style Selector="ProgressBar.FireMeter.Success">
+        <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+    </Style>
+    <Style Selector="ProgressBar.FireMeter.Warn">
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="ProgressBar.FireMeter.Danger">
+        <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+
+</Styles>

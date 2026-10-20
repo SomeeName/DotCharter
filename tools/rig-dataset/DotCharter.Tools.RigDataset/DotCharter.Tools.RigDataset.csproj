@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Tools.RigDataset</RootNamespace>
+        <AssemblyName>DotCharter.Tools.RigDataset</AssemblyName>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <SelfContained>false</SelfContained>
+        <!-- The renderer is a device-less JUCE engine: it needs juce_sharp.dll and
+             the VST host child next to the binary, which the JuceSharp reference
+             copies in. -->
+        <InvariantGlobalization>true</InvariantGlobalization>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\DotCharter.Services\DotCharter.Services.csproj" />
+        <ProjectReference Include="..\..\..\DotCharter.Tone\DotCharter.Tone.csproj" />
+    </ItemGroup>
+
+</Project>

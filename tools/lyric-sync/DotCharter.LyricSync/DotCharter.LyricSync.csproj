@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.LyricSync</RootNamespace>
+        <!-- The published command name. The PROJECT stays DotCharter.LyricSync so
+             the repo-root Directory.Build.props condition (project-name prefix)
+             still applies its zero-warning policy. -->
+        <AssemblyName>dotcharter-lyricsync</AssemblyName>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <SelfContained>false</SelfContained>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <Version>1.0.0</Version>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Layering: a tool may reference Services exactly the way the UI does.
+             AssemblyLayeringTests is a hand-written table over the five LIBRARY
+             assemblies and does not enumerate the solution, so nothing here is a
+             subject of it — the same position tools/rig-dataset is in. -->
+        <ProjectReference Include="..\..\..\DotCharter.Services\DotCharter.Services.csproj" />
+        <ProjectReference Include="..\..\..\DotCharter.Tone\DotCharter.Tone.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+    </ItemGroup>
+
+</Project>

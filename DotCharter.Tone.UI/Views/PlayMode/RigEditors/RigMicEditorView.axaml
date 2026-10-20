@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigMicEditorView"
+             x:DataType="vm:RigDockUnit">
+    <!-- The MIC family (the "Cab Mic Position" unit): its editor IS the placement,
+         at full size on the stage. One scroll region, resting visible, like every
+         family view (RigFooterStabilityUiPerfSmokeTests). -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False"
+                  HorizontalScrollBarVisibility="Disabled">
+        <views:RigMicPlacementView x:Name="RigMicPlacement" DataContext="{Binding MicPlacement}" MinHeight="440"
+                                   Height="{Binding #RigEditorScroll.Viewport.Height}" Padding="{StaticResource FirePadPanel}" />
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,171 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotCharter.UI.ViewModels.Application;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.ProfilePopoverView"
+             x:CompileBindings="True"
+             x:DataType="vm:StatusBarViewModel">
+    <!-- PROFILE — `Play Menus.dc.html`, `profile()`. 320 px.
+
+         Hosted TWICE: by the status rail's profile button and by the Play Mode
+         front door. It used to be a bare `DataTemplate`, which meant it could
+         only ever use marks BOTH hosts define; as a view it carries its own
+         identity, can be constructed by a test and can be rendered to a picture.
+         The `ProfileSwitcherFlyoutContent` template both hosts bind is now one
+         line pointing here. -->
+    <controls:FirePopover Width="320"
+                          Title="{localization:Loc Profile_Title}"
+                          Icon="{DynamicResource IconAccount}">
+        <StackPanel>
+            <!-- WHO AM I PLAYING AS — the list first, because every action below
+                 it acts on the one that is lit. -->
+            <ItemsControl ItemsSource="{Binding Profiles}"
+                          Margin="{StaticResource FirePadPopoverProfiles}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ProfileOption">
+                        <Button AutomationProperties.Name="{Binding Name}" Theme="{StaticResource FirePopoverProfileRowButton}" Classes="FirePopoverProfileRow"
+                                Classes.Current="{Binding IsActive}"
+                                Command="{Binding $parent[ItemsControl].((vm:StatusBarViewModel)DataContext).SwitchProfileCommand}"
+                                CommandParameter="{Binding}">
+                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceMd}">
+                                <!-- 26 px avatar inside a `rgba(255,255,255,.16)`
+                                     ring. The mockup fills it with a per-profile
+                                     gradient; this app has REAL avatars, so the
+                                     picture wins and the profile's accent is the
+                                     fallback. -->
+                                <Panel Grid.Column="0"
+                                       Width="{StaticResource FirePopoverAvatarSize}"
+                                       Height="{StaticResource FirePopoverAvatarSize}"
+                                       VerticalAlignment="Center">
+                                    <Ellipse Width="{StaticResource FirePopoverAvatarSize}"
+                                             Height="{StaticResource FirePopoverAvatarSize}"
+                                             Fill="{Binding Accent}"
+                                             IsVisible="{Binding !HasAvatar}" />
+                                    <Ellipse Width="{StaticResource FirePopoverAvatarSize}"
+                                             Height="{StaticResource FirePopoverAvatarSize}"
+                                             IsVisible="{Binding HasAvatar}">
+                                        <Ellipse.Fill>
+                                            <ImageBrush Source="{Binding Avatar}" Stretch="UniformToFill" />
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                    <Ellipse Width="{StaticResource FirePopoverAvatarSize}"
+                                             Height="{StaticResource FirePopoverAvatarSize}"
+                                             Stroke="{DynamicResource FirePopoverAvatarRing}"
+                                             StrokeThickness="1" />
+                                </Panel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                            Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Classes="FirePopoverProfileName" Text="{Binding Name}" />
+                                    <!-- The mono line under the name. It prints
+                                         what this app KNOWS (last used, lefty),
+                                         never the mockup's invented level. -->
+                                    <TextBlock Classes="FirePopoverProfileMeta"
+                                               Text="{Binding Detail}"
+                                               IsVisible="{Binding HasDetail}" />
+                                </StackPanel>
+                                <!-- DynamicResource on purpose: this view is
+                                     realized inside a popup's own namescope,
+                                     where a StaticResource in deferred template
+                                     content cannot see app-level resources. -->
+                                <PathIcon Grid.Column="2" Data="{DynamicResource IconCheck}"
+                                          Width="11" Height="11"
+                                          IsVisible="{Binding IsActive}"
+                                          Foreground="{DynamicResource FireAccentBright}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- THIS PROFILE — the mockup's 2 × 2 grid, and a UniformGrid is the
+                 right control here (unlike a row of three actions): both columns
+                 hold one word each, the four cells are the same shape by design,
+                 and the panel is 294 px wide, so "Umbenennen" and "Bild wählen…"
+                 both fit a 145 px cell. -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Profile_Eyebrow}" />
+                    <Grid ColumnDefinitions="*,6,Auto" IsVisible="{Binding IsRenamingProfile}">
+                        <TextBox Grid.Column="0" Classes="FirePopoverField"
+                                 AutomationProperties.Name="{localization:Loc Profile_Rename_Placeholder}"
+                                 Text="{Binding RenameProfileName, Mode=TwoWay}"
+                                 PlaceholderText="{localization:Loc Profile_Rename_Placeholder}">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding CommitRenameProfileCommand}" />
+                                <KeyBinding Gesture="Escape" Command="{Binding CancelRenameProfileCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Button Grid.Column="2" Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon"
+                                Command="{Binding CommitRenameProfileCommand}"
+                                AutomationProperties.Name="{localization:Loc Profile_Rename}"
+                                ToolTip.Tip="{localization:Loc Profile_Rename}">
+                            <PathIcon Data="{DynamicResource IconCheck}" />
+                        </Button>
+                    </Grid>
+                    <Grid IsVisible="{Binding !IsRenamingProfile}"
+                          ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="{StaticResource FirePopoverGapTight}"
+                          RowSpacing="{StaticResource FirePopoverGapTight}">
+                        <Button Grid.Row="0" Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Profile_Rename}"
+                                Command="{Binding BeginRenameProfileCommand}"
+                                ToolTip.Tip="{localization:Loc Profile_Rename_Tip}" />
+                        <Button Grid.Row="0" Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Profile_Picture}"
+                                Command="{Binding ChooseProfilePictureCommand}"
+                                ToolTip.Tip="{localization:Loc Profile_Picture_Tip}" />
+                        <Button Grid.Row="1" Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Profile_Export}"
+                                Command="{Binding ExportProfileCommand}"
+                                ToolTip.Tip="{localization:Loc Profile_Export_Tip}" />
+                        <Button Grid.Row="1" Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Profile_Import}"
+                                Command="{Binding ImportProfileCommand}"
+                                ToolTip.Tip="{localization:Loc Profile_Import_Tip}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- PLAY STYLE. A real 38 × 21 switch, not a chip: the mockup draws
+                 one, and lefty is the one setting in this panel that is a STATE
+                 rather than an action. Per-profile, and it mirrors the 3D
+                 highway and the 2D lanes live (SetLeftyFlip →
+                 ActiveProfileChanged → render-option re-stage). -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Profile_PlayStyle}" />
+                    <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto">
+                        <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                                   Text="{localization:Loc Profile_Lefty}" />
+                        <ToggleSwitch Grid.Column="1"
+                                      Theme="{DynamicResource FirePopoverSwitch}"
+                                      IsChecked="{Binding IsActiveLefty, Mode=TwoWay}"
+                                      ToolTip.Tip="{localization:Loc Profile_Lefty_Tip}"
+                                      AutomationProperties.Name="{localization:Loc Profile_Lefty}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Profile_Add_Eyebrow}" />
+                    <Grid ColumnDefinitions="*,6,Auto">
+                        <TextBox Grid.Column="0" Classes="FirePopoverField"
+                                 AutomationProperties.Name="{localization:Loc Profile_New_Placeholder}"
+                                 Text="{Binding NewProfileName, Mode=TwoWay}"
+                                 PlaceholderText="{localization:Loc Profile_New_Placeholder}" />
+                        <Button Grid.Column="2" Theme="{StaticResource FirePopoverPrimaryButton}" Classes="FirePopoverPrimary"
+                                Content="{localization:Loc Profile_Add}"
+                                Command="{Binding CreateProfileCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

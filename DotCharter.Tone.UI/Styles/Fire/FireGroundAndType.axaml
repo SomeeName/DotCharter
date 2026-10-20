@@ -1,0 +1,473 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. Sections: Regions, Type; the Border
+         families (ground, regions, surfaces) are the ControlThemes in its resources. -->
+
+    <Styles.Resources>
+        <!-- Border families are ControlThemes (#240): a Border wears
+             Theme="{StaticResource <Family>Border}" AND its class, and every
+             rule here is gated on that class. UI/BorderControlThemeTests. -->
+        <ControlTheme x:Key="FireGroundBorder" TargetType="Border">
+            <Style Selector="^.FireGround">
+                <Setter Property="Background" Value="{DynamicResource FireGround}" />
+            </Style>
+            <Style Selector="^.FireGround.Screen">
+                <Setter Property="Background" Value="{DynamicResource FireGroundScreen}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireWashBorder" TargetType="Border">
+            <!-- The purple wash, as its own hit-test-invisible layer over the ground so
+                 a screen can pick which one it wants without restating the fill. -->
+            <Style Selector="^.FireWash">
+                <Setter Property="Background" Value="{DynamicResource FireWashTop}" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
+            <Style Selector="^.FireWash.UpperLeft">
+                <Setter Property="Background" Value="{DynamicResource FireWashUpperLeft}" />
+            </Style>
+            <Style Selector="^.FireWash.StageKey">
+                <Setter Property="Background" Value="{DynamicResource FireWashStageKey}" />
+            </Style>
+            <Style Selector="^.FireWash.StageRim">
+                <Setter Property="Background" Value="{DynamicResource FireWashStageRim}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireBackdropClipBorder" TargetType="Border">
+            <!-- The animated note highway's clip: a transparent full-bleed pass-through
+                 behind every Play Mode screen. (Its `.HeroColumn` inset went with the
+                 Play Mode menu's sidebar layout, 2026-09-22.) -->
+            <Style Selector="^.FireBackdropClip">
+                <Setter Property="ClipToBounds" Value="True" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+                <Setter Property="Margin" Value="0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireScreenBorder" TargetType="Border">
+            <!-- A floating modal screen: the panel gradient, a 1 px edge, radius 18 and
+                 one very soft, very deep drop shadow. -->
+            <Style Selector="^.FireScreen">
+                <Setter Property="Background" Value="{DynamicResource FirePanelFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusScreen}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireShadowScreen}" />
+                <Setter Property="ClipToBounds" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireRailBorder" TargetType="Border">
+            <!-- The narrow left rail of a modal screen: sunken, seamed on the right. -->
+            <Style Selector="^.FireRail">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,0,1,0" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRail}" />
+            </Style>
+            <!-- The front door's wider nav: a barely-there wash rather than a sink. -->
+            <Style Selector="^.FireRail.Wide">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceNav}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderHair}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRailWide}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireContextRailBorder" TargetType="Border">
+            <!-- A right-hand context rail (Song Library's song detail, the front door's
+                 session queue): lit from the top, seamed on the left. -->
+            <Style Selector="^.FireContextRail">
+                <Setter Property="Background" Value="{DynamicResource FireRailFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderHair}" />
+                <Setter Property="BorderThickness" Value="1,0,0,0" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPanel}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireHeaderBorder" TargetType="Border">
+            <Style Selector="^.FireHeader">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,0,0,1" />
+                <Setter Property="Padding" Value="{StaticResource FirePadHeader}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireFooterBorder" TargetType="Border">
+            <Style Selector="^.FireFooter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceFooter}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                <Setter Property="Padding" Value="{StaticResource FirePadFooter}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMenuBarBorder" TargetType="Border">
+            <!-- ── The CHART EDITOR's three chrome rails ────────────────────────────
+                 From `Editor Project Settings.dc.html` / `Rocksmith Song Browser.dc.html`.
+                 They are NOT `FireTopBar`/`FireFooter` at different heights: the editor
+                 is the one screen where horizontal AND vertical space is the product,
+                 so its rails are 38 / 44 / 30 px and carry no vertical inset at all
+                 (the §6.8 rule — a bar that states its height centres its content).
+                 All three are declared here rather than inline in the three shell views
+                 so the menu bar, the tool rail and the status rail cannot drift. -->
+            <Style Selector="^.FireMenuBar">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,0,0,1" />
+                <Setter Property="Height" Value="{StaticResource FireMenuBarHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadMenuBar}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToolbarBorder" TargetType="Border">
+            <!-- The tool rail below it. Seamed top AND bottom, because it is a slab
+                 between the menu bar and the timeline rather than an edge of either. -->
+            <Style Selector="^.FireToolbar">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,0,0,1" />
+                <Setter Property="Padding" Value="{StaticResource FirePadMenuBar}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireStatusBarBorder" TargetType="Border">
+            <Style Selector="^.FireStatusBar">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                <Setter Property="Height" Value="{StaticResource FireStatusBarHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadStatusBar}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireRuleBorder" TargetType="Border">
+            <!-- A 1 px hairline between sections. Height/width come from the layout. -->
+            <Style Selector="^.FireRule">
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Background" Value="{DynamicResource FireBorderSeam}" />
+            </Style>
+            <Style Selector="^.FireRule.Vertical">
+                <Setter Property="Height" Value="NaN" />
+                <Setter Property="Width" Value="1" />
+                <Setter Property="Background" Value="{DynamicResource FireBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePanelBorder" TargetType="Border">
+            <Style Selector="^.FirePanel">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderHover}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPanel}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPanel}" />
+            </Style>
+            <!-- A PANEL that carries a state colour. `FireCard.Warn`/`.Accent` below are
+                 the card-scale version (radius 14, card padding); these two are the
+                 panel-scale one, because two of the mockups make a whole PANEL amber or
+                 red rather than a card inside it: Statistics' "weak spots · worth
+                 drilling" and Practice Trends' stalled-section list. Reaching for the
+                 card there gave the screen a state surface a size smaller than its
+                 neighbours, which reads as a nested box. -->
+            <Style Selector="^.FirePanel.Warn">
+                <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+            </Style>
+            <Style Selector="^.FirePanel.Danger">
+                <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireHeroPanelBorder" TargetType="Border">
+            <!-- The ONE panel a screen is about. Never a row of these. -->
+            <Style Selector="^.FireHeroPanel">
+                <Setter Property="Background" Value="{DynamicResource FireHeroFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPanel}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPanelLg}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireCardBorder" TargetType="Border">
+            <Style Selector="^.FireCard">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceRaised}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderHover}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCardLg}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+            </Style>
+            <!-- A card that carries a state colour (Statistics' "weak spots"). -->
+            <Style Selector="^.FireCard.Warn">
+                <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+            </Style>
+            <Style Selector="^.FireCard.Accent">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ Type ════════════════════════════════════════════════════════════
+             TextBlock families are ControlThemes too (#240): a TextBlock wears
+             Theme="{StaticResource <Family>Text}" AND its class, and every rule
+             here is gated on that class. UI/TextBlockToggleButtonControlThemeTests. -->
+
+        <!-- The eyebrow: mono, uppercase, widely tracked, dim. It is what turns a
+             title into a lockup, and it is the single most repeated mark in the
+             mockups — every screen, panel and section opens with one. -->
+        <ControlTheme x:Key="FireEyebrowText" TargetType="TextBlock">
+            <!-- Graphite: a label is words, so the UI face; mono is for figures,
+                 times and tunings (design-proposals/graphite.md § Type). -->
+            <Style Selector="^.FireEyebrow">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackEyebrow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+
+            <Style Selector="^.FireEyebrow.Accent">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccent}" />
+            </Style>
+
+            <Style Selector="^.FireEyebrow.OnHero">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+
+            <Style Selector="^.FireEyebrow.Warn">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireScreenTitleText" TargetType="TextBlock">
+            <Style Selector="^.FireScreenTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeScreenTitle}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+
+            <Style Selector="^.FireScreenTitle.Full">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeDisplay}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireTitleText" TargetType="TextBlock">
+            <Style Selector="^.FireTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeTitle}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePanelTitleText" TargetType="TextBlock">
+            <Style Selector="^.FirePanelTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizePanelTitle}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireWordmarkText" TargetType="TextBlock">
+            <Style Selector="^.FireWordmark">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeWordmark}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackWordmark}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightWordmark}" />
+                <!-- Every FireWordmark TextBlock also carries
+                     TextOptions.TextRenderingMode="Antialias" inline (a Style cannot
+                     set RenderOptions): letter-spaced display type on a dark ground
+                     shows ClearType's red/blue fringes as colour bleeding. -->
+            </Style>
+
+            <Style Selector="^.FireWordmark.Small">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+                <Setter Property="LetterSpacing" Value="3" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightLg}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireSubtitleText" TargetType="TextBlock">
+            <Style Selector="^.FireSubtitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style Selector="^.FireSubtitle.Lead">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireRowTitleText" TargetType="TextBlock">
+            <!-- The row pair: a 13.5 px semibold title over an 11-11.5 px muted
+                 description. Every list, rail and form row in every mockup is this. -->
+            <Style Selector="^.FireRowTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireRowDescText" TargetType="TextBlock">
+            <Style Selector="^.FireRowDesc">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style Selector="^.FireRowDesc.Wide">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireBodyText" TargetType="TextBlock">
+            <Style Selector="^.FireBody">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMonoText" TargetType="TextBlock">
+            <!-- Mono: values, counts, paths, anything the eye reads as data. -->
+            <Style Selector="^.FireMono">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            </Style>
+
+            <Style Selector="^.FireMono.Value">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+
+            <Style Selector="^.FireMono.Accent">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+
+            <Style Selector="^.FireMono.Warn">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+
+            <!-- The third state colour was missing from both mono and figure: amber and
+                 red were here, green was not, and every trend readout in the mockups has
+                 all three (IMPROVING / STEADY / STALLED). -->
+            <Style Selector="^.FireMono.Success">
+                <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+            </Style>
+
+            <!-- …and the fourth. `FireFigure` has had `.Danger` since the layer landed;
+                 mono did not, so the editor's status rail — where the error counter is
+                 the ONE thing on the bar that can be bad — had no way to say so. -->
+            <Style Selector="^.FireMono.Danger">
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+
+            <Style Selector="^.FireMono.Faint">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            </Style>
+            <!-- From FireRigStage.axaml (#242): the rig's own rule on this family, last so it
+                 still wins as the global rule did. -->
+            <Style Selector="^.FireMapZoomText">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Big figure over a mono caption. The other half of the eyebrow lockup:
+             where a header says what a screen IS, this says what it MEASURES. -->
+        <ControlTheme x:Key="FireFigureText" TargetType="TextBlock">
+            <!-- Graphite sets figures in JetBrains Mono: tabular digits, so a score
+                 that climbs mid-song does not jitter, and a thousands comma that stays
+                 a comma at display size (Atkinson Bold's reads as a full stop). -->
+            <Style Selector="^.FireFigure">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeStat}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightStat}" />
+            </Style>
+
+            <Style Selector="^.FireFigure.Hero">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeHero}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightHero}" />
+            </Style>
+
+            <Style Selector="^.FireFigure.Warn">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+
+            <Style Selector="^.FireFigure.Danger">
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+
+            <Style Selector="^.FireFigure.Success">
+                <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+            </Style>
+
+            <!-- A figure that shares its row with a label rather than owning a tile.
+                 The mockups drop to 20/22 px for these (the weak-spot row's miss rate,
+                 a section's latest accuracy) so the tile figures stay the biggest thing
+                 on the screen. -->
+            <Style Selector="^.FireFigure.Inline">
+                <Setter Property="FontSize" Value="{StaticResource FireSizeTitle}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightTitle}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireStatLabelText" TargetType="TextBlock">
+            <Style Selector="^.FireStatLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireLinkText" TargetType="TextBlock">
+            <Style Selector="^.FireLink">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireLink}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- ══ Regions ═════════════════════════════════════════════════════════ -->
+
+    <!-- One TOP-LEVEL menu header (File / Edit / Tempo Map / …). A class rather
+         than a bare `MenuItem` selector because this style has to live in
+         `Fire.axaml` — which redefines nothing — and because the dropdown ROWS
+         under it are a different shape entirely (see ShellChromeStyles.axaml).
+         The open item wears the accent tint; hover is the plain white wash. -->
+    <Style Selector="MenuItem.FireMenuTop">
+        <Setter Property="Padding" Value="{StaticResource FirePadMenuTop}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="MenuItem.FireMenuTop:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="MenuItem.FireMenuTop:open">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+
+</Styles>

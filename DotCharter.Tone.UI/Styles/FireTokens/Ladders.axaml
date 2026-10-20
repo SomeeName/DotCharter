@@ -1,0 +1,510 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Part of the Fire token layer — see `Styles/FireTokens.axaml`, which
+         merges this file and its siblings IN ORDER. The MEASURE half: radii, the type scale and spacing (`x:Double`), padding
+         and gaps (`Thickness`), the fixed metrics the mockups repeat, letter
+         spacing and motion. -->
+
+    <Styles.Resources>
+
+        <!-- ─── Radii ────────────────────────────────────────────────────────
+             Graphite's soft-square ladder (design-proposals/graphite.md
+             § Shape): screen 12 → panel 10 → card 8 → control 8 → field, row
+             and segment 6 → inner 4 → tag 4 → micro 3. Pills stay 999. -->
+        <CornerRadius x:Key="FireRadiusScreen">12</CornerRadius>
+        <CornerRadius x:Key="FireRadiusPanel">10</CornerRadius>
+        <CornerRadius x:Key="FireRadiusCardLg">10</CornerRadius>
+        <CornerRadius x:Key="FireRadiusCard">8</CornerRadius>
+        <CornerRadius x:Key="FireRadiusControl">8</CornerRadius>
+        <CornerRadius x:Key="FireRadiusRow">6</CornerRadius>
+        <CornerRadius x:Key="FireRadiusField">6</CornerRadius>
+        <CornerRadius x:Key="FireRadiusSegment">6</CornerRadius>
+        <CornerRadius x:Key="FireRadiusInner">4</CornerRadius>
+        <CornerRadius x:Key="FireRadiusTag">4</CornerRadius>
+        <CornerRadius x:Key="FireRadiusMicro">3</CornerRadius>
+        <CornerRadius x:Key="FireRadiusPill">999</CornerRadius>
+        <!-- THERE IS NO `FireRadiusCut`. The primary action's silhouette is a
+             CHAMFER — a 45° cut off the top-right and bottom-left — and the
+             first port approximated it by ROUNDING those two corners hard
+             (`0,16,0,16`), which reads as a lozenge rather than a cut. It is
+             now a real clip geometry: `Converters/FireChamferClipConverter`,
+             bound to the button's live Bounds so the notch stays a constant
+             16 px at every button size. -->
+        <x:Double x:Key="FireCutSize">0</x:Double>
+
+        <!-- The Fire layer's two sub-scale shapes, literals in their templates
+             until 2026-09-20: a meter/track bar and the accent edge a nav row
+             lights up with. A proposal that rounds or squares the whole design
+             has to reach these too, or half the surfaces keep the old
+             silhouette (target-architecture.md § 4). Values unchanged. -->
+        <CornerRadius x:Key="FireRadiusTrack">3</CornerRadius>
+        <CornerRadius x:Key="FireRadiusBar">2</CornerRadius>
+        <Thickness x:Key="FireBorderHairline">1</Thickness>
+
+        <!-- ─── The DIALOG WIDTH LADDER (2026-08-11). Four steps replace the
+             seventeen ad-hoc card widths (420…760, 1120, 1160) the catalogue
+             had grown. Worn as `Border.DialogCard.Sm/.Md/.Lg/.Xl` (declared in
+             Views/Dialogs/DialogStyles/ShellAndHead.axaml); the shared clamp
+             there keeps every step inside the scrim on a small window.
+             Sm  = a prompt or a one-column form (Set BPM, FHP, Paste Special)
+             Md  = a settings form or a picker with a list (Song Metadata)
+             Lg  = a two-column form or a wide list (Export, Recovery)
+             Xl  = a workspace dialog (Pattern Builder, Tone Designer).
+             Lint: UI/DialogWidthLadderTests — a numeric Width on a DialogCard
+             fails the gate. -->
+        <x:Double x:Key="FireDialogWidthSm">480</x:Double>
+        <x:Double x:Key="FireDialogWidthMd">600</x:Double>
+        <x:Double x:Key="FireDialogWidthLg">720</x:Double>
+        <x:Double x:Key="FireDialogWidthXl">1120</x:Double>
+
+        <!-- ─── Type scale (x:Double — FontSize/LineHeight ONLY) ─────────────
+             The spec's eleven ROLES and the steps that serve them:
+
+               Mono / micro    8-8.5   FireSizeNanoSm · FireSizeNano
+               Mono / kicker   9-9.5   FireSizeTag · FireSizeEyebrow
+               Mono / status   10-10.5 FireSizeMicro · FireSizeMono
+               Mono / value    11-13.5 FireSizeXs … FireSizeRow
+               Small           12-12.5 FireSizeSm · FireSizeCaption
+               Body            13.5-15 FireSizeRow · FireSizeMd · FireSizeLg
+               H3              15-17   FireSizeLg · FireSizeCardTitle
+               H2              20-22   FireSizeTitle … FireSizeScreenTitle
+               H1              26      FireSizeStat
+               Display L       44-54   FireSizeDisplayLg
+               Display XL      60-62   FireSizeWordmark
+
+             `FireSizeMicro` is the spec's mono/STATUS step, not its mono/micro
+             one — it predates the spec and the name is a trap; the 8-8.5 pair
+             is `FireSizeNano*`. -->
+        <x:Double x:Key="FireSizeNanoSm">9.5</x:Double>      <!-- axis ticks, lane names -->
+        <x:Double x:Key="FireSizeNano">10</x:Double>      <!-- knob labels -->
+        <x:Double x:Key="FireSizeEyebrow">11</x:Double>   <!-- mono eyebrows, stat captions -->
+        <x:Double x:Key="FireSizeTag">10.5</x:Double>         <!-- queue-row category tags -->
+        <x:Double x:Key="FireSizeMicro">11</x:Double>      <!-- mono status text, unit captions -->
+        <x:Double x:Key="FireSizeMono">11.5</x:Double>     <!-- mono segments, badges, counts -->
+        <x:Double x:Key="FireSizeXs">12</x:Double>         <!-- nav-row descriptions, ranks -->
+        <x:Double x:Key="FireSizeMeta">12.5</x:Double>     <!-- row descriptions -->
+        <x:Double x:Key="FireSizeSm">13</x:Double>
+        <x:Double x:Key="FireSizeCaption">13.5</x:Double>  <!-- subtitles, quiet links, chips -->
+        <x:Double x:Key="FireSizeBase">14</x:Double>
+        <x:Double x:Key="FireSizeRow">14.5</x:Double>      <!-- THE row title size -->
+        <x:Double x:Key="FireSizeMd">15</x:Double>
+        <x:Double x:Key="FireSizeLg">16</x:Double>         <!-- list titles, wordmark -->
+        <x:Double x:Key="FireSizeXl">16.5</x:Double>
+        <x:Double x:Key="FireSizeCardTitle">18</x:Double>  <!-- H3 upper bound: card titles, pedal names -->
+        <x:Double x:Key="FireSizePanelTitle">22</x:Double> <!-- rail panel title -->
+        <x:Double x:Key="FireSizeTitle">21</x:Double>      <!-- content-header title -->
+        <x:Double x:Key="FireSizeScreenTitle">24</x:Double><!-- modal screen title -->
+        <x:Double x:Key="FireSizeDisplay">24</x:Double>    <!-- full-screen title -->
+        <x:Double x:Key="FireSizeStat">28</x:Double>       <!-- secondary stat figure -->
+        <x:Double x:Key="FireSizeCta">27</x:Double>        <!-- PLAY NOW -->
+        <x:Double x:Key="FireSizeStatLg">30</x:Double>
+        <x:Double x:Key="FireSizeDisplayLg">44</x:Double>  <!-- Display L: hero song title, gig preset -->
+        <x:Double x:Key="FireSizeCount">144</x:Double>     <!-- the count-in numeral, read from the stool -->
+        <x:Double x:Key="FireSizeHero">58</x:Double>       <!-- the one figure a screen is about -->
+        <x:Double x:Key="FireSizeWordmark">60</x:Double>   <!-- the front door's DotCharter -->
+
+        <!-- ─── LINE HEIGHT (x:Double) ───────────────────────────────────────
+             The second half of a type step, and until 2026-09-12 the only half
+             this layer still wrote as a literal — 33 `LineHeight` setters
+             across the theme carried a bare number beside a tokenised
+             `FontSize` (resolution audit §3 / §5 item 2). Under the shell's
+             `RootScaler` transform both scale together and nothing shows; ramp
+             the SIZE tokens without these and every one of them clips.
+
+             Every value is TODAY'S value, so adopting them is a visual no-op.
+             `UI/LineHeightTokenTests` pins the whole multiset.
+
+             Self-contained like the rest of this ladder: a Fire surface uses
+             `FireLineHeight*`, an app surface uses Typography's `LineHeight*`.
+             The two tables overlap in value on purpose — so do `FireSize*` and
+             `FontSize*`.
+ -->
+        <x:Double x:Key="FireLineHeightXsTight">14</x:Double>     <!-- FireSizeMeta 11.5 · the settings rail's two-line tab description -->
+        <x:Double x:Key="FireLineHeightXsSnug">15</x:Double>      <!-- FireSizeXs 11 · TextBlock.FireConsequence -->
+        <x:Double x:Key="FireLineHeightXs">16</x:Double>          <!-- FireSizeXs 11 / FireSizeMeta 11.5 · the default for both; 8 sites -->
+        <x:Double x:Key="FireLineHeightLg">18</x:Double>          <!-- FireSizeLg 15 · TextBlock.FireWordmark.Small -->
+        <x:Double x:Key="FireLineHeightBase">19</x:Double>        <!-- FireSizeBase 13 · a dialog's running prose -->
+        <x:Double x:Key="FireLineHeightRow">20</x:Double>         <!-- FireSizeRow 13.5 · the empty-state body -->
+        <!-- The three FIGURE boxes carry ~1.25× their size: a box at 1.0× cut
+             the comma's tail off below the baseline, so "1,940,200" read as
+             "1.940.200" on every score (2026-09-22). -->
+        <x:Double x:Key="FireLineHeightTitle">28</x:Double>       <!-- FireSizeTitle 21 · TextBlock.FireFigure.Inline -->
+        <x:Double x:Key="FireLineHeightFigure">26</x:Double>      <!-- FireSizeTitle 20 on the DISPLAY face · TextBlock.Figure -->
+        <x:Double x:Key="FireLineHeightStat">36</x:Double>        <!-- FireSizeStat 28 · TextBlock.FireFigure, the inspector's stat tiles -->
+        <x:Double x:Key="FireLineHeightHero">72</x:Double>
+        <x:Double x:Key="FireLineHeightCount">168</x:Double>      <!-- FireSizeCount 144 · the count-in numeral -->        <!-- FireSizeHero 58 · TextBlock.FireFigure.Hero -->
+        <x:Double x:Key="FireLineHeightWordmark">62</x:Double>    <!-- FireSizeWordmark 60 · TextBlock.FireWordmark -->
+
+        <!-- Weight aliases. The bundle has Regular + Bold only (see the font
+             note above), so the mockups' 500/600 map here — one place to
+             change if a four-weight bundle ever lands. -->
+        <FontWeight x:Key="FireWeightUi">Bold</FontWeight>
+        <FontWeight x:Key="FireWeightDisplay">Bold</FontWeight>
+
+        <!-- ─── Spacing (x:Double — Spacing/ColumnSpacing/RowSpacing ONLY) ───
+             THE SPEC'S LADDER, COMPLETE AND EXACT:
+             2 · 4 · 6 · 8 · 10 · 12 · 14 · 16 · 18 · 20 · 22 · 26 · 32 · 40.
+             Every gap between siblings comes from this set and nothing else.
+             The port was missing 8, 10, 18, 32 and 40, and carried a 9 that is
+             not on the ladder at all — so `FireSpaceMd`, the single most-used
+             gap in the converted screens, sat half a step off every other one.
+             Corrected to 10; the four missing steps are added.
+             Screen padding is 26-32 horizontal (`FireSpaceHuge`/`Screen`). -->
+        <x:Double x:Key="FireSpaceXxs">2</x:Double>
+        <x:Double x:Key="FireSpaceXs">4</x:Double>
+        <x:Double x:Key="FireSpaceSm">6</x:Double>
+        <x:Double x:Key="FireSpaceSmPlus">8</x:Double>
+        <x:Double x:Key="FireSpaceMd">10</x:Double>
+        <x:Double x:Key="FireSpaceLg">12</x:Double>
+        <x:Double x:Key="FireSpaceRow">14</x:Double>
+        <x:Double x:Key="FireSpaceXl">16</x:Double>
+        <x:Double x:Key="FireSpaceXlPlus">18</x:Double>
+        <x:Double x:Key="FireSpaceXxl">20</x:Double>
+        <x:Double x:Key="FireSpaceSection">22</x:Double>
+        <x:Double x:Key="FireSpaceHuge">26</x:Double>
+        <x:Double x:Key="FireSpaceScreen">32</x:Double>
+        <x:Double x:Key="FireSpaceScreenLg">40</x:Double>
+
+        <!-- ─── Padding + gaps (Thickness — Padding/Margin/BorderThickness) ── -->
+        <Thickness x:Key="FirePadScreen">40</Thickness>          <!-- ground → floating screen -->
+        <Thickness x:Key="FirePadRail">16,24</Thickness>         <!-- the narrow left rail -->
+        <Thickness x:Key="FirePadRailWide">16,20,16,18</Thickness><!-- the front door's sidebar -->
+        <Thickness x:Key="FirePadHeader">26,20,26,16</Thickness>  <!-- content header -->
+        <Thickness x:Key="FirePadBody">26,22</Thickness>          <!-- content body -->
+        <Thickness x:Key="FirePadFooter">26,16</Thickness>        <!-- footer bar -->
+        <Thickness x:Key="FirePadModalBody">26,0,26,22</Thickness> <!-- a modal card's scrolling body, under a FirePadHeader head -->
+        <!-- A FIXED-HEIGHT bar has NO vertical padding, and getting that wrong
+             is silent: `FirePadHeader` spends 36 px of vertical inset, so a
+             `Border.FireHeader` pinned to the spec's `Height="56"` hands its
+             content 20 px — a segmented control needs ~33, measured 0, and the
+             strip rendered as an empty pill with its captions invisible. There
+             is no exception and no warning; the text simply has no size. Every
+             bar that states its own height centres its content instead.
+             (`Border.FireTopBar` already inlines exactly this, which is why it
+             never had the fault.) -->
+        <Thickness x:Key="FirePadBar">26,0</Thickness>            <!-- a bar that states its height -->
+        <!-- …and the editor's two narrower rails, which state their heights the
+             same way and therefore carry NO vertical inset either. -->
+        <Thickness x:Key="FirePadMenuBar">12,0</Thickness>        <!-- the 38 px menu bar -->
+        <Thickness x:Key="FirePadStatusBar">16,0</Thickness>      <!-- the 30 px status rail -->
+        <Thickness x:Key="FirePadMenuTop">11,6</Thickness>        <!-- one top-level menu header -->
+        <Thickness x:Key="FirePadMenuItem">9,8</Thickness>        <!-- one row inside a dropdown -->
+        <Thickness x:Key="FirePadMenuPanel">6</Thickness>         <!-- a dropdown panel's interior -->
+        <Thickness x:Key="FirePadPanel">22</Thickness>            <!-- panel interior -->
+        <Thickness x:Key="FirePadPanelLg">24,22</Thickness>       <!-- hero panel interior -->
+        <Thickness x:Key="FirePadCard">18,14</Thickness>          <!-- continue card -->
+        <Thickness x:Key="FirePadRow">12,10</Thickness>           <!-- nav row -->
+        <!-- A DATA LIST ROW is not a nav row. The spec puts it at 10-14
+             vertical × 16-22 horizontal (the mockups' boards are all
+             `13px 22px`), against the nav row's 10 × 12 — the port used the
+             nav row's inset for both, which crowded every board's first column
+             against the panel edge. -->
+        <Thickness x:Key="FirePadListRow">22,13</Thickness>       <!-- data list row -->
+        <!-- A NAV-sized rail is not a data list either: the rig drawer's
+             category rail is 12 FIXED rows, and at the data-row inset that is
+             ~540 px of list in a ~340 px body — nine categories below the fold
+             behind an auto-hiding scrollbar. Dense keeps the full taxonomy on
+             screen at once. -->
+        <Thickness x:Key="FirePadListRowDense">16,6</Thickness>   <!-- fixed-taxonomy rail row -->
+        <Thickness x:Key="FirePadRowLg">12</Thickness>            <!-- queue row -->
+        <Thickness x:Key="FirePadKnobCell">7,12,7,4</Thickness>   <!-- a rack knob cell: the design's 14/7/3 -->
+        <Thickness x:Key="FirePadPill">11,9</Thickness>           <!-- status pill -->
+        <Thickness x:Key="FirePadChip">13,7</Thickness>           <!-- profile chip -->
+        <Thickness x:Key="FirePadField">12,0</Thickness>          <!-- search field interior -->
+        <!-- …and the same field around a WRAPPING editor. A one-line field is
+             36 px of frame around 18 px of text, so its vertical inset is 0 and
+             centring does the work; a multi-line one is as tall as its content
+             and top-anchored, so the first line needs real air above it. -->
+        <Thickness x:Key="FirePadFieldTall">12,9</Thickness>      <!-- multi-line field interior -->
+        <!-- …and both at the compact size (`FireFieldHeightCompact`, #600). The
+             COMBO's right inset is negative on purpose: Fluent's template keeps a
+             fixed 32 px column for an 11 px chevron, and three compact pickers in
+             one row of a 340 px pane gave a third of their text to it. The
+             `.FireCombo.Compact` chevron is drawn smaller and nearer the edge, and
+             the selected text runs on into the space it no longer needs. -->
+        <Thickness x:Key="FirePadFieldCompact">8,0</Thickness>
+        <Thickness x:Key="FirePadComboCompact">8,0,-11,0</Thickness>
+        <Thickness x:Key="FirePadFieldTallCompact">10,5</Thickness>
+        <Thickness x:Key="FireComboGlyphCompact">0,0,7,0</Thickness>
+        <Thickness x:Key="FirePadSegment">3</Thickness>           <!-- segmented-control frame -->
+        <Thickness x:Key="FirePadSegmentItem">12,6</Thickness>    <!-- one segment -->
+        <!-- …the same segment in a strip too narrow for 12 (see
+             `.FireSegmentItem.Dense`). Same VERTICAL padding, so a dense strip
+             is the same height as every other one. -->
+        <Thickness x:Key="FirePadSegmentItemDense">6,6</Thickness>
+        <Thickness x:Key="FirePadTag">6,3</Thickness>             <!-- category tag -->
+        <Thickness x:Key="FirePadBadge">6,1</Thickness>           <!-- count badge -->
+        <Thickness x:Key="FirePadNone">0</Thickness>
+
+        <!-- ONE POPOVER (`Play Menus.dc.html` — "every popover that hangs off
+             the transport bar, redrawn on one shared shell"). Its four insets
+             are the mockup's own: a 40 px head with no vertical padding
+             (`FirePopoverHeadHeight` states it), a body at 11/12, a section at
+             12 and a footer at 9. They are separate keys rather than reuses
+             because a popover is 344-420 px wide and the panel/card insets
+             (22 / 18,14) spend a tenth of that on air. -->
+        <Thickness x:Key="FirePadPopoverHead">13,0</Thickness>
+        <Thickness x:Key="FirePadPopoverBody">13,11,13,12</Thickness>
+        <Thickness x:Key="FirePadPopoverSection">13,12</Thickness>
+        <Thickness x:Key="FirePadPopoverFooter">13,9</Thickness>
+
+        <Thickness x:Key="FireGapEyebrow">0,0,0,10</Thickness>    <!-- eyebrow → first row -->
+        <Thickness x:Key="FireGapSection">0,20,0,10</Thickness>   <!-- between rail sections -->
+        <Thickness x:Key="FireGapRowSm">0,0,0,6</Thickness>
+        <Thickness x:Key="FireGapRowMd">0,0,0,12</Thickness>
+        <Thickness x:Key="FireGapRowLg">0,0,0,18</Thickness>
+        <Thickness x:Key="FireGapTopSm">0,6,0,0</Thickness>
+        <Thickness x:Key="FireGapTopMd">0,12,0,0</Thickness>
+        <Thickness x:Key="FireGapTopRow">0,14,0,0</Thickness>
+        <Thickness x:Key="FireGapTopLg">0,18,0,0</Thickness>
+        <Thickness x:Key="FireGapNavRow">0,0,0,2</Thickness>      <!-- nav rows nearly touch -->
+        <!-- The HORIZONTAL steps. Every early Fire screen stacked downward, so
+             the ladder only had top/bottom entries; a row of clusters inside a
+             Grid needs the same thing turned 90°, because `Spacing` cannot
+             reach across cells. Sm/Md/Lg mirror FireGapTopSm/Md/Lg.
+             `FireGapLeftMd` separates a stretched label from the figure pinned
+             beside it — without it the front door's library button read as
+             "Songbibliothek0" — and `FireGapRightLg` keeps a footer's fact line
+             off the action beside it, since a star and an Auto column of one
+             grid meet edge to edge. -->
+        <Thickness x:Key="FireGapLeftSm">6,0,0,0</Thickness>
+        <Thickness x:Key="FireGapLeftMd">12,0,0,0</Thickness>
+        <!-- The gap the editor's top bar puts between the last menu item and
+             the CHART / LIBRARY / SETTINGS switcher — a whole ladder step wider
+             than the 2 px between menu items, which is what makes the switcher
+             read as a separate control rather than a ninth menu. -->
+        <Thickness x:Key="FireGapLeftRow">14,0,0,0</Thickness>
+        <Thickness x:Key="FireGapLeftLg">18,0,0,0</Thickness>
+        <Thickness x:Key="FireGapRightLg">0,0,18,0</Thickness>
+        <Thickness x:Key="FireGapRightMd">0,0,12,0</Thickness>
+        <!-- A `WrapPanel` has no `Spacing`, so a wrapped cluster carries its gap
+             as a per-item margin. These are the two the mockups repeat: the
+             26 px between stat figures, and the 6 px between chips/tags. -->
+        <Thickness x:Key="FireGapFigure">0,0,26,12</Thickness>
+        <Thickness x:Key="FireGapTag">0,0,6,6</Thickness>
+        <Thickness x:Key="FireGapLaneBus">0,18</Thickness>        <!-- the split fan's bus stops short of the outer lane centres -->
+        <Thickness x:Key="FireGapLaneRow">0,0,0,6</Thickness>     <!-- between stacked lanes -->
+
+
+        <!-- ─── Fixed metrics the mockups repeat verbatim ──────────────────── -->
+        <x:Double x:Key="FireTagSquareSize">22</x:Double>    <!-- L/R/B/V letter chip -->
+        <!-- The browse bar's sort picker. FIXED, at the longest localized sort
+             label, so choosing a mode does not re-lay the bar out under the
+             pointer — Avalonia's ComboBox measures the SELECTED item, so an
+             Auto width breathes with every pick. -->
+        <x:Double x:Key="FireSortChipWidth">150</x:Double>
+        <x:Double x:Key="FireRailWidth">230</x:Double>       <!-- modal screen's tab rail -->
+        <x:Double x:Key="FireSidebarWidth">262</x:Double>    <!-- front door's nav -->
+        <x:Double x:Key="FireContextRailWidth">404</x:Double><!-- front door's session queue -->
+        <x:Double x:Key="FireTopBarHeight">58</x:Double>
+        <!-- The CHART EDITOR's two rails (Editor Project Settings.dc.html /
+             Rocksmith Song Browser.dc.html). They are not the 58 px Play Mode
+             top bar: the editor trades every pixel of vertical space for the
+             timeline, so its menu bar is 38 and its status rail 30 — the two
+             numbers both editor mockups repeat verbatim. -->
+        <x:Double x:Key="FireMenuBarHeight">38</x:Double>
+        <x:Double x:Key="FireStatusBarHeight">30</x:Double>
+        <x:Double x:Key="FireBarWidth">3</x:Double>          <!-- the accent selection bar -->
+        <x:Double x:Key="FireBarHeight">16</x:Double>
+        <x:Double x:Key="FireBarHeightTall">26</x:Double>
+        <x:Double x:Key="FireDotSize">6</x:Double>           <!-- status dot -->
+        <x:Double x:Key="FireDotSizeSm">5</x:Double>
+        <x:Double x:Key="FireFieldHeight">36</x:Double>
+        <!-- The COMPACT field (#600): a picker, button or box in a docked pane,
+             where every pixel of chrome comes out of the content beside it — the
+             AI chat's head and composer. The app's `Compact` buttons' 28. -->
+        <x:Double x:Key="FireFieldHeightCompact">28</x:Double>
+        <x:Double x:Key="FireActionHeight">42</x:Double>
+        <x:Double x:Key="FireButtonHeight">48</x:Double>
+        <x:Double x:Key="FireCtaHeight">84</x:Double>
+        <x:Double x:Key="FireIconButtonSize">34</x:Double>
+        <x:Double x:Key="FireHeaderControlHeight">36</x:Double> <!-- every control on the rig header + routing strip -->
+        <x:Double x:Key="FireTrackHeight">6</x:Double>
+        <x:Double x:Key="FireMeterHeight">3</x:Double>
+        <x:Double x:Key="FireChipHeight">30</x:Double>       <!-- status chip floor (spec 30-38) -->
+        <!-- ONE POPOVER's three stated numbers, verbatim from the mockup's own
+             SHELL RULES panel: "Head 40px · rows 34px · radius 14/9" and
+             "popover never wider than 420px". The radii are already on the
+             ladder (`FireRadiusCardLg` / `FireRadiusField`), so only these
+             three are new. The MAX width is the load-bearing one: a popover is
+             a menu, not a dialog, and the Tools panel was 460 px wide. -->
+        <x:Double x:Key="FirePopoverHeadHeight">40</x:Double>
+        <x:Double x:Key="FirePopoverRowHeight">34</x:Double>
+        <x:Double x:Key="FirePopoverMaxWidth">420</x:Double>
+        <x:Double x:Key="FireNavSlide">3</x:Double>          <!-- nav-row hover translateX -->
+        <x:Double x:Key="FireScreenMinWidth">1320</x:Double> <!-- below this the app scrolls, never reflows -->
+        <x:Double x:Key="FireHeroMinWidth">520</x:Double>    <!-- the hero column's own floor -->
+
+        <!-- ─── LANE F (2026-09-13): the four constants the shell chrome, the
+             LAN surfaces and the command palette used to spell as literals.
+             Every value here is TODAY'S value, so adopting them is a visual
+             no-op at 1080p; `Styles/FireTokens/Ladders.Wide.axaml` carries the
+             wide rung of each, and a `DynamicResource` consumer re-resolves on
+             the merge with no selector and no per-view edit. That route is
+             deliberate: a `MaxWidth="560"` written on the element is a LOCAL
+             value and outranks every style setter, so a breakpoint SELECTOR
+             would have been silently dead on all four of them (the trap lane C
+             recorded, `docs/agents/ui/fire-design-system.md` §Breakpoints). -->
+        <x:Double x:Key="FireCardMaxWidth">560</x:Double>    <!-- the editor launch card: one centred card -->
+        <x:Double x:Key="FirePaletteWidth">680</x:Double>    <!-- the command palette card -->
+        <x:Double x:Key="FirePaletteMaxHeight">500</x:Double><!-- …and its result list's ceiling: the row height is fixed, so this IS the visible row count -->
+
+        <!-- VALUE COLUMNS. A data list's right-hand columns are FIXED width so
+             the numbers line up vertically down the whole list — that
+             alignment is the point, and auto-sizing destroys it silently
+             (every row is individually correct and the column is a staircase).
+             These are the three widths the boards actually use. -->
+        <x:Double x:Key="FireColCount">38</x:Double>         <!-- "2/4" seat count -->
+        <x:Double x:Key="FireColValueSm">80</x:Double>
+        <x:Double x:Key="FireColValue">100</x:Double>
+        <x:Double x:Key="FireColValueLg">110</x:Double>
+
+        <!-- ─── CENTRED READING COLUMNS ──────────────────────────────────────
+             A `MaxWidth` + `HorizontalAlignment="Center"` column: content that
+             must not stretch across a whole monitor, parked in the middle of
+             whatever space it is given. The 2026-09-12 resolution audit counted
+             SIXTEEN of these hand-written across `Views/`, every one of them a
+             literal, and every one of them the reason its screen measures the
+             same pixel size at 1080p and at 4K (`ratio` 0.25 — see §3 of the
+             audit).
+
+             They are a TOKEN so a single ladder swap can widen all of them at
+             once: `Ladders.Wide.axaml` is merged over this file above the wide
+             breakpoint (`Services/UiBreakpointController`), and these are the
+             values it moves.
+
+             Sm  = a prompt, a hero column, a single form  (520 -> 760 at .Wide)
+             Lg  = a full settings / setup page             (1040 -> 1400)
+
+             Sm is not consumed in this repo YET — it is the token the audit's
+             remaining lanes (the Play Mode game moments, the
+             shell chrome and LAN) repoint their own literals at. Declaring it
+             here with the audit's measured default is what makes those lanes a
+             one-line edit each instead of sixteen new numbers. -->
+        <x:Double x:Key="FireColumnMaxWidth">520</x:Double>
+        <x:Double x:Key="FireColumnMaxWidthLg">1040</x:Double>
+
+        <!-- ─── The Amp & FX rig's two shape constants (audit lane E) ────────
+             The gear palette's width, and the ceiling the module-editor faces
+             scale to through `Controls/Fire/RigScaleToFit`. Both are SHAPE:
+             the palette is a rail like `FireContextRailWidth`, and the face
+             ceiling decides how much of the dock ROW one face occupies —
+             a ratio, invariant under `RootScaler` exactly like a rail width.
+             `FireRigFaceMaxScale` is the value `RigArtwork.MaxEditorScale`
+             has always carried; it is a token so the wide ladder can lift it,
+             and a view that sets nothing still gets 1.35 from the C# default. -->
+        <x:Double x:Key="FireRigGearPanelWidth">320</x:Double>
+        <x:Double x:Key="FireRigFaceMaxScale">1.35</x:Double>
+
+        <!-- …and a third, from W1 (2026-09-16): the height of the rig's
+             WORKSPACE — the one host below the routing canvas that holds the
+             module editor and the tone drawer — before the user has dragged the
+             divider. It is a LADDER rather than a `2.2*` row because the canvas
+             must not resize when the editor opens (which a content-sized row
+             did) and a panel must not be a fixed share of its parent (which a
+             star row is). A step at the wide breakpoint is neither. 480 fits the
+             drawer's rail plus two card rows and leaves the canvas its 244 px
+             floor at 1600x900, the smallest supported window. -->
+        <!-- 540 since the rig took the AmpliTube / BIAS FX layout (2026-09-27):
+             the chain above is an overview of small gear, and the SELECTED gear
+             opens big in this dock, so the dock is the larger half. -->
+        <x:Double x:Key="FireRigWorkspaceHeight">540</x:Double>
+
+        <!-- ─── The TONES MODE's four shape constants (W4, 2026-09-16) ───────
+             The tone designer is the LEFT COLUMN of the rig's Tones mode, and
+             its width is a token for the same reason the gear rail's is: a
+             literal pixel column is a different SHARE of every screen — 26 % of
+             a 1600 window and 11 % of a 3840 one. The Tones list takes the rest
+             and its card grid reflows into it, so the two never trade a
+             hard-coded ratio.
+
+             The card's width and MIN height are tokens too, and the word MIN is
+             the point: a card GROWS with its description now (it drew
+             `MaxLines="2"` in a fixed 136 px box and cut every factory tone
+             mid-word), so this is the floor that keeps a short description's
+             card the same size as its neighbours rather than a ceiling that
+             clips a long one.
+
+             `FireRigEmptyStateHeight` is the rule "an empty state occupies the
+             space the loaded state would": the not-configured banner, the empty
+             workspace under the dock bar and the module editor's unavailable
+             blocks all reserve it, so nothing on this screen jumps when the
+             thing it was waiting for arrives. -->
+        <x:Double x:Key="FireRigToneDesignerWidth">460</x:Double>
+        <x:Double x:Key="FireRigToneCardWidth">196</x:Double>
+        <x:Double x:Key="FireRigToneCardMinHeight">88</x:Double>
+        <x:Double x:Key="FireRigEmptyStateHeight">140</x:Double>
+
+        <!-- The Tones view (2026-09-27). The SIDEBAR is a fixed column — the
+             category rail now, and the natural home of any narrow list beside the
+             library (setlists) — so the card grid never shifts when a row's
+             count gains a digit. The designer's SEND row (status + button) is
+             reserved at a button's height, so "Asking…", "12.4 s · local" and
+             "Saved" replace each other without moving anything; the PROMPT
+             floor (two lines) keeps the box from jumping when a word wraps. -->
+        <x:Double x:Key="FireRigToneSidebarWidth">184</x:Double>
+        <x:Double x:Key="FireToneStatusHeight">32</x:Double>
+        <x:Double x:Key="FireTonePromptMinHeight">56</x:Double>
+        <!-- The "ChatGPT (copy & paste)" paste box: two lines empty like the
+             prompt, and CAPPED at three — a chat answer is a page of prose plus a
+             JSON object, the box sits in the PINNED composer, and every pixel it
+             takes comes out of the thread (at 1280x800 a 120 px cap left the
+             thread no height at all). It scrolls inside the cap instead; nobody
+             needs to read a paste. -->
+        <x:Double x:Key="FireToneReplyMaxHeight">76</x:Double>
+        <!-- The designer column's three bands share its 18 px side inset so the
+             header, the thread and the composer line up; the vertical insets are
+             tight because at 1600x900 in German the column's height is exactly
+             what decides whether "Match by section" is on screen with the
+             prompt (Perf/RigTonesModeUiPerfSmokeTests). -->
+        <Thickness x:Key="FirePadToneHead">18,10,18,8</Thickness>
+        <!-- …and the AI chat pane's head (#600): one compact control tall, so the
+             conversation keeps the dock's height. Same side inset as the thread. -->
+        <Thickness x:Key="FirePadToneHeadCompact">18,6</Thickness>
+        <Thickness x:Key="FirePadToneThread">18,6,18,14</Thickness>
+        <Thickness x:Key="FirePadToneComposer">18,10</Thickness>
+
+        <!-- The match-percentage column on a candidate row, sized for the
+             WIDEST thing it can print — which is W5b's "unrated" pill, not
+             "100 %". An unrated candidate has to read as unrated rather than as
+             a low score, and a column that grew when the first one appeared
+             would shift every row beside it. -->
+        <x:Double x:Key="FireRigMatchScoreWidth">72</x:Double>
+
+        <!-- ─── Letter spacing (Avalonia LetterSpacing is DIPs, not em) ──────
+             The mockups letter-space in em, which only makes sense next to a
+             font size. These are the four combinations they actually use:
+               .24em @ 9.5  = 2.28   eyebrow
+               .14em @ 10   = 1.4    stat caption / metadata
+               .12em @ 10.5 = 1.26   status text / badges
+               .10em @ 15   = 1.5    display captions -->
+        <x:Double x:Key="FireTrackEyebrow">0.6</x:Double>
+        <x:Double x:Key="FireTrackCaption">0.3</x:Double>
+        <x:Double x:Key="FireTrackStatus">0.3</x:Double>
+        <x:Double x:Key="FireTrackDisplay">0</x:Double>
+        <x:Double x:Key="FireTrackMicro">0.3</x:Double>      <!-- .14em @ 8.5 (mono/micro) -->
+        <x:Double x:Key="FireTrackAction">0.4</x:Double>     <!-- .22em @ 14 — the primary button caption -->
+        <x:Double x:Key="FireTrackCta">0.6</x:Double>          <!-- .22em @ 27 -->
+        <x:Double x:Key="FireTrackWordmark">0</x:Double>   <!-- .02em @ 60 -->
+
+        <!-- ─── Motion ───────────────────────────────────────────────────────
+             The spec's three durations. NOTHING IN THIS LAYER'S STYLES MAY
+             CONSUME THEM AS A `Transitions` SETTER: building an
+             `AvaloniaList<ITransition>` calls `Dispatcher.VerifyAccess`, which
+             would make the whole dictionary UI-thread-only (the trap that took
+             out all nine SettingsSearchTests in 0.35), and every Fire surface
+             is `IsVisible`-gated, where a style clock keeps ticking while
+             hidden. Style-driven state changes are therefore INSTANT.
+
+             They are declared because the CUSTOM-DRAWN Fire controls
+             (`Controls/`) animate inside their own render pass, where none of
+             that applies — a duration named once here is what stops four
+             controls each inventing their own. Nothing bounces, nothing
+             springs, nothing exceeds 250 ms except the 1.5 s loading bar. -->
+        <sys:TimeSpan x:Key="FireMotionState">00:00:00.160</sys:TimeSpan>
+        <sys:TimeSpan x:Key="FireMotionOverlay">00:00:00.220</sys:TimeSpan>
+        <sys:TimeSpan x:Key="FireMotionLoading">00:00:01.500</sys:TimeSpan>
+    </Styles.Resources>
+</Styles>

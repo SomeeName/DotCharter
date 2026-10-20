@@ -1,0 +1,428 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:inspector="clr-namespace:DotCharter.UI.Views.Editor.Inspector;assembly=DotCharter"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.MixerInspectorView"
+             x:DataType="viewModels:InspectorViewModel">
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles.axaml" />
+    </UserControl.Styles>
+    <!-- #601: the Inspector's dense language. The tab's five sections (Levels, Stems,
+         Playback FX, EQ & filters, MIDI synth) sit behind the same icon-only rail as the Sound
+         tab, ONE section at a time; there is no header repeating the tab's name and no card
+         around a section. The bodies are always in the tree (IsVisible-gated by the rail,
+         InspectorSectionRail, each body bound to its entry) and InspectorView.NestedPaneNames prewarms the hidden ones; an
+         Expander's collapsed presenter would never realise its rows.
+
+         0.51: the ROWS were rebuilt from `Chart Editor.dc.html`. Every channel
+         in the tab is now the same five-part row — [M][S] · label · fader ·
+         mono value — with the label rail and the value rail fixed by
+         `TextBlock.MixerLabel`/`MixerValue`, so LEVELS, STEMS, PLAYBACK FX, the
+         EQ filters and the MIDI synth all share one left edge and one right
+         edge. Three rules the mockup settles and this markup keeps:
+
+           • THE FILL CARRIES THE IDENTITY, the track behind it stays neutral.
+             The levels bus is violet, a stem takes the colour of what it plays
+             (`StemIdentityBrushConverter` → the `FireStem*` tokens), a playback
+             effect is amber. That is why the fader is `Slider.MixerSlider` and
+             not the shared `Slider.FireSlider`, whose decrease-track template
+             hard-wires the accent gradient.
+           • A ROW ONLY DRAWS THE VERBS IT HAS. The master bus has no solo and
+             a playback effect has neither, so those squares are
+             `Border.MixerVerbSlot` — the column stays open and the labels stay
+             aligned, but there is no dead control to click.
+           • A STEM ROW ONLY EXISTS IF THE STEM DOES. `StemMixerViewModel` only
+             adds a track whose file was found on disk, so the ItemsControl
+             below IS the "what actually separated" list; nothing here needs to
+             hide a missing channel.
+    -->
+    <Grid ColumnDefinitions="38,*">
+        <!-- ── the section rail: icons only, the name is the tooltip and the accessible name (#601) ── -->
+        <Border x:Name="MixerRail" Grid.Column="0"
+                Background="{DynamicResource FireSurfaceSunken}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,1,0">
+            <StackPanel x:Name="MixerRailEntries" Spacing="{StaticResource SpaceXxs}" Margin="{StaticResource GapTopXs}"
+                        HorizontalAlignment="Center">
+                <Panel x:Name="MixerRailLevels">
+                    <ToggleButton x:Name="MixerRailLevelsEntry" Tag="MixerLevelsCard" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Levels}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Levels}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconVolumeHigh}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #MixerRailLevelsEntry.IsChecked}" />
+                </Panel>
+                <Panel x:Name="MixerRailStems" IsVisible="{Binding StemMixer.HasStems}">
+                    <ToggleButton x:Name="MixerRailStemsEntry" Tag="MixerStemsBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Stems}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Stems}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconTuneVertical}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #MixerRailStemsEntry.IsChecked}" />
+                </Panel>
+                <Panel x:Name="MixerRailPlaybackFx">
+                    <ToggleButton x:Name="MixerRailPlaybackFxEntry" Tag="MixerPlaybackFxBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_PlaybackFx}"
+                                  ToolTip.Tip="{localization:Loc Inspector_PlaybackFx}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconTune}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #MixerRailPlaybackFxEntry.IsChecked}" />
+                </Panel>
+                <Panel x:Name="MixerRailEq">
+                    <ToggleButton x:Name="MixerRailEqEntry" Tag="MixerEqBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_EqFilters}"
+                                  ToolTip.Tip="{localization:Loc Inspector_EqFilters}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconEqualizer}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #MixerRailEqEntry.IsChecked}" />
+                </Panel>
+                <Panel x:Name="MixerRailMidi">
+                    <ToggleButton x:Name="MixerRailMidiEntry" Tag="MixerMidiBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_MidiSynth}"
+                                  ToolTip.Tip="{localization:Loc Inspector_MidiSynth}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconPiano}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #MixerRailMidiEntry.IsChecked}" />
+                </Panel>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer x:Name="MixerSectionScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Padding="{StaticResource PaddingRow}">
+            <Panel>
+                <StackPanel x:Name="MixerLevelsCard" IsVisible="{Binding #MixerRailLevelsEntry.IsChecked}" Spacing="{StaticResource FireSpaceXs}">
+                    <!-- Master: the bus everything else feeds. It has a mute and
+                         deliberately no solo — soloing the master is soloing
+                         nothing — so its solo square stays a reserved slot. -->
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                          Classes="SliderRow">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <ToggleButton Content="M" Classes="MuteBtn"
+                                          AutomationProperties.Name="{localization:Loc Inspector_MuteMaster}"
+                                          ToolTip.Tip="{localization:Loc Inspector_MuteMaster}"
+                                          IsChecked="{Binding Transport.IsMasterMuted}" />
+                            <Border Classes="MixerVerbSlot" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Toolbar_Master}"
+                                   ToolTip.Tip="{localization:Loc Toolbar_Master}" Classes="MixerLabel" />
+                        <Slider x:Name="MasterSlider" AutomationProperties.Name="{localization:Loc Toolbar_Master}" Grid.Column="2" Classes="MixerSlider"
+                                Minimum="0.0" Maximum="1.0"
+                                Value="{Binding Transport.Volume}" TickFrequency="0.05"
+                                IsSnapToTickEnabled="True" Foreground="{DynamicResource FireAccent}"
+                                ctl:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}" />
+                        <TextBlock Grid.Column="3" Classes="MixerValue"
+                                   Text="{Binding Transport.Volume, StringFormat=\{0:P0\}}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                          Classes="SliderRow">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <ToggleButton Content="M" Classes="MuteBtn"
+                                          AutomationProperties.Name="{localization:Loc Inspector_MuteSong}"
+                                          ToolTip.Tip="{localization:Loc Inspector_MuteSong}"
+                                          IsChecked="{Binding Transport.IsSongMuted}" />
+                            <ToggleButton Content="S" Classes="SoloBtn"
+                                          AutomationProperties.Name="{localization:Loc Inspector_SoloSong}"
+                                          ToolTip.Tip="{localization:Loc Inspector_SoloSong}"
+                                          IsChecked="{Binding Transport.IsSongSoloed}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Song}"
+                                   ToolTip.Tip="{localization:Loc Inspector_Song}" Classes="MixerLabel" />
+                        <Slider x:Name="SongGainSlider" AutomationProperties.Name="{localization:Loc Inspector_Song}" Grid.Column="2" Classes="MixerSlider"
+                                Minimum="0" Maximum="2.0"
+                                Value="{Binding Transport.SongVolume}" TickFrequency="0.05"
+                                IsSnapToTickEnabled="True" Foreground="{DynamicResource FireAccent}"
+                                ctl:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}" />
+                        <TextBlock Grid.Column="3" Classes="MixerValue"
+                                   Text="{Binding Transport.SongVolume, StringFormat=\{0:P0\}}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                          Classes="SliderRow">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <ToggleButton Content="M" Classes="MuteBtn"
+                                          AutomationProperties.Name="{localization:Loc Inspector_MuteInput}"
+                                          ToolTip.Tip="{localization:Loc Inspector_MuteInput}"
+                                          IsChecked="{Binding Transport.IsInputMuted}" />
+                            <ToggleButton Content="S" Classes="SoloBtn"
+                                          AutomationProperties.Name="{localization:Loc Inspector_SoloInput}"
+                                          ToolTip.Tip="{localization:Loc Inspector_SoloInput}"
+                                          IsChecked="{Binding Transport.IsInputSoloed}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Toolbar_InputGain}"
+                                   ToolTip.Tip="{localization:Loc Toolbar_InputGain}" Classes="MixerLabel" />
+                        <Slider x:Name="InputGainSlider" AutomationProperties.Name="{localization:Loc Toolbar_InputGain}" Grid.Column="2" Classes="MixerSlider"
+                                Minimum="0" Maximum="2.0"
+                                Value="{Binding Transport.InputVolume}" TickFrequency="0.05"
+                                IsSnapToTickEnabled="True" Foreground="{DynamicResource FireAccent}"
+                                ctl:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}" />
+                        <TextBlock Grid.Column="3" Classes="MixerValue"
+                                   Text="{Binding Transport.InputVolume, StringFormat=\{0:P0\}}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                          Classes="SliderRow">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <ToggleButton Content="M" Classes="MuteBtn"
+                                          AutomationProperties.Name="{localization:Loc Inspector_MuteMidi}"
+                                          ToolTip.Tip="{localization:Loc Inspector_MuteMidi}"
+                                          IsChecked="{Binding Transport.IsMidiMuted}" />
+                            <ToggleButton Content="S" Classes="SoloBtn"
+                                          AutomationProperties.Name="{localization:Loc Inspector_SoloMidi}"
+                                          ToolTip.Tip="{localization:Loc Inspector_SoloMidi}"
+                                          IsChecked="{Binding Transport.IsMidiSoloed}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Toolbar_MidiInst}"
+                                   ToolTip.Tip="{localization:Loc Toolbar_MidiInst}" Classes="MixerLabel" />
+                        <Slider x:Name="MidiInstSlider" AutomationProperties.Name="{localization:Loc Toolbar_MidiInst}" Grid.Column="2" Classes="MixerSlider"
+                                Minimum="0" Maximum="1.5"
+                                Value="{Binding Transport.MidiVolume}" TickFrequency="0.05"
+                                IsSnapToTickEnabled="True" Foreground="{DynamicResource FireAccent}"
+                                ctl:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}" />
+                        <TextBlock Grid.Column="3" Classes="MixerValue"
+                                   Text="{Binding Transport.MidiVolume, StringFormat=\{0:P0\}}" />
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel x:Name="MixerStemsBody" IsVisible="{Binding #MixerRailStemsEntry.IsChecked}" Spacing="{StaticResource FireSpaceSm}">
+                  <!-- Draw the timeline waveform from what the MIXER plays rather
+                       than from the audio file. It belongs to the whole stem
+                       section, not to any one strip, so it sits above them.
+                       NOTE: this checkbox also exists in StemMixerView.axaml,
+                       which NOTHING hosts (tests only) — this is the copy the
+                       app actually shows. -->
+                  <CheckBox IsChecked="{Binding StemMixer.WaveformFollowsMix}"
+                            Content="{localization:Loc Mixer_WaveformFollowsMix}"
+                            ToolTip.Tip="{localization:Loc Mixer_WaveformFollowsMix_Tip}"
+                            AutomationProperties.Name="{localization:Loc Mixer_WaveformFollowsMix}" />
+                  <!-- #260: the guitar stem as Lead (centre) / Rhythm (sides). A
+                       property of the stem SET, like the checkbox above, so it sits
+                       above the strips it changes. -->
+                  <inspector:GuitarRolesView x:Name="GuitarRoles" DataContext="{Binding StemMixer.GuitarRoles}" />
+                  <ItemsControl ItemsSource="{Binding StemMixer.Tracks}">
+                      <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="viewModels:StemTrackViewModel">
+                              <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                                    ColumnSpacing="{StaticResource FireSpaceMd}"
+                                    Classes="SliderRow"
+                                    Margin="0,0,0,4">
+                                  <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                              Spacing="{StaticResource FireSpaceXxs}">
+                                      <ToggleButton Content="M" Classes="MuteBtn"
+                                                    AutomationProperties.Name="{localization:Loc Inspector_Mute}"
+                                                    ToolTip.Tip="{localization:Loc Inspector_Mute}"
+                                                    IsChecked="{Binding IsMuted, Mode=TwoWay}" />
+                                      <ToggleButton Content="S" Classes="SoloBtn"
+                                                    AutomationProperties.Name="{localization:Loc Inspector_Solo}"
+                                                    ToolTip.Tip="{localization:Loc Inspector_Solo}"
+                                                    IsChecked="{Binding IsSolo, Mode=TwoWay}"
+                                                    IsEnabled="{Binding !IsMasterMix}" />
+                                  </StackPanel>
+                                  <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                             ToolTip.Tip="{Binding DisplayName}" Classes="MixerLabel" />
+                                  <!-- The fill IS the instrument. The pair
+                                       (Name, IsMasterMix) is the key rather than
+                                       the name alone: the master strip's display
+                                       name is the literal "Original", and keying
+                                       on that string would repaint the row the
+                                       day it is localized. -->
+                                  <Slider Grid.Column="2" Classes="MixerSlider" Minimum="0" Maximum="2.0" AutomationProperties.Name="{Binding DisplayName}"
+                                          Value="{Binding VolumeLinear, Mode=TwoWay}"
+                                          ctl:ResetOnDoubleClick.DefaultValue="{Binding DefaultVolumeLinear}"
+                                          ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}"
+                                          TickFrequency="0.05" IsSnapToTickEnabled="True">
+                                      <Slider.Foreground>
+                                          <MultiBinding Converter="{x:Static converters:StemIdentityBrushConverter.Instance}">
+                                              <Binding Path="Name" />
+                                              <Binding Path="IsMasterMix" />
+                                          </MultiBinding>
+                                      </Slider.Foreground>
+                                  </Slider>
+                                  <TextBlock Grid.Column="3" Classes="MixerValue"
+                                             Text="{Binding VolumeDbLabel}" />
+                              </Grid>
+                          </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <StackPanel x:Name="MixerPlaybackFxBody" IsVisible="{Binding #MixerRailPlaybackFxEntry.IsChecked}" Spacing="{StaticResource FireSpaceXs}">
+                    <!-- Playback effects are not channels: there is nothing to
+                         mute or solo about a tempo. Both squares stay reserved
+                         slots so the labels below still start where the labels
+                         above do. -->
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                          Classes="SliderRow">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <Border Classes="MixerVerbSlot" />
+                            <Border Classes="MixerVerbSlot" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_TrackPan}"
+                                   ToolTip.Tip="{localization:Loc Inspector_TrackPan}" Classes="MixerLabel" />
+                        <Slider x:Name="TrackPanSlider" AutomationProperties.Name="{localization:Loc Inspector_TrackPan}" Grid.Column="2" Classes="MixerSlider"
+                                Minimum="-1.0" Maximum="1.0"
+                                Value="{Binding Transport.Pan}" TickFrequency="0.5"
+                                IsSnapToTickEnabled="True"
+                                Foreground="{DynamicResource FireWarning}"
+                                ctl:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}" />
+                        <TextBlock Grid.Column="3" Classes="MixerValue"
+                                   Text="{Binding Transport.Pan, StringFormat=\{0:0.00\}}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                          Classes="SliderRow">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <Border Classes="MixerVerbSlot" />
+                            <Border Classes="MixerVerbSlot" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Toolbar_Speed}"
+                                   ToolTip.Tip="{localization:Loc Toolbar_Speed}" Classes="MixerLabel" />
+                        <Slider x:Name="SpeedSlider" AutomationProperties.Name="{localization:Loc Toolbar_Speed}" Grid.Column="2" Classes="MixerSlider"
+                                Minimum="0.25" Maximum="2.0"
+                                Value="{Binding Transport.PlaybackSpeed}" TickFrequency="0.05"
+                                IsSnapToTickEnabled="True" Foreground="{DynamicResource FireWarning}"
+                                ctl:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}" />
+                        <TextBlock Grid.Column="3" Classes="MixerValue"
+                                   Text="{Binding Transport.PlaybackSpeed, StringFormat=\{0:P0\}}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}"
+                          Classes="SliderRow">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <Border Classes="MixerVerbSlot" />
+                            <Border Classes="MixerVerbSlot" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_PitchShift}"
+                                   ToolTip.Tip="{localization:Loc Inspector_PitchShift}" Classes="MixerLabel" />
+                        <Slider x:Name="PitchShiftSlider" AutomationProperties.Name="{localization:Loc Inspector_PitchShift}" Grid.Column="2" Classes="MixerSlider"
+                                Minimum="-12" Maximum="12"
+                                Value="{Binding Transport.PitchShift}" TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                Foreground="{DynamicResource FireWarning}"
+                                ctl:ResetOnDoubleClick.Command="{Binding Transport.ResetMixerParameterCommand}"
+                                ToolTip.Tip="{localization:Loc Inspector_DoubleClickReset}" />
+                        <TextBlock Grid.Column="3" Classes="MixerValue"
+                                   Text="{Binding Transport.PitchShift, StringFormat=\{0:+0;-0;0\} st}" />
+                    </Grid>
+                </StackPanel>
+
+                <Panel x:Name="MixerEqBody" IsVisible="{Binding #MixerRailEqEntry.IsChecked}">
+                    <!-- 0.56: the three fixed filters (a bound Polyline, a high-pass
+                         badge and six freq/Q sliders) were replaced by the six-band
+                         parametric module from `EQ and Filters.dc.html`. It is its
+                         OWN view rather than more markup here, for the reason v0.43
+                         paid for on the pedalboard: markup nested inside another
+                         screen is not a type a second host can name, and this module
+                         has to be renderable standalone for the width/height sweep
+                         that verifies it. -->
+                    <inspector:EqModuleView DataContext="{Binding Transport.Eq}" />
+                </Panel>
+
+                <StackPanel x:Name="MixerMidiBody" IsVisible="{Binding #MixerRailMidiEntry.IsChecked}" Spacing="{StaticResource FireSpaceXs}">
+                    <!-- #138: ONE switch plays the chart — MIDI Out (Tools ▸ MIDI instrument
+                         ▸ Out is the same property): the built-in guitar / bass through the
+                         rig and the chart's own tones, or the VST instrument when one is
+                         loaded. Detection never hears either. -->
+                    <CheckBox x:Name="ChartSynthToggle"
+                              IsChecked="{Binding Transport.MidiEnabled}"
+                              IsEnabled="{Binding Transport.CanPlayChart}"
+                              Content="{localization:Loc Mixer_ChartSynth}"
+                              ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Tip}"
+                              AutomationProperties.Name="{localization:Loc Mixer_ChartSynth}" />
+                    <!-- #574: the same availability as the toolbar's toggle — no
+                         engine, nothing sounds, so the switch is off-limits. -->
+                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               Text="{localization:Loc Mixer_ChartSynth_Unavailable}"
+                               IsVisible="{Binding !Transport.CanPlayChart}" />
+                    <!-- #50: which guitar / bass it sounds like, and its pickups. -->
+                    <inspector:ChartSynthInstrumentView x:Name="ChartSynthInstrument" DataContext="{Binding Transport.ChartSynthInstrument}" />
+                    <!-- #164: what the synth plays through in the editor. -->
+                    <Grid x:Name="ChartSynthToneSourceRow" ColumnDefinitions="*,Auto"
+                          ColumnSpacing="{StaticResource FireSpaceSm}"
+                          IsEnabled="{Binding Transport.IsChartSynthAvailable}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                   Text="{localization:Loc Mixer_ChartSynth_ToneSource}"
+                                   ToolTip.Tip="{localization:Loc Mixer_ChartSynth_ToneSource_Tip}" />
+                        <Border Grid.Column="1" Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXxs}">
+                                <RadioButton x:Name="ChartSynthToneSongTones" Classes="FireSegmentItem Dense"
+                                             GroupName="ChartSynthToneSource"
+                                             IsChecked="{Binding Transport.ChartSynthPlaysSongTones}"
+                                             Content="{localization:Loc Mixer_ChartSynth_ToneSource_Song}"
+                                             ToolTip.Tip="{localization:Loc Mixer_ChartSynth_ToneSource_Tip}"
+                                             AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_ToneSource_Song}" />
+                                <RadioButton x:Name="ChartSynthToneOwnRig" Classes="FireSegmentItem Dense"
+                                             GroupName="ChartSynthToneSource"
+                                             IsChecked="{Binding Transport.ChartSynthPlaysOwnRig}"
+                                             Content="{localization:Loc Mixer_ChartSynth_ToneSource_OwnRig}"
+                                             ToolTip.Tip="{localization:Loc Mixer_ChartSynth_ToneSource_Desc}"
+                                             AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_ToneSource_OwnRig}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <TextBlock x:Name="ChartSynthToneSourceDesc" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               Text="{localization:Loc Mixer_ChartSynth_ToneSource_Desc}"
+                               IsVisible="{Binding Transport.ChartSynthPlaysOwnRig}" />
+                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="{StaticResource FireSpaceMd}">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceXxs}">
+                            <Border Classes="MixerVerbSlot" />
+                            <Border Classes="MixerVerbSlot" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Offset}"
+                                   ToolTip.Tip="{localization:Loc Inspector_Offset}" Classes="MixerLabel" />
+                        <NumericUpDown Grid.Column="2"
+                                       AutomationProperties.Name="{localization:Loc Inspector_Offset}"
+                                       HorizontalAlignment="Stretch"
+                                       Minimum="-500" Maximum="500" Increment="5"
+                                       FormatString="0 ms"
+                                       Value="{Binding Transport.MidiOffsetMs}"
+                                       ToolTip.Tip="{localization:Loc Inspector_MidiOffsetTip}" />
+                    </Grid>
+                    <CheckBox x:Name="InstrumentThroughRigToggle"
+                              IsChecked="{Binding Transport.RouteInstrumentToRig}"
+                              IsEnabled="{Binding Transport.CanRouteInstrumentToRig}"
+                              Content="{localization:Loc Mixer_InstrumentThroughRig}"
+                              ToolTip.Tip="{localization:Loc Mixer_InstrumentThroughRig_Tip}"
+                              AutomationProperties.Name="{localization:Loc Mixer_InstrumentThroughRig}" />
+                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               Text="{localization:Loc Mixer_InstrumentThroughRig_Sandboxed}"
+                               IsVisible="{Binding !Transport.CanRouteInstrumentToRig}" />
+                    <!-- #160: how the synth plays this song (saved with the project). -->
+                    <inspector:ChartSynthPlayStyleView x:Name="ChartSynthPlayStyle" DataContext="{Binding SynthPlayStyle}" />
+                </StackPanel>
+            </Panel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

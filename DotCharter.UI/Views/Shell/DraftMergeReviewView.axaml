@@ -1,0 +1,270 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             x:Class="DotCharter.UI.Views.Shell.DraftMergeReviewView"
+             x:DataType="viewModels:DraftMergeReviewViewModel"
+             x:CompileBindings="True">
+    <!-- Chart from audio's merge card (#647): the draft HELD against the current
+         arrangement, one dense row per phrase it would change, in the AI chart
+         review's dense language (AiChartReviewView, #613) so the two cards read
+         as one family. NON-modal, over the timeline's top-right corner, so the
+         phrase marks it publishes stay in view. Unlike the AI card a decision is
+         not batched: ✓ merges the phrase NOW (one undo step), ✕ drops the row,
+         Merge all merges every row (one undo step).
+
+         Hidden until a review is held; MainWindowPrewarm reaches it through
+         IPrewarmableSurfaces. Keyboard (code-behind): Up/Down move the current
+         row and go to it, A merges it, R drops it; the card itself takes focus
+         when the decided row leaves, so the next key still lands. ✓ and ✕ never
+         take focus. Pinned by
+         Perf/DraftMergeReviewConstructionUiPerfSmokeTests. -->
+    <UserControl.Styles>
+        <Style Selector="Border.ReviewBar">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+            <Setter Property="Padding" Value="11,5,12,5" />
+        </Style>
+        <Style Selector="TextBlock.ReviewTitle">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.ReviewMeta">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.ReviewMeta.ReviewWarn">
+            <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+        </Style>
+
+        <Style Selector="Border.ReviewRow">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderRow}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="MinHeight" Value="26" />
+        </Style>
+        <Style Selector="Border.ReviewRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        </Style>
+        <Style Selector="Border.ReviewRow.ReviewCurrent">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        </Style>
+        <Style Selector="Border.ReviewSpine">
+            <Setter Property="Width" Value="3" />
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.ReviewRow.ReviewCurrent Border.ReviewSpine">
+            <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+        </Style>
+
+        <Style Selector="Button.ReviewRowGo">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ReviewRowGo /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="TextBlock.ReviewName">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.ReviewSpan">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- The counts: mono, so +12 ~3 −4 line up down the list. A row that would
+             REPLACE notes the charter wrote reads in the warning colour. -->
+        <Style Selector="TextBlock.ReviewDetail">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="MaxWidth" Value="96" />
+        </Style>
+        <Style Selector="Border.ReviewRow.ReviewReplace TextBlock.ReviewDetail">
+            <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+        </Style>
+
+        <Style Selector="Button.ReviewToggle">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ReviewToggle /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextDim}" />
+        </Style>
+        <Style Selector="Button.ReviewToggle.ReviewAccept:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireSuccessTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireSuccessBorder}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireSuccess}" />
+        </Style>
+        <Style Selector="Button.ReviewToggle.ReviewReject:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+        </Style>
+        <Style Selector="Button.ReviewToggle PathIcon">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Height" Value="9" />
+        </Style>
+
+        <Style Selector="Button.ReviewVerb">
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.ReviewApply">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border x:Name="DraftMergeCard" Theme="{StaticResource FireCardBorder}" Classes="FireCard"
+            Background="{DynamicResource FireSurfaceChrome}"
+            Padding="{StaticResource FirePadNone}" ClipToBounds="True"
+            Width="460" VerticalAlignment="Top"
+            Focusable="True" FocusAdorner="{x:Null}"
+            IsVisible="{Binding IsOpen, FallbackValue=False}">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <!-- Merge audio draft · 5 phrases  ⓘ
+                 Into “Lead” · each merge is one undo step
+                 4 phrases with notes left alone -->
+            <Border Grid.Row="0" x:Name="DraftMergeHeader" Classes="ReviewBar" BorderThickness="0,0,0,1">
+                <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                        <TextBlock Grid.Column="0" x:Name="DraftMergeTitle" Classes="ReviewTitle" MaxWidth="220"
+                                   Text="{localization:Loc DraftMerge_Title}" />
+                        <TextBlock Grid.Column="1" x:Name="DraftMergeCounts" Classes="ReviewMeta"
+                                   TextAlignment="Right" Text="{Binding CountsText}"
+                                   ToolTip.Tip="{Binding CountsText}" />
+                        <Border Grid.Column="2" x:Name="DraftMergeInfo" Background="Transparent"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{localization:Loc DraftMerge_Info}"
+                                ToolTip.Tip="{Binding HintText}" ToolTip.ShowDelay="150">
+                            <PathIcon Data="{DynamicResource IconInfo}" Width="11" Height="11"
+                                      Foreground="{DynamicResource FireTextMuted}" />
+                        </Border>
+                    </Grid>
+                    <TextBlock x:Name="DraftMergeSubtitle" Classes="ReviewMeta" Text="{Binding Subtitle}"
+                               ToolTip.Tip="{Binding Subtitle}" />
+                    <TextBlock x:Name="DraftMergeOccupied" Classes="ReviewMeta ReviewWarn"
+                               IsVisible="{Binding HasOccupied}" Text="{Binding OccupiedText}"
+                               ToolTip.Tip="{Binding OccupiedText}" />
+                </StackPanel>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" x:Name="DraftMergeScroll"
+                          HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                          AllowAutoHide="False">
+                <ItemsControl x:Name="DraftMergeRows" ItemsSource="{Binding Rows}"
+                              Grid.IsSharedSizeScope="True"
+                              KeyboardNavigation.TabNavigation="Once">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="viewModels:DraftMergeRowViewModel">
+                            <Border x:Name="DraftMergeRow" Classes="ReviewRow"
+                                    Classes.ReviewCurrent="{Binding IsCurrent}"
+                                    Classes.ReviewReplace="{Binding IsReplace}">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXs}"
+                                      Margin="0,0,6,0">
+                                    <Button Grid.Column="0" x:Name="DraftMergeRowGo" Classes="ReviewRowGo"
+                                            Command="{Binding ShowCommand}"
+                                            AutomationProperties.Name="{Binding AccessibleName}"
+                                            ToolTip.Tip="{Binding Tip}">
+                                        <Grid ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="MergeSpan" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="MergeDetail" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="MergeConfidence" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Classes="ReviewSpine" />
+                                            <TextBlock Grid.Column="1" x:Name="DraftMergeRowName" Classes="ReviewName"
+                                                       Text="{Binding Name}" />
+                                            <TextBlock Grid.Column="2" x:Name="DraftMergeRowSpan" Classes="ReviewSpan"
+                                                       Text="{Binding Where}" />
+                                            <TextBlock Grid.Column="3" x:Name="DraftMergeRowDetail" Classes="ReviewDetail"
+                                                       Text="{Binding Detail}" />
+                                            <TextBlock Grid.Column="4" x:Name="DraftMergeRowConfidence" Classes="ReviewSpan"
+                                                       TextAlignment="Right" MinWidth="28"
+                                                       Text="{Binding Confidence}" />
+                                        </Grid>
+                                    </Button>
+                                    <Button Grid.Column="1" x:Name="DraftMergeRowAccept" Classes="ReviewToggle ReviewAccept"
+                                            IsTabStop="False" Focusable="False"
+                                            AutomationProperties.Name="{localization:Loc DraftMerge_Accept}"
+                                            ToolTip.Tip="{localization:Loc DraftMerge_Accept_Tip}"
+                                            Command="{Binding MergeCommand}">
+                                        <PathIcon Data="{DynamicResource IconCheck}" />
+                                    </Button>
+                                    <Button Grid.Column="2" x:Name="DraftMergeRowReject" Classes="ReviewToggle ReviewReject"
+                                            IsTabStop="False" Focusable="False"
+                                            AutomationProperties.Name="{localization:Loc DraftMerge_Reject}"
+                                            ToolTip.Tip="{localization:Loc DraftMerge_Reject_Tip}"
+                                            Command="{Binding RejectCommand}">
+                                        <PathIcon Data="{DynamicResource IconClose}" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Discard                                   [Merge all] -->
+            <Border Grid.Row="2" x:Name="DraftMergeFooter" Classes="ReviewBar" BorderThickness="0,1,0,0">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                    <Button Grid.Column="0" x:Name="DraftMergeDiscard" Theme="{StaticResource FireQuietButton}"
+                            Classes="FireQuiet ReviewVerb" HorizontalAlignment="Left"
+                            Content="{localization:Loc DraftMerge_Discard}"
+                            AutomationProperties.Name="{localization:Loc DraftMerge_Discard}"
+                            ToolTip.Tip="{localization:Loc DraftMerge_Discard_Tip}"
+                            Command="{Binding DiscardCommand}" />
+                    <Button Grid.Column="1" x:Name="DraftMergeAll"
+                            Theme="{StaticResource FirePopoverPrimaryButton}" Classes="FirePopoverPrimary ReviewApply"
+                            VerticalAlignment="Center"
+                            Content="{localization:Loc DraftMerge_MergeAll}"
+                            AutomationProperties.Name="{localization:Loc DraftMerge_MergeAll}"
+                            ToolTip.Tip="{localization:Loc DraftMerge_MergeAll_Tip}"
+                            Command="{Binding MergeAllCommand}" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

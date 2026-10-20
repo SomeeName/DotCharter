@@ -1,0 +1,200 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.PausedScreenView"
+             x:DataType="contracts:IPausedScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Paused, redesigned.
+
+        One primary verb, a tool GRID and a quiet leave rail — never nine equal
+        word buttons. Every choice on this screen is a different kind of thing:
+        resume is the one you want, the tools change the run, and the three ways
+        out are the ones you must not hit by accident. Giving them one shape
+        each is the whole design.
+
+        The figures are HIDDEN, not zeroed, before the first judged note.
+        Pausing during the count-in is ordinary, and "0 · 0.0 % · 0" reads as a
+        bad run rather than as no run.
+    -->
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+        <Border Theme="{StaticResource FireOverlayScrimBorder}" Classes="FireOverlayScrim" />
+
+        <Grid x:Name="PausedRedesignRoot">
+            <Border x:Name="PausedRedesignCard" Theme="{StaticResource FireOverlayCardBorder}" Classes="FireOverlayCard"
+                    Width="{StaticResource FireDialogWidthLg}"
+                    Padding="{StaticResource FirePadPanelLg}">
+                <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+                    <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Classes="FireSectionHeader">
+                        <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle"
+                                   Text="{localization:Loc PlayMode_Pause_Title}" />
+                        <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextWrapping="Wrap"
+                                   Text="{Binding SongTitle}" />
+                        <!-- SETLIST (#646): where the running setlist stands. -->
+                        <TextBlock x:Name="PausedRedesignSetlistProgress" Theme="{StaticResource FireMonoText}" Classes="FireMono Accent"
+                                   TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding Setlist.IsRunning}"
+                                   Text="{Binding Setlist.ProgressLabel}" />
+                    </StackPanel>
+
+                    <!-- where you stopped -->
+                    <Border x:Name="PausedRedesignRunPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                        <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                            <Grid x:Name="PausedRedesignFigures" ColumnDefinitions="*,*,*"
+                                  IsVisible="{Binding HasRun}"
+                                  ColumnSpacing="{StaticResource FireSpaceXl}">
+                                <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding ScoreLabel}" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc LivePlay_Score}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding AccuracyLabel}" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc LivePlay_Accuracy}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding StreakLabel}" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc LivePlay_Streak}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock x:Name="PausedRedesignNoRunNote" Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                                       IsVisible="{Binding !HasRun}"
+                                       Text="{localization:Loc PlayMode_Pause_NotStartedYet}" />
+
+                            <!-- the section, named beside its label, above the bar it is part of -->
+                            <Grid x:Name="PausedRedesignSectionRow" ColumnDefinitions="Auto,*"
+                                  IsVisible="{Binding HasSection}"
+                                  ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                           VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_Hud_Section}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding SectionLabel}" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceRow}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                           Text="{Binding ElapsedLabel}" />
+                                <ProgressBar Grid.Column="1" Classes="FireMeter" Minimum="0" Maximum="1"
+                                             VerticalAlignment="Center"
+                                             Value="{Binding Progress}" />
+                                <TextBlock Grid.Column="2" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Quiet"
+                                           Text="{Binding TotalLabel}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- the one you want -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceRow}">
+                        <Button x:Name="PausedRedesignResume" Grid.Column="0" Theme="{StaticResource FireCtaButton}" Classes="FireCta"
+                                HorizontalAlignment="Stretch" IsCancel="True"
+                                Command="{Binding ResumeCommand}">
+                            <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                                       Text="{localization:Loc PlayMode_Pause_Resume}" />
+                        </Button>
+                        <Button x:Name="PausedRedesignRestart" Grid.Column="1"
+                                Theme="{StaticResource FireOutlineCtaButton}" Classes="FireOutlineCta" MinWidth="220"
+                                Height="{StaticResource FireCtaHeight}"
+                                ToolTip.Tip="{localization:Loc PlayMode_Pause_Restart_Caption}"
+                                Command="{Binding RestartCommand}"
+                                Content="{localization:Loc PlayMode_Pause_Restart}" />
+                    </Grid>
+
+                    <!-- the tools -->
+                    <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   Text="{localization:Loc PlayMode_Pause_Tools}" />
+                        <ItemsControl x:Name="PausedRedesignToolGrid" ItemsSource="{Binding Tools}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <!-- two equal columns, and every tile in a row the
+                                         same height whatever its caption wraps to -->
+                                    <UniformGrid Columns="2" ColumnSpacing="{StaticResource FireSpaceRow}"
+                                                 RowSpacing="{StaticResource FireSpaceRow}" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IPauseTool">
+                                    <Button Theme="{StaticResource FirePresetCardButton}" Classes="FirePresetCard"
+                                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+                                            Command="{Binding InvokeCommand}"
+                                            AutomationProperties.Name="{Binding Title}">
+                                        <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                                            <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding Title}" />
+                                            <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                                                       Text="{Binding Caption}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- the ways out, quiet on purpose -->
+                    <StackPanel x:Name="PausedRedesignLeaveRail"
+                                Spacing="{StaticResource FireSpaceRow}">
+                        <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   Text="{localization:Loc PlayMode_Pause_Leave}" />
+                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="{StaticResource FireSpaceRow}"
+                              IsVisible="{Binding !Setlist.IsRunning}">
+                            <Button Grid.Column="0" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding EndRunCommand}"
+                                    Content="{localization:Loc PlayMode_Pause_EndRun}" />
+                            <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding LeaveToSongSelectCommand}"
+                                    Content="{localization:Loc PlayMode_Results_SongSelect}" />
+                            <Button Grid.Column="2" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding LeaveToMenuCommand}"
+                                    Content="{localization:Loc Nav_Home}" />
+                        </Grid>
+                        <!-- SETLIST (#646): while one runs, Song select would end it, so the
+                             rail says so — Skip song (this run is abandoned) and End setlist
+                             take its place. -->
+                        <Grid x:Name="PausedRedesignSetlistRow" ColumnDefinitions="Auto,*,*,Auto" ColumnSpacing="{StaticResource FireSpaceRow}"
+                              IsVisible="{Binding Setlist.IsRunning}">
+                            <Button Grid.Column="0" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding EndRunCommand}"
+                                    Content="{localization:Loc PlayMode_Pause_EndRun}" />
+                            <Button x:Name="PausedRedesignSetlistSkip" Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding Setlist.SkipSetlistSongCommand}"
+                                    Content="{localization:Loc PlayMode_Setlist_Skip}" />
+                            <Button x:Name="PausedRedesignSetlistEnd" Grid.Column="2" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding Setlist.EndSetlistCommand}"
+                                    Content="{localization:Loc PlayMode_Setlist_End}" />
+                            <Button Grid.Column="3" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding LeaveToMenuCommand}"
+                                    Content="{localization:Loc Nav_Home}" />
+                        </Grid>
+                        <TextBlock Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_Pause_Hint}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Panel>
+</UserControl>

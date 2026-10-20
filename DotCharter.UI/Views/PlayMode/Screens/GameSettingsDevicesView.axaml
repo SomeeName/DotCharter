@@ -1,0 +1,244 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GameSettingsDevicesView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- The Devices section pane of the Play Mode settings modal. Its host,
+         Screens/GameplaySettingsView.axaml, declares it with the pane's x:Name
+         (GameSettingsDevicesPane, which PlayModeView.GameplaySettingsPaneNames prewarms) and
+         its IsVisible gate. Lifted out of PlayModeView.axaml in #294, markup
+         unchanged. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  BringIntoViewOnFocusChange="False"
+                  Padding="{StaticResource FirePadBody}">
+        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+            <!-- What the engine is running RIGHT
+                 NOW, read back from the engine —
+                 not from the config, because the
+                 two disagree exactly when it
+                 matters. -->
+            <Border Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Accent">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow Accent"
+                               Text="{localization:Loc PlayMode_GS_EngineNow}" />
+                    <TextBlock x:Name="GameSettingsEngineSummary" Theme="{StaticResource FireMonoText}" Classes="FireMono Value"
+                               Text="{Binding Settings.GameplayEngineSummary}" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}"
+                        IsVisible="{Binding Settings.HasAudioDevices}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Output}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_OutputDriver}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_OutputDriver_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ItemsSource="{Binding Settings.AudioDevices.DriverOptions}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_GS_OutputDriver}"
+                              SelectedItem="{Binding Settings.AudioDevices.SelectedDriver, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_OutputDevice}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_OutputDevice_Desc}" />
+                    </StackPanel>
+                    <Panel Grid.Column="2" VerticalAlignment="Center">
+                        <!-- Empty is a legitimate state on every device combo (no pick yet =
+                             system default on WASAPI, nothing chosen on ASIO), so each says
+                             so instead of rendering as a blank box; long device names TRIM
+                             with the full name on the tooltip ("Focusrite Thunderl..."). -->
+                        <ComboBox x:Name="GameSettingsOutputDevice" Classes="FireCombo"
+                                  HorizontalAlignment="Stretch"
+                                  IsVisible="{Binding Settings.AudioDevices.IsWasapiOutput}"
+                                  PlaceholderText="{localization:Loc Combo_SystemDefault}"
+
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GS_OutputDevice}"
+                                  ItemsSource="{Binding Settings.AudioDevices.WasapiDevices}"
+                                  SelectedIndex="{Binding Settings.AudioDevices.SelectedWasapiOutputIndex, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <ComboBox x:Name="GameSettingsOutputDeviceAsio" Classes="FireCombo"
+                                  HorizontalAlignment="Stretch"
+                                  IsVisible="{Binding Settings.AudioDevices.IsAsioOutput}"
+                                  PlaceholderText="{localization:Loc Combo_SelectDevice}"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GS_OutputDevice}"
+                                  ItemsSource="{Binding Settings.AudioDevices.AsioDevices}"
+                                  SelectedIndex="{Binding Settings.AudioDevices.SelectedAsioOutputIndex, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Panel>
+                </Grid>
+            </StackPanel>
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}"
+                        IsVisible="{Binding Settings.HasAudioDevices}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Input}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_EnableInput}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_EnableInput_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GS_EnableInput}"
+                                  IsChecked="{Binding Settings.AudioDevices.EnableInput, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_InputDriver}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_InputDriver_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ItemsSource="{Binding Settings.AudioDevices.DriverOptions}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_GS_InputDriver}"
+                              SelectedItem="{Binding Settings.AudioDevices.SelectedInputDriver, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_InputDevice}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_InputDevice_Desc}" />
+                    </StackPanel>
+                    <Panel Grid.Column="2" VerticalAlignment="Center">
+                        <ComboBox x:Name="GameSettingsInputDevice" Classes="FireCombo"
+                                  HorizontalAlignment="Stretch"
+                                  IsVisible="{Binding Settings.AudioDevices.IsWasapiInput}"
+                                  PlaceholderText="{localization:Loc Combo_SystemDefault}"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GS_InputDevice}"
+                                  ItemsSource="{Binding Settings.AudioDevices.WasapiInputDevicesList}"
+                                  SelectedIndex="{Binding Settings.AudioDevices.SelectedWasapiInputIndex, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <ComboBox x:Name="GameSettingsInputDeviceAsio" Classes="FireCombo"
+                                  HorizontalAlignment="Stretch"
+                                  IsVisible="{Binding Settings.AudioDevices.IsAsioInput}"
+                                  PlaceholderText="{localization:Loc Combo_SelectDevice}"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GS_InputDevice}"
+                                  ItemsSource="{Binding Settings.AudioDevices.AsioInputDevicesList}"
+                                  SelectedIndex="{Binding Settings.AudioDevices.SelectedAsioInputIndex, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Panel>
+                </Grid>
+            </StackPanel>
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}"
+                        IsVisible="{Binding Settings.HasAudioDevices}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Engine}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_AutoFollow}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_AutoFollow_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GS_AutoFollow}"
+                                  IsChecked="{Binding Settings.AudioDevices.AutoFollowDeviceSettings, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_SampleRate}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_SampleRate_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              IsEnabled="{Binding Settings.AudioDevices.IsManualAudioConfig}"
+                              ItemsSource="{Binding Settings.AudioDevices.SampleRateOptions}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_GS_SampleRate}"
+                              SelectedItem="{Binding Settings.AudioDevices.SampleRate, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_BufferSize}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_BufferSize_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              IsEnabled="{Binding Settings.AudioDevices.IsManualAudioConfig}"
+                              ItemsSource="{Binding Settings.AudioDevices.BufferSizeOptions}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_GS_BufferSize}"
+                              SelectedItem="{Binding Settings.AudioDevices.BufferSizeFrames, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_OutputLatency}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_OutputLatency_Desc}" />
+                    </StackPanel>
+                    <Button Grid.Column="2" x:Name="GameSettingsApplyDevices"
+                            Theme="{StaticResource FireGhostButton}" Classes="FireGhost Accent"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                            Command="{Binding Settings.ApplyAudioDevicesCommand}"
+                            Content="{localization:Loc PlayMode_GS_ApplyDevices}" />
+                </Grid>
+            </StackPanel>
+
+            <!-- No audio service at all (a headless
+                 host, or the engine failed to come
+                 up). Say so; never show an empty
+                 device picker that looks broken. -->
+            <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Classes="FireEmptyState"
+                        IsVisible="{Binding !Settings.HasAudioDevices}">
+                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                           Text="{localization:Loc PlayMode_GS_NoDevice}" />
+                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                           Text="{localization:Loc PlayMode_GS_NoDevice_Body}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

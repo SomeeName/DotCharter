@@ -1,0 +1,147 @@
+<MenuItem xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+          xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+          xmlns:converters="using:DotCharter.UI.Converters"
+          x:Class="DotCharter.UI.Views.Shell.Menus.EditMenu"
+          x:DataType="viewModels:MainWindowViewModel"
+          Classes="FireMenuTop" Header="{localization:Loc Menu_Edit}">
+    <MenuItem Header="{localization:Loc Menu_Undo}" Command="{Binding ChartEditor.UndoCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.Undo, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M12.5,8C9.85,8 7.45,9 5.6,10.6L2,7V16H11L7.38,12.38C8.77,11.22 10.54,10.5 12.5,10.5C16.04,10.5 19.05,12.81 20.1,16L22.47,15.22C21.08,11.03 17.15,8 12.5,8Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_Redo}" Command="{Binding ChartEditor.RedoCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.Redo, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M11.5,8C14.15,8 16.55,9 18.4,10.6L22,7V16H13L16.62,12.38C15.23,11.22 13.46,10.5 11.5,10.5C7.96,10.5 4.95,12.81 3.9,16L1.53,15.22C2.92,11.03 6.85,8 11.5,8Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc History_Menu}" Command="{Binding ShellDialogs.OpenHistoryCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Checkpoints_Menu}" Command="{Binding ShellDialogs.OpenCheckpointsCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12H8A4,4 0 0,1 12,8V6Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_Cut}" Command="{Binding CutCommand}" InputGesture="{Binding ProjectState.Keybinds.Cut, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_Copy}" Command="{Binding CopyCommand}" InputGesture="{Binding ProjectState.Keybinds.Copy, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_Paste}" Command="{Binding PasteCommand}" InputGesture="{Binding ProjectState.Keybinds.Paste, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_PasteSpecial}"
+              Command="{Binding ShellDialogs.OpenPasteSpecialCommand}" InputGesture="{Binding ProjectState.Keybinds.PasteSpecial, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <Separator />
+
+    <!-- SELECTION. The "Select" submenu is GONE (2026-09-04): its third
+         row, Select by query, went with its dialog, and a submenu that
+         hides two rows is an extra click for nothing — the rule
+         MainMenuLocalizationTests.NoSubmenuHidesFewerThanThreeRows
+         enforces. The two survivors sit flat between the clipboard
+         verbs and Delete, which acts ON a selection rather than making
+         one. -->
+    <MenuItem Header="{localization:Loc Menu_SelectAll}" Command="{Binding SelectAllCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.SelectAll, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M3,5H21V7H3V5M3,17H21V19H3V17M6,9H18V15H6V9M8,11V13H16V11H8Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_SelectLikePattern}"
+              Command="{Binding SelectLikePatternCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.SelectLike, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M3,5H21V7H3V5M3,17H21V19H3V17M6,9H18V15H6V9M8,11V13H16V11H8Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_DeleteSelected}" Command="{Binding DeleteSelectionCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.Delete, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_PatternBuilder}"
+              Command="{Binding ShellDialogs.OpenPatternBuilderCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.PatternBuilder, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+
+    <!-- The four verbs that MOVE or RESIZE what is already there, as
+         opposed to creating or selecting it. -->
+    <MenuItem Header="{localization:Loc Menu_GroupSnapLength}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_SnapSelected}" Command="{Binding SnapSelectedCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.SnapSelected, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_SnapAll}" Command="{Binding SnapAllCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.SnapAll, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <Separator />
+        <MenuItem Header="{localization:Loc Menu_IncreaseLength}" Command="{Binding IncreaseLengthCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.IncreaseLength, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_DecreaseLength}" Command="{Binding DecreaseLengthCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.DecreaseLength, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_Bookmarks}">
+        <!-- CommandParameter must be a TYPED Int32: a string literal
+             makes RelayCommand<int>.CanExecute throw the moment the
+             submenu opens, which crashes the app. -->
+        <MenuItem Header="0" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=0}">
+            <MenuItem.CommandParameter><x:Int32>0</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="1" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=1}">
+            <MenuItem.CommandParameter><x:Int32>1</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="2" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=2}">
+            <MenuItem.CommandParameter><x:Int32>2</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="3" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=3}">
+            <MenuItem.CommandParameter><x:Int32>3</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="4" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=4}">
+            <MenuItem.CommandParameter><x:Int32>4</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="5" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=5}">
+            <MenuItem.CommandParameter><x:Int32>5</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="6" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=6}">
+            <MenuItem.CommandParameter><x:Int32>6</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="7" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=7}">
+            <MenuItem.CommandParameter><x:Int32>7</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="8" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=8}">
+            <MenuItem.CommandParameter><x:Int32>8</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+        <MenuItem Header="9" Command="{Binding ToggleBookmarkCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.BookmarkBase, Converter={x:Static converters:KeyChordToGestureConverter.Instance}, ConverterParameter=9}">
+            <MenuItem.CommandParameter><x:Int32>9</x:Int32></MenuItem.CommandParameter>
+        </MenuItem>
+    </MenuItem>
+</MenuItem>

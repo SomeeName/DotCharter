@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="using:DotCharter.Tone.UI.Controls.Fire"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigNodeSpectrumView"
+             x:DataType="vm:RigNodeSpectrumViewModel">
+    <!-- The selected unit's pre/post spectrum (#299): a reference phrase rendered
+         OFFLINE through the chain cut before and after the unit. PRE / POST picks
+         the bright curve; the other stays faint behind it. A host with no offline
+         renderer prints why instead of a dead button. -->
+    <StackPanel Spacing="{StaticResource FireSpaceSm}">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                       Text="{localization:Loc Rig_Spectrum}" />
+            <Border Grid.Column="1" Theme="{StaticResource FireModeStripBorder}" Classes="FireModeStrip">
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton" x:Name="RigSpectrumPre"
+                                  IsChecked="{Binding IsPre, Mode=OneWay}" Command="{Binding SelectTapCommand}" CommandParameter="Pre"
+                                  AutomationProperties.Name="{localization:Loc Rig_SpectrumPre}">
+                        <TextBlock Text="{localization:Loc Rig_SpectrumPre}" />
+                    </ToggleButton>
+                    <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton" x:Name="RigSpectrumPost"
+                                  IsChecked="{Binding IsPost, Mode=OneWay}" Command="{Binding SelectTapCommand}" CommandParameter="Post"
+                                  AutomationProperties.Name="{localization:Loc Rig_SpectrumPost}">
+                        <TextBlock Text="{localization:Loc Rig_SpectrumPost}" />
+                    </ToggleButton>
+                </StackPanel>
+            </Border>
+            <Button Grid.Column="2" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton" x:Name="RigSpectrumMeasure"
+                    Command="{Binding MeasureCommand}" Content="{localization:Loc Rig_SpectrumMeasure}"
+                    ToolTip.Tip="{localization:Loc Rig_SpectrumMeasure_Tip}" />
+        </Grid>
+        <fire:RigSpectrumPlot x:Name="RigSpectrumPlot" Height="72"
+                              Bands="{Binding Bands}" ReferenceBands="{Binding ReferenceBands}" />
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" TextWrapping="Wrap"
+                   Text="{localization:Loc Rig_SpectrumUnavailable}" IsVisible="{Binding IsUnavailable}" />
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" TextWrapping="Wrap"
+                   Text="{localization:Loc Rig_SpectrumUnsupported}" IsVisible="{Binding IsUnsupported}" />
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" TextWrapping="Wrap"
+                   Text="{localization:Loc Rig_SpectrumFailed}" IsVisible="{Binding IsFailed}" />
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" TextWrapping="Wrap"
+                   Text="{localization:Loc Rig_SpectrumHint}" IsVisible="{Binding IsAvailable}" />
+    </StackPanel>
+</UserControl>

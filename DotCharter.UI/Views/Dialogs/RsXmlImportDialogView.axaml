@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.RsXmlImportDialogView"
+             x:DataType="contracts:IRsXmlImportScreen"
+             x:CompileBindings="True">
+
+    <!-- Rocksmith XML import. Grammar: Views/Dialogs/DialogStyles.axaml.
+         Read-only: the file is already chosen by the time this appears, so the
+         card only reports progress and — on failure — why. Per the CLOSE TIER
+         rule its single footer action is the Primary, carrying IsCancel and
+         IsDefault: Enter and Esc both leave. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconFileDocument}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_RsXmlImport_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_RsXmlImport_Subtitle}" />
+                        <!-- Which file this is about — the third, quietest line. -->
+                        <TextBlock Theme="{DynamicResource DialogContextText}" Classes="DialogContext" Text="{Binding FileName}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" IsVisible="{Binding IsBusy}">
+                        <ProgressBar />
+                        <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" Classes="DlgBusyText" Text="{localization:Loc Dialog_RsXmlImport_Busy}" />
+                    </StackPanel>
+
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Error" Margin="{DynamicResource GapTopLg}"
+                            IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

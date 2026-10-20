@@ -1,0 +1,269 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellVm="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.PauseMenuView"
+             x:DataType="vm:PlayModeViewModel">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter/Views/PlayMode/PlayModeThemes.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- 0.37.1: it was a 320 px stack of NINE identical word buttons, in
+         which "Resume" carried exactly as much weight as "Amp/FX". Now: one
+         primary Resume, the six mid-run tools as a 2x3 grid of MenuTiles
+         that say what each one DOES, and the three ways to leave the run on
+         a quiet footer rail. Still a centered card over the frozen frame,
+         never a Flyout (airspace). -->
+    <!-- Hosted by PlayModeView as the ContentTemplate body of
+         PauseScreenRootHost, which carries the IsPausedScreen gate; the frozen
+         highway frame and the scrim under it stay in PlayModeView. The
+         screen is DEFERRED (PlayModeView.DeferredScreenHostNames): this view
+         is not constructed for the app's first frame. Lifted out of
+         PlayModeView.axaml in #294, markup unchanged. -->
+    <!-- P0.3 (resolution audit §4): the pause card measured 620x565
+         px — 16.9 % of a 1080p window and 4.2 % of a 4K one,
+         `ratio` 0.25. The card keeps its 620 px DESIGN width (every
+         column, wrap point and German string in it is tuned to
+         that) and the Viewbox scales the whole figure UpOnly to a
+         ceiling that is a SHARE of the surface, so the menu is the
+         same fraction of the screen on every panel. A Viewbox
+         LAYOUT-scales, so the six tool tiles keep hit-testing and
+         their focus adorners; the text is vector and stays crisp.
+         The gate stays on the HOST (PlayModeView.DeferredScreenHostNames
+         — a second gate here would make the prewarm realize
+         nothing), so this Viewbox carries none. -->
+    <Viewbox x:Name="PauseScreenFrame"
+             Stretch="Uniform" StretchDirection="UpOnly"
+             HorizontalAlignment="Center" VerticalAlignment="Center"
+             MaxWidth="{Binding $parent[Panel].Bounds,
+                 Converter={x:Static conv:ViewportFractionConverter.Instance},
+                 ConverterParameter=Width:0.42}"
+             MaxHeight="{Binding $parent[Panel].Bounds,
+                 Converter={x:Static conv:ViewportFractionConverter.Instance},
+                 ConverterParameter=Height:0.80}">
+    <Border Theme="{StaticResource GlassPanelBorder}" x:Name="PauseScreenRoot"
+            Classes="GlassPanel" Width="620"
+            HorizontalAlignment="Center" VerticalAlignment="Center">
+      <Grid>
+        <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+        <StackPanel Spacing="{StaticResource SpaceLg}">
+        <!-- The header now carries the RUN, not just the song. The old one
+             told you the title (which you knew) and nothing about how the
+             run was going (the only question you have while looking at it).
+             The figures are a snapshot taken at pause — see PausedRunFacts;
+             with no judged run behind the pause the whole row hides rather
+             than printing 0 %. Grid, not a horizontal StackPanel: German
+             runs ~40 % longer and a StackPanel would push the figures off
+             the card. -->
+        <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" Spacing="{StaticResource SpaceXxs}">
+                <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc PlayMode_Nav_Play}" Classes="Eyebrow" />
+                <TextBlock Theme="{StaticResource ScreenTitleText}" Text="{localization:Loc PlayMode_Pause_Title}" Classes="ScreenTitle" />
+                <Border Theme="{StaticResource HeaderRuleBorder}" Classes="HeaderRule" HorizontalAlignment="Left" />
+                <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{Binding FlowSongTitle}" Classes="ScreenSubtitle"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="{StaticResource GapTopXs}" />
+                <StackPanel Orientation="Horizontal" x:Name="PauseWhereRow"
+                            Spacing="{StaticResource SpaceSm}"
+                            IsVisible="{Binding PausedRun.HasRun}">
+                    <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel" Text="{Binding PausedRun.SectionLabel}"
+                               IsVisible="{Binding PausedRun.HasSection}"
+                               TextTrimming="CharacterEllipsis" MaxWidth="200" />
+                    <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel" Text="{Binding PausedRun.ElapsedLabel}" />
+                    <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel" Text="/" />
+                    <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel" Text="{Binding PausedRun.TotalLabel}" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" x:Name="PauseRunFigures"
+                        VerticalAlignment="Top"
+                        Spacing="{StaticResource SpaceLg}"
+                        IsVisible="{Binding PausedRun.HasRun}">
+                <StackPanel Spacing="1">
+                    <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel" HorizontalAlignment="Right"
+                               Text="{localization:Loc LivePlay_Accuracy}" />
+                    <TextBlock Theme="{StaticResource StatFigureText}" Classes="StatFigure" HorizontalAlignment="Right"
+                               Foreground="{DynamicResource SuccessColor}"
+                               Text="{Binding PausedRun.AccuracyLabel}" />
+                </StackPanel>
+                <StackPanel Spacing="1">
+                    <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel" HorizontalAlignment="Right"
+                               Text="{localization:Loc LivePlay_Streak}" />
+                    <TextBlock Theme="{StaticResource StatFigureText}" Classes="StatFigure" HorizontalAlignment="Right"
+                               Foreground="{DynamicResource AccentColor}"
+                               Text="{Binding PausedRun.StreakLabel}" />
+                </StackPanel>
+                <StackPanel Spacing="1">
+                    <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel" HorizontalAlignment="Right"
+                               Text="{localization:Loc LivePlay_Score}" />
+                    <TextBlock Theme="{StaticResource StatFigureText}" Classes="StatFigure" HorizontalAlignment="Right"
+                               Text="{Binding PausedRun.ScoreLabel}" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <Button x:Name="PauseResume" AutomationProperties.Name="{localization:Loc PlayMode_Pause_Resume}" Theme="{StaticResource PrimaryButton}" Classes="PlayMenu Primary"
+                Command="{Binding ResumeGameplayCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceMd}"
+                        HorizontalAlignment="Center">
+                <PathIcon Data="{DynamicResource IconPlay}" Width="15" Height="15"
+                          VerticalAlignment="Center" />
+                <TextBlock Text="{localization:Loc PlayMode_Pause_Resume}"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </Button>
+
+        <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc PlayMode_Pause_Tools}" Classes="Eyebrow" />
+        <Grid x:Name="PauseToolGrid"
+              ColumnDefinitions="*,10,*" RowDefinitions="Auto,10,Auto,10,Auto">
+            <Button AutomationProperties.Name="{localization:Loc PlayMode_Pause_RiffRepeater}" Grid.Row="0" Grid.Column="0" Classes="MenuTile"
+                    Command="{Binding OpenRiffRepeaterCommand}">
+                <Grid ColumnDefinitions="Auto,10,*">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource IconRepeat}"
+                              Width="17" Height="17" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Spacing="1">
+                        <TextBlock Text="{localization:Loc PlayMode_Pause_RiffRepeater}"
+                                   FontWeight="SemiBold" HorizontalAlignment="Left" />
+                        <TextBlock Theme="{StaticResource StatLabelText}" Text="{localization:Loc PlayMode_Pause_RiffRepeater_Caption}"
+                                   Classes="StatLabel" HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+            <Button AutomationProperties.Name="{localization:Loc PlayMode_Pause_Restart}" Grid.Row="0" Grid.Column="2" Classes="MenuTile"
+                    Command="{Binding RestartRunCommand}">
+                <Grid ColumnDefinitions="Auto,10,*">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource IconRedo}"
+                              Width="17" Height="17" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Spacing="1">
+                        <TextBlock Text="{localization:Loc PlayMode_Pause_Restart}"
+                                   FontWeight="SemiBold" HorizontalAlignment="Left" />
+                        <TextBlock Theme="{StaticResource StatLabelText}" Text="{localization:Loc PlayMode_Pause_Restart_Caption}"
+                                   Classes="StatLabel" HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+            <Button AutomationProperties.Name="{localization:Loc PlayMode_OpenTuner}" Grid.Row="2" Grid.Column="0" Classes="MenuTile"
+                    Command="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ShellDialogs.OpenTunerCommand}">
+                <Grid ColumnDefinitions="Auto,10,*">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource IconTune}"
+                              Width="17" Height="17" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Spacing="1">
+                        <TextBlock Text="{localization:Loc PlayMode_OpenTuner}"
+                                   FontWeight="SemiBold" HorizontalAlignment="Left" />
+                        <TextBlock Theme="{StaticResource StatLabelText}" Text="{localization:Loc PlayMode_Pause_Tuner_Caption}"
+                                   Classes="StatLabel" HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+            <Button AutomationProperties.Name="{localization:Loc PlayMode_Pedalboard}" Grid.Row="2" Grid.Column="2" Classes="MenuTile"
+                    Command="{Binding ToneRig.OpenPedalboardCommand}">
+                <Grid ColumnDefinitions="Auto,10,*">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource IconEqualizer}"
+                              Width="17" Height="17" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Spacing="1">
+                        <TextBlock Text="{localization:Loc PlayMode_Pedalboard}"
+                                   FontWeight="SemiBold" HorizontalAlignment="Left" />
+                        <TextBlock Theme="{StaticResource StatLabelText}" Text="{localization:Loc PlayMode_Pause_Pedalboard_Caption}"
+                                   Classes="StatLabel" HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+            <Button AutomationProperties.Name="{localization:Loc PlayMode_AmpFx}" Grid.Row="4" Grid.Column="0" Classes="MenuTile"
+                    Command="{Binding OpenAmpFxCommand}">
+                <Grid ColumnDefinitions="Auto,10,*">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource IconAmp}"
+                              Width="17" Height="17" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Spacing="1">
+                        <TextBlock Text="{localization:Loc PlayMode_AmpFx}"
+                                   FontWeight="SemiBold" HorizontalAlignment="Left" />
+                        <TextBlock Theme="{StaticResource StatLabelText}" Text="{localization:Loc PlayMode_Pause_AmpFx_Caption}"
+                                   Classes="StatLabel" HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+            <!-- Settings mid-song: opens the curated gameplay-settings
+                 overlay OVER the pause menu (Esc closes it back to here) —
+                 never leaves the paused run for the editor's tabbed
+                 Settings view. -->
+            <Button AutomationProperties.Name="{localization:Loc PlayMode_Menu_Settings}" Grid.Row="4" Grid.Column="2" Classes="MenuTile"
+                    Command="{Binding Settings.OpenGameplaySettingsCommand}">
+                <Grid ColumnDefinitions="Auto,10,*">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource IconCog}"
+                              Width="17" Height="17" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Spacing="1">
+                        <TextBlock Text="{localization:Loc PlayMode_Menu_Settings}"
+                                   FontWeight="SemiBold" HorizontalAlignment="Left" />
+                        <TextBlock Theme="{StaticResource StatLabelText}" Text="{localization:Loc PlayMode_Pause_Settings_Caption}"
+                                   Classes="StatLabel" HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </Grid>
+
+        <!-- Leaving the run. END RUN is not a peer of "Song select": it is
+             the one that BANKS what you just played and takes you to
+             Results, and the mockup pulls it out as a warm-coloured action
+             for exactly that reason. The other two discard the run, so they
+             stay quiet. -->
+        <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc PlayMode_Pause_Leave}" Classes="Eyebrow" />
+        <Grid ColumnDefinitions="*,8,Auto,8,Auto">
+            <Button Grid.Column="0" x:Name="PauseEndRun"
+                    Theme="{StaticResource SubtleButton}" Classes="Subtle" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    BorderBrush="{DynamicResource WarningColor}"
+                    Foreground="{DynamicResource WarningColor}"
+                    Command="{Binding EndRunFromPauseCommand}"
+                    Content="{localization:Loc PlayMode_Pause_EndRun}" />
+            <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                    HorizontalContentAlignment="Center"
+                    Command="{Binding AbortToSongSelectCommand}"
+                    Content="{localization:Loc PlayMode_Results_SongSelect}" />
+            <Button Grid.Column="4" Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                    HorizontalContentAlignment="Center"
+                    Command="{Binding AbortToHomeCommand}"
+                    Content="{localization:Loc Nav_Home}" />
+        </Grid>
+        <!-- SETLIST (#646): skip to the next song (this run is abandoned) or
+             end the setlist here. Only while one runs. Bound through the
+             IPausedSetlist contract. -->
+        <StackPanel x:Name="PauseSetlistRow" Spacing="6"
+                    DataContext="{Binding Setlists}" x:DataType="contracts:IPausedSetlist"
+                    IsVisible="{Binding IsRunning}">
+            <TextBlock x:Name="PauseSetlistProgress" Theme="{StaticResource StatLabelText}" Classes="StatLabel"
+                       TextWrapping="Wrap"
+                       Text="{Binding ProgressLabel}" />
+            <Grid ColumnDefinitions="*,8,*">
+                <Button Grid.Column="0" x:Name="PauseSetlistSkip"
+                        Theme="{StaticResource SubtleButton}" Classes="Subtle" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Command="{Binding SkipSetlistSongCommand}"
+                        Content="{localization:Loc PlayMode_Setlist_Skip}" />
+                <Button Grid.Column="2" x:Name="PauseSetlistEnd"
+                        Theme="{StaticResource SubtleButton}" Classes="Subtle" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Command="{Binding EndSetlistCommand}"
+                        Content="{localization:Loc PlayMode_Setlist_End}" />
+            </Grid>
+        </StackPanel>
+        <TextBlock Text="{localization:Loc PlayMode_Pause_Hint}"
+                   HorizontalAlignment="Center" TextAlignment="Center"
+                   FontSize="{StaticResource FontSizeSm}"
+                   Foreground="{DynamicResource TextMuted}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+    </Viewbox>
+</UserControl>

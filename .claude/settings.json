@@ -1,0 +1,23 @@
+{
+  "env": {
+    "CLAUDE_CODE_GLOB_NO_IGNORE": "false"
+  },
+  "enabledPlugins": {
+    "csharp-lsp@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/tools/agent/Guard-DotnetCommand.ps1\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

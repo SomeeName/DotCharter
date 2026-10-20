@@ -1,0 +1,245 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. The rig's own marks (§6.8)
+         are four parts, merged one after another: FireRigBoard,
+         FireRigUnitsAndGear, FireRigRolesAndTones, FireRigStage.
+         Sections: the rig's three type roles, the primary action's body
+         caption, the Tones mode (chain chip, tones view), the AI designer
+         and the match breakdown chip. -->
+
+    <Styles.Resources>
+        <!-- ══ THE RIG'S THREE TYPE ROLES (W4, 2026-09-16) ══════════════════════
+             PANEL TITLE, SECTION LABEL, BODY — and nothing else on the tone
+             surfaces or in the module editor. The screen had reached seven faces:
+             `FirePanelTitle`, `FireTitle`, `FireRowTitle`, `FireRowDesc`,
+             `FireRowDesc.Wide`, `FireMono.Faint` and `FireStatusText`, so a
+             section label, a status line and a load state were three different
+             sizes with no rule saying which was which. These three ARE those
+             faces, named for the JOB instead of the look, so the call sites carry
+             a role and never a FontSize or a LetterSpacing.
+             `UI/RigTypographyRoleTests` is the pin.
+
+             A WEIGHT is not a FACE, which is why `.Strong` exists: Space Grotesk
+             Bold and Regular are one family, and a card's own name has to separate
+             from its description without becoming a fourth role.
+
+             The SECTION LABEL doubles as the smallest legible text on the screen,
+             deliberately. "No capture loaded" and "No model loaded" were the
+             module editor's tiniest type — the one line that says whether the unit
+             you are looking at does anything — and the floor for a load state is
+             now this role. -->
+
+        <ControlTheme x:Key="RigRoleTitleText" TargetType="TextBlock">
+            <Style Selector="^.RigRoleTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizePanelTitle}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="RigRoleLabelText" TargetType="TextBlock">
+            <Style Selector="^.RigRoleLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackEyebrow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style Selector="^.RigRoleLabel.Accent">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+            <Style Selector="^.RigRoleLabel.Warn">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+            <Style Selector="^.RigRoleLabel.Danger">
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="RigRoleBodyText" TargetType="TextBlock">
+            <Style Selector="^.RigRoleBody">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style Selector="^.RigRoleBody.Strong">
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+            <Style Selector="^.RigRoleBody.Danger">
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+            <!-- Declared AFTER `.Strong` so `RigRoleBody Strong Warn` is bold AND amber:
+                 Avalonia applies styles in DECLARATION order, not by specificity, so the
+                 other order would leave a load state bold and primary-coloured. That
+                 combination is the module editor's LOAD STATUS — "No model loaded" — and
+                 it is bold body rather than a section label because the section-label
+                 role is the smallest legible type on the screen and this is the one line
+                 that says whether the unit you are looking at does anything. -->
+            <Style Selector="^.RigRoleBody.Warn">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ THE TONES MODE'S CHAIN CHIP (W4) ════════════════════════════════
+             The read-only strip that stands in for the routing canvas while the
+             Tones mode is up. It is not a button and must not look like one: a
+             capability the app cannot honour must never look live, and this strip
+             deliberately cannot select. `.Active` is the selected block, lit in
+             the unit's own identity colour through the inherited
+             `FireUnitState.Category` — the same fold every other rig surface
+             uses, so the strip reads as the board it replaces. -->
+
+        <ControlTheme x:Key="FireChainChipBorder" TargetType="Border">
+            <Style Selector="^.FireChainChip">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.FireChainChip.Active">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneCardStepBorder" TargetType="Border">
+            <!-- A tone card's chain: one short bar per unit in its family's colour, a
+                 glance-able fingerprint above the spelled-out chain. -->
+            <Style Selector="^.FireToneCardStep">
+                <Setter Property="Height" Value="4" />
+                <Setter Property="MinWidth" Value="10" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ THE AI DESIGNER (2026-09-27) ═════════════════════════════════════
+             A column that reads like a conversation: header, the scrolling THREAD
+             (the "You" bubbles and the ANSWER card), and the COMPOSER pinned under
+             it. The column is a card of its own so it reads as a separate tool
+             beside the library, not as more of the library. -->
+
+        <ControlTheme x:Key="FireToneDesignerBorder" TargetType="Border">
+            <Style Selector="^.FireToneDesigner">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceRaised}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCardLg}" />
+                <Setter Property="ClipToBounds" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneDesignerHeadBorder" TargetType="Border">
+            <!-- The header sits on a seam, like the composer under the thread, so a
+                 scrolled thread visibly passes UNDER both. -->
+            <Style Selector="^.FireToneDesignerHead">
+                <Setter Property="Padding" Value="{StaticResource FirePadToneHead}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,0,0,1" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneTurnBorder" TargetType="Border">
+            <!-- What you asked: a quiet raised bubble. -->
+            <Style Selector="^.FireToneTurn">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneAnswerBorder" TargetType="Border">
+            <!-- The model's answer: the one bordered card in the thread, edged in the
+                 accent so the eye lands on it. -->
+            <Style Selector="^.FireToneAnswer">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneStepBorder" TargetType="Border">
+            <!-- One unit of the answer's chain: a chip with its family's dot. -->
+            <Style Selector="^.FireToneStep">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneStepDotBorder" TargetType="Border">
+            <Style Selector="^.FireToneStepDot">
+                <Setter Property="Width" Value="7" />
+                <Setter Property="Height" Value="7" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneManualBorder" TargetType="Border">
+            <!-- The copy & paste block under the composer's send row: parted from it by
+                 the same seam that parts the composer from the thread, so it reads as a
+                 second way to send, not as more of the box above. -->
+            <Style Selector="^.FireToneManual">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                <Setter Property="Padding" Value="{StaticResource FireGapTopMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireToneComposerBorder" TargetType="Border">
+            <!-- The composer: pinned under the thread, parted from it by a seam, on
+                 the sunken floor a message box sits on. -->
+            <Style Selector="^.FireToneComposer">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                <Setter Property="Padding" Value="{StaticResource FirePadToneComposer}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ THE MATCH BREAKDOWN CHIP (W4 round 2, over W5b) ═════════════════
+             One feature block under a candidate's headline percentage: "Dynamics
+             41 %". A chip rather than a list row because there are up to four of
+             them per candidate and they WRAP — the row is already a title, a chain
+             summary and a score column.
+
+             `.Worse` is the honest half and the reason this is not just a tag:
+             W5b's `WorseThanReference` says the search did NOT beat an
+             information-free amp-and-cab in that block, so the chip carries the
+             warning colour rather than the neutral one. A number shown alone was
+             the thing W5b's report set out to remove; this is where the rest of it
+             goes. -->
+
+        <ControlTheme x:Key="FireMatchBlockBorder" TargetType="Border">
+            <Style Selector="^.FireMatchBlock">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.FireMatchBlock.Worse">
+                <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+</Styles>

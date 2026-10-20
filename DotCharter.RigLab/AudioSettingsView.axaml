@@ -1,0 +1,125 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DotCharter.RigLab;assembly=DotCharter.RigLab"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.RigLab.AudioSettingsView"
+             Foreground="{DynamicResource FireTextPrimary}"
+             x:DataType="local:AudioSettingsViewModel">
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="AudioSettingsBody"
+                    MaxWidth="760"
+                    Margin="{StaticResource FirePadScreen}"
+                    Spacing="{StaticResource FireSpaceLg}">
+
+            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" Text="{localization:Loc RigLab_Audio_Title}" />
+                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                           Text="{localization:Loc RigLab_Audio_Subtitle}" />
+            </StackPanel>
+
+            <!-- Label column | control column. The label column is wide enough
+                 for the longest German label. -->
+            <Border Background="{DynamicResource FireSurfaceCard}"
+                    CornerRadius="{StaticResource FireRadiusCard}"
+                    Padding="{StaticResource FirePadCard}">
+                <Grid x:Name="AudioSettingsRows"
+                      ColumnDefinitions="240,*"
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                      ColumnSpacing="{StaticResource FireSpaceLg}"
+                      RowSpacing="{StaticResource FireSpaceMd}">
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"
+                               Text="{localization:Loc Settings_AudioDriver}" />
+                    <ComboBox Grid.Row="0" Grid.Column="1" x:Name="AudioDriverPicker"
+                              HorizontalAlignment="Stretch"
+                              AutomationProperties.Name="{localization:Loc Settings_AudioDriver}"
+                              ItemsSource="{Binding Drivers}"
+                              SelectedItem="{Binding SelectedDriver, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"
+                               Text="{localization:Loc Settings_Audio_ReadoutDevice}" />
+                    <ComboBox Grid.Row="1" Grid.Column="1" x:Name="AudioOutputPicker"
+                              HorizontalAlignment="Stretch"
+                              AutomationProperties.Name="{localization:Loc Settings_Audio_ReadoutDevice}"
+                              ItemsSource="{Binding OutputDevices}"
+                              SelectedItem="{Binding SelectedOutputDevice, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"
+                               IsVisible="{Binding HasSeparateInputDevice}"
+                               Text="{localization:Loc Settings_InputDevice}" />
+                    <ComboBox Grid.Row="2" Grid.Column="1" x:Name="AudioInputPicker"
+                              HorizontalAlignment="Stretch"
+                              IsVisible="{Binding HasSeparateInputDevice}"
+                              AutomationProperties.Name="{localization:Loc Settings_InputDevice}"
+                              ItemsSource="{Binding InputDevices}"
+                              SelectedItem="{Binding SelectedInputDevice, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"
+                               Text="{localization:Loc Settings_InputJack}" />
+                    <StackPanel Grid.Row="3" Grid.Column="1" Spacing="{StaticResource FireSpaceXxs}">
+                        <ComboBox x:Name="AudioJackPicker"
+                                  HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="{localization:Loc Settings_InputJack}"
+                                  IsEnabled="{Binding InputChannel.IsAvailable}"
+                                  ItemsSource="{Binding InputChannel.Options}"
+                                  SelectedItem="{Binding InputChannel.Selected, Mode=TwoWay}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   IsVisible="{Binding !InputChannel.IsAvailable}"
+                                   Text="{Binding InputChannel.Hint}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"
+                               Text="{localization:Loc Settings_EnableLiveInput_RowLabel}" />
+                    <ToggleSwitch Grid.Row="4" Grid.Column="1" x:Name="AudioInputSwitch"
+                                  AutomationProperties.Name="{localization:Loc Settings_EnableLiveInput}"
+                                  OnContent="{localization:Loc Settings_EnableLiveInput}"
+                                  OffContent="{localization:Loc Settings_EnableLiveInput}"
+                                  IsChecked="{Binding EnableInput, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"
+                               Text="{localization:Loc Settings_BufferSize}" />
+                    <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceMd}">
+                        <ComboBox x:Name="AudioBufferPicker" MinWidth="140"
+                                  AutomationProperties.Name="{localization:Loc Settings_BufferSize}"
+                                  ItemsSource="{Binding BufferSizes}"
+                                  SelectedItem="{Binding SelectedBufferSize, Mode=TwoWay}" />
+                        <Button x:Name="AudioAsioPanelButton" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton"
+                                IsVisible="{Binding IsAsio}"
+                                AutomationProperties.Name="{localization:Loc Settings_OpenAsioControlPanel}"
+                                ToolTip.Tip="{localization:Loc Settings_AsioControlPanelHint}"
+                                Content="{localization:Loc Settings_OpenAsioControlPanel}"
+                                Command="{Binding OpenAsioControlPanelCommand}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"
+                               Text="{localization:Loc Settings_SampleRate}" />
+                    <ComboBox Grid.Row="6" Grid.Column="1" x:Name="AudioRatePicker" MinWidth="140"
+                              HorizontalAlignment="Left"
+                              AutomationProperties.Name="{localization:Loc Settings_SampleRate}"
+                              ItemsSource="{Binding SampleRates}"
+                              SelectedItem="{Binding SelectedSampleRate, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="7" Grid.Column="1" x:Name="AudioStatusLine"
+                               Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               Text="{Binding StatusText}" />
+                </Grid>
+            </Border>
+
+            <Border Background="{DynamicResource FireSurfaceCard}"
+                    CornerRadius="{StaticResource FireRadiusCard}"
+                    Padding="{StaticResource FirePadCard}">
+                <Grid ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}">
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                               Text="{localization:Loc Settings_Language}" />
+                    <ComboBox Grid.Column="1" x:Name="AudioLanguagePicker" MinWidth="220"
+                              HorizontalAlignment="Left"
+                              AutomationProperties.Name="{localization:Loc Settings_Language}"
+                              ItemsSource="{Binding Languages}"
+                              SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

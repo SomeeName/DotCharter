@@ -1,0 +1,283 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DotCharter.UI.ViewModels.CommandPalette;assembly=DotCharter"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:locSvc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.CommandPalette.CommandPaletteView"
+             x:DataType="vm:CommandPaletteViewModel">
+
+    <!-- The command palette, on the Fire layer (0.54, `Play Menus.dc.html`).
+         Same grammar as the transport popovers — mono category left, name in
+         the middle, shortcut as a key cap right, selected row filled — but it
+         is NOT a `FirePopover`: a popover hangs off a control and is 420 px
+         wide at most; this is a 680 px centred overlay with a search field for
+         a head and a legend for a footer. What the two share is the LADDER. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Shell/ShellStyles.axaml" />
+
+        <!-- The query field owns the whole top of the card, so it drops the
+             global TextBox chrome entirely and lets the card be its frame. -->
+        <Style Selector="TextBox.PaletteSearch">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXl}" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!-- One result row. 38 px, and the SELECTED one is filled + ringed:
+             the palette is arrow-key navigated, so which row Enter runs has to
+             be readable without moving the pointer. -->
+        <Style Selector="ListBox.PaletteList ListBoxItem">
+            <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+            <Setter Property="MinHeight" Value="38" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBox.PaletteList ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        </Style>
+        <Style Selector="ListBox.PaletteList ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        </Style>
+        <Style Selector="ListBox.PaletteList ListBoxItem:selected TextBlock.PaletteName">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        </Style>
+        <Style Selector="ListBox.PaletteList ListBoxItem:selected TextBlock.PaletteGroup">
+            <Setter Property="Foreground" Value="{DynamicResource FireAccentPale}" />
+        </Style>
+
+        <!-- The category column is FIXED — that is what lines the whole list up
+             into groups the eye can skip through — so it must fit the longest
+             thing that can land in it. The mockup draws 68 px, which is a width
+             for "FILE" and "TEMPO": the real categories are the `Keybinds_*`
+             strings, and in German "NOTEN-MODIFIKATOREN" needs 147 px and
+             "ANSICHT & PANELS" 124. 152 is derived from that, and
+             `Perf/CommandPaletteUiPerfSmokeTests` re-derives it from the
+             CATALOGUE's own source so a sixth category cannot slip past.
+             `TextTrimming` below is the BACKSTOP, not the fix. -->
+        <Style Selector="TextBlock.PaletteGroup">
+            <Setter Property="Width" Value="152" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+            <Setter Property="LetterSpacing" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.PaletteName">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- A key cap: the same mark in the row's shortcut column and in the
+             footer legend, because they are the same thing. -->
+        <Style Selector="Border.PaletteKey">
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.PaletteKey > TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        </Style>
+        <Style Selector="TextBlock.PaletteLegend">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- ── lane F: the wide breakpoint ──────────────────────────────────
+             The card's SIZE moves through the two tokens above; these are the
+             type rungs that have to move with it, or a 920x760 palette is a
+             1080p palette blown up in scrim. Both reach an EXISTING `FireSize*`
+             rung — a font ladder may never live in `Ladders.Wide.axaml`, because
+             it would compound with `MainWindow`'s `RootScaler`
+             (`Styles/FireTokens/Ladders.Wide.axaml`'s own header).
+
+             `:is(Window)` rather than `Window`: both forms reach a `Window`
+             SUBCLASS today (`Perf/UiResolutionAuditUiPerfSmokeTests
+             .ABreakpointSelector_ReachesAWindowSubclass` measures it), and the
+             shell's root is `Views.MainWindow : Window`. The failure mode of the
+             other form is silent, so this file states the one that cannot go
+             dead on an upgrade.
+
+             The row's 38 px floor and `TextBlock.PaletteGroup`'s 152 px column
+             stay put deliberately: the row height is what the taller ceiling
+             spends on MORE ROWS, and the category column is derived from the
+             longest localized `Keybinds_*` string by
+             `Perf/CommandPaletteUiPerfSmokeTests`, not from the window. -->
+        <Style Selector=":is(Window).Wide TextBox.PaletteSearch">
+            <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+        </Style>
+        <Style Selector=":is(Window).Wide TextBlock.PaletteName">
+            <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+        </Style>
+        <Style Selector=":is(Window).Wide TextBlock.PaletteLegend">
+            <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        </Style>
+
+        <!-- NO Transitions and NO animations anywhere in this file: the whole
+             surface is IsVisible-gated and a hidden control's style clocks keep
+             running (DotCharter.UI/AGENTS.md). -->
+    </UserControl.Styles>
+
+    <!-- Scrim + centered-near-top card. Mirrors the dialog overlay pattern:
+         the whole thing collapses (IsVisible=false) when the palette is shut so
+         it costs nothing per frame. Clicking the scrim closes it (code-behind). -->
+    <Grid x:Name="Scrim" IsVisible="{Binding IsOpen}"
+          Background="{DynamicResource FireScrimFill}" ZIndex="600">
+        <!-- The card's two numbers are TOKENS, not literals, and that is what
+             makes them move with the window: `FirePaletteWidth` /
+             `FirePaletteMaxHeight` are 680/500 on the base ladder and 920/760 on
+             `Styles/FireTokens/Ladders.Wide.axaml`, so above the wide breakpoint
+             the palette grows instead of being the same 1080p box with more
+             scrim around it. `DynamicResource` re-resolves on the merge — there
+             is no selector here on purpose: a `Width="680"` written on the
+             element is a LOCAL value and outranks every style setter, so a
+             breakpoint selector would have been silently dead. The list is a
+             plain `ListBox` over fixed 38 px rows, so the taller ceiling IS more
+             visible rows; the search field, the selection and the arrow-key
+             navigation are untouched. -->
+        <Border x:Name="PaletteCard"
+                Width="{DynamicResource FirePaletteWidth}"
+                MaxHeight="{DynamicResource FirePaletteMaxHeight}"
+                HorizontalAlignment="Center" VerticalAlignment="Top"
+                Margin="0,110,0,0"
+                Background="{DynamicResource FirePopoverFill}"
+                BorderBrush="{DynamicResource FireAccentBorderFaint}" BorderThickness="1"
+                CornerRadius="{StaticResource FireRadiusPanel}"
+                BoxShadow="{DynamicResource FireShadowMenu}"
+                ClipToBounds="True">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <!-- Query row: magnifier, field, and the chord that opened it —
+                     the palette is the one surface whose own shortcut is worth
+                     printing, because it is how you get back to it. -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="{StaticResource FireSpaceLg}"
+                      Margin="15,13">
+                    <PathIcon Grid.Column="0" Width="15" Height="15"
+                              VerticalAlignment="Center"
+                              Foreground="{DynamicResource FireTextMuted}"
+                              Data="{DynamicResource ShellIconSearch}" />
+                    <TextBox Grid.Column="1" x:Name="SearchBox" Classes="PaletteSearch"
+                             AutomationProperties.Name="{localization:Loc CommandPalette_Placeholder}"
+                             Text="{Binding Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             PlaceholderText="{localization:Loc CommandPalette_Placeholder}" />
+                    <Border Grid.Column="2" Classes="PaletteKey">
+                        <TextBlock Text="Ctrl+Shift+P" />
+                    </Border>
+                </Grid>
+
+                <Border Grid.Row="1" Height="1" Background="{DynamicResource FireBorder}" />
+
+                <!-- Results. The category is a LEFT-HAND column rather than an
+                     eyebrow above the title: it is what tells two same-named
+                     commands apart, and in a column it also lines the whole
+                     list up into groups the eye can skip through. -->
+                <ListBox Grid.Row="2" x:Name="ResultList" Classes="PaletteList"
+                         AutomationProperties.Name="{localization:Loc CommandPalette_ResultList}"
+                         Background="Transparent" BorderThickness="0"
+                         Padding="{StaticResource FirePadMenuPanel}"
+                         ItemsSource="{Binding Results}"
+                         SelectedItem="{Binding SelectedItem, Mode=TwoWay}">
+                    <ListBox.Styles>
+                        <!-- A row is announced by its own words, not its CLR type name (#311). -->
+                        <Style Selector="ListBoxItem" x:DataType="vm:CommandPaletteItem">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CommandPaletteItem">
+                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceLg}"
+                                  Margin="13,0" MinHeight="38">
+                                <TextBlock Grid.Column="0" Classes="PaletteGroup"
+                                           Text="{Binding Category}" />
+                                <TextBlock Grid.Column="1" Classes="PaletteName"
+                                           Text="{Binding Title}" />
+                                <Border Grid.Column="2" Classes="PaletteKey"
+                                        IsVisible="{Binding HasShortcut}">
+                                    <TextBlock Text="{Binding ShortcutText}" />
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Empty state -->
+                <StackPanel Grid.Row="2" IsVisible="{Binding !HasResults}"
+                            IsHitTestVisible="False"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Spacing="{StaticResource FireSpaceMd}" MaxWidth="360">
+                    <PathIcon Data="{DynamicResource ShellIconSearch}" Width="22" Height="22"
+                              HorizontalAlignment="Center"
+                              Foreground="{DynamicResource FireTextDim}" />
+                    <TextBlock Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                               Text="{localization:Loc CommandPalette_NoResults}"
+                               HorizontalAlignment="Center" TextAlignment="Center" />
+                </StackPanel>
+
+                <!-- Footer legend: three key caps and the match count. The count
+                     is the one thing that tells "my query narrowed this" from
+                     "my query matched nothing yet". -->
+                <Border Grid.Row="3"
+                        Background="{DynamicResource FirePopoverFooterFill}"
+                        BorderBrush="{DynamicResource FireBorder}"
+                        BorderThickness="0,1,0,0"
+                        Padding="15,9">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                    Spacing="{StaticResource FireSpaceXl}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <Border Classes="PaletteKey"><TextBlock Text="&#x2191;&#x2193;" /></Border>
+                                <TextBlock Classes="PaletteLegend"
+                                           Text="{localization:Loc CommandPalette_Navigate}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <Border Classes="PaletteKey"><TextBlock Text="&#x21B5;" /></Border>
+                                <TextBlock Classes="PaletteLegend"
+                                           Text="{localization:Loc CommandPalette_Run}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <Border Classes="PaletteKey"><TextBlock Text="Esc" /></Border>
+                                <TextBlock Classes="PaletteLegend"
+                                           Text="{localization:Loc CommandPalette_Close}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Center">
+                            <TextBlock.Text>
+                                <MultiBinding
+                                    Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                                    <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                             Path="[CommandPalette_Count]" />
+                                    <Binding Path="ResultCount" />
+                                    <Binding Path="TotalCount" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

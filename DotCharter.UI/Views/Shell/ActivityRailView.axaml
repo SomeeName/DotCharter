@@ -1,0 +1,108 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             x:Class="DotCharter.UI.Views.Shell.ActivityRailView"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- The app's top-level navigation, down the left edge of the whole shell.
+         Every destination writes the SAME `MainWindowViewModel
+         .SelectedMainTabIndex` the menu-bar switcher drove, so every other
+         entry point into a tab (the song browser loading a song, the palette,
+         the pause menu) still lights the right row.
+
+         The indices are stated as ConverterParameters here and read back off
+         the shell's own constants by `UI/EditorChromeTests`, so renumbering
+         the tabs fails in the gate rather than in a bug report about Settings
+         opening the song browser. -->
+    <Border Theme="{StaticResource FireActivityRailBorder}" Classes="FireActivityRail">
+        <DockPanel LastChildFill="False">
+
+            <!-- The app's mark, in the window's top-left corner: the rail spans the
+                 title bar's row, so this cell sits beside the menu bar at its height
+                 (38 px), and it moves the window like the title bar does. Full-bleed
+                 screens show the same mark in their window caption (MainWindow). -->
+            <Border DockPanel.Dock="Top" x:Name="RailAppMark" Height="38" Background="Transparent"
+                    PointerPressed="AppMark_PointerPressed" DoubleTapped="AppMark_DoubleTapped">
+                <Image AutomationProperties.AccessibilityView="Raw" Source="avares://DotCharter/Assets/app-icon.png" Width="18" Height="18"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+            </Border>
+
+            <StackPanel DockPanel.Dock="Top" Margin="0,2,0,0">
+                <RadioButton x:Name="RailHome" Classes="FireRailItem" GroupName="ActivityRail"
+                             AutomationProperties.Name="{localization:Loc Nav_Home}"
+                             IsChecked="{Binding SelectedMainTabIndex, Mode=TwoWay,
+                                         Converter={x:Static converters:IntEqualsConverter.Instance},
+                                         ConverterParameter=4}">
+                    <StackPanel Theme="{StaticResource FireRailStackPanel}" Classes="FireRailStack">
+                        <PathIcon Classes="FireRailGlyph" Data="{DynamicResource IconHome}" />
+                        <TextBlock Theme="{StaticResource FireRailCaptionText}" Classes="FireRailCaption" Text="{localization:Loc Nav_Home}" />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="RailLibrary" Classes="FireRailItem" GroupName="ActivityRail"
+                             AutomationProperties.Name="{localization:Loc Menu_SongBrowser}"
+                             IsChecked="{Binding SelectedMainTabIndex, Mode=TwoWay,
+                                         Converter={x:Static converters:IntEqualsConverter.Instance},
+                                         ConverterParameter=1}">
+                    <StackPanel Theme="{StaticResource FireRailStackPanel}" Classes="FireRailStack">
+                        <PathIcon Classes="FireRailGlyph" Data="{DynamicResource IconLibraryMusic}" />
+                        <TextBlock Theme="{StaticResource FireRailCaptionText}" Classes="FireRailCaption" Text="{localization:Loc Nav_Library}" />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="RailChart" Classes="FireRailItem" GroupName="ActivityRail"
+                             ToolTip.Tip="{localization:Loc Main_ChartEditor}"
+                             AutomationProperties.Name="{localization:Loc Main_ChartEditor}"
+                             IsChecked="{Binding SelectedMainTabIndex, Mode=TwoWay,
+                                         Converter={x:Static converters:IntEqualsConverter.Instance},
+                                         ConverterParameter=0}">
+                    <StackPanel Theme="{StaticResource FireRailStackPanel}" Classes="FireRailStack">
+                        <PathIcon Classes="FireRailGlyph" Data="{DynamicResource IconChartLine}" />
+                        <TextBlock Theme="{StaticResource FireRailCaptionText}" Classes="FireRailCaption" Text="{localization:Loc Nav_Chart}" />
+                    </StackPanel>
+                </RadioButton>
+
+                <!-- PLAY IS DELIBERATELY NOT HERE. This rail exists only on the
+                     workbench surfaces; a run is a GAME and hides every piece
+                     of chrome, so a Play row would light itself and then vanish
+                     along with the control it lives on. Play is reached from
+                     HOME, which is where you start, and from the File menu.
+                     `UI/PlayModeReachableFromEditorTests` pins both. -->
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,10">
+                <Border Theme="{StaticResource FireRailRuleBorder}" Classes="FireRailRule" />
+
+                <!-- The rig is an OVERLAY over the editor, not a tab, so it is
+                     a real ToggleButton and deliberately not part of the group:
+                     it opens over whichever destination is showing and the rail
+                     must keep saying which one that is. It is ALSO the rig's
+                     only door in BOTH directions — the rig draws no close
+                     button of its own, because a surface you switch TO from the
+                     rail is one you switch AWAY from there too. -->
+                <ToggleButton x:Name="RailRig" Theme="{StaticResource FireRailToggle}"
+                              IsChecked="{Binding ToneRig.IsPedalboardOpen, Mode=TwoWay}"
+                              ToolTip.Tip="{localization:Loc Toolbar_Pedalboard_Tip}"
+                              AutomationProperties.Name="{localization:Loc Toolbar_Pedalboard}">
+                    <StackPanel Theme="{StaticResource FireRailStackPanel}" Classes="FireRailStack">
+                        <PathIcon Classes="FireRailGlyph" Data="{DynamicResource IconAmp}" />
+                        <TextBlock Theme="{StaticResource FireRailCaptionText}" Classes="FireRailCaption" Text="{localization:Loc Nav_Rig}" />
+                    </StackPanel>
+                </ToggleButton>
+
+                <RadioButton x:Name="RailSettings" Classes="FireRailItem" GroupName="ActivityRail"
+                             AutomationProperties.Name="{localization:Loc Nav_Settings}"
+                             IsChecked="{Binding SelectedMainTabIndex, Mode=TwoWay,
+                                         Converter={x:Static converters:IntEqualsConverter.Instance},
+                                         ConverterParameter=2}">
+                    <StackPanel Theme="{StaticResource FireRailStackPanel}" Classes="FireRailStack">
+                        <PathIcon Classes="FireRailGlyph" Data="{DynamicResource IconCog}" />
+                        <TextBlock Theme="{StaticResource FireRailCaptionText}" Classes="FireRailCaption" Text="{localization:Loc Nav_Settings}" />
+                    </StackPanel>
+                </RadioButton>
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</UserControl>

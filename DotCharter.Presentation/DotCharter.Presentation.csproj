@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Presentation</RootNamespace>
+        <AssemblyName>DotCharter.Presentation</AssemblyName>
+        <!-- Banned APIs (BannedSymbols.txt at the repo root): no file, process,
+             network or database access, and no JuceAudioPlaybackService /
+             IAudioPlaybackService. Wired in Directory.Build.props. -->
+        <DotCharterBannedApis>true</DotCharterBannedApis>
+        <DotCharterBannedPresentationApis>true</DotCharterBannedPresentationApis>
+    </PropertyGroup>
+
+    <!-- Screen contracts and view models. May reference Core, Localization,
+         Services and CommunityToolkit.Mvvm — never Avalonia, Dock, SkiaSharp
+         or JuceSharp (AssemblyLayeringTests). -->
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj" />
+        <ProjectReference Include="..\DotCharter.Localization\DotCharter.Localization.csproj" />
+        <ProjectReference Include="..\DotCharter.Services\DotCharter.Services.csproj" />
+        <ProjectReference Include="..\DotCharter.Tone\DotCharter.Tone.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <!-- Each area's Module.Register(IServiceCollection) (target-architecture.md § 3). -->
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+    </ItemGroup>
+
+</Project>

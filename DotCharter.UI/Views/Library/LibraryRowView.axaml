@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Library"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Library.LibraryRowView"
+             x:DataType="contracts:ILibraryRow"
+             x:CompileBindings="True">
+    <!-- One song row of the Library, the template of its list's containers
+         (LibraryView's LibraryRowContainer, #180). A view of its own rather than the
+         template's body: a value set inside a ControlTemplate has TEMPLATE priority and a
+         style outranks it (Border.FireListRow's padding would win over this row's 18,10),
+         while in here every value is a plain local value, as it was in the ItemTemplate.
+         It binds the container's DataContext; LibraryView's styles reach it. -->
+    <StackPanel>
+        <!-- The artist heading is part of the first row of its run: it scrolls with the list. -->
+        <Grid ColumnDefinitions="Auto,*" Margin="18,12,18,4" ColumnSpacing="{StaticResource FireSpaceLg}"
+              IsVisible="{Binding HasGroupHeader}">
+            <TextBlock Grid.Column="0" x:Name="RowGroupHeader" Classes="LibraryGroupHeader" VerticalAlignment="Center" MaxWidth="640" TextTrimming="CharacterEllipsis"
+                       Text="{Binding GroupHeader}" />
+            <Border Grid.Column="1" Theme="{StaticResource FireRuleBorder}" Classes="FireRule" VerticalAlignment="Center" />
+        </Grid>
+        <!-- The columns are LibraryView's caption row's: ONE SongTableLayout (#212). The panel
+             owns its children's IsVisible, so a cell that shows itself only sometimes wraps that
+             binding in a child the panel may switch. -->
+        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow" Padding="18,10">
+            <controls:SongTablePanel Columns="{x:Static controls:SongTableLayout.Library}">
+                <Border controls:SongTablePanel.Column="0" Width="32" Height="32" VerticalAlignment="Center" ClipToBounds="True"
+                        CornerRadius="{StaticResource FireRadiusTag}" Background="{DynamicResource FireSurfaceRaised}">
+                    <Panel>
+                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Text="{Binding Monogram}" />
+                        <Image AutomationProperties.AccessibilityView="Raw" Source="{Binding Cover}" Stretch="UniformToFill" />
+                    </Panel>
+                </Border>
+                <!-- While the Status column has given way, a problem is a mark on the cover's corner
+                     (its words in the tooltip and the detail rail). -->
+                <Panel controls:SongTablePanel.Column="0" controls:SongTablePanel.StandInFor="7" Width="32" Height="32" VerticalAlignment="Center">
+                    <Border x:Name="RowStatusMark" Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-3,0"
+                            IsVisible="{Binding HasProblem}" ToolTip.Tip="{Binding StatusLabel}" />
+                </Panel>
+                <StackPanel controls:SongTablePanel.Column="1" VerticalAlignment="Center" Spacing="{StaticResource FireSpaceXxs}">
+                    <TextBlock x:Name="RowTitle" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextTrimming="CharacterEllipsis" Text="{Binding Title}" />
+                    <!-- A DotCharter song package (.dcsong) says so ahead of its subtitle, in the
+                         subtitle's own font and size (only the colour and weight differ) so the row
+                         keeps its height: it can sit beside the archive it was exported from. -->
+                    <!-- No ColumnSpacing: it would indent every OTHER row's subtitle past its title. -->
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" x:Name="RowSourceTag" Classes="LibraryRowSub" Margin="0,0,6,0"
+                                   Foreground="{DynamicResource FireAccentBright}" FontWeight="{StaticResource FireWeightUi}"
+                                   IsVisible="{Binding HasSourceTag}" Text="{Binding SourceTag}"
+                                   ToolTip.Tip="{localization:Loc Library_Row_SourceDcSong_Tip}" />
+                        <TextBlock Grid.Column="1" Classes="LibraryRowSub" TextTrimming="CharacterEllipsis" Text="{Binding Subtitle}" />
+                    </Grid>
+                </StackPanel>
+                <!-- Only the paths the song HAS. -->
+                <fire:FireChipStrip controls:SongTablePanel.Column="2" x:Name="RowPaths" VerticalAlignment="Center" Initials="{Binding Paths}"
+                                    ToolTip.Tip="{Binding PathsSummary}"
+                                    AutomationProperties.Name="{Binding PathsSummary}" />
+                <!-- Only a tuning that is not E Standard without a capo, amber: it means work first.
+                     The tooltip names the strings' notes, which the name alone hides. -->
+                <TextBlock controls:SongTablePanel.Column="3" x:Name="RowTuning" Theme="{StaticResource FireMonoText}" Classes="FireMono" Classes.Warn="{Binding TuningNeedsAttention}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding TuningTip}" Text="{Binding TuningLabel}" />
+                <!-- The numbers start where their captions start (#212). -->
+                <TextBlock controls:SongTablePanel.Column="4" x:Name="RowYear" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Center"
+                           Text="{Binding YearLabel}" />
+                <!-- The tooltip says what the number is and why it can be "—" (not rated until first loaded). -->
+                <TextBlock controls:SongTablePanel.Column="5" x:Name="RowDifficulty" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center"
+                           ToolTip.Tip="{localization:Loc SongBrowser_Col_Difficulty_Tip}" Text="{Binding DifficultyLabel}" />
+                <TextBlock controls:SongTablePanel.Column="6" x:Name="RowLength" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center"
+                           Text="{Binding LengthLabel}" />
+                <!-- Only a problem. A green "Loadable" on every row said nothing. -->
+                <Panel controls:SongTablePanel.Column="7">
+                    <TextBlock x:Name="RowStatus" Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding HasProblem}" ToolTip.Tip="{Binding StatusLabel}" Text="{Binding StatusLabel}" />
+                </Panel>
+            </controls:SongTablePanel>
+        </Border>
+    </StackPanel>
+</UserControl>

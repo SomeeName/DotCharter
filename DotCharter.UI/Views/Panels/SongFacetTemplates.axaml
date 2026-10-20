@@ -1,0 +1,63 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:panelsVm="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+                    xmlns:controls="using:DotCharter.Tone.UI.Controls"
+                    xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI">
+    <!-- ══════════════════════════════════════════════════════════════════
+         THE ONE facet popover, shared by BOTH song lists' caption funnels
+         (the unified browser, 2026-08-15): a checkbox per option with its
+         match count (refreshed when the flyout OPENS — each view's
+         OnFacetFlyoutOpening), and a per-facet clear in the footer.
+
+         Declared as keyed resources rather than implicit DataTemplates
+         because a flyout realizes in the popup's own scope, where an
+         implicit template lookup is exactly the kind of thing that fails
+         silently. Included via ResourceInclude from Play Mode's Song Select
+         (Screens/SongSelectView, #294). The Library draws its funnels from
+         ILibraryColumn's options through LibraryView's own
+         LibraryColumnFunnel template.
+
+         A label too wide for the popover's MaxWidth stays on ONE line (a CheckBox's
+         content presenter passes TextWrapping=Wrap down), trims with an ellipsis
+         and carries the full label as its tooltip (#723, the Library's rule
+         since #712), pinned by Perf/SongSelectFacetPopoverUiPerfSmokeTests.
+         ══════════════════════════════════════════════════════════════════ -->
+    <DataTemplate x:Key="FacetOptionsTemplate" x:DataType="panelsVm:BrowserFacet">
+        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Options}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="panelsVm:BrowserFacetOption">
+                        <CheckBox AutomationProperties.Name="{Binding Label}" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch">
+                            <Grid ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceLg}">
+                                <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding Label}"
+                                           Text="{Binding Label}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding Count}" />
+                            </Grid>
+                        </CheckBox>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DataTemplate>
+
+    <DataTemplate x:Key="FacetPopoverTemplate" x:DataType="panelsVm:BrowserFacet">
+        <controls:FirePopover Padding="{StaticResource FirePadPopoverBody}" MinWidth="250" Icon="{DynamicResource IconFilter}"
+                              Title="{Binding Title}">
+            <ContentControl Content="{Binding}"
+                            ContentTemplate="{StaticResource FacetOptionsTemplate}" />
+            <controls:FirePopover.Footer>
+                <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" HorizontalAlignment="Left"
+                        Command="{Binding ClearFacetCommand}"
+                        Content="{localization:Loc SongBrowser_Facet_Clear}" />
+            </controls:FirePopover.Footer>
+        </controls:FirePopover>
+    </DataTemplate>
+</ResourceDictionary>

@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.UI.Gallery</RootNamespace>
+        <AssemblyName>DotCharter.Gallery</AssemblyName>
+        <Product>DotCharter UI Gallery</Product>
+        <AssemblyTitle>DotCharter UI Gallery</AssemblyTitle>
+        <Description>Standalone host for DotCharter UI screens bound to fake view models. No audio, no JUCE, no DI.</Description>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The gallery renders the PRODUCTION styles, control themes and
+             tokens — it does not own a second theme. -->
+        <ProjectReference Include="..\DotCharter.UI\DotCharter.UI.csproj" />
+        <ProjectReference Include="..\DotCharter.Tone.UI\DotCharter.Tone.UI.csproj" />
+        <!-- EXPLICIT, for the same reason DotCharter.UI declares it: the
+             `{localization:Loc}` markup extension is used from gallery markup,
+             and a transitive reference is not a declared dependency. -->
+        <ProjectReference Include="..\DotCharter.Localization\DotCharter.Localization.csproj" />
+        <!-- The contracts the pages' views bind to, and the fakes that
+             implement them. The gallery is the one host allowed the fakes. -->
+        <ProjectReference Include="..\DotCharter.Presentation\DotCharter.Presentation.csproj" />
+        <ProjectReference Include="..\DotCharter.Presentation.Fakes\DotCharter.Presentation.Fakes.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Same versions as DotCharter.UI. A drift here would render the
+             gallery on a different Fluent base than the app. -->
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Controls.ColorPicker" />
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.HarfBuzz" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
+        <PackageReference Include="Avalonia.Fonts.Inter" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+    </ItemGroup>
+
+</Project>

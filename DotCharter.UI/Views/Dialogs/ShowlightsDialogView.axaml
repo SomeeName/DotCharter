@@ -1,0 +1,160 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.ShowlightsDialogView"
+             x:DataType="contracts:IShowlightsScreen"
+             x:CompileBindings="True">
+
+    <!-- Stage lighting cues. Grammar: Views/Dialogs/DialogStyles.axaml.
+         Editing dialog: the scrim deliberately does NOT dismiss (scrim-click discards work; Esc cancels via IsCancel - see docs/agents/ui/dialogs.md, the scrim rule).
+
+         The POSITION readout is a card of its own rather than a row: it is not
+         a setting, it is the point in the song everything below it applies to,
+         and as a plain DlgRow it read as the first of four equal choices. Beat
+         and milliseconds are two values (they used to be one string with the ms
+         in brackets), both mono, because both are figures.
+
+         Delete moved to the footer's TERTIARY slot. It is the one destructive
+         action here and it was sitting immediately left of Save. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md" MinHeight="420">
+            <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconLightbulb}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_Showlights_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc Dialog_Showlights_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Theme="{DynamicResource DlgSectionBorder}" Grid.Row="1" x:Name="PositionCard" Classes="DlgSection">
+                    <Grid ColumnDefinitions="Auto,*,Auto"
+                          ColumnSpacing="{DynamicResource FireSpaceRow}">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                       Margin="{DynamicResource FirePadNone}"
+                                       Text="{localization:Loc Dialog_Showlights_Position}" />
+                            <TextBlock x:Name="TargetBeat" Text="{Binding TargetPositionText}"
+                                       FontFamily="{DynamicResource FireFontMono}"
+                                       FontSize="{DynamicResource FireSizeLg}"
+                                       Foreground="{DynamicResource FireTextPrimary}" />
+                        </StackPanel>
+                        <TextBlock x:Name="TargetMs" Grid.Column="1" Text="{Binding TargetMsText}"
+                                   VerticalAlignment="Bottom" TextAlignment="Left"
+                                   FontFamily="{DynamicResource FireFontMono}"
+                                   FontSize="{DynamicResource FireSizeMeta}"
+                                   Foreground="{DynamicResource FireTextMuted}" />
+                        <Button Grid.Column="2" Classes="DlgLink" VerticalAlignment="Center"
+                                Content="{localization:Loc Dialog_Showlights_UsePlayhead}"
+                                Command="{Binding UsePlayheadCommand}" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Row="2">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,280">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Showlights_Fog}" />
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding FogOptions}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Showlights_Fog}"
+                                  SelectedIndex="{Binding SelectedFogIndex}" />
+                    </Grid>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,280">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Showlights_Beams}" />
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding BeamsOptions}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Showlights_Beams}"
+                                  SelectedIndex="{Binding SelectedBeamsIndex}" />
+                    </Grid>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,280">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Showlights_Lasers}" />
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding LasersOptions}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Showlights_Lasers}"
+                                  SelectedIndex="{Binding SelectedLasersIndex}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- #725: a Grid, not a StackPanel, so the list of positions shrinks into
+                     the star row when the card is clamped (a fully cued song at 1280x720
+                     painted its last positions under Delete, Cancel and Save). -->
+                <Grid Grid.Row="3" Margin="{DynamicResource FireGapTopLg}" RowDefinitions="Auto,*">
+                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Grid.Row="0" Classes="DlgSectionLabel"
+                               Text="{localization:Loc Dialog_Showlights_Existing}" />
+                    <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="1" Classes="DlgListFrame">
+                        <Panel>
+                            <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding !HasExistingPositions}">
+                                <TextBlock Text="{localization:Loc Dialog_Showlights_EmptyState}" />
+                            </Border>
+                            <ListBox IsVisible="{Binding HasExistingPositions}"
+                                     AutomationProperties.Name="{localization:Loc Dialog_Showlights_Existing}"
+                                     ItemsSource="{Binding ExistingPositions}"
+                                     SelectedIndex="{Binding SelectedExistingIndex}"
+                                     Background="Transparent" BorderThickness="0"
+                                     ScrollViewer.AllowAutoHide="False"
+                                     MaxHeight="220">
+                                <ListBox.Styles>
+                                    <!-- A row is announced by its own words, not its record's member dump (#311). -->
+                                    <Style Selector="ListBoxItem" x:DataType="contracts:IShowlightPosition">
+                                        <Setter Property="AutomationProperties.Name">
+                                            <MultiBinding StringFormat="{}{0}: {1}">
+                                                <Binding Path="PositionText" />
+                                                <Binding Path="Summary" />
+                                            </MultiBinding>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.Styles>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IShowlightPosition">
+                                        <Grid ColumnDefinitions="120,*"
+                                              ColumnSpacing="{DynamicResource FireSpaceMd}">
+                                            <TextBlock x:Name="ExistingBeat" Grid.Column="0"
+                                                       Text="{Binding PositionText}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{DynamicResource FireFontMono}"
+                                                       FontSize="{DynamicResource FireSizeSm}"
+                                                       Foreground="{DynamicResource FireTextBright}" />
+                                            <TextBlock x:Name="ExistingSummary" Grid.Column="1"
+                                                       Text="{Binding Summary}"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       FontFamily="{DynamicResource FireFontMono}"
+                                                       FontSize="{DynamicResource FireSizeMicro}"
+                                                       LetterSpacing="{DynamicResource FireTrackMicro}"
+                                                       Foreground="{DynamicResource FireTextMuted}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Panel>
+                    </Border>
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="4" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <!-- The DANGER tier carries the colour now (it wins the
+                                 tier's TextElement.Foreground because it is the
+                                 grammar file's final word) — no inline Foreground. -->
+                            <Button x:Name="DeletePosition" Theme="{DynamicResource DangerButton}" Classes="DlgLink Danger"
+                                    Command="{Binding DeleteAtPositionCommand}"
+                                    IsEnabled="{Binding HasShowlightsAtTarget}">
+                                <TextBlock Text="{localization:Loc Dialog_Showlights_Delete}" />
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" IsCancel="True" />
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Save}"
+                                    Command="{Binding SaveCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

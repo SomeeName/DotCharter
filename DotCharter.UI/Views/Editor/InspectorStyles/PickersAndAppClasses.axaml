@@ -1,0 +1,383 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the inspector grammar — see `Views/Editor/InspectorStyles.axaml`,
+         which merges this file and its siblings IN ORDER. The picker properties a style CAN reach (the popup CHROME is a resource
+         key, merged by the container), then the app classes this pane leans on
+         restated on the Fire layer. -->
+
+    <!-- …and the properties a style CAN reach: the picker's own box and the
+         rows inside its panel. -->
+    <Style Selector="ComboBox">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+    </Style>
+    <Style Selector="ComboBoxItem">
+        <Setter Property="Padding" Value="{StaticResource FirePadMenuItem}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+    </Style>
+    <Style Selector="TextBox">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+    </Style>
+
+    <!-- ONE NUMBER INPUT (#118). The Placement card had three: String and
+         Fret as `NumericUpDown`s, Length as a text box with two tiny ▾▴
+         buttons OUTSIDE it (down before up), Slide-to as a stretched
+         `NumericUpDown`. Length has to stay a fraction text box, so it wears
+         the spinner chrome instead: a `ButtonSpinner` around the box, which is
+         the very control `NumericUpDown` is built from. Both carry
+         `.InspectorNumber`, and the ButtonSpinner is given the shared field
+         chrome a `NumericUpDown` already gets from `Styles/Inputs.axaml`. -->
+    <Style Selector="NumericUpDown.InspectorNumber">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="MinHeight" Value="{StaticResource RowHeightField}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="ButtonSpinnerLocation" Value="Right" />
+        <Setter Property="ShowButtonSpinner" Value="True" />
+    </Style>
+    <Style Selector="ButtonSpinner.InspectorNumber">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="MinHeight" Value="{StaticResource RowHeightField}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="ButtonSpinnerLocation" Value="Right" />
+        <Setter Property="ShowButtonSpinner" Value="True" />
+        <Setter Property="Background" Value="{DynamicResource AppBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ButtonSpinner.InspectorNumber:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+    </Style>
+    <Style Selector="ButtonSpinner.InspectorNumber:focus-within">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+    </Style>
+    <!-- The box inside is the spinner's CONTENT, so its own frame goes: the
+         spinner draws the one frame, exactly as inside a NumericUpDown. -->
+    <Style Selector="ButtonSpinner.InspectorNumber TextBox,
+                     ButtonSpinner.InspectorNumber TextBox:pointerover,
+                     ButtonSpinner.InspectorNumber TextBox:focus">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ButtonSpinner.InspectorNumber TextBox /template/ Border#PART_BorderElement,
+                     ButtonSpinner.InspectorNumber TextBox:pointerover /template/ Border#PART_BorderElement,
+                     ButtonSpinner.InspectorNumber TextBox:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         THE APP CLASSES THIS PANE LEANS ON, RESTATED ON THE LAYER.
+
+         `Button.Subtle`(+`.Compact`), `ToggleButton.Seg`, `ToggleButton.Chip`,
+         `TextBlock.Label`/`Caption`/`HelpText`, `PathIcon.SectionIcon` and
+         `Border.PaneHeader` are declared app-wide in `Styles/Buttons.axaml`,
+         `Typography.axaml` and `Containers.axaml`, and between them they carry
+         ~150 controls in these eight tabs. Converting the inspector without
+         them would leave the surface half on each grammar.
+
+         They are restated HERE, not changed there: a `UserControl.Styles`
+         include is applied after the application's styles, so this file wins
+         for the four views that include it and every other consumer of those
+         classes keeps its old look. That is the same call `SettingsStyles`
+         made for `Border.SettingsGroup`.
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- The workhorse action: 42 of the inspector's buttons are `Subtle
+         Compact`. This is the Fire GHOST tier — `white .04` on the layer's
+         hairline, violet on hover, never a lit fill (the inspector has no
+         primary action of its own; its verbs all act on the selection). -->
+    <Style Selector="Button.Subtle, Button.Secondary">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <!-- The chrome goes on the `/template/ ContentPresenter`, never on the
+         Button: Fluent's Button template ROOT is the presenter, so a fill set
+         on the control is painted straight over — the 0.49 dialog conversion
+         shipped one build of that and every Cancel in the app rendered as bare
+         text with no box. -->
+    <Style Selector="Button.Subtle /template/ ContentPresenter,
+                     Button.Secondary /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="Button.Subtle:pointerover /template/ ContentPresenter,
+                     Button.Secondary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Button.Subtle:pressed /template/ ContentPresenter,
+                     Button.Secondary:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+    </Style>
+    <!-- `.Compact` is the dense spelling the tab headers and row verbs wear. -->
+    <Style Selector="Button.Compact, ToggleButton.Compact">
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+    </Style>
+
+    <!-- The one accented action a tab may hold (Riff Library's capture). The
+         Fire primary's chamfered `FirePrimaryButton` theme is deliberately NOT
+         worn here: its 30 px inset and .22em tracking are sized for a
+         full-width PLAY NOW and would be 300 px of button in a 380 px pane. -->
+    <Style Selector="Button.Primary">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.Primary /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+    </Style>
+    <Style Selector="Button.Primary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentDeep}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+    </Style>
+
+    <!-- A destructive verb states itself in the danger colour and nothing
+         else — a filled red button in a dock pane reads as an alert. -->
+    <Style Selector="Button.Danger">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.Danger /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+
+    <!-- Inline suggestion button (Suggest-name, Apply-shape). -->
+    <Style Selector="Button.Pill">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="Button.Pill /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="Button.Pill:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+    </Style>
+
+    <!-- The enum pickers (Mute / HOPO / Harmonic / Picking) — 26 of them.
+         They are the layer's SEGMENT, restated at inspector density rather
+         than reaching for `ToggleButton.FireSegmentItem`: that theme's 12,6
+         inset and mono captions are sized for a strip of four words, and these
+         sit four-to-a-row inside a card. Radius, active fill and hover come
+         from the same tokens the shared component uses, so the two cannot
+         disagree about what "selected" looks like. -->
+    <Style Selector="ToggleButton.Seg">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="Margin" Value="0,0,2,0" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="MinWidth" Value="28" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+    </Style>
+    <!-- A segment may carry a `PathIcon` instead of a glyph; PathIcon does not
+         inherit Foreground, so every state has to be driven explicitly. -->
+    <Style Selector="ToggleButton.Seg PathIcon">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:checked PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+
+    <!-- Binary-flag chip (the `.Mini` spelling is the only one this pane
+         uses). Its states sit on the PRESENTER, where Fluent paints them with
+         triggered setters; set on the ToggleButton they never showed.
+         Checked wears the accent as an OUTLINE plus a tint, never a
+         fill — the layer's rule, and the reason a row of ten chips no longer
+         reads as ten equally loud violet blocks. -->
+    <Style Selector="ToggleButton.Chip">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTag}" />
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.Chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="ToggleButton.Chip:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+    </Style>
+    <Style Selector="ToggleButton.Chip:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="ToggleButton.Chip:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+    </Style>
+    <!-- Mixed across the selection: the WARNING edge, no fill — clicking will
+         stomp data, and that is not the same claim as "off". -->
+    <Style Selector="ToggleButton.Chip:indeterminate /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="ToggleButton.Chip:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+        <Setter Property="Cursor" Value="Arrow" />
+    </Style>
+    <Style Selector="ToggleButton.Chip.Mini">
+        <Setter Property="Padding" Value="7,1" />
+        <Setter Property="Margin" Value="0,0,3,3" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+    </Style>
+
+    <!-- Row typography. `Label` is the inspector's field caption (43 uses),
+         `Caption` its supporting line, `HelpText` the hint under a card. All
+         three are the Fire row pair: a 12/13.5 px body over an 11.5 px muted
+         description. -->
+    <Style Selector="TextBlock.Label">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.Caption">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+        <Setter Property="LetterSpacing" Value="0" />
+    </Style>
+    <Style Selector="TextBlock.HelpText">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+    </Style>
+    <!-- The leading glyph on a header or a disclosure. It is the ONE accent
+         mark in a section lockup — the caption beside it is plain text, so a
+         column of cards no longer reads as a column of alerts. -->
+    <Style Selector="PathIcon.SectionIcon">
+        <Setter Property="Width" Value="13" />
+        <Setter Property="Height" Value="13" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+
+    <!-- The 22 px dock-pane header the Riff Library and the Stem Mixer carry.
+         Its HEIGHT is load-bearing — it is what lines the fixed 3D preview up
+         with its dockable siblings — so only the surface and the type move. -->
+    <Style Selector="Border.PaneHeader">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+    <Style Selector="Border.PaneHeader TextBlock.PaneTitle">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+</Styles>

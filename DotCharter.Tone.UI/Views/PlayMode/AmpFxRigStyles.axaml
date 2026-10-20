@@ -1,0 +1,304 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI">
+
+    <!-- AmpFxRigView's OWN style rules (#242): the board, the stage, the routing map, the tuner and the tone library's rail.
+         `StyleInclude`d first in AmpFxRigView's `UserControl.Styles`, so they attach only
+         to controls inside it, not to every control of their type in the app as
+         they did while they lived in the global Fire chain. What is here is what a
+         ControlTheme cannot hold (descendant and child selectors) or what no theme
+         lint covers (Path, Panel, Grid, StackPanel, Slider, ScrollViewer, RigFan,
+         Button.FireInsertDot). The Border / TextBlock / ToggleButton families are
+         ControlThemes in Styles/Fire/FireRig*.axaml.
+         UI/FireClassReachabilityTests keeps every class declared only here inside
+         AmpFxRigView. -->
+
+    <Style Selector="Border.FireUnitCard:pointerover Border.FireUnitArtFrame">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+    </Style>
+    <Style Selector="Border.FireUnitCard.selected Border.FireUnitArtFrame">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarning}" />
+        <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccentSoft}" />
+    </Style>
+    <!-- Only MaxWidth. While these rules were global they sat BEFORE the global
+         `TextBlock.FireCardTitle` rule, which set the same Foreground and FontSize
+         and so always won (and AmpFxRigView's own FireCardTitle rule wins the size).
+         A view-scoped rule outranks the FireCardTitleText theme instead, so the
+         FireSizeSm / FireTextSecondary / selected-FireWarning setters that never
+         showed were dropped rather than switched on (#242): the card title renders
+         exactly as before, FireTextBright, selected or not. -->
+    <Style Selector="Border.FireUnitCard TextBlock.FireCardTitle">
+        <Setter Property="MaxWidth" Value="150" />
+    </Style>
+    <!-- a bypassed unit fades: the picture fades itself (FireUnitState.IsBypassed,
+         inherited from the card), the name dims with it -->
+    <Style Selector="Border.FireUnitCard.bypassed TextBlock.FireCardTitle"><Setter Property="Opacity" Value="0.55" /></Style>
+    <!-- The engraved title strip stays neutral; the category eyebrow and the
+         narrow bar carry identity. This fixes its geometry and seam.
+
+         It is ALSO the card's drag handle (`RigBoardDragController`), hence the
+         cursor: the rest of a unit card is knobs, and a knob owns the vertical
+         drag gesture, so the two cannot share pixels. The cursor is the only
+         thing that says which strip is grabbable. -->
+    <Style Selector="StackPanel.FireUnitHead">
+        <Setter Property="Cursor" Value="SizeAll" />
+    </Style>
+    <!-- ══ THE RIG BOARD'S SIGNAL PATH ═════════════════════════════════════════
+         A row of cards is a SHELF; a row of cards with jacks and cable between
+         them is a signal PATH, and that is the whole reason the mockup draws
+         them. All the marks are ACCENT — the v8 mockup's lit wire — because
+         they are one object seen in pieces, not four decorations. (They were
+         amber until the v8 pass; the owner's reference draws the LIVE path in
+         the accent, which also stops the wire colliding with the amber WARN
+         strips on the cards it runs between.) -->
+
+
+    <!-- The gap between two units: a run of cable with an insert dot on it. -->
+    <Style Selector="Panel.FireConnector">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- "Put the next unit HERE." A real button on a real command — the mockup's
+         + is the only way to add a unit anywhere but the end of the chain. -->
+    <!-- The dot rests hidden on the wire (the design draws a bare arrow) and
+         shows when the pointer is over the gap; it stays a real, focusable
+         button the whole time, so keyboard users and tests reach it. -->
+    <Style Selector="Panel.FireConnector Button.FireInsertDot, Panel.FireLaneTail Button.FireInsertDot">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Panel.FireConnector:pointerover Button.FireInsertDot, Panel.FireConnector Button.FireInsertDot:focus-visible, Panel.FireLaneTail:pointerover Button.FireInsertDot, Panel.FireLaneTail Button.FireInsertDot:focus-visible">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <!-- a lane's tail: the same gap, stretched to the lane's mixer node -->
+    <Style Selector="Panel.FireLaneTail">
+        <Setter Property="MinWidth" Value="44" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.FireInsertDot">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.FireInsertDot /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireGroundScreen}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+    </Style>
+    <Style Selector="Button.FireInsertDot:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+    </Style>
+    <!-- The board's two ends. A ringed jack with its label under it. The well
+         is exactly the RING's height: the label hangs below it out of layout
+         (VerticalAlignment Bottom + a negative bottom margin in the view), so
+         the well's centre IS the ring's centre and the wire, which is centred
+         on the row, passes through the middle of the ring. As a StackPanel of
+         ring + label the centre sat 8 px below the ring
+         (RigBoardWiresUiPerfSmokeTests caught it, 2026-09-08). -->
+    <Style Selector="Grid.FireJackWell">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- ══ THE BOARD'S SCROLLBARS (Amp and FX Rig v8.dc.html) ══════════════════
+         Rest-visible and styled, so a chain running past the board's edge SAYS
+         so — the app-wide chrome fades scrollbars to 0.2 opacity at rest,
+         which here read as "the rig ends at the window". The mockup keeps a
+         9 px visible track with a raised thumb; this is that treatment, scoped
+         to `ScrollViewer.FireBoardScroll` only (Chrome.axaml stays global and
+         untouched). Fire.axaml merges AFTER Chrome.axaml, so these win. -->
+    <Style Selector="ScrollViewer.FireBoardScroll /template/ ScrollBar">
+        <Setter Property="Opacity" Value="0.9" />
+        <Setter Property="AllowAutoHide" Value="False" />
+    </Style>
+    <Style Selector="ScrollViewer.FireBoardScroll:pointerover /template/ ScrollBar">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ScrollViewer.FireBoardScroll ScrollBar:horizontal">
+        <Setter Property="Height" Value="10" />
+        <Setter Property="MinHeight" Value="10" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+    </Style>
+    <Style Selector="ScrollViewer.FireBoardScroll ScrollBar:vertical">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="MinWidth" Value="10" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+    </Style>
+    <Style Selector="ScrollViewer.FireBoardScroll ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource FireAccentBar}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+    </Style>
+    <Style Selector="ScrollViewer.FireBoardScroll ScrollBar:pointerover /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+    </Style>
+    <!-- Fluent's expanded track is `Rectangle#TrackRect`, and it resolves to a
+         LIGHT fill (#e6e6e6) — invisible app-wide because the global chrome
+         fades scrollbars to 0.2 opacity, glaring here where the bar is
+         rest-visible. Verified against the real template tree headless, not
+         guessed from theme sources. The arrows ride Foreground. -->
+    <Style Selector="ScrollViewer.FireBoardScroll ScrollBar /template/ Rectangle#TrackRect">
+        <Setter Property="Fill" Value="{DynamicResource FireSurfaceSunken}" />
+    </Style>
+    <Style Selector="ScrollViewer.FireBoardScroll ScrollBar">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+    </Style>
+    <!-- The fan: a vertical BUS at each region edge with one STUB per lane at
+         that lane's vertical centre — the mockup's split/merge glyph, drawn by
+         layout instead of an SVG so it stays aligned when a lane grows. The
+         stub's Background is bound to the lane's identity. -->
+    <!-- The fan is the design's curved wires now (RigFan draws them, one per
+         lane in the lane's colour); the stub is only the lane's ANCHOR for it —
+         invisible, with the lane colour on its Background for the fan to read. -->
+    <Style Selector="fire|RigFan.FireLaneBus">
+        <Setter Property="Width" Value="48" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Border.FireTunerString > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.FireTunerString.tuned > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+    </Style>
+    <Style Selector="Border.FireTunerString.current > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="Border.FireChainChip.Active TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <!-- ══ THE TONES VIEW (2026-09-27) ══════════════════════════════════════
+         RigTonesView: a head row (title, count, search, the catalogue actions,
+         the AI designer's toggle), a fixed SIDEBAR (the category rail), the card
+         grid, and the designer as a right-hand column. -->
+
+    <!-- The rail row's count: right-aligned mono, and a row whose slice is
+         empty under the current search is DIMMED rather than hidden, so the
+         rail never changes length while you type. -->
+    <Style Selector="ListBox.FireList.ToneRail Border.FireListRow.FireToneRailEmpty">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <!-- ══ THE AMPLITUBE LAYOUT (2026-09-27): stage · gear bar · routing map ═══
+         AmpFxRigView: the selected gear big on the STAGE, a slim GEAR BAR under
+         it, the whole chain small in the ROUTING MAP at the foot with the routing
+         RAIL on its left, and the gear browser's thumbnail GRID on the right. -->
+
+    <!-- The stroked glyph every one of those controls draws (Styles/Icons.axaml).
+         Drawn UNSTRETCHED in its 24x24 design box and scaled about its centre: a
+         `Stretch="Uniform"` shape pins a flat glyph (Series is 20x12) to the TOP of
+         its box instead of centring it. 0.75 = an 18 px glyph; a context rescales. -->
+    <Style Selector="Path.FireRigGlyph">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Stretch" Value="None" />
+        <Setter Property="RenderTransform" Value="scale(0.75)" />
+        <Setter Property="Stroke" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="StrokeThickness" Value="2" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="StrokeJoin" Value="Round" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.FirePowerButton Path.FireRigGlyph">
+        <Setter Property="Stroke" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="StrokeThickness" Value="2.6" />
+        <Setter Property="RenderTransform" Value="scale(0.7)" />
+    </Style>
+    <Style Selector="ToggleButton.FirePowerButton:checked Path.FireRigGlyph">
+        <Setter Property="Stroke" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector="ToggleButton.FireDetailsToggle:checked Path.FireRigGlyph">
+        <Setter Property="Stroke" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector="ToggleButton.FireMapMode Path.FireRigGlyph">
+        <Setter Property="RenderTransform" Value="scale(1.1)" />
+        <Setter Property="StrokeThickness" Value="1.6" />
+    </Style>
+    <Style Selector="ToggleButton.FireMapMode:checked Path.FireRigGlyph">
+        <Setter Property="Stroke" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <!-- the speaker the map ends in, beside the OUT jack -->
+    <Style Selector="Path.FireMapSpeaker">
+        <Setter Property="RenderTransform" Value="scale(1)" />
+        <Setter Property="Margin" Value="{StaticResource FireGapLeftSm}" />
+        <Setter Property="Stroke" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector="ToggleButton.FireGearCatTab:checked Path.FireRigGlyph">
+        <Setter Property="Stroke" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <!-- …and the grid: two tiles a row, each the gear's faceplate over its name. -->
+    <Style Selector="Grid.FireGearTileRow">
+        <Setter Property="ColumnSpacing" Value="{StaticResource FireSpaceSm}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+    </Style>
+    <Style Selector="Panel.FireGearTileArt">
+        <Setter Property="Height" Value="84" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+    </Style>
+    <Style Selector="Panel.FireGearTileArt fire|RigFaceplateView">
+        <Setter Property="MaxHeight" Value="58" />
+        <Setter Property="Margin" Value="{StaticResource FirePadTag}" />
+    </Style>
+    <!-- ══ The design's header ═════════════════════════════════════════════
+         A waveform brand mark, outlined buttons (Save, BYPASS), a text button
+         with an icon (Copy to both) and the editor's side rack. -->
+    <Style Selector="Path.FireBrandMark">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{DynamicResource FireAccent}" />
+        <Setter Property="StrokeThickness" Value="2.5" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Path.FireHeaderIcon">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="StrokeThickness" Value="1.6" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="StrokeJoin" Value="Round" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- the tone browser's category rail: the design's active row has a violet
+         fill and a bright bar on its left -->
+    <Style Selector="ListBox.FireList.ToneRail TextBlock.FireRowTitle">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+    <Style Selector="ListBox.FireList.ToneRail > ListBoxItem:selected Border.FireListRow">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+    </Style>
+    <Style Selector="Border.FireLaneChip > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- the design's fork glyph on the Split / Merge nodes (mirrored for Merge) -->
+    <Style Selector="Path.FireJunctionGlyph">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="Stroke" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="StrokeThickness" Value="2" />
+        <Setter Property="StrokeLineCap" Value="Round" />
+        <Setter Property="StrokeJoin" Value="Round" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+</Styles>

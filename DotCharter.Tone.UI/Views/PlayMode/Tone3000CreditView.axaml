@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.Tone3000CreditView"
+             x:DataType="vm:NamCaptureBrowserViewModel">
+    <!-- "Powered by TONE3000" is the TONE3000 brand credit the terms prescribe
+         verbatim, so it is deliberately not a resx key.
+         It links to tone3000.com, and the TONE3000 API terms
+         ask for it wherever the product shows TONE3000 content. Hosted under
+         the capture browser's Online and Library lists (RigTonesView). -->
+    <Button x:Name="Tone3000CreditLink"
+            Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+            HorizontalAlignment="Center"
+            Content="Powered by TONE3000"
+            AutomationProperties.Name="{localization:Loc Nam_PoweredByAutomation}"
+            ToolTip.Tip="{Binding Tone3000Url}"
+            Command="{Binding OpenTone3000Command}" />
+</UserControl>

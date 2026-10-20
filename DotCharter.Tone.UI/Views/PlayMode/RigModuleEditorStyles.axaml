@@ -1,0 +1,159 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI">
+
+    <!-- RigModuleEditorView's OWN style rules (#242): the module editor and the family editors it opens (RigEditorTemplateSelector).
+         `StyleInclude`d first in RigModuleEditorView's `UserControl.Styles`, so they attach only
+         to controls inside it, not to every control of their type in the app as
+         they did while they lived in the global Fire chain. What is here is what a
+         ControlTheme cannot hold (descendant and child selectors) or what no theme
+         lint covers (Path, Panel, Grid, StackPanel, Slider, ScrollViewer, RigFan,
+         Button.FireInsertDot). The Border / TextBlock / ToggleButton families are
+         ControlThemes in Styles/Fire/FireRig*.axaml.
+         UI/FireClassReachabilityTests keeps every class declared only here inside
+         RigModuleEditorView. -->
+
+    <!-- The unit inspector's parameter rows (RigPedalEditorView): a bare dial,
+         the name, the exact value. Wrapped into columns by the list. -->
+    <Style Selector="Grid.FireValueRow">
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Margin" Value="0,0,16,2" />
+        <Setter Property="ColumnSpacing" Value="10" />
+    </Style>
+    <Style Selector="Border.FireLaneBadge > TextBlock">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccentInk}" />
+    </Style>
+    <!-- The stage the enclosure stands on: centred, a little breathing room. -->
+    <Style Selector="Panel.FireEnclosureStage">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+    </Style>
+    <!-- Title strip: eyebrow · name · brand over a hairline. -->
+    <Style Selector="Grid.FireEnclosureTitle">
+        <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+    </Style>
+    <!-- A labelled (choice) parameter in the knob grid: eyebrow over a picker,
+         sized like a knob cell so the grid stays square. -->
+    <Style Selector="StackPanel.FireEnclosureChoice">
+        <Setter Property="MinWidth" Value="100" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTag}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.FireEnclosureChoice > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+    </Style>
+    <!-- The picker in a choice cell (pedal-editors.css .instrument-choice
+         select): as tall as a knob's cap row, on a near-black field with the
+         accent showing through its edge, so it reads as a switch set INTO the
+         paint rather than a form control laid on top of it. -->
+    <Style Selector="StackPanel.FireEnclosureChoice > ComboBox">
+        <Setter Property="MinHeight" Value="39" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+    </Style>
+    <!-- The engaged LED and the footswitch row under the controls. -->
+    <Style Selector="StackPanel.FireEnclosureBypass">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="Spacing" Value="{StaticResource FireSpaceMd}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+        <Setter Property="MinHeight" Value="48" />
+    </Style>
+    <!-- ══ The amp face (design 6.3) ═══════════════════════════════════════
+         The shell picture is a RigArtworkImage behind this panel; the brand
+         plate, the knob row and the lamp sit on it. The lamp is at a fixed
+         inset from the right so it stays on the bezel however wide the head. -->
+    <Style Selector="Panel.FireAmpFace">
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.FireCabBadge > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+        <Setter Property="LetterSpacing" Value="2" />
+        <Setter Property="Foreground" Value="{DynamicResource FireUnitCabinets}" />
+    </Style>
+    <Style Selector="Border.FireFacePanel.Rack TextBlock.FireEyebrow">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccent}" />
+    </Style>
+    <!-- A REAL fader (specialized-editors.css .device-fader): a 7 px recessed
+         rail — the same dark rail above and below the cap, no fill, because a
+         ±12 dB band centred on 0 has nothing to fill from — and a 25×15
+         brushed cap with the unit's accent as its centre stripe. The stripe
+         is a Border painted with the THUMB's inherited Foreground, so the
+         view sets the Slider's Foreground to the family accent and the cap
+         follows. The base theme's hover scale is a circle's gesture; on a
+         rectangular cap it is replaced by a brighter edge. -->
+    <Style Selector="Slider.FireEqFader">
+        <Setter Property="Orientation" Value="Vertical" />
+        <Setter Property="Width" Value="34" />
+        <Setter Property="MinWidth" Value="34" />
+        <Setter Property="Height" Value="168" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccent}" />
+        <Setter Property="Cursor" Value="SizeNorthSouth" />
+    </Style>
+    <!-- The graphic EQ's faders take the EQ green. A class, not a local
+         DynamicResource on the Slider: the local value read back as the style's
+         violet in the headless probe, and a more specific selector cannot lose. -->
+    <Style Selector="Slider.FireEqFader.Eq">
+        <Setter Property="Foreground" Value="{DynamicResource FireRigAccentEq}" />
+    </Style>
+    <Style Selector="Slider.FireEqFader:vertical /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Width="7" CornerRadius="{StaticResource FireRadiusMicro}"
+                        Background="{DynamicResource FireRigFaderRail}"
+                        BorderBrush="{DynamicResource FireHardwareShadow}" BorderThickness="1" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FireEqFader:vertical /template/ Track RepeatButton#PART_IncreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Width="7" CornerRadius="{StaticResource FireRadiusMicro}"
+                        Background="{DynamicResource FireRigFaderRail}"
+                        BorderBrush="{DynamicResource FireHardwareShadow}" BorderThickness="1" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FireEqFader /template/ Thumb">
+        <Setter Property="Width" Value="25" />
+        <Setter Property="Height" Value="15" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="FaderCap" Width="25" Height="15"
+                        CornerRadius="{StaticResource FireRadiusHair}"
+                        Background="{DynamicResource FireRigFaderCap}"
+                        BorderBrush="{DynamicResource FireRigFaderCapEdge}" BorderThickness="1"
+                        BoxShadow="{DynamicResource FireShadowSwitch}">
+                    <!-- The SLIDER's Foreground, looked up by ancestor: the
+                         thumb's own Foreground came back as the style default
+                         (violet) on a green EQ, so inheritance is not relied on. -->
+                    <Border Height="3" Margin="2,0" VerticalAlignment="Center"
+                            Background="{Binding $parent[Slider].Foreground}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FireEqFader:pointerover /template/ Thumb Border">
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+    <Style Selector="Slider.FireEqFader:pressed /template/ Thumb Border">
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+    <Style Selector="Slider.FireEqFader:pointerover /template/ Thumb Border#FaderCap">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireHardwarePointer}" />
+    </Style>
+
+</Styles>

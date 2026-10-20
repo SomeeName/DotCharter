@@ -1,0 +1,313 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      THE CHART EDITOR'S CHROME GRAMMAR, on the Fire layer (0.50).
+
+      Built from the top bar and status rail of `Editor Project Settings.dc.html`
+      and `Rocksmith Song Browser.dc.html`. Included by the three views that
+      make up that chrome — `MainMenuView`, `ToolbarView` and `StatusBar` — and
+      by nothing else, so a Fire menu row cannot leak into a context menu on a
+      pane that has not been converted yet.
+
+      It is the THIRD converted grammar file, after `Views/Dialogs/DialogStyles`
+      and `Views/Settings/SettingsStyles`, and it is held to the same two lints
+      (`UI/FireStyleClassTests.EachConvertedGrammar_*`): only `FireRadius*` /
+      `FireSize*` / `FirePad*` / `FireGap*` / `FireSpace*` may appear here, and
+      the file must really speak the layer.
+
+      ── THE ONE THING THAT MAKES THIS FILE LOOK STRANGE ─────────────────────
+      A DROPDOWN'S CHROME IS REACHED THROUGH FLUENT'S RESOURCE KEYS, NOT
+      THROUGH A STYLE SELECTOR — hence the merged `Styles/FireMenuChrome.axaml`
+      above, which is where all of this file's colour lives. That is not a
+      preference; it is the only thing that works, and the reason is written
+      out in that file's own header.
+
+      The second half of the same finding, and the reason there is a
+      `MenuItem.FireMenuTop` class in `Fire.axaml` but a bare `MenuItem`
+      selector here: a setter on the CONTROL'S OWN properties (a MenuItem's
+      Padding, FontSize, CornerRadius) works normally, and a view-scoped type
+      selector DOES reach the items inside an open submenu.
+    -->
+
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Fluent's popup keys, restated in Fire values. The literals
+                     live under `Styles/` because that is where colour is
+                     DECLARED, and every one of them is pinned against its Fire
+                     token by `UI/EditorChromeTests`. -->
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Styles/FireMenuChrome.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+
+    <!-- ══ Menu bar ═══════════════════════════════════════════════════════════
+         The bar itself is `Border.FireMenuBar` in the shell markup; the top-level
+         headers wear `MenuItem.FireMenuTop`. Both live in `Fire.axaml` because
+         they are the LAYER's marks. What is left here is the `Menu` host, which
+         only has to get out of the way. -->
+    <Style Selector="Menu">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+    </Style>
+
+    <!-- ══ One row inside a dropdown ══════════════════════════════════════════
+         Everything colour-shaped came from the resource block above; these are
+         the row's OWN properties, which a style reaches normally. -->
+    <Style Selector="MenuItem">
+        <Setter Property="Padding" Value="{StaticResource FirePadMenuItem}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+    </Style>
+
+    <!-- ══ Flyouts (the toolbar's Mix / Tempo / Tools / Tracks panels, the
+         status bar's message + profile panels) ════════════════════════════════
+         The presenter's fill and border come from the resource block; radius and
+         inset are its own. -->
+    <Style Selector="FlyoutPresenter">
+        <!-- ZERO inset and NO border: since 0.54 every popover on these rails is
+             a `FirePopover`, which draws its own head, hairlines, footer and
+             14 px edge. A presenter that kept the card inset would frame that
+             shell in a second, differently-rounded one. -->
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCardLg}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="BorderThickness" Value="{StaticResource FirePadNone}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MaxWidth" Value="640" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+    </Style>
+
+    <!-- ══ ComboBoxes on the chrome rails ═════════════════════════════════════ -->
+    <Style Selector="ComboBox">
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+    </Style>
+    <Style Selector="ComboBoxItem">
+        <Setter Property="Padding" Value="{StaticResource FirePadMenuItem}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+    </Style>
+
+    <!-- ══ The tool rail's own vocabulary ═════════════════════════════════════
+         A dense row of 28 px controls. Density IS the design here — what the
+         conversion changes is the ladder underneath it, not the layout. -->
+    <Style Selector="StackPanel.TbGroup">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="{StaticResource FireSpaceXs}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <!-- Hit-testable so the group-name tooltip works in the gaps between
+             controls (the old ribbon caption moved here). -->
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="StackPanel.TbGroup > ComboBox">
+        <Setter Property="Height" Value="28" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="{StaticResource FirePadField}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.TbGroup > Button, StackPanel.TbGroup > ToggleButton">
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.TbGroup > TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Slim separator between controls inside a group; the taller one between
+         groups. Both are hairlines — colour carries the weight, never width. -->
+    <Style Selector="Border.GroupSep">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Background" Value="{DynamicResource FireBorder}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapLeftSm}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.GroupDivider">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Background" Value="{DynamicResource FireBorderStrong}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapLeftSm}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ══ Inside a toolbar / status-bar flyout ═══════════════════════════════
+         The flyouts open with the layer's own lockup: a mono eyebrow over a
+         Chakra title. `GroupHeader` is the SUB-section kicker inside one. -->
+    <Style Selector="TextBlock.GroupHeader">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+    </Style>
+    <Style Selector="TextBlock.FlyoutTitle">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.FlyoutHead">
+        <Setter Property="Spacing" Value="{StaticResource FireSpaceSm}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+    </Style>
+    <Style Selector="Border.FlyoutSep">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource FireBorderRow}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="Grid.FlyoutRow">
+        <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+    </Style>
+    <Style Selector="Grid.FlyoutRow > TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Grid.FlyoutRow Slider">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ══ The status rail ════════════════════════════════════════════════════
+         Every read-out on it is mono, and the two counters are the only things
+         here that can be BAD — so they are the only things that carry colour.
+         `StatusChipButton` is the flat hit target under a counter or the profile
+         pill: it asserts itself on hover and is invisible the rest of the time. -->
+    <Style Selector="Button.StatusChipButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadBadge}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- All three states have to be stated on the PRESENTER: Fluent's Button
+         template ROOT is the presenter, so a fill set on the control alone is
+         painted straight over (the trap the 0.49 dialog conversion shipped). -->
+    <Style Selector="Button.StatusChipButton /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.StatusChipButton:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <Style Selector="Button.StatusChipButton:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+    </Style>
+    <Style Selector="Border.StatusDivider">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="12" />
+        <Setter Property="Background" Value="{DynamicResource FireBorder}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- ══ THE TOOL RAIL'S GLYPH SIZE ═════════════════════════════════════════
+         The 24 icons on the rail each spelled `Width="14" Height="14"` on the
+         element until 2026-09-13 (lane F), which is a LOCAL value — and a local
+         value outranks every style setter, so the breakpoint rule below would
+         have been silently dead on all 24 of them while reading as applied. They
+         are declared here now, once, and the `.TbCaret` disclosure carets keep
+         their own smaller step. Both are SQUARE and stay square; the rail's own
+         44 px height and the 38/30 px menu and status rails do not move.
+         Scoped to `Border.FireToolbar` on purpose: the flyouts these buttons
+         open are separate views with their own icon sizes. -->
+    <Style Selector="Border.FireToolbar PathIcon">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+    </Style>
+    <Style Selector="Border.FireToolbar PathIcon.TbCaret">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+    </Style>
+
+    <!-- ══ THE WIDE BREAKPOINT (lane F, 2026-09-13) ═══════════════════════════
+         `Services/UiBreakpointController` puts `Wide` on the WINDOW above 2560
+         INNER (post-`RootScaler`) DIPs. The editor's three rails are the one
+         part of the app that is pinned to the window's EDGES rather than
+         centred, so the audit's usual finding — "a centred column the same pixel
+         width at 1080p and 4K" — is not what is wrong with them. What is wrong
+         is density: a 38 / 44 / 30 px rail of 10.5–13 px type and 14 px glyphs is
+         a correct design at 1920 and a row of specks at 3840.
+
+         So the CONTENT steps and the CHROME does not. All three bar heights
+         (`FireMenuBarHeight` 38, the rail's own 44 px floor,
+         `FireStatusBarHeight` 30) are untouched, nothing becomes a centred
+         capped strip, and every rung below is an EXISTING `FireSize*` step
+         rather than a literal — a font ladder may never live in
+         `Styles/FireTokens/Ladders.Wide.axaml`, because ramping one there
+         compounds with `MainWindow`'s `RootScaler` (that file's own header).
+
+         `:is(Window)` rather than `Window`: the shell's root is
+         `Views.MainWindow : Window`. Both forms reach a subclass today —
+         measured by `Perf/UiResolutionAuditUiPerfSmokeTests
+         .ABreakpointSelector_ReachesAWindowSubclass` — and this is the form
+         whose failure mode is not silent.
+
+         NOTHING HERE REACHES INTO A DROPDOWN, and that is deliberate rather
+         than an oversight: a `MenuItem` row, a `FlyoutPresenter` and a
+         `ComboBox` popup are hosted in their own `PopupRoot` under the native
+         swapchain opt-out (`DotCharter.UI/AGENTS.md`, airspace), where a
+         selector rooted at the shell `Window` matches nothing. A rule that
+         works on one presentation path and dies on the other is exactly the
+         silent half-fix this layer keeps paying for, so the dropdown rows keep
+         one size on both. -->
+    <Style Selector=":is(Window).Wide Border.FireToolbar PathIcon">
+        <Setter Property="Width" Value="17" />
+        <Setter Property="Height" Value="17" />
+    </Style>
+    <Style Selector=":is(Window).Wide Border.FireToolbar PathIcon.TbCaret">
+        <Setter Property="Width" Value="12" />
+        <Setter Property="Height" Value="12" />
+    </Style>
+    <!-- The hit targets grow with their glyphs and stay inside the 44 px rail.
+         28 -> 32 is the step that keeps an icon-only button SQUARE against the
+         `FirePadTag` inset it already carries. -->
+    <Style Selector=":is(Window).Wide StackPanel.TbGroup > Button,
+                     :is(Window).Wide StackPanel.TbGroup > ToggleButton">
+        <Setter Property="Height" Value="32" />
+    </Style>
+    <Style Selector=":is(Window).Wide StackPanel.TbGroup > ComboBox">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+    </Style>
+    <!-- The rail's captions ("Grid Snap", the Tracks arrangement name). -->
+    <Style Selector=":is(Window).Wide StackPanel.TbGroup > TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+    </Style>
+    <!-- The menu bar's top-level headers. The ROWS under them are a dropdown
+         and are left alone, for the reason above. -->
+    <Style Selector=":is(Window).Wide MenuItem.FireMenuTop">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+    </Style>
+    <!-- The status rail. Every read-out on it is `TextBlock.FireMono` at
+         `FireSizeMono` 10.5 — the ladder's quietest step, and genuinely
+         unreadable on a 4K panel. `FireSizeSm` 12 still clears the 30 px rail
+         with room, and `TextBlock.FireMono` pins no line box, so nothing has to
+         move with it. -->
+    <Style Selector=":is(Window).Wide Border.FireStatusBar TextBlock.FireMono">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+    </Style>
+    <!-- …and `.Faint` keeps its rung BELOW the plain one. It is a real step
+         (9.5 against 10.5, the quiet half of the rail's read-outs), and a rule
+         that only named `TextBlock.FireMono` would have flattened the two to one
+         size at the breakpoint — a hierarchy that exists at 1080p and vanishes
+         on the bigger screen is a regression, not a step up. It is stated AFTER
+         the rule above because the last matching style wins. -->
+    <Style Selector=":is(Window).Wide Border.FireStatusBar TextBlock.FireMono.Faint">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+    </Style>
+
+</Styles>

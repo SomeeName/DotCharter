@@ -1,0 +1,4163 @@
+{
+ "schemaVersion": 1,
+ "sampleRate": 48000,
+ "clipSeconds": 5,
+ "slots": 7,
+ "noneLabel": "<none>",
+ "knobDim": 573,
+ "families": [
+  "amp",
+  "cab",
+  "delay",
+  "drive",
+  "dynamics",
+  "eq",
+  "filter",
+  "modulation",
+  "pitch",
+  "reverb",
+  "routing",
+  "synth",
+  "utility"
+ ],
+ "modules": [
+  {
+   "id": "acousticsim",
+   "category": "cab",
+   "paramOffset": 0,
+   "params": [
+    {
+     "id": "body",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "brightness",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "lowCutHz",
+     "min": 40,
+     "max": 200,
+     "default": 90
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "acpre",
+   "category": "amp",
+   "paramOffset": 4,
+   "params": [
+    {
+     "id": "notchHz",
+     "min": 60,
+     "max": 500,
+     "default": 120
+    },
+    {
+     "id": "notchDepthDb",
+     "min": 0,
+     "max": 30,
+     "default": 0
+    },
+    {
+     "id": "notchQ",
+     "min": 2,
+     "max": 30,
+     "default": 10
+    },
+    {
+     "id": "phase",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "bass",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "mid",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "treble",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "presence",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "piezoFix",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    }
+   ]
+  },
+  {
+   "id": "amp",
+   "category": "amp",
+   "paramOffset": 14,
+   "params": [
+    {
+     "id": "gain",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "bass",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mid",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "treble",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "presence",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "master",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "voicing",
+     "min": 0,
+     "max": 23,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "autopan",
+   "category": "modulation",
+   "paramOffset": 21,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.05,
+     "max": 10,
+     "default": 1
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "shape",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    },
+    {
+     "id": "phaseDeg",
+     "min": 0,
+     "max": 180,
+     "default": 90
+    },
+    {
+     "id": "law",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "autowah",
+   "category": "filter",
+   "paramOffset": 26,
+   "params": [
+    {
+     "id": "sensitivity",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "attackMs",
+     "min": 1,
+     "max": 100,
+     "default": 10
+    },
+    {
+     "id": "releaseMs",
+     "min": 20,
+     "max": 500,
+     "default": 100
+    },
+    {
+     "id": "rangeLo",
+     "min": 100,
+     "max": 800,
+     "default": 300
+    },
+    {
+     "id": "rangeHi",
+     "min": 800,
+     "max": 4000,
+     "default": 2200
+    },
+    {
+     "id": "direction",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "barberpole",
+   "category": "modulation",
+   "paramOffset": 33,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.05,
+     "max": 5,
+     "default": 0.2
+    },
+    {
+     "id": "stages",
+     "min": 2,
+     "max": 12,
+     "default": 6
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 0.8
+    },
+    {
+     "id": "feedback",
+     "min": -0.9,
+     "max": 0.9,
+     "default": 0.3
+    },
+    {
+     "id": "direction",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "bassamp",
+   "category": "amp",
+   "paramOffset": 39,
+   "params": [
+    {
+     "id": "model",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "gain",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "bass",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "lowMid",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "hiMid",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "treble",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.2
+    },
+    {
+     "id": "compress",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "master",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "bassod",
+   "category": "drive",
+   "paramOffset": 48,
+   "params": [
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "blend",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "bass",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "treble",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "basssynth",
+   "category": "pitch",
+   "paramOffset": 53,
+   "params": [
+    {
+     "id": "waveform",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "octave",
+     "min": 0,
+     "max": 2,
+     "default": 1
+    },
+    {
+     "id": "cutoffHz",
+     "min": 40,
+     "max": 8000,
+     "default": 800
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "envAmount",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "decayMs",
+     "min": 10,
+     "max": 2000,
+     "default": 300
+    },
+    {
+     "id": "glideMs",
+     "min": 0,
+     "max": 300,
+     "default": 20
+    },
+    {
+     "id": "dryMix",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "synthMix",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    }
+   ]
+  },
+  {
+   "id": "bbddelay",
+   "category": "delay",
+   "paramOffset": 62,
+   "params": [
+    {
+     "id": "timeMs",
+     "min": 20,
+     "max": 600,
+     "default": 300
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "modRateHz",
+     "min": 0.1,
+     "max": 5,
+     "default": 0.5
+    },
+    {
+     "id": "modDepth",
+     "min": 0,
+     "max": 1,
+     "default": 0.1
+    },
+    {
+     "id": "age",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    }
+   ]
+  },
+  {
+   "id": "bigmuff",
+   "category": "drive",
+   "paramOffset": 68,
+   "params": [
+    {
+     "id": "sustain",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "volume",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "bitcrusher",
+   "category": "drive",
+   "paramOffset": 71,
+   "params": [
+    {
+     "id": "bits",
+     "min": 1,
+     "max": 16,
+     "default": 16
+    },
+    {
+     "id": "downsample",
+     "min": 1,
+     "max": 64,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "boost",
+   "category": "drive",
+   "paramOffset": 74,
+   "params": [
+    {
+     "id": "gainDb",
+     "min": 0,
+     "max": 24,
+     "default": 6
+    },
+    {
+     "id": "tilt",
+     "min": -1,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "character",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "cab",
+   "category": "cab",
+   "paramOffset": 77,
+   "params": [
+    {
+     "id": "model",
+     "min": 0,
+     "max": 11,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "lowCutHz",
+     "min": 40,
+     "max": 200,
+     "default": 60
+    },
+    {
+     "id": "highCutHz",
+     "min": 3000,
+     "max": 12000,
+     "default": 8000
+    },
+    {
+     "id": "blend",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "gainADb",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    },
+    {
+     "id": "gainBDb",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    },
+    {
+     "id": "invertA",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "invertB",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "delayAMs",
+     "min": 0,
+     "max": 20,
+     "default": 0
+    },
+    {
+     "id": "delayBMs",
+     "min": 0,
+     "max": 20,
+     "default": 0
+    },
+    {
+     "id": "outputDb",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "chorus",
+   "category": "modulation",
+   "paramOffset": 89,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.1,
+     "max": 5,
+     "default": 0.8
+    },
+    {
+     "id": "depthMs",
+     "min": 1,
+     "max": 15,
+     "default": 6
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "voices",
+     "min": 1,
+     "max": 3,
+     "default": 2
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.9,
+     "default": 0
+    },
+    {
+     "id": "spread",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "lfoShape",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    },
+    {
+     "id": "wetHpfHz",
+     "min": 20,
+     "max": 400,
+     "default": 20
+    }
+   ]
+  },
+  {
+   "id": "comb",
+   "category": "filter",
+   "paramOffset": 97,
+   "params": [
+    {
+     "id": "freqHz",
+     "min": 20,
+     "max": 5000,
+     "default": 220
+    },
+    {
+     "id": "feedback",
+     "min": -0.98,
+     "max": 0.98,
+     "default": 0.7
+    },
+    {
+     "id": "damping",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "polarity",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "compressor",
+   "category": "dynamics",
+   "paramOffset": 102,
+   "params": [
+    {
+     "id": "thresholdDb",
+     "min": -60,
+     "max": 0,
+     "default": -18
+    },
+    {
+     "id": "ratio",
+     "min": 1,
+     "max": 20,
+     "default": 4
+    },
+    {
+     "id": "attackMs",
+     "min": 0.1,
+     "max": 100,
+     "default": 10
+    },
+    {
+     "id": "releaseMs",
+     "min": 5,
+     "max": 1000,
+     "default": 120
+    },
+    {
+     "id": "makeupDb",
+     "min": 0,
+     "max": 24,
+     "default": 0
+    },
+    {
+     "id": "kneeDb",
+     "min": 0,
+     "max": 24,
+     "default": 6
+    },
+    {
+     "id": "detector",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "convreverb",
+   "category": "reverb",
+   "paramOffset": 109,
+   "params": [
+    {
+     "id": "predelayMs",
+     "min": 0,
+     "max": 200,
+     "default": 0
+    },
+    {
+     "id": "lengthPct",
+     "min": 10,
+     "max": 100,
+     "default": 100
+    },
+    {
+     "id": "lowCutHz",
+     "min": 20,
+     "max": 500,
+     "default": 40
+    },
+    {
+     "id": "highCutKHz",
+     "min": 2,
+     "max": 20,
+     "default": 16
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    }
+   ]
+  },
+  {
+   "id": "delay",
+   "category": "delay",
+   "paramOffset": 114,
+   "params": [
+    {
+     "id": "timeMs",
+     "min": 10,
+     "max": 2000,
+     "default": 300
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.95,
+     "default": 0.4
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.35
+    },
+    {
+     "id": "pingPong",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "toneHz",
+     "min": 500,
+     "max": 12000,
+     "default": 4000
+    },
+    {
+     "id": "sync",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "bpm",
+     "min": 20,
+     "max": 400,
+     "default": 120
+    },
+    {
+     "id": "division",
+     "min": 0,
+     "max": 8,
+     "default": 2
+    },
+    {
+     "id": "trails",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "detune",
+   "category": "pitch",
+   "paramOffset": 123,
+   "params": [
+    {
+     "id": "cents",
+     "min": 0,
+     "max": 50,
+     "default": 12
+    },
+    {
+     "id": "spreadMs",
+     "min": 0,
+     "max": 30,
+     "default": 8
+    },
+    {
+     "id": "width",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "lowLatency",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "dimension",
+   "category": "modulation",
+   "paramOffset": 128,
+   "params": [
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 3,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "distortion",
+   "category": "drive",
+   "paramOffset": 130,
+   "params": [
+    {
+     "id": "model",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "gain",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "tightHz",
+     "min": 20,
+     "max": 300,
+     "default": 90
+    }
+   ]
+  },
+  {
+   "id": "doubler",
+   "category": "modulation",
+   "paramOffset": 135,
+   "params": [
+    {
+     "id": "detuneCents",
+     "min": 0,
+     "max": 30,
+     "default": 12
+    },
+    {
+     "id": "spread",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "delayMs",
+     "min": 2,
+     "max": 40,
+     "default": 12
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "ds1",
+   "category": "drive",
+   "paramOffset": 139,
+   "params": [
+    {
+     "id": "dist",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "duckdelay",
+   "category": "delay",
+   "paramOffset": 142,
+   "params": [
+    {
+     "id": "timeMs",
+     "min": 10,
+     "max": 2000,
+     "default": 400
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.9,
+     "default": 0.35
+    },
+    {
+     "id": "duckDb",
+     "min": 0,
+     "max": 40,
+     "default": 12
+    },
+    {
+     "id": "sensitivity",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "releaseMs",
+     "min": 20,
+     "max": 2000,
+     "default": 300
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    }
+   ]
+  },
+  {
+   "id": "ducker",
+   "category": "dynamics",
+   "paramOffset": 149,
+   "params": [
+    {
+     "id": "thresholdDb",
+     "min": -60,
+     "max": 0,
+     "default": -30
+    },
+    {
+     "id": "duckDb",
+     "min": 0,
+     "max": 40,
+     "default": 12
+    },
+    {
+     "id": "attackMs",
+     "min": 1,
+     "max": 200,
+     "default": 10
+    },
+    {
+     "id": "holdMs",
+     "min": 0,
+     "max": 500,
+     "default": 50
+    },
+    {
+     "id": "releaseMs",
+     "min": 10,
+     "max": 2000,
+     "default": 300
+    }
+   ]
+  },
+  {
+   "id": "ensemble",
+   "category": "modulation",
+   "paramOffset": 154,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.1,
+     "max": 2,
+     "default": 0.6
+    },
+    {
+     "id": "fastRateHz",
+     "min": 3,
+     "max": 8,
+     "default": 5.5
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "voices",
+     "min": 2,
+     "max": 3,
+     "default": 3
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "envfilter",
+   "category": "filter",
+   "paramOffset": 160,
+   "params": [
+    {
+     "id": "sensitivity",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "rangeLoHz",
+     "min": 100,
+     "max": 800,
+     "default": 200
+    },
+    {
+     "id": "rangeHiHz",
+     "min": 800,
+     "max": 4000,
+     "default": 2500
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "direction",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "eq",
+   "category": "eq",
+   "paramOffset": 166,
+   "params": [
+    {
+     "id": "lowFreq",
+     "min": 40,
+     "max": 400,
+     "default": 100
+    },
+    {
+     "id": "lowGainDb",
+     "min": -18,
+     "max": 18,
+     "default": 0
+    },
+    {
+     "id": "midFreq",
+     "min": 200,
+     "max": 4000,
+     "default": 1000
+    },
+    {
+     "id": "midQ",
+     "min": 0.3,
+     "max": 8,
+     "default": 1
+    },
+    {
+     "id": "midGainDb",
+     "min": -18,
+     "max": 18,
+     "default": 0
+    },
+    {
+     "id": "highFreq",
+     "min": 2000,
+     "max": 12000,
+     "default": 6000
+    },
+    {
+     "id": "highGainDb",
+     "min": -18,
+     "max": 18,
+     "default": 0
+    },
+    {
+     "id": "outputTrimDb",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "expander",
+   "category": "dynamics",
+   "paramOffset": 174,
+   "params": [
+    {
+     "id": "thresholdDb",
+     "min": -80,
+     "max": 0,
+     "default": -40
+    },
+    {
+     "id": "ratio",
+     "min": 1,
+     "max": 10,
+     "default": 2
+    },
+    {
+     "id": "attackMs",
+     "min": 0.1,
+     "max": 100,
+     "default": 10
+    },
+    {
+     "id": "releaseMs",
+     "min": 5,
+     "max": 1000,
+     "default": 120
+    },
+    {
+     "id": "rangeDb",
+     "min": 0,
+     "max": 60,
+     "default": 30
+    }
+   ]
+  },
+  {
+   "id": "feedbacker",
+   "category": "synth",
+   "paramOffset": 179,
+   "params": [
+    {
+     "id": "amount",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "riseMs",
+     "min": 10,
+     "max": 3000,
+     "default": 400
+    },
+    {
+     "id": "harmonic",
+     "min": 0,
+     "max": 3,
+     "default": 1
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "thresholdDb",
+     "min": -60,
+     "max": -10,
+     "default": -40
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "filterseq",
+   "category": "filter",
+   "paramOffset": 185,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.1,
+     "max": 16,
+     "default": 4
+    },
+    {
+     "id": "steps",
+     "min": 2,
+     "max": 16,
+     "default": 8
+    },
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "trigger",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "rangeLoHz",
+     "min": 100,
+     "max": 1000,
+     "default": 200
+    },
+    {
+     "id": "rangeHiHz",
+     "min": 500,
+     "max": 6000,
+     "default": 3000
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "glide",
+     "min": 0,
+     "max": 1,
+     "default": 0.15
+    },
+    {
+     "id": "filterType",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "flanger",
+   "category": "modulation",
+   "paramOffset": 195,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.05,
+     "max": 3,
+     "default": 0.3
+    },
+    {
+     "id": "depthMs",
+     "min": 0.5,
+     "max": 5,
+     "default": 2
+    },
+    {
+     "id": "feedback",
+     "min": -0.95,
+     "max": 0.95,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "formant",
+   "category": "filter",
+   "paramOffset": 199,
+   "params": [
+    {
+     "id": "vowel",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "amount",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "brightness",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "rateHz",
+     "min": 0,
+     "max": 8,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "freeze",
+   "category": "synth",
+   "paramOffset": 203,
+   "params": [
+    {
+     "id": "capture",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "lengthMs",
+     "min": 120,
+     "max": 2000,
+     "default": 500
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "fadeMs",
+     "min": 5,
+     "max": 2000,
+     "default": 80
+    },
+    {
+     "id": "toneHz",
+     "min": 500,
+     "max": 12000,
+     "default": 6000
+    }
+   ]
+  },
+  {
+   "id": "freqshift",
+   "category": "modulation",
+   "paramOffset": 208,
+   "params": [
+    {
+     "id": "shiftHz",
+     "min": -1000,
+     "max": 1000,
+     "default": 5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.9,
+     "default": 0
+    },
+    {
+     "id": "direction",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "fuzz",
+   "category": "drive",
+   "paramOffset": 212,
+   "params": [
+    {
+     "id": "fuzz",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    }
+   ]
+  },
+  {
+   "id": "gain",
+   "category": "utility",
+   "paramOffset": 215,
+   "params": [
+    {
+     "id": "gainDb",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "gate",
+   "category": "dynamics",
+   "paramOffset": 216,
+   "params": [
+    {
+     "id": "thresholdDb",
+     "min": -80,
+     "max": 0,
+     "default": -55
+    },
+    {
+     "id": "ratio",
+     "min": 1,
+     "max": 50,
+     "default": 10
+    },
+    {
+     "id": "attackMs",
+     "min": 0.1,
+     "max": 50,
+     "default": 1
+    },
+    {
+     "id": "holdMs",
+     "min": 0,
+     "max": 500,
+     "default": 40
+    },
+    {
+     "id": "releaseMs",
+     "min": 5,
+     "max": 1000,
+     "default": 120
+    }
+   ]
+  },
+  {
+   "id": "gatedreverb",
+   "category": "reverb",
+   "paramOffset": 221,
+   "params": [
+    {
+     "id": "decayS",
+     "min": 0.5,
+     "max": 10,
+     "default": 3
+    },
+    {
+     "id": "gateMs",
+     "min": 20,
+     "max": 1000,
+     "default": 250
+    },
+    {
+     "id": "thresholdDb",
+     "min": -60,
+     "max": 0,
+     "default": -30
+    },
+    {
+     "id": "releaseMs",
+     "min": 5,
+     "max": 200,
+     "default": 20
+    },
+    {
+     "id": "predelayMs",
+     "min": 0,
+     "max": 100,
+     "default": 0
+    },
+    {
+     "id": "dampingKHz",
+     "min": 1,
+     "max": 16,
+     "default": 8
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "glitch",
+   "category": "utility",
+   "paramOffset": 228,
+   "params": [
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "trigger",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "sliceMs",
+     "min": 20,
+     "max": 1000,
+     "default": 250
+    },
+    {
+     "id": "repeats",
+     "min": 1,
+     "max": 16,
+     "default": 4
+    },
+    {
+     "id": "chance",
+     "min": 0,
+     "max": 1,
+     "default": 0.35
+    },
+    {
+     "id": "decay",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "reverse",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "granular",
+   "category": "delay",
+   "paramOffset": 236,
+   "params": [
+    {
+     "id": "grainMs",
+     "min": 10,
+     "max": 500,
+     "default": 80
+    },
+    {
+     "id": "density",
+     "min": 1,
+     "max": 32,
+     "default": 8
+    },
+    {
+     "id": "pitchSemitones",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "spray",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.9,
+     "default": 0.2
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "freeze",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "graphiceq",
+   "category": "eq",
+   "paramOffset": 243,
+   "params": [
+    {
+     "id": "band31",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band63",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band125",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band250",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band500",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band1k",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band2k",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band4k",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band8k",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "band16k",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "level",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "hallreverb",
+   "category": "reverb",
+   "paramOffset": 254,
+   "params": [
+    {
+     "id": "space",
+     "min": 0,
+     "max": 3,
+     "default": 2
+    },
+    {
+     "id": "decayS",
+     "min": 0.2,
+     "max": 20,
+     "default": 2.5
+    },
+    {
+     "id": "predelayMs",
+     "min": 0,
+     "max": 200,
+     "default": 20
+    },
+    {
+     "id": "dampingKHz",
+     "min": 1,
+     "max": 16,
+     "default": 6
+    },
+    {
+     "id": "lowCutHz",
+     "min": 20,
+     "max": 500,
+     "default": 80
+    },
+    {
+     "id": "erLevel",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "diffusion",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "width",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    }
+   ]
+  },
+  {
+   "id": "harmonizer",
+   "category": "pitch",
+   "paramOffset": 263,
+   "params": [
+    {
+     "id": "semitones",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "lowLatency",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "harmtremolo",
+   "category": "modulation",
+   "paramOffset": 266,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.1,
+     "max": 12,
+     "default": 4
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "crossoverHz",
+     "min": 200,
+     "max": 2000,
+     "default": 800
+    }
+   ]
+  },
+  {
+   "id": "hm2",
+   "category": "drive",
+   "paramOffset": 269,
+   "params": [
+    {
+     "id": "dist",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "lowDb",
+     "min": 0,
+     "max": 12,
+     "default": 10
+    },
+    {
+     "id": "highDb",
+     "min": 0,
+     "max": 12,
+     "default": 10
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "klon",
+   "category": "drive",
+   "paramOffset": 273,
+   "params": [
+    {
+     "id": "gain",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "treble",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "output",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "blend",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "limiter",
+   "category": "dynamics",
+   "paramOffset": 277,
+   "params": [
+    {
+     "id": "ceilingDb",
+     "min": -20,
+     "max": 0,
+     "default": -1
+    },
+    {
+     "id": "releaseMs",
+     "min": 5,
+     "max": 500,
+     "default": 80
+    },
+    {
+     "id": "lookaheadMs",
+     "min": 0,
+     "max": 5,
+     "default": 1
+    },
+    {
+     "id": "gainDb",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "looper",
+   "category": "utility",
+   "paramOffset": 281,
+   "params": [
+    {
+     "id": "state",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "maxLoopS",
+     "min": 1,
+     "max": 60,
+     "default": 30
+    },
+    {
+     "id": "loopLevel",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "overdubDecay",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "reverse",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "halfSpeed",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "undo",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "merger",
+   "category": "routing",
+   "paramOffset": 289,
+   "params": [
+    {
+     "id": "level1",
+     "min": 0,
+     "max": 2,
+     "default": 1
+    },
+    {
+     "id": "pan1",
+     "min": -1,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "level2",
+     "min": 0,
+     "max": 2,
+     "default": 1
+    },
+    {
+     "id": "pan2",
+     "min": -1,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "level3",
+     "min": 0,
+     "max": 2,
+     "default": 1
+    },
+    {
+     "id": "pan3",
+     "min": -1,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mute1",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "solo1",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mute2",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "solo2",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mute3",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "solo3",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "micpos",
+   "category": "cab",
+   "paramOffset": 302,
+   "params": [
+    {
+     "id": "mic",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "position",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "distanceCm",
+     "min": 0,
+     "max": 30,
+     "default": 5
+    },
+    {
+     "id": "room",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "blend2",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    }
+   ]
+  },
+  {
+   "id": "midside",
+   "category": "utility",
+   "paramOffset": 308,
+   "params": [
+    {
+     "id": "midDb",
+     "min": -24,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "sideDb",
+     "min": -24,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "width",
+     "min": 0,
+     "max": 2,
+     "default": 1
+    },
+    {
+     "id": "midPhase",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "sidePhase",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "monoBelowHz",
+     "min": 0,
+     "max": 500,
+     "default": 0
+    },
+    {
+     "id": "swap",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "miku",
+   "category": "synth",
+   "paramOffset": 315,
+   "params": [
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "character",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "octave",
+     "min": -1,
+     "max": 2,
+     "default": 1
+    },
+    {
+     "id": "pattern",
+     "min": 0,
+     "max": 7,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "mikustomp",
+   "category": "synth",
+   "paramOffset": 319,
+   "params": [
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "character",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "breath",
+     "min": 0,
+     "max": 1,
+     "default": 0.35
+    },
+    {
+     "id": "attackMs",
+     "min": 1,
+     "max": 200,
+     "default": 12
+    },
+    {
+     "id": "portamentoMs",
+     "min": 0,
+     "max": 300,
+     "default": 50
+    },
+    {
+     "id": "vibrato",
+     "min": 0,
+     "max": 1,
+     "default": 0.45
+    },
+    {
+     "id": "vibratoRateHz",
+     "min": 3,
+     "max": 8,
+     "default": 5.8
+    },
+    {
+     "id": "octave",
+     "min": -1,
+     "max": 2,
+     "default": 1
+    },
+    {
+     "id": "pattern",
+     "min": 0,
+     "max": 10,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "multiband",
+   "category": "dynamics",
+   "paramOffset": 328,
+   "params": [
+    {
+     "id": "lowXoverHz",
+     "min": 60,
+     "max": 500,
+     "default": 150
+    },
+    {
+     "id": "highXoverHz",
+     "min": 1000,
+     "max": 8000,
+     "default": 2500
+    },
+    {
+     "id": "lowThresholdDb",
+     "min": -60,
+     "max": 0,
+     "default": -20
+    },
+    {
+     "id": "lowRatio",
+     "min": 1,
+     "max": 20,
+     "default": 3
+    },
+    {
+     "id": "lowGainDb",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "midThresholdDb",
+     "min": -60,
+     "max": 0,
+     "default": -20
+    },
+    {
+     "id": "midRatio",
+     "min": 1,
+     "max": 20,
+     "default": 3
+    },
+    {
+     "id": "midGainDb",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "highThresholdDb",
+     "min": -60,
+     "max": 0,
+     "default": -20
+    },
+    {
+     "id": "highRatio",
+     "min": 1,
+     "max": 20,
+     "default": 3
+    },
+    {
+     "id": "highGainDb",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "attackMs",
+     "min": 0.1,
+     "max": 100,
+     "default": 10
+    },
+    {
+     "id": "releaseMs",
+     "min": 5,
+     "max": 1000,
+     "default": 120
+    }
+   ]
+  },
+  {
+   "id": "multitap",
+   "category": "delay",
+   "paramOffset": 341,
+   "params": [
+    {
+     "id": "taps",
+     "min": 1,
+     "max": 4,
+     "default": 3
+    },
+    {
+     "id": "timeMs",
+     "min": 10,
+     "max": 2000,
+     "default": 375
+    },
+    {
+     "id": "spread",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "decay",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "pan",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.9,
+     "default": 0.2
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    }
+   ]
+  },
+  {
+   "id": "namamp",
+   "category": "amp",
+   "paramOffset": 349,
+   "params": [
+    {
+     "id": "gain",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "bass",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mid",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "treble",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "presence",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "master",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "inputDb",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    },
+    {
+     "id": "outputDb",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "noisereducer",
+   "category": "dynamics",
+   "paramOffset": 358,
+   "params": [
+    {
+     "id": "amount",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "thresholdDb",
+     "min": -80,
+     "max": -20,
+     "default": -55
+    },
+    {
+     "id": "humFreq",
+     "min": 50,
+     "max": 60,
+     "default": 50
+    },
+    {
+     "id": "humDepth",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "releaseMs",
+     "min": 20,
+     "max": 500,
+     "default": 120
+    }
+   ]
+  },
+  {
+   "id": "octaver",
+   "category": "pitch",
+   "paramOffset": 363,
+   "params": [
+    {
+     "id": "sub1",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "sub2",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "dry",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "toneHz",
+     "min": 500,
+     "max": 5000,
+     "default": 2000
+    }
+   ]
+  },
+  {
+   "id": "octfuzz",
+   "category": "drive",
+   "paramOffset": 367,
+   "params": [
+    {
+     "id": "fuzz",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "octave",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "volume",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "optocomp",
+   "category": "dynamics",
+   "paramOffset": 371,
+   "params": [
+    {
+     "id": "peakReduction",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "gainDb",
+     "min": 0,
+     "max": 24,
+     "default": 0
+    },
+    {
+     "id": "limit",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "emphasis",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    }
+   ]
+  },
+  {
+   "id": "overdrive",
+   "category": "drive",
+   "paramOffset": 375,
+   "params": [
+    {
+     "id": "model",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    }
+   ]
+  },
+  {
+   "id": "phaser",
+   "category": "modulation",
+   "paramOffset": 379,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.05,
+     "max": 8,
+     "default": 0.5
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "feedback",
+     "min": -0.95,
+     "max": 0.95,
+     "default": 0.3
+    },
+    {
+     "id": "stages",
+     "min": 2,
+     "max": 12,
+     "default": 6
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "pitchcorrect",
+   "category": "pitch",
+   "paramOffset": 384,
+   "params": [
+    {
+     "id": "scale",
+     "min": 0,
+     "max": 4,
+     "default": 0
+    },
+    {
+     "id": "key",
+     "min": 0,
+     "max": 11,
+     "default": 0
+    },
+    {
+     "id": "speedMs",
+     "min": 0,
+     "max": 500,
+     "default": 50
+    },
+    {
+     "id": "amount",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "humanize",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "formant",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "platereverb",
+   "category": "reverb",
+   "paramOffset": 391,
+   "params": [
+    {
+     "id": "decay",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "damping",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "predelayMs",
+     "min": 0,
+     "max": 120,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "width",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "poweramp",
+   "category": "amp",
+   "paramOffset": 396,
+   "params": [
+    {
+     "id": "tubes",
+     "min": 0,
+     "max": 4,
+     "default": 2
+    },
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "sag",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "presence",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "damping",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "rat",
+   "category": "drive",
+   "paramOffset": 403,
+   "params": [
+    {
+     "id": "distortion",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "filter",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "volume",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "clip",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "resonator",
+   "category": "synth",
+   "paramOffset": 407,
+   "params": [
+    {
+     "id": "key",
+     "min": 0,
+     "max": 11,
+     "default": 0
+    },
+    {
+     "id": "chord",
+     "min": 0,
+     "max": 4,
+     "default": 0
+    },
+    {
+     "id": "octave",
+     "min": 0,
+     "max": 4,
+     "default": 2
+    },
+    {
+     "id": "decay",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "damping",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "spread",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "reverb",
+   "category": "reverb",
+   "paramOffset": 414,
+   "params": [
+    {
+     "id": "roomSize",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "damping",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "width",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    }
+   ]
+  },
+  {
+   "id": "reversedelay",
+   "category": "delay",
+   "paramOffset": 418,
+   "params": [
+    {
+     "id": "timeMs",
+     "min": 100,
+     "max": 2000,
+     "default": 500
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.7,
+     "default": 0.3
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "toneHz",
+     "min": 500,
+     "max": 12000,
+     "default": 4000
+    }
+   ]
+  },
+  {
+   "id": "reversereverb",
+   "category": "reverb",
+   "paramOffset": 422,
+   "params": [
+    {
+     "id": "decayS",
+     "min": 0.5,
+     "max": 5,
+     "default": 2
+    },
+    {
+     "id": "windowMs",
+     "min": 100,
+     "max": 2000,
+     "default": 800
+    },
+    {
+     "id": "predelayMs",
+     "min": 0,
+     "max": 200,
+     "default": 0
+    },
+    {
+     "id": "dampingKHz",
+     "min": 1,
+     "max": 16,
+     "default": 8
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "swellShape",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "rhythmdelay",
+   "category": "delay",
+   "paramOffset": 428,
+   "params": [
+    {
+     "id": "timeMs",
+     "min": 10,
+     "max": 2000,
+     "default": 500
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.9,
+     "default": 0.4
+    },
+    {
+     "id": "pattern",
+     "min": 0,
+     "max": 7,
+     "default": 0
+    },
+    {
+     "id": "stepMs",
+     "min": 50,
+     "max": 1000,
+     "default": 125
+    },
+    {
+     "id": "gateDepth",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "gateShape",
+     "min": 0,
+     "max": 1,
+     "default": 0.2
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "ringmod",
+   "category": "modulation",
+   "paramOffset": 435,
+   "params": [
+    {
+     "id": "freqHz",
+     "min": 20,
+     "max": 3000,
+     "default": 500
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "waveform",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "rotary",
+   "category": "modulation",
+   "paramOffset": 438,
+   "params": [
+    {
+     "id": "speed",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "shimmer",
+   "category": "reverb",
+   "paramOffset": 441,
+   "params": [
+    {
+     "id": "decay",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "shimmer",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "damping",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.35
+    }
+   ]
+  },
+  {
+   "id": "slapback",
+   "category": "delay",
+   "paramOffset": 445,
+   "params": [
+    {
+     "id": "timeMs",
+     "min": 40,
+     "max": 300,
+     "default": 110
+    },
+    {
+     "id": "repeats",
+     "min": 1,
+     "max": 3,
+     "default": 1
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.35
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.25
+    },
+    {
+     "id": "wobble",
+     "min": 0,
+     "max": 1,
+     "default": 0.2
+    }
+   ]
+  },
+  {
+   "id": "splitter",
+   "category": "routing",
+   "paramOffset": 451,
+   "params": [
+    {
+     "id": "enabledBranches",
+     "min": 2,
+     "max": 3,
+     "default": 2
+    }
+   ]
+  },
+  {
+   "id": "springreverb",
+   "category": "reverb",
+   "paramOffset": 452,
+   "params": [
+    {
+     "id": "decay",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "drip",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    }
+   ]
+  },
+  {
+   "id": "subharmonic",
+   "category": "pitch",
+   "paramOffset": 456,
+   "params": [
+    {
+     "id": "sub1",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "sub2",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "waveform",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    },
+    {
+     "id": "cutoffHz",
+     "min": 100,
+     "max": 4000,
+     "default": 900
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.25
+    },
+    {
+     "id": "envAmount",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "attackMs",
+     "min": 0,
+     "max": 300,
+     "default": 5
+    },
+    {
+     "id": "dry",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "sustainer",
+   "category": "dynamics",
+   "paramOffset": 464,
+   "params": [
+    {
+     "id": "sustain",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "attack",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "svf",
+   "category": "filter",
+   "paramOffset": 468,
+   "params": [
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "cutoffHz",
+     "min": 20,
+     "max": 20000,
+     "default": 1000
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "source",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    },
+    {
+     "id": "lfoRateHz",
+     "min": 0.05,
+     "max": 20,
+     "default": 1
+    },
+    {
+     "id": "lfoDepth",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "envSens",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "envAttackMs",
+     "min": 1,
+     "max": 200,
+     "default": 10
+    },
+    {
+     "id": "envReleaseMs",
+     "min": 10,
+     "max": 2000,
+     "default": 200
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "swell",
+   "category": "dynamics",
+   "paramOffset": 479,
+   "params": [
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "attackMs",
+     "min": 5,
+     "max": 2000,
+     "default": 350
+    },
+    {
+     "id": "sensitivity",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "position",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "talkbox",
+   "category": "filter",
+   "paramOffset": 484,
+   "params": [
+    {
+     "id": "vowel",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "sweep",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    },
+    {
+     "id": "lfoRateHz",
+     "min": 0.05,
+     "max": 10,
+     "default": 0.5
+    },
+    {
+     "id": "envSens",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "tapedelay",
+   "category": "delay",
+   "paramOffset": 491,
+   "params": [
+    {
+     "id": "timeMs",
+     "min": 20,
+     "max": 2000,
+     "default": 350
+    },
+    {
+     "id": "feedback",
+     "min": 0,
+     "max": 0.95,
+     "default": 0.35
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.35
+    },
+    {
+     "id": "wowFlutter",
+     "min": 0,
+     "max": 1,
+     "default": 0.25
+    },
+    {
+     "id": "toneHz",
+     "min": 800,
+     "max": 8000,
+     "default": 4000
+    },
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.25
+    }
+   ]
+  },
+  {
+   "id": "tapesat",
+   "category": "drive",
+   "paramOffset": 497,
+   "params": [
+    {
+     "id": "drive",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "bias",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "hfRolloffKHz",
+     "min": 4,
+     "max": 20,
+     "default": 12
+    },
+    {
+     "id": "hiss",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "tapestop",
+   "category": "pitch",
+   "paramOffset": 502,
+   "params": [
+    {
+     "id": "trigger",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "stopMs",
+     "min": 50,
+     "max": 3000,
+     "default": 600
+    },
+    {
+     "id": "startMs",
+     "min": 50,
+     "max": 3000,
+     "default": 400
+    },
+    {
+     "id": "curve",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "tilt",
+   "category": "eq",
+   "paramOffset": 507,
+   "params": [
+    {
+     "id": "tilt",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "pivotHz",
+     "min": 200,
+     "max": 5000,
+     "default": 1000
+    },
+    {
+     "id": "level",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "transient",
+   "category": "dynamics",
+   "paramOffset": 510,
+   "params": [
+    {
+     "id": "attackDb",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "sustainDb",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "sensitivity",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "tremolo",
+   "category": "modulation",
+   "paramOffset": 514,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.1,
+     "max": 12,
+     "default": 5
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "shape",
+     "min": 0,
+     "max": 2,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "tubepre",
+   "category": "drive",
+   "paramOffset": 517,
+   "params": [
+    {
+     "id": "gain",
+     "min": 0,
+     "max": 1,
+     "default": 0.4
+    },
+    {
+     "id": "sag",
+     "min": 0,
+     "max": 1,
+     "default": 0.3
+    },
+    {
+     "id": "bright",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "tone",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "level",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "cabSim",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "twelvestring",
+   "category": "pitch",
+   "paramOffset": 523,
+   "params": [
+    {
+     "id": "octaveLevel",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "unisonLevel",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    },
+    {
+     "id": "detuneCents",
+     "min": 0,
+     "max": 25,
+     "default": 8
+    },
+    {
+     "id": "delayMs",
+     "min": 0,
+     "max": 20,
+     "default": 6
+    },
+    {
+     "id": "brightness",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.6
+    }
+   ]
+  },
+  {
+   "id": "tzflanger",
+   "category": "modulation",
+   "paramOffset": 529,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.02,
+     "max": 10,
+     "default": 0.3
+    },
+    {
+     "id": "depthMs",
+     "min": 0.1,
+     "max": 10,
+     "default": 3
+    },
+    {
+     "id": "manualMs",
+     "min": 0,
+     "max": 10,
+     "default": 3
+    },
+    {
+     "id": "feedback",
+     "min": -0.95,
+     "max": 0.95,
+     "default": 0.3
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "shape",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "univibe",
+   "category": "modulation",
+   "paramOffset": 535,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.1,
+     "max": 8,
+     "default": 2
+    },
+    {
+     "id": "depth",
+     "min": 0,
+     "max": 1,
+     "default": 0.7
+    },
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    }
+   ]
+  },
+  {
+   "id": "vibrato",
+   "category": "modulation",
+   "paramOffset": 539,
+   "params": [
+    {
+     "id": "rateHz",
+     "min": 0.1,
+     "max": 10,
+     "default": 5
+    },
+    {
+     "id": "depthMs",
+     "min": 0.5,
+     "max": 12,
+     "default": 3
+    },
+    {
+     "id": "waveform",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "vocoder",
+   "category": "filter",
+   "paramOffset": 542,
+   "params": [
+    {
+     "id": "bands",
+     "min": 8,
+     "max": 24,
+     "default": 16
+    },
+    {
+     "id": "carrier",
+     "min": 0,
+     "max": 3,
+     "default": 1
+    },
+    {
+     "id": "pitchHz",
+     "min": 30,
+     "max": 500,
+     "default": 110
+    },
+    {
+     "id": "attackMs",
+     "min": 1,
+     "max": 100,
+     "default": 5
+    },
+    {
+     "id": "releaseMs",
+     "min": 5,
+     "max": 500,
+     "default": 40
+    },
+    {
+     "id": "formantShift",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "emphasis",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "volume",
+   "category": "utility",
+   "paramOffset": 550,
+   "params": [
+    {
+     "id": "position",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "curve",
+     "min": 0,
+     "max": 3,
+     "default": 0
+    },
+    {
+     "id": "minDb",
+     "min": -90,
+     "max": 0,
+     "default": -90
+    },
+    {
+     "id": "maxDb",
+     "min": -12,
+     "max": 12,
+     "default": 0
+    },
+    {
+     "id": "smoothMs",
+     "min": 1,
+     "max": 200,
+     "default": 20
+    }
+   ]
+  },
+  {
+   "id": "wah",
+   "category": "filter",
+   "paramOffset": 555,
+   "params": [
+    {
+     "id": "mode",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "position",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "sensitivity",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "rangeLoHz",
+     "min": 200,
+     "max": 800,
+     "default": 400
+    },
+    {
+     "id": "rangeHiHz",
+     "min": 1200,
+     "max": 3000,
+     "default": 2000
+    },
+    {
+     "id": "resonance",
+     "min": 0,
+     "max": 1,
+     "default": 0.5
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    }
+   ]
+  },
+  {
+   "id": "whammy",
+   "category": "pitch",
+   "paramOffset": 562,
+   "params": [
+    {
+     "id": "position",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "heelSemis",
+     "min": -24,
+     "max": 24,
+     "default": 0
+    },
+    {
+     "id": "toeSemis",
+     "min": -24,
+     "max": 24,
+     "default": 12
+    },
+    {
+     "id": "mix",
+     "min": 0,
+     "max": 1,
+     "default": 1
+    },
+    {
+     "id": "glideMs",
+     "min": 0,
+     "max": 200,
+     "default": 20
+    },
+    {
+     "id": "formant",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    },
+    {
+     "id": "lowLatency",
+     "min": 0,
+     "max": 1,
+     "default": 0
+    }
+   ]
+  },
+  {
+   "id": "widener",
+   "category": "utility",
+   "paramOffset": 569,
+   "params": [
+    {
+     "id": "width",
+     "min": 0,
+     "max": 2,
+     "default": 1.4
+    },
+    {
+     "id": "haas",
+     "min": 0,
+     "max": 1,
+     "default": 0.35
+    },
+    {
+     "id": "delayMs",
+     "min": 1,
+     "max": 40,
+     "default": 18
+    },
+    {
+     "id": "bassMonoHz",
+     "min": 0,
+     "max": 500,
+     "default": 120
+    }
+   ]
+  }
+ ]
+}

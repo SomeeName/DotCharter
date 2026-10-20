@@ -1,0 +1,127 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.CheckpointsDialogView"
+             x:DataType="contracts:ICheckpointsScreen"
+             x:CompileBindings="True">
+
+    <!-- Named project checkpoints. Grammar: Views/Dialogs/DialogStyles.axaml.
+
+         The capture line is BARE rather than boxed in a DlgSection: it is the
+         one thing the dialog is for, and a card around a single field made it
+         read as an optional cluster below the title instead of the action.
+         Create is the body's own action; the footer's ONE Button.Primary is
+         Close, which is the chamfered Fire primary.
+
+         The empty state says two things — that there are none, and what saving
+         one would capture — because a checkpoint list is empty exactly when the
+         user has never used the feature. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconContentSave}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Checkpoints_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Checkpoints_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto"
+                      ColumnSpacing="{DynamicResource FireSpaceSm}"
+                      Margin="{DynamicResource FireGapRowMd}">
+                    <TextBox Grid.Column="0" Text="{Binding NewCheckpointName}"
+                             AutomationProperties.Name="{localization:Loc Checkpoints_NamePlaceholder}"
+                             PlaceholderText="{localization:Loc Checkpoints_NamePlaceholder}"
+                             VerticalContentAlignment="Center" />
+                    <Button Grid.Column="1" Theme="{DynamicResource PrimaryButton}" Classes="Primary" MinWidth="128"
+                            HorizontalContentAlignment="Center"
+                            Content="{localization:Loc Checkpoints_Create}"
+                            IsEnabled="{Binding !IsBusy}"
+                            Command="{Binding CreateCheckpointCommand}" />
+                </Grid>
+
+                <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="2" Classes="DlgListFrame">
+                    <Panel>
+                        <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding !HasCheckpoints}">
+                            <StackPanel Spacing="{DynamicResource FireSpaceXs}">
+                                <TextBlock Text="{localization:Loc Checkpoints_Empty}" />
+                                <!-- One step quieter than the line above it: the
+                                     DlgEmpty style dresses every TextBlock in the
+                                     box alike, so the second line says so inline. -->
+                                <TextBlock x:Name="CheckpointsEmptyHint"
+                                           Text="{localization:Loc Checkpoints_EmptyHint}"
+                                           FontSize="{DynamicResource FireSizeMeta}"
+                                           Foreground="{DynamicResource FireTextDim}" />
+                            </StackPanel>
+                        </Border>
+                        <ScrollViewer MaxHeight="330" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      IsVisible="{Binding HasCheckpoints}">
+                            <ItemsControl ItemsSource="{Binding Checkpoints}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:ICheckpointRow">
+                                        <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding Name}"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Detail}"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" MinWidth="104"
+                                                        HorizontalContentAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Content="{localization:Loc Checkpoints_Restore}"
+                                                        IsEnabled="{Binding !$parent[ItemsControl].((contracts:ICheckpointsScreen)DataContext).IsBusy}"
+                                                        Command="{Binding $parent[ItemsControl].((contracts:ICheckpointsScreen)DataContext).RestoreCommand}"
+                                                        CommandParameter="{Binding}" />
+                                                <!-- Two-click confirm: the first click arms the row
+                                                     (caption swaps to DeleteCaption's confirm text),
+                                                     the second deletes. A checkpoint is the only copy
+                                                     of its snapshot — Restore prompts; Delete used to
+                                                     run on one click in the same row. -->
+                                                <Button Grid.Column="2" Theme="{DynamicResource SubtleButton}" Classes="Subtle Danger" MinWidth="90"
+                                                        HorizontalContentAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Content="{Binding DeleteCaption}"
+                                                        AutomationProperties.Name="{localization:Loc Checkpoints_Delete}"
+                                                        IsEnabled="{Binding !$parent[ItemsControl].((contracts:ICheckpointsScreen)DataContext).IsBusy}"
+                                                        Command="{Binding $parent[ItemsControl].((contracts:ICheckpointsScreen)DataContext).DeleteCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Panel>
+                </Border>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <TextBlock Text="{localization:Loc Checkpoints_FooterNote}"
+                                       FontFamily="{DynamicResource FireFontMono}"
+                                       FontSize="{DynamicResource FireSizeMicro}"
+                                       LetterSpacing="{DynamicResource FireTrackMicro}"
+                                       Foreground="{DynamicResource FireTextFaint}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                    Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

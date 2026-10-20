@@ -1,0 +1,35 @@
+<MenuItem xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+          xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+          x:Class="DotCharter.UI.Views.Shell.Menus.ArrangementsMenu"
+          x:DataType="viewModels:MainWindowViewModel"
+          Classes="FireMenuTop" Header="{localization:Loc Menu_Arrangements}">
+    <MenuItem Header="{localization:Loc Menu_NewArrangement}" Command="{Binding Project.NewArrangementCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" Width="14" Height="14"
+                      Foreground="{DynamicResource SuccessColor}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_DeleteArrangement}" Command="{Binding Project.DeleteArrangementCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"
+                      Width="14" Height="14" Foreground="{DynamicResource DangerColor}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_CopyStructureToArrangements}"
+              Command="{Binding CopyStructureToOtherArrangementsCommand}"
+              ToolTip.Tip="{localization:Loc Menu_CopyStructureToArrangements_Tip}" />
+    <MenuItem Header="{localization:Loc Menu_ArrangementSync}"
+              Command="{Binding ShellDialogs.OpenArrangementSyncDialogCommand}"
+              ToolTip.Tip="{localization:Loc ArrangementSync_Subtitle}" />
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_ArrangementSettings}"
+              Command="{Binding ShellDialogs.OpenArrangementSettingsCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconCog}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+</MenuItem>

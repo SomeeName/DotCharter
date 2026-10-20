@@ -1,0 +1,130 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.CountdownScreenView"
+             x:DataType="contracts:ICountdownScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Count-in, redesigned.
+
+        A FIGURE centred in an empty window, and the frame it needs is a card
+        rather than a bare numeral: the shipped count-in prints "3" alone, so
+        the one moment the player cannot check what is about to start is the
+        moment just before it starts. The lockup under the numeral is the whole
+        change — title, artist, path and the tuning it expects.
+
+        The beat pips are the count made visible: four dots, lit as they pass,
+        so the numeral is not the only thing carrying the timing.
+
+        Corner chrome (the ESC hint) stays OUTSIDE the card, on the surface —
+        a keyboard hint scaled with the figure is a billboard.
+    -->
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+        <Border Theme="{StaticResource FireWashBorder}" Classes="FireWash UpperLeft" Margin="{StaticResource FireWashBleed}" />
+
+        <Grid x:Name="CountdownRedesignRoot" RowDefinitions="*,Auto">
+
+            <!--
+                The ceiling is a SHARE of the surface, not a number. A figure
+                screen authored at one pixel size covers a quarter as much of a
+                4K window as of a 1080p one — the resolution audit's 0.25 ratio —
+                and a literal MaxWidth, however generous, restores that signature
+                immediately. StretchDirection="UpOnly" makes the design size a
+                FLOOR: a small window never shrinks the card, it stops growing it.
+            -->
+            <Viewbox x:Name="CountdownRedesignFrame" Grid.Row="0"
+                     Stretch="Uniform" StretchDirection="UpOnly"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     MaxWidth="{Binding $parent[Panel].Bounds,
+                         Converter={x:Static conv:ViewportFractionConverter.Instance},
+                         ConverterParameter=Width:0.34}"
+                     MaxHeight="{Binding $parent[Panel].Bounds,
+                         Converter={x:Static conv:ViewportFractionConverter.Instance},
+                         ConverterParameter=Height:0.74}">
+            <Border x:Name="CountdownRedesignCard" Theme="{StaticResource FireCardBorder}" Classes="FireCard" Width="420">
+                <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+                    <TextBlock Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                               Text="{localization:Loc PlayMode_Countdown_Eyebrow}" />
+
+                    <!-- The numeral IS the screen: a player reads it from the
+                         stool, so it is the count size, not the stat hero. -->
+                    <TextBlock x:Name="CountdownRedesignFigure" Theme="{StaticResource FireFigureText}" Classes="FireFigure Hero"
+                               FontSize="{StaticResource FireSizeCount}"
+                               LineHeight="{StaticResource FireLineHeightCount}"
+                               HorizontalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Text="{Binding CountLabel}" />
+
+                    <ItemsControl x:Name="CountdownRedesignPips" ItemsSource="{Binding Pips}"
+                                  HorizontalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel ItemSpacing="{StaticResource FireSpaceMd}"
+                                           LineSpacing="{StaticResource FireSpaceMd}" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:ICountdownPip">
+                                <Panel>
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot" IsVisible="{Binding IsLit}" />
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Neutral" IsVisible="{Binding !IsLit}" />
+                                </Panel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+                    <!-- WHAT is starting. A Grid, not a horizontal stack: a
+                         stack arranges its children at their own desired size
+                         and paints into whatever is beside it. -->
+                    <StackPanel x:Name="CountdownRedesignLockup"
+                                Spacing="{StaticResource FireSpaceSm}">
+                        <TextBlock Theme="{StaticResource FireTitleText}" Classes="FireTitle" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" TextAlignment="Center"
+                                   Text="{Binding SongTitle}" />
+                        <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" IsVisible="{Binding HasArtist}"
+                                   HorizontalAlignment="Center" TextAlignment="Center"
+                                   Text="{Binding Artist}" />
+                    </StackPanel>
+
+                    <!-- Path, then tuning, each centred and WRAPPING: the tuning
+                         is what the player acts on before the first note, so
+                         it is never cut short. -->
+                    <StackPanel x:Name="CountdownRedesignPathTuning" Spacing="{StaticResource FireSpaceMd}">
+                        <StackPanel Spacing="{StaticResource FireSpaceXxs}" HorizontalAlignment="Center">
+                            <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel" HorizontalAlignment="Center"
+                                       Text="{localization:Loc SongBrowser_Cap_Path}" />
+                            <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextWrapping="Wrap"
+                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                       Text="{Binding ArrangementName}" />
+                        </StackPanel>
+                        <StackPanel Spacing="{StaticResource FireSpaceXxs}" HorizontalAlignment="Center">
+                            <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel" HorizontalAlignment="Center"
+                                       Text="{localization:Loc SongBrowser_Col_Tuning}" />
+                            <!-- tunings are set in the mono face, which carries the flat sign -->
+                            <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextWrapping="Wrap"
+                                       FontFamily="{StaticResource FireFontMono}"
+                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                       Text="{Binding TuningLabel}" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            </Viewbox>
+
+            <Button x:Name="CountdownRedesignCancel" Grid.Row="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                    HorizontalAlignment="Center" Margin="{StaticResource FireGapRowLg}"
+                    Command="{Binding CancelCommand}"
+                    AutomationProperties.Name="{localization:Loc PlayMode_Countdown_Keys}">
+                <TextBlock Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint" Text="{localization:Loc PlayMode_Countdown_Keys}" />
+            </Button>
+        </Grid>
+    </Panel>
+</UserControl>

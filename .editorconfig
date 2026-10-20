@@ -1,0 +1,389 @@
+# DotCharter code-style enforcement. Two tiers:
+#   1. dotnet_diagnostic.* severities — the Roslyn analyzers report these at
+#      BUILD time (EnforceCodeStyleInBuild) where TreatWarningsAsErrors turns
+#      them into errors.
+#   2. resharper_*_highlighting — Rider/ReSharper-only inspections the compiler
+#      never sees; raising them here makes them glow as errors in the IDE, but
+#      they CANNOT fail `dotnet build`. Honest limit, accepted.
+# The JuceSharp submodule has no .editorconfig of its own, so this file would
+# apply there too — but severities only matter where EnforceCodeStyleInBuild
+# is on, which Directory.Build.props scopes to DotCharter.* projects.
+
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+# LF: 3,438 of 3,597 tracked .cs files (outside JuceSharp/). The 152 committed
+# with CRLF, and the 2 with mixed endings, keep them
+# (IDE0055 ignores the kind of an existing line break); code fixes insert LF.
+end_of_line = lf
+
+# ---------------------------------------------------------------------------
+# C# code style, ENFORCED by the build. Every rule below is `warning`, which
+# EnforceCodeStyleInBuild + TreatWarningsAsErrors (Directory.Build.props) turn
+# into a build error for the DotCharter.* projects. Each convention is the form
+# the code already used most; the numbers were measured on 2026-10-04
+# (origin/main 2ef8d7fe2) with `dotnet format style --verify-no-changes`, once
+# with the rule set as below ("fixed N" = the sites rewritten when the rule
+# went in) and once with each option inverted (the majority form's count).
+# Option values carry no `:severity` suffix on purpose: the build reads only
+# the dotnet_diagnostic.* lines.
+# ---------------------------------------------------------------------------
+
+# Unused usings, redundant casts.
+dotnet_diagnostic.IDE0005.severity = warning
+dotnet_diagnostic.IDE0004.severity = warning
+
+# Namespaces and usings: file-scoped namespace (3,585 files, 0 fixed; the one
+# block-scoped file declares two namespaces, cannot be file-scoped and is not
+# flagged);
+# usings outside the namespace (0 inside).
+csharp_style_namespace_declarations = file_scoped
+dotnet_diagnostic.IDE0161.severity = warning
+csharp_using_directive_placement = outside_namespace
+dotnet_diagnostic.IDE0065.severity = warning
+
+# `var` everywhere: about 60,400 `var` declarations against 112 explicit
+# types where `var` would do (fixed 112).
+csharp_style_var_for_built_in_types = true
+csharp_style_var_when_type_is_apparent = true
+csharp_style_var_elsewhere = true
+dotnet_diagnostic.IDE0007.severity = warning
+
+# Braces: required when the embedded statement itself spans more than one
+# line (including stacked `for`/`foreach` headers sharing one body); a
+# single-line body — `if (x) return;`, or `if (x)` with `return;` on the next
+# line — may stay bare. 2,688 multi-line brace-free embedded statements
+# (fixed).
+csharp_prefer_braces = when_multiline
+dotnet_diagnostic.IDE0011.severity = warning
+
+# Expression bodies: `=>` whenever the body fits on one line, for methods,
+# constructors, properties, indexers, accessors, local functions and lambdas.
+#   methods      5,476 `=>` vs 1,119 one-line block bodies (fixed)
+#   ctors          161 `=>` vs   123 one-line block bodies (fixed)
+#   properties   3,013 vs 14, accessors 1,141 vs 0, indexers 1 fixed,
+#   local funcs    115 vs 11 (all fixed)
+# Operators and conversion operators keep block bodies (2 expression-bodied
+# operators fixed).
+csharp_style_expression_bodied_methods = when_on_single_line
+csharp_style_expression_bodied_constructors = when_on_single_line
+csharp_style_expression_bodied_properties = when_on_single_line
+csharp_style_expression_bodied_indexers = when_on_single_line
+csharp_style_expression_bodied_accessors = when_on_single_line
+csharp_style_expression_bodied_local_functions = when_on_single_line
+csharp_style_expression_bodied_lambdas = when_on_single_line
+csharp_style_expression_bodied_operators = false
+csharp_style_expression_bodied_conversion_operators = false
+dotnet_diagnostic.IDE0021.severity = warning
+dotnet_diagnostic.IDE0022.severity = warning
+dotnet_diagnostic.IDE0023.severity = warning
+dotnet_diagnostic.IDE0024.severity = warning
+dotnet_diagnostic.IDE0025.severity = warning
+dotnet_diagnostic.IDE0026.severity = warning
+dotnet_diagnostic.IDE0027.severity = warning
+dotnet_diagnostic.IDE0053.severity = warning
+dotnet_diagnostic.IDE0061.severity = warning
+
+# Default modifier order (0 out of order); explicit accessibility modifiers
+# on every non-interface member, none inside an interface (1 fixed); fields
+# never reassigned are `readonly` (3 fixed).
+csharp_preferred_modifier_order = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async
+dotnet_diagnostic.IDE0036.severity = warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members
+dotnet_diagnostic.IDE0040.severity = warning
+dotnet_style_readonly_field = true
+dotnet_diagnostic.IDE0044.severity = warning
+
+# Null checks and pattern matching. `??` and `?? throw` (6 fixed), `?.`
+# including null-conditional assignment (104 fixed), `is null` over
+# ReferenceEquals (2 fixed), `is not null` over `is object`, `is T t` over
+# as+null-check / is+cast (3 fixed), `not` patterns, `x is a or b`
+# combinators (106 fixed), extended property patterns (1 fixed), `?.Invoke`
+# for delegates. Roslyn has NO rule for `== null` vs `is null` (about 2,660
+# vs 1,400 today), so that one is not enforced either way.
+dotnet_style_coalesce_expression = true
+dotnet_diagnostic.IDE0029.severity = warning
+dotnet_diagnostic.IDE0270.severity = warning
+dotnet_style_null_propagation = true
+dotnet_diagnostic.IDE0031.severity = warning
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true
+dotnet_diagnostic.IDE0041.severity = warning
+csharp_style_prefer_null_check_over_type_check = true
+dotnet_diagnostic.IDE0150.severity = warning
+csharp_style_pattern_matching_over_as_with_null_check = true
+dotnet_diagnostic.IDE0019.severity = warning
+dotnet_diagnostic.IDE0260.severity = warning
+csharp_style_pattern_matching_over_is_with_cast_check = true
+dotnet_diagnostic.IDE0020.severity = warning
+csharp_style_prefer_not_pattern = true
+dotnet_diagnostic.IDE0083.severity = warning
+csharp_style_prefer_pattern_matching = true
+dotnet_diagnostic.IDE0078.severity = warning
+csharp_style_prefer_extended_property_pattern = true
+dotnet_diagnostic.IDE0170.severity = warning
+csharp_style_conditional_delegate_call = true
+dotnet_diagnostic.IDE1005.severity = warning
+
+# Initializers. Object initializers (138 fixed); collection initializers and
+# collection expressions where the target type is exactly the collection type
+# (1,546 convertible creations fixed: IDE0028 740, IDE0300 591, IDE0301 123,
+# IDE0302 92); target-typed `new()` when the type is apparent (0).
+dotnet_style_object_initializer = true
+dotnet_diagnostic.IDE0017.severity = warning
+dotnet_style_collection_initializer = true
+dotnet_style_prefer_collection_expression = when_types_exactly_match
+dotnet_diagnostic.IDE0028.severity = warning
+dotnet_diagnostic.IDE0300.severity = warning
+dotnet_diagnostic.IDE0301.severity = warning
+dotnet_diagnostic.IDE0302.severity = warning
+csharp_style_implicit_object_creation_when_type_is_apparent = true
+dotnet_diagnostic.IDE0090.severity = warning
+
+# Small simplifications, each with a handful of hits (or none) when enforced:
+# `default` literal, inferred tuple/anonymous names, compound assignment,
+# simplified interpolation and boolean expressions, inline `out var`, `^1`
+# index, static local functions (30 fixed), tuple swap, readonly structs and
+# struct members, `nameof`, unbound generic `nameof`, implicitly typed
+# lambdas, redundant equality, LINQ simplification, redundant `#nullable`,
+# unnecessary value assignments (fixed by hand).
+csharp_prefer_simple_default_expression = true
+dotnet_diagnostic.IDE0034.severity = warning
+dotnet_style_prefer_inferred_tuple_names = true
+dotnet_style_prefer_inferred_anonymous_type_member_names = true
+dotnet_diagnostic.IDE0037.severity = warning
+dotnet_style_prefer_compound_assignment = true
+dotnet_diagnostic.IDE0054.severity = warning
+dotnet_diagnostic.IDE0074.severity = warning
+dotnet_style_prefer_simplified_interpolation = true
+dotnet_diagnostic.IDE0071.severity = warning
+dotnet_style_prefer_simplified_boolean_expressions = true
+dotnet_diagnostic.IDE0075.severity = warning
+csharp_style_inlined_variable_declaration = true
+dotnet_diagnostic.IDE0018.severity = warning
+csharp_style_prefer_index_operator = true
+dotnet_diagnostic.IDE0056.severity = warning
+csharp_prefer_static_local_function = true
+dotnet_diagnostic.IDE0062.severity = warning
+csharp_style_prefer_tuple_swap = true
+dotnet_diagnostic.IDE0180.severity = warning
+csharp_style_prefer_readonly_struct = true
+dotnet_diagnostic.IDE0250.severity = warning
+csharp_style_prefer_readonly_struct_member = true
+dotnet_diagnostic.IDE0251.severity = warning
+dotnet_diagnostic.IDE0280.severity = warning
+csharp_style_prefer_unbound_generic_type_in_nameof = true
+dotnet_diagnostic.IDE0340.severity = warning
+csharp_style_prefer_implicitly_typed_lambda_expression = true
+dotnet_diagnostic.IDE0350.severity = warning
+dotnet_diagnostic.IDE0082.severity = warning
+dotnet_diagnostic.IDE0100.severity = warning
+dotnet_diagnostic.IDE0120.severity = warning
+dotnet_diagnostic.IDE0240.severity = warning
+csharp_style_unused_value_assignment_preference = discard_variable
+dotnet_diagnostic.IDE0059.severity = warning
+
+# `??` on nullable value types (IDE0030, 0 today; enforced — a deliberate
+# violation fails the build).
+dotnet_diagnostic.IDE0030.severity = warning
+
+# IDE-ONLY: the command-line build does NOT report these. Each was probed on
+# 2026-10-04 (SDK 10.0.400) with a deliberate violation and produced no
+# diagnostic. They still show in the IDE, and none is violated today, but
+# nothing fails if one comes back.
+#   no `this.` qualification (IDE0003); `int` not `Int32` (IDE0049);
+#   throw expressions (IDE0016)
+dotnet_style_qualification_for_field = false
+dotnet_style_qualification_for_property = false
+dotnet_style_qualification_for_method = false
+dotnet_style_qualification_for_event = false
+dotnet_diagnostic.IDE0003.severity = warning
+dotnet_style_predefined_type_for_locals_parameters_members = true
+dotnet_style_predefined_type_for_member_access = true
+dotnet_diagnostic.IDE0049.severity = warning
+csharp_style_throw_expression = true
+dotnet_diagnostic.IDE0016.severity = warning
+
+# Deliberately NOT enforced (counts = sites the rule would rewrite):
+#   IDE0305/0306 `.ToList()` -> `[.. x]`  547/0 — `.ToList()`/`.ToArray()` is
+#                the dominant form (about 2,740 uses); the rule cannot enforce
+#                it back
+#   IDE0045/0046 if/else -> conditional expression  23/475 — readability call
+#   IDE0047/0048 parentheses for clarity —
+#                parentheses are used as a readability tool both ways
+#   IDE0032 auto-property  419 — removes backing fields (interop, ref uses)
+#   IDE0290 primary constructors  332 — changes field mutability/capture
+#   IDE0042 deconstruction  97 — named tuple access is fine
+#   IDE0200 lambda -> method group  78 — changes delegate allocation
+#   IDE0330 System.Threading.Lock  64 — changes lock semantics
+#   IDE0039 local function over lambda  19 — changes delegate allocation
+#   IDE0057 range operator  24, IDE0063 simple using  5 (moves Dispose),
+#   IDE0066 switch expression  3, IDE0230 UTF-8 literals  2 (changes type)
+#   IDE0130 namespace matches folder  4 — each on purpose: test fixtures that
+#                declare sibling namespaces, a dialog helper in its XAML
+#                namespace; renaming is public surface
+#   IDE0051/0052/0060 unused members/parameters — removal, not style
+#   IDE0001/0002 simplify names — not reported by the command-line build,
+#                and its fix strips explicit type arguments from DI
+#                registrations (`AddSingleton<T>(sp => …)`) that lints read
+#   async methods ending in "Async" — about 1,570 without vs 410 with
+
+# ---------------------------------------------------------------------------
+# Naming (IDE1006). The renames, counted in the commit that made them:
+#   private instance fields  _camelCase
+#   private static fields    _camelCase
+#   private static readonly  PascalCase   59 `_camel` renamed
+#   constants (any access)   PascalCase    3 renamed
+#   local constants          camelCase     8 renamed
+#   types, members, non-private fields PascalCase; interfaces I*; type
+#   parameters T*; parameters and locals camelCase (a handful fixed).
+# Rules are matched most-specific first (Roslyn orders them by modifiers and
+# accessibility, not by position in this file).
+# ---------------------------------------------------------------------------
+dotnet_diagnostic.IDE1006.severity = warning
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.interface_style.required_prefix = I
+dotnet_naming_style.interface_style.capitalization = pascal_case
+dotnet_naming_style.type_parameter_style.required_prefix = T
+dotnet_naming_style.type_parameter_style.capitalization = pascal_case
+
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_rule.interfaces_start_with_i.symbols = interfaces
+dotnet_naming_rule.interfaces_start_with_i.style = interface_style
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+
+dotnet_naming_symbols.type_parameters.applicable_kinds = type_parameter
+dotnet_naming_rule.type_parameters_start_with_t.symbols = type_parameters
+dotnet_naming_rule.type_parameters_start_with_t.style = type_parameter_style
+dotnet_naming_rule.type_parameters_start_with_t.severity = warning
+
+dotnet_naming_symbols.constant_fields.applicable_kinds = field
+dotnet_naming_symbols.constant_fields.required_modifiers = const
+dotnet_naming_rule.constant_fields_are_pascal_case.symbols = constant_fields
+dotnet_naming_rule.constant_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.constant_fields_are_pascal_case.severity = warning
+
+dotnet_naming_symbols.local_constants.applicable_kinds = local
+dotnet_naming_symbols.local_constants.required_modifiers = const
+dotnet_naming_rule.local_constants_are_camel_case.symbols = local_constants
+dotnet_naming_rule.local_constants_are_camel_case.style = camel_case
+dotnet_naming_rule.local_constants_are_camel_case.severity = warning
+
+dotnet_naming_symbols.private_static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly_fields.required_modifiers = static, readonly
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.symbols = private_static_readonly_fields
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.severity = warning
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_rule.private_fields_are_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_are_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_fields_are_underscore_camel_case.severity = warning
+
+dotnet_naming_symbols.non_private_fields.applicable_kinds = field
+dotnet_naming_symbols.non_private_fields.applicable_accessibilities = public, internal, protected, protected_internal, private_protected
+dotnet_naming_rule.non_private_fields_are_pascal_case.symbols = non_private_fields
+dotnet_naming_rule.non_private_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.non_private_fields_are_pascal_case.severity = warning
+
+dotnet_naming_symbols.types_and_namespaces.applicable_kinds = namespace, class, struct, enum, delegate
+dotnet_naming_rule.types_are_pascal_case.symbols = types_and_namespaces
+dotnet_naming_rule.types_are_pascal_case.style = pascal_case
+dotnet_naming_rule.types_are_pascal_case.severity = warning
+
+dotnet_naming_symbols.members.applicable_kinds = method, property, event, local_function
+dotnet_naming_rule.members_are_pascal_case.symbols = members
+dotnet_naming_rule.members_are_pascal_case.style = pascal_case
+dotnet_naming_rule.members_are_pascal_case.severity = warning
+
+dotnet_naming_symbols.parameters_and_locals.applicable_kinds = parameter, local
+dotnet_naming_rule.parameters_and_locals_are_camel_case.symbols = parameters_and_locals
+dotnet_naming_rule.parameters_and_locals_are_camel_case.style = camel_case
+dotnet_naming_rule.parameters_and_locals_are_camel_case.severity = warning
+
+# ---------------------------------------------------------------------------
+# Formatting (IDE0055): Allman braces and the Roslyn defaults, except
+#   - a `{ }` block under a `case` label sits at the label's indent, not one
+#     deeper (the default would have re-indented ~300 lines; the code's form)
+#   - object-initializer members may share a line (`{ X = 1, Y = 2 }`):
+#     common in Vulkan/DSP struct setup; not enforced either way
+# ---------------------------------------------------------------------------
+dotnet_diagnostic.IDE0055.severity = warning
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = false
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_case_contents_when_block = false
+csharp_indent_block_contents = true
+csharp_indent_braces = false
+csharp_indent_labels = one_less_than_current
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_around_binary_operators = before_and_after
+csharp_space_around_declaration_statements = false
+csharp_preserve_single_line_statements = true
+csharp_preserve_single_line_blocks = true
+
+# Rider/ReSharper-only (IDE glow, cannot fail dotnet build). WARNING on
+# purpose, not error: at error severity Rider's solution summary read
+# "223 errors" for findings that cannot fail the build, which cried wolf
+# (owner feedback 2026-07-18). Warning still glows amber in the editor.
+resharper_redundant_name_qualifier_highlighting = warning
+resharper_possibly_impure_method_call_on_readonly_variable_highlighting = warning
+resharper_access_to_modified_closure_highlighting = warning
+resharper_redundant_using_directive_highlighting = warning
+
+[*.axaml]
+indent_style = space
+indent_size = 4
+
+# The composition root and the platform adapters are the ONLY places in the UI
+# assembly that may touch files, processes, the network or SQLite directly
+# (docs/agents/ui/target-architecture.md § 4). RS0030 is the banned-API
+# diagnostic, active only where a csproj sets DotCharterBannedApis=true
+# (Directory.Build.props). These sections are the whole exemption list — never
+# a #pragma (PresentationSourceRulesTests counts those and requires zero).
+[DotCharter.UI/{App*.cs,Program.cs}]
+dotnet_diagnostic.RS0030.severity = none
+
+[DotCharter.UI/Platform/**.cs]
+dotnet_diagnostic.RS0030.severity = none
+
+# The platform adapters the standalone rig shares with the app (file pickers,
+# the shell launcher, the UI dispatcher, the timer resolution) moved to
+# DotCharter.Tone.UI with the rig; same rule, same folder name.
+[DotCharter.Tone.UI/Platform/**.cs]
+dotnet_diagnostic.RS0030.severity = none
+
+# Naming carve-out, interop only: these files declare Win32 structs whose
+# fields keep the names from the Windows headers (STARTUPINFOW,
+# PROCESS_INFORMATION, MONITORINFOEXW, DEVMODEW, GUITHREADINFO) so they can be
+# checked against the documentation field by field. Nothing else is exempt.
+[{DotCharter.Services/Infrastructure/Process/ChildProcessJob.cs,DotCharter.UI/Platform/DisplayRefresh.cs,DotCharter.UI/Views/Shell/MainWindowShellLayout.cs}]
+dotnet_diagnostic.IDE1006.severity = none
+
+# Line-ending DECLARATION, not an exemption: every rule above still applies.
+# These files are committed with CRLF. IDE0055 re-emits the line break inside
+# trivia that carries a comment (a comment between arguments, or after `=>`)
+# using end_of_line, so with `lf` it flags exactly those breaks in a CRLF
+# file. Declaring the file's real line ending keeps the check exact without
+# rewriting every line of the file. Renormalizing them to LF (a separate,
+# whole-file change) deletes this section; never add a file to it otherwise.
+[{DotCharter.Services/Parsing/Psarc/Index/SqliteLibraryIndex.cs,DotCharter.Tests/Ai/Search/RealRendererMatchEvalTests.cs,DotCharter.Tests/Rendering/GraphicsSettingsPolicyTests.cs,DotCharter.Tests/Services/Ai/ClaudeCliRunnerTests.cs,DotCharter.Tests/Services/Ai/ToneDesignPromptTests.cs,DotCharter.Tests/UI/Preview3DFrameGateTests.cs,DotCharter.Tests/UI/RelayCommandReachabilityTests.cs,DotCharter.Tests/UI/SettingsRoundTripTests.cs,DotCharter.Tests/UI/ToneDesignViewModelTests.cs,DotCharter.UI/App.AudioServices.cs,DotCharter.UI/App.MatchServices.cs,DotCharter.UI/App.ViewModelServices.cs,DotCharter.UI/Theming/ThemePresets.cs}]
+end_of_line = crlf

@@ -1,0 +1,84 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigPerformanceControlsView"
+             x:Name="RigPerformanceRoot"
+             x:DataType="vm:RigMacroBankViewModel">
+    <!-- The performance macros in the side rack: 52 px hardware dials across the
+         rack's ~300 px (the 64 px design dial would need 336), each with its
+         caption above and its percentage plate below.
+
+         A MACRO WITH NO ASSIGNMENT IS NOT DRAWN (W4, 2026-09-16). This card used
+         to render all four dials GREYED, always, with a sentence underneath
+         explaining that they did nothing — four controls that look live, are
+         not, and cannot say why in the space they have. Each dial now follows
+         its own `CanControl`, and with none assigned the card is an EMPTY STATE
+         that occupies the space the dials would and says what to do next.
+
+         `HasAnyAssignment` is a view-level fold of the four `CanControl` flags
+         (RigPerformanceControlsView.axaml.cs). It is in the VIEW and not on the
+         bank because it is presentation — "is this card in its empty state" —
+         and because the bank is not this item's to change. -->
+    <StackPanel Spacing="{StaticResource FireSpaceSm}">
+        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{localization:Loc Rig_MacroTitle}" />
+
+        <!-- A WrapPanel and not a UniformGrid: a UniformGrid keeps a column for
+             a dial that is not drawn, so two assigned macros would sit under two
+             holes. -->
+        <WrapPanel x:Name="RigMacroDials"
+                   ItemSpacing="{StaticResource FireSpaceSm}"
+                   LineSpacing="{StaticResource FireSpaceSm}"
+                   IsVisible="{Binding #RigPerformanceRoot.HasAnyAssignment}">
+            <StackPanel IsVisible="{Binding Drive.CanControl}">
+                <fire:FireKnob DialSize="52" HardwareStyle="True" HorizontalAlignment="Center"
+                               Minimum="0" Maximum="1" DefaultValue="0" Step="0.01"
+                               Value="{Binding Drive.Value, Mode=TwoWay}"
+                               Label="{localization:Loc Rig_MacroDrive}" ValueText="{Binding Drive.Value, StringFormat='{}{0:P0}'}"
+                               ToolTip.Tip="{localization:Loc Rig_MacroAssignHint}" />
+                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" HorizontalAlignment="Center"
+                           Text="{localization:Loc Rig_MacroMixed}" IsVisible="{Binding Drive.HasMixedValues}" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding Space.CanControl}">
+                <fire:FireKnob DialSize="52" HardwareStyle="True" HorizontalAlignment="Center"
+                               Minimum="0" Maximum="1" DefaultValue="0" Step="0.01"
+                               Value="{Binding Space.Value, Mode=TwoWay}"
+                               Label="{localization:Loc Rig_MacroSpace}" ValueText="{Binding Space.Value, StringFormat='{}{0:P0}'}"
+                               ToolTip.Tip="{localization:Loc Rig_MacroAssignHint}" />
+                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" HorizontalAlignment="Center"
+                           Text="{localization:Loc Rig_MacroMixed}" IsVisible="{Binding Space.HasMixedValues}" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding Motion.CanControl}">
+                <fire:FireKnob DialSize="52" HardwareStyle="True" HorizontalAlignment="Center"
+                               Minimum="0" Maximum="1" DefaultValue="0" Step="0.01"
+                               Value="{Binding Motion.Value, Mode=TwoWay}"
+                               Label="{localization:Loc Rig_MacroMotion}" ValueText="{Binding Motion.Value, StringFormat='{}{0:P0}'}"
+                               ToolTip.Tip="{localization:Loc Rig_MacroAssignHint}" />
+                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" HorizontalAlignment="Center"
+                           Text="{localization:Loc Rig_MacroMixed}" IsVisible="{Binding Motion.HasMixedValues}" />
+            </StackPanel>
+            <StackPanel IsVisible="{Binding Level.CanControl}">
+                <fire:FireKnob DialSize="52" HardwareStyle="True" HorizontalAlignment="Center"
+                               Minimum="0" Maximum="1" DefaultValue="0" Step="0.01"
+                               Value="{Binding Level.Value, Mode=TwoWay}"
+                               Label="{localization:Loc Rig_MacroLevel}" ValueText="{Binding Level.Value, StringFormat='{}{0:P0}'}"
+                               ToolTip.Tip="{localization:Loc Rig_MacroAssignHint}" />
+                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" HorizontalAlignment="Center"
+                           Text="{localization:Loc Rig_MacroMixed}" IsVisible="{Binding Level.HasMixedValues}" />
+            </StackPanel>
+        </WrapPanel>
+
+        <!-- THE EMPTY STATE, and it reserves the height the dials take so the
+             rack does not jump the first time a parameter is assigned. -->
+        <Border x:Name="RigMacroEmpty" Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner"
+                MinHeight="{DynamicResource FireRigEmptyStateHeight}"
+                IsVisible="{Binding !#RigPerformanceRoot.HasAnyAssignment}">
+            <StackPanel VerticalAlignment="Center" Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                           Text="{localization:Loc Rig_Editor_NoAssignmentsTitle}" />
+                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc Rig_MacroAssignHint}" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

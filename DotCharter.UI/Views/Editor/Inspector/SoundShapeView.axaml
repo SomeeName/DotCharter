@@ -1,0 +1,101 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:panels="clr-namespace:DotCharter.UI.Views.Panels;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundShapeView"
+             x:DataType="viewModels:InspectorViewModel"
+             Name="SoundShapeRoot">
+    <!-- The Sound tab's SHAPE section (#601) for a chord or a hand shape: the chord box, the
+         fingering and the name (ChordTemplateEditorView, fingering first) and, for a hand shape,
+         its span. The "Apply to" ladder is NOT in here: the tab pins it above the section. -->
+    <StackPanel Spacing="{StaticResource SpaceMd}">
+        <!-- Reshaping a hand shape also rebinds the untemplated chords inside it
+             (ChordApplyScope.EnclosedUnbound): stated BEFORE the edit. -->
+        <Border Classes="FieldIssue Warn"
+                IsVisible="{Binding HandShapeEditor.HandShapeRebindsChords}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+                <PathIcon Grid.Column="0" Data="{DynamicResource IconAlert}" />
+                <TextBlock Grid.Column="1" Text="{Binding HandShapeEditor.HandShapeRebindWarning}" TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+
+        <panels:ChordTemplateEditorView
+            DataContext="{Binding ChordTemplateEditor}"
+            ShowsApplyScope="False" FingeringFirst="True"
+            Mask="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).ProjectState.StringEditMask}"
+            ToggleMaskCommand="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).StringMask.ToggleStringMaskCommand}"
+            IssueStrings="{Binding #SoundShapeRoot.((viewModels:InspectorViewModel)DataContext).SelectionIssuePips}" />
+
+        <!-- SPAN: a hand shape's editable start and EXCLUSIVE end. Commits on LostFocus; an end at
+             or before the start is refused rather than clamped. -->
+        <StackPanel x:Name="SoundSpanBlock" Spacing="{StaticResource SpaceSm}" IsVisible="{Binding ShowSpanCard}">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
+                <PathIcon Data="{DynamicResource IconTechLinkNext}" Classes="SectionIcon" Margin="0" />
+                <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_Span}" />
+            </StackPanel>
+            <Grid Classes="FieldRow" ColumnDefinitions="Auto,*,Auto,*">
+                <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_Span_Start}"
+                           Theme="{StaticResource LabelText}" Classes="Label FieldLabel" />
+                <TextBox Grid.Column="1"
+                         AutomationProperties.Name="{localization:Loc Inspector_Span_Start}"
+                         Text="{Binding HandShapeEditor.HandShapeStartText, UpdateSourceTrigger=LostFocus}"
+                         FontFamily="{StaticResource FireFontMono}"
+                         Margin="{StaticResource GapRightMd}"
+                         ToolTip.Tip="{localization:Loc Inspector_Span_StartTip}" />
+                <TextBlock Grid.Column="2" Text="{localization:Loc Inspector_Span_End}"
+                           Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
+                           Margin="{StaticResource GapRightMd}" />
+                <TextBox Grid.Column="3"
+                         AutomationProperties.Name="{localization:Loc Inspector_Span_End}"
+                         Text="{Binding HandShapeEditor.HandShapeEndText, UpdateSourceTrigger=LostFocus}"
+                         FontFamily="{StaticResource FireFontMono}"
+                         ToolTip.Tip="{localization:Loc Inspector_Span_EndTip}" />
+            </Grid>
+            <TextBlock Text="{Binding HandShapeEditor.HandShapeSpanLabel}"
+                       FontFamily="{StaticResource FireFontMono}"
+                       FontSize="{StaticResource FontSizeXs}"
+                       Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding HandShapeEditor.HandShapeEnclosedLabel}"
+                           Foreground="{DynamicResource TextMuted}"
+                           VerticalAlignment="Center"
+                           FontSize="{StaticResource FontSizeXs}" />
+                <Button Grid.Column="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                        Content="{localization:Loc Inspector_Span_Fit}"
+                        Command="{Binding HandShapeEditor.FitHandShapeToSoundsCommand}"
+                        ToolTip.Tip="{localization:Loc Inspector_Span_FitTip}" />
+            </Grid>
+        </StackPanel>
+
+        <!-- GHOST GEMS (#785): the strings the grip HOLDS without playing (a tapped harmonic's
+             fretting finger, the full chord a partial strum sits in), and the grip's pin. A grip
+             with ghost gems is always pinned, so the box is disabled then. -->
+        <StackPanel x:Name="SoundGhostBlock" Spacing="{StaticResource SpaceSm}"
+                    IsVisible="{Binding HandShapeEditor.HasGhostRows}">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
+                <PathIcon Data="{DynamicResource IconGuitar}" Classes="SectionIcon" Margin="0" />
+                <TextBlock Classes="InspectorCardTitle" Text="{localization:Loc Inspector_GhostGems}" />
+            </StackPanel>
+            <TextBlock Text="{localization:Loc Inspector_GhostGems_Hint}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextMuted}" FontSize="{StaticResource FontSizeXs}" />
+            <ItemsControl x:Name="SoundGhostRows" ItemsSource="{Binding HandShapeEditor.GhostRows}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="inspector:HandShapeGhostRow">
+                        <CheckBox Content="{Binding Label}" IsChecked="{Binding IsGhost, Mode=TwoWay}"
+                                  AutomationProperties.Name="{Binding Label}"
+                                  ToolTip.Tip="{localization:Loc Inspector_GhostGem_Tip}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <CheckBox x:Name="SoundGripPinned"
+                      Content="{localization:Loc Inspector_GripPinned}"
+                      AutomationProperties.Name="{localization:Loc Inspector_GripPinned}"
+                      IsChecked="{Binding HandShapeEditor.IsGripPinned, Mode=TwoWay}"
+                      IsEnabled="{Binding HandShapeEditor.CanUnpinGrip}"
+                      ToolTip.Tip="{localization:Loc Inspector_GripPinned_Tip}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

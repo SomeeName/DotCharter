@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.StemMixerView"
+             x:DataType="vm:StemMixerViewModel">
+    <UserControl.Styles>
+        <!-- The pane header strip (`Border.PaneHeader`) moved onto the Fire
+             layer in 0.51. Included by the VIEW, not by MainWindow: a floated
+             pane is re-hosted in a Dock.Avalonia HostWindow that never sees a
+             window-scoped style. -->
+        <StyleInclude Source="avares://DotCharter/Views/Editor/EditorWorkspaceStyles.axaml" />
+        <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles.axaml" />
+        <!-- On the Fire layer since 0.50, alongside the rest of the inspector
+             grammar this view includes. A lit M or S is a TINT plus a coloured
+             edge and a coloured letter, matching `ToggleButton.MuteBtn` /
+             `SoloBtn` in `InspectorStyles.axaml` — the Mixer TAB and this pane
+             show the same two verbs and may not disagree about what "on"
+             looks like. The two `Transitions` setters that used to be here are
+             gone: this surface is `IsVisible`-gated and a hidden control's
+             style clocks keep ticking. -->
+        <Style Selector="ToggleButton.MixerButton">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+        </Style>
+        <Style Selector="ToggleButton.MixerButton:pointerover">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        </Style>
+        <Style Selector="ToggleButton.MixerButton.Mute:checked">
+            <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+        </Style>
+        <Style Selector="ToggleButton.MixerButton.Solo:checked">
+            <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        </Style>
+
+        <!-- Channel strip: fills the pane's height; the fader row is the
+             star-sized middle so faders grow/shrink with the pane instead of
+             clipping at a fixed height (the old layout's "distortion"). -->
+        <Style Selector="Border.MixerStrip">
+            <Setter Property="Width" Value="96" />
+            <Setter Property="Padding" Value="8,8,8,6" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+        </Style>
+        <Style Selector="Border.MixerStrip:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        </Style>
+        <Style Selector="Border.MixerStrip.Master">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceRaised}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*" Background="{DynamicResource FireSurfaceChrome}">
+        <!-- Header row -->
+        <Border Grid.Row="0" Classes="PaneHeader">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Classes="PaneTitle"
+                           Text="{localization:Loc Panel_StemMixer_Title}" />
+                <!-- Draw the waveform of what the MIXER plays rather than of the
+                     audio file. It lives in the header because it is a property
+                     of the whole mixer, not of any one channel strip. -->
+                <CheckBox Grid.Column="1"
+                          IsChecked="{Binding WaveformFollowsMix}"
+                          IsVisible="{Binding HasStems}"
+                          Content="{localization:Loc Mixer_WaveformFollowsMix}"
+                          ToolTip.Tip="{localization:Loc Mixer_WaveformFollowsMix_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_WaveformFollowsMix}" />
+            </Grid>
+        </Border>
+
+        <!-- Channel strips: stretch to the pane height -->
+        <ScrollViewer Grid.Row="1"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled"
+                      Padding="8,8,8,4"
+                      IsVisible="{Binding HasStems}">
+            <ItemsControl ItemsSource="{Binding Tracks}" VerticalAlignment="Stretch">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:StemTrackViewModel">
+                        <Border Classes="MixerStrip" Classes.Master="{Binding IsMasterMix}">
+                            <Grid RowDefinitions="Auto,Auto,*,Auto">
+                                <TextBlock Grid.Row="0"
+                                           Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           HorizontalAlignment="Center"
+                                           FontWeight="{StaticResource FireWeightUi}"
+                                           FontSize="{StaticResource FireSizeSm}"
+                                           Foreground="{DynamicResource FireTextPrimary}"
+                                           Margin="0,0,0,6" />
+                                <StackPanel Grid.Row="1"
+                                            Orientation="Horizontal"
+                                            HorizontalAlignment="Center"
+                                            Spacing="4"
+                                            Margin="0,0,0,8">
+                                    <ToggleButton Classes="MixerButton Mute"
+                                                  Content="M"
+                                                  IsChecked="{Binding IsMuted, Mode=TwoWay}"
+                                                  AutomationProperties.Name="{localization:Loc Inspector_Mute}"
+                                                  ToolTip.Tip="{localization:Loc Inspector_Mute}" />
+                                    <ToggleButton Classes="MixerButton Solo"
+                                                  Content="S"
+                                                  IsChecked="{Binding IsSolo, Mode=TwoWay}"
+                                                  IsEnabled="{Binding !IsMasterMix}"
+                                                  AutomationProperties.Name="{localization:Loc Inspector_Solo}"
+                                                  ToolTip.Tip="{localization:Loc Inspector_Solo}" />
+                                </StackPanel>
+                                <!-- Fader fills the remaining height (min keeps it
+                                     usable when the pane is squashed). -->
+                                <Slider Grid.Row="2"
+                                        Orientation="Vertical"
+                                        MinHeight="72"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Stretch"
+                                        Minimum="0"
+                                        Maximum="2"
+                                        TickFrequency="0.25"
+                                        Value="{Binding VolumeLinear, Mode=TwoWay}"
+                                        ToolTip.Tip="{localization:Loc Panel_StemMixer_Volume}"
+                                        AutomationProperties.Name="{localization:Loc Panel_StemMixer_Volume}" />
+                                <TextBlock Grid.Row="3"
+                                           Text="{Binding VolumeDbLabel}"
+                                           HorizontalAlignment="Center"
+                                           FontFamily="{StaticResource FireFontMono}"
+                                           Foreground="{DynamicResource FireTextMuted}"
+                                           FontSize="{StaticResource FireSizeMono}"
+                                           Margin="0,6,0,0" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Empty state: point the user at the separator instead of showing
+             a bare pane. -->
+        <!-- The Inspector's own empty-state treatment (icon size, spacing, muted
+             ink, hit-test-through) rather than a second hand-rolled one — this
+             pane docks beside it. -->
+        <StackPanel Grid.Row="1"
+                    Classes="InspectorEmpty"
+                    IsVisible="{Binding !HasStems}">
+            <PathIcon Data="{DynamicResource IconTuneVertical}"
+                      HorizontalAlignment="Center" />
+            <TextBlock Text="{localization:Loc Empty_StemMixer_Hint}"
+                       TextWrapping="Wrap" TextAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</UserControl>

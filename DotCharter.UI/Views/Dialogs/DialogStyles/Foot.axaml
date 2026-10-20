@@ -1,0 +1,269 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+
+    <!-- ─── THE BUTTON LADDER, in the footer's two action slots.
+         Fire orders actions ghost > quiet > primary and gives ONLY the primary
+         a lit, chamfered silhouette. The app-wide Button.Primary/.Secondary/
+         .Subtle classes are NOT touched — they dress the toolbar, the panels
+         and the browser too — so every rule here is scoped to a footer slot.
+         `:not(.Primary)` is load-bearing, not tidiness: a Style beats a
+         ControlTheme, so a plain `> Button` ghost rule would repaint the
+         primary's violet fill grey and its caption body-coloured — while the
+         chamfered template underneath still applied. It would look like the
+         theme had half-failed. -->
+
+    <!-- THE FAMILIES ARE CONTROLTHEMES (#428). A `Border.X` / `TextBlock.X` /
+         `Grid.X` / `StackPanel.X` rule here was attached to EVERY control of that
+         type under the dialog host (886 Borders, 663 TextBlocks, 526 Grids,
+         286 StackPanels, prewarmed), worn or not: ~32,000 value frames. A
+         dialog control wears the theme AND the class,
+         `Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"` (Dynamic:
+         a dialog view is built before it is parented under the host whose
+         Styles hold these). A theme ranks BELOW every style, so the
+         descendant rules in this grammar (`Border.DlgStrip TextBlock`,
+         `Border.DlgSection Grid.DlgRow:nth-last-child(1)`, …) beat a family
+         rule whatever their order: each was checked to be the one that won
+         before as well. The `SelectableTextBlock` halves stay styles: only
+         SelectableTextBlocks carry them. UI/StyleIncludeScopeTests. -->
+    <Styles.Resources>
+        <ControlTheme x:Key="DialogFooterBorder" TargetType="Border">
+            <!-- The hairline is what tells the eye the dialog has ENDED. Declared as
+                     <Border Classes="DialogFooter">
+                         <Grid ColumnDefinitions="Auto,*,Auto">
+                             <StackPanel Grid.Column="0" Classes="DlgActionsLeft"> … </StackPanel>
+                             <StackPanel Grid.Column="2" Classes="DlgActions">   … </StackPanel>
+                         </Grid>
+                     </Border>
+                 Order in the right slot is fixed: destructive/secondary, then Cancel,
+                 then the ONE Button.Primary last. -->
+            <Style Selector="^.DialogFooter">
+
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                <Setter Property="Padding" Value="{StaticResource FireGapTopLg}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapTopRow}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgActionsPanel" TargetType="StackPanel">
+            <!-- ═══ 5. Foot ══════════════════════════════════════════════════════ -->
+            <Style Selector="^.DlgActions">
+
+                <Setter Property="Orientation" Value="Horizontal" />
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceLg}" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgActionsLeftPanel" TargetType="StackPanel">
+            <!-- Part of the dialog grammar — see `Views/Dialogs/DialogStyles.axaml`,
+                 which merges this file and its siblings IN ORDER. §5 Foot: the footer rule, its two action slots, the button ladder that
+                 lives in them, the body quick-pick chip and the footer meta line. -->
+            <Style Selector="^.DlgActionsLeft">
+
+                <Setter Property="Orientation" Value="Horizontal" />
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceLg}" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <Style Selector="StackPanel.DlgActions > Button:not(.Primary),
+                     StackPanel.DlgActionsLeft > Button:not(.Primary)">
+        <Setter Property="MinHeight" Value="{StaticResource FireActionHeight}" />
+        <Setter Property="Padding" Value="18,0" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <!-- The ghost's CHROME lives on the ContentPresenter, not on the Button:
+         Fluent's Button template root IS the presenter and template-binds the
+         button's Background/BorderBrush, so a class that paints the presenter
+         (which every class in Styles/Buttons.axaml does, and which Button.Subtle
+         does for its hover fill) wins over anything set on the control. The
+         first cut of this conversion set the fill on the Button and the
+         presenter to Transparent, and every Cancel in the app rendered as bare
+         text with no box at all. -->
+    <Style Selector="StackPanel.DlgActions > Button:not(.Primary) /template/ ContentPresenter,
+                     StackPanel.DlgActionsLeft > Button:not(.Primary) /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusControl}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="StackPanel.DlgActions > Button:not(.Primary):pointerover /template/ ContentPresenter,
+                     StackPanel.DlgActionsLeft > Button:not(.Primary):pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="StackPanel.DlgActions > Button:not(.Primary):pressed /template/ ContentPresenter,
+                     StackPanel.DlgActionsLeft > Button:not(.Primary):pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+    </Style>
+
+    <!-- ONE button width for the whole app's dialogs. The old set ran 80 / 90 /
+         100 / 110 / 120 / 150 px, often two different ones side by side. -->
+    <Style Selector="Button.DlgAction">
+        <Setter Property="MinWidth" Value="104" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- ─── A QUICK-PICK CHIP inside a body: a one-click shortcut that fills the
+         field beside it (the genre suggestions on Song Metadata). Fire's quiet
+         tier — a small outlined pill, deliberately lighter than any footer
+         action, because pressing one commits nothing.
+         Its chrome goes on the /template/ ContentPresenter for the same reason
+         the footer's ghost does: Fluent's Button template root IS the presenter
+         and template-binds the control's Background, so a fill set on the Button
+         is painted over and the chip renders as bare text. -->
+    <Style Selector="Button.DlgChip">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadSegmentItem}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTag}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.DlgChip /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="Button.DlgChip:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Button.DlgChip:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+    </Style>
+
+    <!-- A footer action that is a link, not a command ("What's new", "Open
+         folder") — Fire's QUIET tier: no chrome at all, so it cannot compete
+         with the primary.
+         ToggleButton is listed EXPLICITLY beside Button, not inherited: an
+         Avalonia type selector matches its type EXACTLY, so `Button.DlgLink`
+         never reaches a ToggleButton and the Tone Designer's two-state
+         "Preview tone" action would have rendered in the default look with no
+         warning. Its `:checked` state is below, with the other states. -->
+    <Style Selector="Button.DlgLink, ToggleButton.DlgLink">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <!-- The chrome lives on the ContentPresenter, not the Button (that is how
+         every other class in Styles/Buttons.axaml does it — a Background on
+         the Button alone is painted over by the template). -->
+    <Style Selector="Button.DlgLink /template/ ContentPresenter,
+                     ToggleButton.DlgLink /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="Button.DlgLink:pointerover /template/ ContentPresenter,
+                     ToggleButton.DlgLink:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <!-- ON. A quiet action with no chrome has nothing else to say it is
+         engaged, and "is the preview running?" is the one question this shape
+         has to answer at a glance — so the checked state is the only place the
+         link tier carries a fill at all. -->
+    <Style Selector="ToggleButton.DlgLink:checked /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector="ToggleButton.DlgLink:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+
+    <!-- THE ONE PRIMARY, and the layer's brand signature: a 45° cut off the
+         top-right and bottom-left corners, a violet fill and one soft glow.
+         Reached through the SHARED `FirePrimaryButton` ControlTheme, never by
+         restating it — the chamfer is a live `Clip` bound to the button's own
+         bounds (Converters/FireChamferClipConverter) and the glow has to live
+         on an UNCLIPPED ancestor Border, which a class style cannot express.
+         The four setters after it are dialog metrics on top of the theme: the
+         Fire CTA's 30 px inset and .22em tracking are sized for a full-width
+         PLAY NOW, and "Einstellungen speichern" at that tracking is 300 px of
+         button in a 380 px prompt. A Style beats a ControlTheme, so these win. -->
+    <Style Selector="Border.DialogFooter Button.Primary">
+        <Setter Property="Theme" Value="{DynamicResource FirePrimaryButton}" />
+        <Setter Property="Height" Value="{StaticResource FireActionHeight}" />
+        <Setter Property="Padding" Value="22,0" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackCaption}" />
+    </Style>
+    <!-- Disabled is ONE neutral surface. Control-theme styles rank below app
+         styles, so Button.Primary's accent beat FirePrimaryButton's own disabled
+         fill, and Buttons.axaml's disabled presenter rule painted a grey box
+         inside this template. Perf/ControlStateColourUiPerfSmokeTests. -->
+    <Style Selector="Border.DialogFooter Button.Primary:disabled">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Border.DialogFooter Button.Primary:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextDim}" />
+    </Style>
+
+    <!-- ─── THE DANGER TIER. A destructive action ("Don't Save", "Discard all",
+         a row's Delete) keeps whatever silhouette its slot gives it — a footer
+         ghost, a row Subtle, a DlgChip, a DlgLink — it must never compete with
+         the primary. What changes is the one place colour carries information:
+         the border and the caption go FireDanger. Without this tier "Don't
+         Save" and "Cancel" render pixel-identical and the only thing separating
+         "lose my work" from "keep my work" is reading order.
+         COLOUR-ONLY on purpose, and declared LAST on purpose: it sets no
+         silhouette property (no radius, no padding, no thickness), so
+         `Classes="DlgChip Danger"` keeps the chip's shape and
+         `Classes="DlgAction Danger"` keeps the footer ghost's — and being the
+         file's final word, its colour setters win over every tier above.
+         Scoped to Border.DialogCard so one vocabulary covers footer slots AND
+         the per-row Delete/Discard buttons in list bodies.
+         Lint: UI/DialogDangerTierTests — a destructive caption without the
+         class, or a Danger class outside this tier's reach, fails the gate. -->
+    <Style Selector="Border.DialogCard Button.Danger">
+        <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="Border.DialogCard Button.Danger /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="Border.DialogCard Button.Danger:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireDanger}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="Border.DialogCard Button.Danger:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireDanger}" />
+    </Style>
+
+    <!-- NOTE: there is deliberately NO header "✕" class here. Every dialog
+         already closes two ways — Esc (MainWindowViewModel.HandleEscapeKey) and
+         a footer Cancel/Close — and a third affordance in the head would need a
+         close command on 30 view models that do not all agree on its name. Add
+         one only together with that command, not as a style on its own. -->
+</Styles>

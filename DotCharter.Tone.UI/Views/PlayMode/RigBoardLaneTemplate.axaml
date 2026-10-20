@@ -1,0 +1,110 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+                    xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+                    xmlns:conv="using:DotCharter.Tone.UI.Converters"
+                    xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI">
+    <!-- ONE lane of the board's split region (RigBoardLane): its stub, its run
+         of graph nodes (the board's shared unit template), the drop zone, the
+         tail into its mixer node and the mixer strip. AmpFxRigView merges this
+         file and names it as the region's ItemTemplate; its own file so that
+         view stays inside its size budget (#240), like RigGearTileTemplate. -->
+    <DataTemplate x:Key="RigBoardLaneTemplate" x:DataType="vm:RigBoardLane">
+        <Grid ColumnDefinitions="Auto,*,Auto"
+              Margin="{StaticResource FireGapLaneRow}">
+            <Border Theme="{StaticResource FireLaneStubBorder}" Classes="FireLaneStub"
+                    Background="{Binding TokenKey,
+                        Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+            <Border Grid.Column="1" Theme="{StaticResource FireLaneRowBorder}" Classes="FireLaneRow" fire:FireUnitState.LaneToken="{Binding TokenKey}">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto" VerticalAlignment="Center">
+                    <!-- the design's lane chip: "Lane A" in the lane's colour -->
+                    <Border Theme="{StaticResource FireLaneChipBorder}" Classes="FireLaneChip"
+                            BorderBrush="{Binding TokenKey,
+                                Converter={x:Static conv:FireTokenBrushConverter.Instance}}">
+                        <TextBlock Text="{Binding ChipLabel}"
+                                   Foreground="{Binding TokenKey,
+                                       Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                            Spacing="{StaticResource FireSpaceXs}" Margin="{StaticResource FireGapLeftSm}">
+                    <!-- An EMPTY lane is an honest target: a dashed
+                         drop surface that says what to do. Click arms
+                         the lane's gap; drops resolve to this lane. -->
+                    <Button Theme="{StaticResource FireLaneDropZoneButton}" Classes="FireLaneDropZone"
+                            IsVisible="{Binding IsEmpty}"
+                            Command="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).InsertIntoLaneCommand}"
+                            CommandParameter="{Binding}"
+                            Content="{localization:Loc Rig_Lane_DropHere}"
+                            AutomationProperties.Name="{localization:Loc Rig_Lane_DropHere}" />
+                    <!-- No ItemTemplate: the lane inherits the board's
+                         unit card, so a lane card IS the serial card. -->
+                    <ItemsControl ItemsSource="{Binding Items}"
+                                  VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    </StackPanel>
+                    <!-- every lane ends in its own gap: the armed gap
+                         carries the lane's branch. It STRETCHES to the
+                         mixer, so the mixers stand in a column at the
+                         region's edge as the design draws them. -->
+                    <Panel Grid.Column="2" Classes="FireLaneTail">
+                        <fire:RigWire />
+                        <Button Classes="FireInsertDot"
+                                Command="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).InsertIntoLaneCommand}"
+                                CommandParameter="{Binding}"
+                                Content="+"
+                                ToolTip.Tip="{localization:Loc Rig_InsertHere}"
+                                AutomationProperties.Name="{localization:Loc Rig_InsertHere}" />
+                    </Panel>
+                    <!-- The design's "Mixer A" node: level with its dB,
+                         a pan knob, M and S. Greyed with its reason
+                         when the lane has no merger to mix at. -->
+                    <Border Grid.Column="3" Theme="{StaticResource FireMixerNodeBorder}" Classes="FireMixerNode">
+                        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto" IsEnabled="{Binding Mixer.CanMix}">
+                                <StackPanel VerticalAlignment="Center" Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireMixerLabelText}" Classes="FireMixerLabel" Text="{Binding MixerLabel}" />
+                                    <Slider Classes="FireSlider" Width="56" Height="20" Minimum="0" Maximum="2"
+                                            Value="{Binding Mixer.Level.Value, Mode=TwoWay}"
+                                            AutomationProperties.Name="{localization:Loc Rig_LaneLevel}" />
+                                    <TextBlock Theme="{StaticResource FireMixerReadoutText}" Classes="FireMixerReadout" Text="{Binding Mixer.LevelText}" />
+                                </StackPanel>
+                                <!-- the pan: a bare dial (Dense) with its own readout under it -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="{StaticResource FireGapLeftSm}"
+                                            Spacing="{StaticResource FireSpaceXxs}">
+                                    <fire:FireKnob Dense="True" HardwareStyle="False" HorizontalAlignment="Center"
+                                                   Minimum="{Binding Mixer.Pan.Minimum}"
+                                                   Maximum="{Binding Mixer.Pan.Maximum}"
+                                                   DefaultValue="{Binding Mixer.Pan.Default}"
+                                                   Value="{Binding Mixer.Pan.Value, Mode=TwoWay}"
+                                                   ValueText="{Binding Mixer.PanText}"
+                                                   Label="{Binding Mixer.Pan.DisplayName}"
+                                                   AutomationProperties.Name="{localization:Loc Rig_LanePan}" />
+                                    <TextBlock Theme="{StaticResource FireMixerReadoutText}" Classes="FireMixerReadout" HorizontalAlignment="Center" Text="{Binding Mixer.PanText}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center"
+                                            Margin="{StaticResource FireGapLeftSm}" IsEnabled="{Binding Mixer.CanMuteSolo}">
+                                    <ToggleButton Theme="{StaticResource FireMixerSwitchToggle}" Classes="FireMixerSwitch" Content="{localization:Loc Rig_LaneMuteShort}"
+                                                  IsChecked="{Binding Mixer.IsMuted, Mode=TwoWay}"
+                                                  ToolTip.Tip="{localization:Loc Rig_LaneMute}" AutomationProperties.Name="{localization:Loc Rig_LaneMute}" />
+                                    <ToggleButton Theme="{StaticResource FireMixerSwitchToggle}" Classes="FireMixerSwitch" Content="{localization:Loc Rig_LaneSoloShort}"
+                                                  IsChecked="{Binding Mixer.IsSoloed, Mode=TwoWay}"
+                                                  ToolTip.Tip="{localization:Loc Rig_LaneSolo}" AutomationProperties.Name="{localization:Loc Rig_LaneSolo}" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Theme="{StaticResource FireMixerNoteText}" Classes="FireMixerNote" IsVisible="{Binding !Mixer.HasExplicitMerger}" Text="{localization:Loc Rig_LaneNeedsMerger}" />
+                            <TextBlock Theme="{StaticResource FireMixerNoteText}" Classes="FireMixerNote" IsVisible="{Binding Mixer.RequiresUpdatedEngine}" Text="{localization:Loc Rig_LaneNeedsEngine}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+            <Border Grid.Column="2" Theme="{StaticResource FireLaneStubBorder}" Classes="FireLaneStub"
+                    Background="{Binding TokenKey,
+                        Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+        </Grid>
+    </DataTemplate>
+</ResourceDictionary>

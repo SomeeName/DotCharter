@@ -1,0 +1,217 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <!-- File/process/network/SQLite calls are RS0030 errors outside App*.cs,
+             Program.cs, Platform/ and the shrink-only debt list in .editorconfig. -->
+        <DotCharterBannedApis>true</DotCharterBannedApis>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.UI</RootNamespace>
+        <AssemblyName>DotCharter</AssemblyName>
+        <Product>DotCharter</Product>
+        <AssemblyTitle>DotCharter</AssemblyTitle>
+        <Company>DotCharter</Company>
+        <Description>DotCharter - a rhythm-game charting workstation for custom Rocksmith songs.</Description>
+        <!-- The SDK derives binary versions from Version; release identity comes from InformationalVersion. -->
+        <Version>1.0.0</Version>
+        <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <ServerGarbageCollection>false</ServerGarbageCollection>
+        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+        <TieredPGO>true</TieredPGO>
+        <!-- QuickJit stays ON (default): disabling it forced full-opt JIT for
+             every method executed at startup — the worst setting for cold
+             start. Steady-state code still reaches tier-1 via tiering + PGO.
+             Published releases additionally precompile via ReadyToRun below,
+             so startup code is mostly not JIT-bound at all. -->
+        <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+        <!-- Publish-only: R2R-precompile against win-x64. Keep tiering+PGO on
+             top (R2R code re-jits to tier-1 where hot). The publish must stay
+             self-contained with the standard InstallLayout — the LAN updater
+             robocopies payloads over installs and CI verifies the layout. -->
+        <PublishReadyToRun Condition="'$(RuntimeIdentifier)' == 'win-x64'">true</PublishReadyToRun>
+    </PropertyGroup>
+
+    <!-- Publish payload size (#410). ReadyToRun roughly doubles an assembly, and
+         startup needs it only for the code that runs before the window is
+         interactive (0.8 s with R2R, 2.2 s without). These assemblies are NOT
+         loaded on the way to the StartupPhases: line, measured by mapping the
+         published app's loaded images after it went interactive: the AI SDK, the
+         Guitar Pro reader, PSARC/Wwise packing, stem separation, GDI+, and the
+         Linux/macOS Avalonia backends. They ship as IL and JIT on first use.
+         Anything that moves onto the startup path must leave this list —
+         `Infrastructure/PublishPayloadSettingsTests` pins the names that must
+         stay precompiled. -->
+    <ItemGroup>
+        <PublishReadyToRunExclude Include="Anthropic.dll;Microsoft.Extensions.AI.Abstractions.dll" />
+        <PublishReadyToRunExclude Include="AlphaTab.dll;AlphaSkia.dll;AlphaSkia.Native.Windows.dll" />
+        <PublishReadyToRunExclude Include="Newtonsoft.Json.dll" />
+        <PublishReadyToRunExclude Include="Microsoft.ML.OnnxRuntime.dll;System.Numerics.Tensors.dll" />
+        <PublishReadyToRunExclude Include="System.Drawing.Common.dll;System.Private.Windows.Core.dll" />
+        <PublishReadyToRunExclude Include="Avalonia.X11.dll;Avalonia.Native.dll;Avalonia.FreeDesktop.dll;Avalonia.FreeDesktop.AtSpi.dll;Tmds.DBus.Protocol.dll" />
+        <PublishReadyToRunExclude Include="Avalonia.Remote.Protocol.dll;Avalonia.DesignerSupport.dll" />
+    </ItemGroup>
+
+    <!-- Trim the two Silk.NET COM bindings, and NOTHING else (#410).
+         Silk.NET.Direct3D11 is 16 MB of IL (30 MB precompiled) and Silk.NET.DXGI
+         1.7 MB, for the dozen calls VulkanComposedImagePool makes; trimmed they
+         are ~70 KB together. Every other assembly is marked not trimmable, so the
+         linker copies it unchanged.
+
+         PublishTrimmed is set INSIDE a target on purpose. Set as a property, the
+         ILLink package turns on its trimmed-app feature switches at evaluation
+         (System.Text.Json reflection off, DefaultValueAttribute off, Serilog
+         structure capture off, startup hooks off, ...), and they land in
+         runtimeconfig.json and change how the WHOLE app behaves. Set here, after
+         evaluation, only the linker runs: runtimeconfig.json stays what an
+         untrimmed publish writes. _RequiresILLinkPack makes the SDK restore and
+         import the linker without that property. New-Release.ps1's
+         Test-PublishTrimSettings fails a payload whose runtimeconfig carries any
+         of the trimmed-app switches, or whose D3D11 binding is still full size. -->
+    <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+        <_RequiresILLinkPack>true</_RequiresILLinkPack>
+    </PropertyGroup>
+
+    <Target Name="DotCharterEnableBindingTrim" BeforeTargets="PrepareForPublish" Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+        <PropertyGroup>
+            <PublishTrimmed>true</PublishTrimmed>
+            <TrimMode>partial</TrimMode>
+            <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+            <_ExtraTrimmerArgs>$(_ExtraTrimmerArgs) --notrimwarn</_ExtraTrimmerArgs>
+        </PropertyGroup>
+    </Target>
+
+    <Target Name="DotCharterTrimOnlyBindings" BeforeTargets="PrepareForILLink">
+        <ItemGroup>
+            <ManagedAssemblyToLink Condition="'%(Filename)' == 'Silk.NET.Direct3D11' or '%(Filename)' == 'Silk.NET.DXGI'">
+                <IsTrimmable>true</IsTrimmable>
+            </ManagedAssemblyToLink>
+            <ManagedAssemblyToLink Condition="'%(Filename)' != 'Silk.NET.Direct3D11' and '%(Filename)' != 'Silk.NET.DXGI'">
+                <IsTrimmable>false</IsTrimmable>
+            </ManagedAssemblyToLink>
+        </ItemGroup>
+    </Target>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj" />
+        <ProjectReference Include="..\DotCharter.Services\DotCharter.Services.csproj" />
+        <ProjectReference Include="..\DotCharter.Tone\DotCharter.Tone.csproj" />
+        <ProjectReference Include="..\DotCharter.Tone.UI\DotCharter.Tone.UI.csproj" />
+        <ProjectReference Include="..\DotCharter.Analysis\DotCharter.Analysis.csproj" />
+        <ProjectReference Include="..\DotCharter.Rendering\DotCharter.Rendering.csproj" />
+        <!-- EXPLICIT on purpose. `GlobalUsing.cs` has `global using
+             DotCharter.Localization;`, ~500 call sites use
+             `LocalizationService.Instance`, and `{localization:Loc}` is bound in
+             the markup — yet this reference used to arrive only TRANSITIVELY
+             through Services. A transitive reference is not a declared
+             dependency: dropping Localization from Services (or flipping it to
+             `PrivateAssets`) would break the UI's compile in a place that never
+             mentioned Localization. -->
+        <ProjectReference Include="..\DotCharter.Localization\DotCharter.Localization.csproj" />
+        <!-- Screen contracts the views bind to. Never the fakes project
+             (AssemblyLayeringTests): a fake in the product assembly is one
+             DataContext typo away from shipping. -->
+        <ProjectReference Include="..\DotCharter.Presentation\DotCharter.Presentation.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp\JuceSharp.csproj" />
+    </ItemGroup>
+
+    <!-- Optional plugins (Directory.Build.props): the project at the top of every
+         git-ignored plugins/<name>/ folder, unless the build was asked for the public
+         variant (DotCharterPlugins=false). Nothing in this project names a plugin's
+         types: each is declared as [assembly: PluginAssembly("<project file name>")]
+         (DotCharterDeclarePlugins, Directory.Build.targets) and PluginLoader loads the
+         module it finds in that assembly. -->
+    <PropertyGroup>
+        <DotCharterDeclarePlugins>true</DotCharterDeclarePlugins>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(DotCharterPlugins)' != 'false'">
+        <ProjectReference Include="..\plugins\*\*.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AvaloniaResource Include="Assets\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="..\LICENSE" Link="LICENSE">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <!-- Bundled freely-licensed NAM neural-amp captures (MIT). Shipped as files
+         next to the exe under NamCaptures/ and installed into the local capture
+         library on first run (BundledNamCaptureInstaller). NOT AvaloniaResource
+         (the namamp module + library need real files on disk, not embedded). -->
+    <ItemGroup>
+        <Content Include="NamCaptures\**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <!-- The built-in guitar / bass voice's SAMPLE PACKS (CC0 Karoryfer + one
+         CC BY EGFxSet Strat pack per pickup position, ~543 MB; #50). NOT in git: JuceSharp/src/JuceSharp.Native/tools/voice/
+         build_voice_pack.py writes them to artifacts/voice-pack/ from a pinned,
+         SHA-256-checked manifest, and this copies them into voices/ next to the
+         exe, where the native voice looks (dcvoice_pack_store.h). Absent packs
+         are not an error: the voice falls back to its string model.
+         tools/release/New-Release.ps1 builds them if missing and refuses to
+         publish without them. -->
+    <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\artifacts\voice-pack\guitar.dcvp')">
+        <Content Include="..\artifacts\voice-pack\*.dcvp;..\artifacts\voice-pack\VOICE-CREDITS.txt" LinkBase="voices">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Controls.ColorPicker" />
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.HarfBuzz" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
+        <PackageReference Include="Avalonia.Fonts.Inter" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Dock.Avalonia" />
+        <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
+        <PackageReference Include="Dock.Model.Avalonia" />
+        <PackageReference Include="Dock.Model.Mvvm" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Serilog.Sinks.Async" />
+        <PackageReference Include="Serilog.Sinks.Console" />
+        <PackageReference Include="Serilog.Sinks.File" />
+        <PackageReference Include="Silk.NET.Core" />
+        <PackageReference Include="Silk.NET.Maths" />
+        <PackageReference Include="Silk.NET.Vulkan" />
+        <PackageReference Include="SkiaSharp" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+        <!-- The UI gallery (DotCharter.UI.Gallery, assembly DotCharter.Gallery)
+             builds its AppBuilder from the same internal font-fallback chain,
+             so the two hosts shape text identically. -->
+        <InternalsVisibleTo Include="DotCharter.Gallery" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Update="Views\Dialogs\SetBpmDialogView.axaml.cs">
+            <DependentUpon>SetBpmDialogView.axaml</DependentUpon>
+        </Compile>
+        <Compile Update="Views\Dialogs\BeatDialogView.axaml.cs">
+            <DependentUpon>BeatDialogView.axaml</DependentUpon>
+        </Compile>
+        <Compile Update="Views\Dialogs\ShowlightsDialogView.axaml.cs">
+            <DependentUpon>ShowlightsDialogView.axaml</DependentUpon>
+        </Compile>
+        <Compile Update="Views\Dialogs\TempoMapOperationDialogView.axaml.cs">
+            <DependentUpon>TempoMapOperationDialogView.axaml</DependentUpon>
+        </Compile>
+    </ItemGroup>
+
+</Project>

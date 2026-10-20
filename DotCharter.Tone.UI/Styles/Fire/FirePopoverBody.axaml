@@ -1,0 +1,846 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. Section: inside one popover — the BODY grammar (`Play Menus.dc.html`).
+         Its BUTTONS are ControlThemes, in `FirePopoverButtons.axaml` (#240). -->
+
+    <Styles.Resources>
+        <!-- Border families are ControlThemes (#240): a Border wears
+             Theme="{StaticResource <Family>Border}" AND its class, and every
+             rule here is gated on that class. UI/BorderControlThemeTests. -->
+        <ControlTheme x:Key="FirePopoverSectionBorder" TargetType="Border">
+            <!-- `border-top:1px solid rgba(255,255,255,.055); padding:12px 13px;
+                 gap:9px`. A section is separated by a hairline, never by whitespace. -->
+            <Style Selector="^.FirePopoverSection">
+                <Setter Property="Padding" Value="{StaticResource FirePadPopoverSection}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverSectionRule}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverEmptyBorder" TargetType="Border">
+            <!-- `padding:13px; border-radius:10px; background:rgba(0,0,0,.24); gap:3px` -->
+            <Style Selector="^.FirePopoverEmpty">
+                <Setter Property="Padding" Value="{StaticResource FirePadPopoverEmpty}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Background" Value="{DynamicResource FirePopoverEmptyFill}" />
+                <Setter Property="BorderThickness" Value="{StaticResource FirePadNone}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverOptionsBorder" TargetType="Border">
+            <!-- ─── …and its OPTIONS panel (`options()`) ──────────────────────────────
+                 `margin-top:5; padding:5; radius:11; background:#232830;
+                 1px rgba(255,255,255,.1)`; one option is `padding:7px 9px; radius:8`
+                 and the picked one wears `rgba(139,92,246,.3)` + a `✓`. -->
+            <Style Selector="^.FirePopoverOptions">
+                <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPopoverOptions}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusControl}" />
+                <Setter Property="Background" Value="{DynamicResource FirePopoverOptionsFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverSlotBorder" TargetType="Border">
+            <!-- ─── VST3 chain ───────────────────────────────────────────────────────
+                 One slot: `height:36; padding:0 6px 0 9px; radius:9;
+                 background:rgba(255,255,255,.028); 1px rgba(255,255,255,.08); gap:9`,
+                 holding the drag grip, a 13 px index, the name, an ON/BYPASS pill and
+                 a `GUI` button. A BYPASSED slot's name and state drop to `#7a8390` —
+                 the row is dimmed, not struck through. -->
+            <Style Selector="^.FirePopoverSlot">
+                <Setter Property="MinHeight" Value="{StaticResource FirePopoverSlotHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPopoverSlot}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Background" Value="{DynamicResource FirePopoverSlotFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverKickText" TargetType="TextBlock">
+            <!-- `mono 9px / .22em / #7a8390`. NOT `TextBlock.FireEyebrow` — that is
+                 9.5 px at 2.3 tracking, which is 1.4 px wider per character and turns
+                 `STACKED ARRANGEMENTS` into a two-line caption inside 376 px. -->
+            <Style Selector="^.FirePopoverKick">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverStateText" TargetType="TextBlock">
+            <!-- `mono 9px / .1em / #687080` — the state on the right of a kicker. -->
+            <Style Selector="^.FirePopoverState">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverLabelText" TargetType="TextBlock">
+            <!-- `font-size:12.5px; color:#d3d8df` — a row's label. -->
+            <Style Selector="^.FirePopoverLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style Selector="^.FirePopoverLabel.Dim">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverNoteText" TargetType="TextBlock">
+            <!-- `font-size:11px; line-height:1.45; color:#5d5675` — the explanatory
+                 line under a section. It WRAPS, so it needs a width bound: the
+                 popover's own MaxWidth is that bound. -->
+            <Style Selector="^.FirePopoverNote">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextQuiet}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverValueText" TargetType="TextBlock">
+            <!-- `mono 11.5 / .02em / #e8eef6`, right-aligned in a 52 px column. Its own
+                 class rather than `FireValueCell` (13 px): a popover row is 34 px and
+                 the value sits beside a 12.5 px label, so the 13 px step made the
+                 number the loudest thing in the row. -->
+            <Style Selector="^.FirePopoverValue">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackPopoverValue}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentPaper}" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="TextAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverChipToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- ─── Chip ─────────────────────────────────────────────────────────────
+                 `height:26; padding:0 10; radius:7; 11px/600`; OFF is
+                 `rgba(255,255,255,.035)` inside `rgba(255,255,255,.1)` at `#aeb6c1`,
+                 ON is `rgba(139,92,246,.24)` inside `rgba(167,139,250,.5)` at
+                 `#e8eef6`. -->
+            <Style Selector="^.FirePopoverChip">
+                <Setter Property="Height" Value="{StaticResource FirePopoverChipHeight}" />
+                <Setter Property="MinHeight" Value="{StaticResource FirePopoverChipHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPopoverChip}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusChip}" />
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!-- Fluent's Button template ROOT is the presenter, so every fill has to be
+                 stated there or it is painted straight over (the 0.49 dialog trap). -->
+            <Style Selector="^.FirePopoverChip /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextSecondary}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverChip:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverChip:checked">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverChip:checked /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FirePopoverChipOnFill}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentPaper}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverChip:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverIconToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- ─── Square icon / caption action (`iconBtn`) ──────────────────────────
+                 26 × 26, radius 7, `rgba(255,255,255,.035)` inside
+                 `rgba(255,255,255,.1)`, glyph or 3-letter caption at 10 px in
+                 `#aeb6c1`. `Button.FireIconAction` is 34 px — the ROW's whole height —
+                 so three of them in one 36 px slot would leave no vertical air. -->
+            <Style Selector="^.FirePopoverIcon">
+                <Setter Property="Width" Value="{StaticResource FirePopoverChipHeight}" />
+                <Setter Property="Height" Value="{StaticResource FirePopoverChipHeight}" />
+                <Setter Property="MinHeight" Value="{StaticResource FirePopoverChipHeight}" />
+                <Setter Property="MinWidth" Value="{StaticResource FirePopoverChipHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusChip}" />
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverIcon /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextSecondary}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverIcon:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverIcon:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverIcon:checked">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverIcon:checked /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FirePopoverChipOnFill}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentPaper}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverIcon:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverSelectToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- ─── The SELECT face (`select()`) ──────────────────────────────────────
+                 `height:34; padding:0 10; radius:9; background:rgba(0,0,0,.36);
+                 1px rgba(255,255,255,.11)` — and while its list is open,
+                 `rgba(167,139,250,.65)` plus a 3 px `rgba(139,92,246,.16)` halo.
+
+                 It is a ToggleButton with an INLINE list rather than a ComboBox, and
+                 that is the mockup's own structure: the "select open" specimen pushes
+                 the rows below it DOWN rather than covering them. It is also the only
+                 version that can be laid out headlessly — a real popup neither renders
+                 into a capture nor opens without deadlocking `Avalonia.Headless` — and
+                 it avoids a second popup HWND over the first, which on this app's
+                 composition settings is where transparent pixels go black. -->
+            <Style Selector="^.FirePopoverSelect">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="Height" Value="{StaticResource FirePopoverRowHeight}" />
+                <Setter Property="MinHeight" Value="{StaticResource FirePopoverRowHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPopoverField}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Background" Value="{DynamicResource FirePopoverFieldFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverFieldBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSelect /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSelect:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSelect:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSelect:checked">
+                <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverFieldBorderOpen}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSelect:checked /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSelect:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- The popover empty state's title, `font-size:12px; color:#929ba8`. A theme,
+             not the global `Border.FirePopoverEmpty TextBlock.FirePopoverEmptyTitle` it
+             was: that descendant rule was attached to every TextBlock with a Border
+             above it, ~3,700 of them (#412). Every wearer sits in a FirePopoverEmpty. -->
+        <ControlTheme x:Key="FirePopoverEmptyTitleText" TargetType="TextBlock">
+            <Style Selector="^.FirePopoverEmptyTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverMetaText" TargetType="TextBlock">
+            <!-- `mono 9.5 / .08em / #929ba8` — the meta beside it (`E STD`). -->
+            <Style Selector="^.FirePopoverMeta">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverOptionToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <Style Selector="^.FirePopoverOption">
+                <Setter Property="Padding" Value="{StaticResource FirePadPopoverOption}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapNavRow}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="{StaticResource FirePadNone}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+
+            <Style Selector="^.FirePopoverOption /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
+            <Style Selector="^.FirePopoverOption:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverOption.Picked /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FirePopoverOptionPicked}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverGripText" TargetType="TextBlock">
+            <!-- `⠇` at 10 px in `#687080`, `cursor:grab`. It is the ONLY thing in the
+                 row that starts a drag, and it is why the arrows are gone. -->
+            <Style Selector="^.FirePopoverGrip">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FirePopoverGripSize}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverIndexText" TargetType="TextBlock">
+            <!-- `width:13; mono 9.5 / .02em / #687080` — the slot number. -->
+            <Style Selector="^.FirePopoverIndex">
+                <Setter Property="Width" Value="{StaticResource FirePopoverIndexColumn}" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackPopoverTiny}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverSlotNameText" TargetType="TextBlock">
+            <!-- `12.5px; #e8ebef` — and `#7a8390` when the slot is bypassed. -->
+            <Style Selector="^.FirePopoverSlotName">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSlotName.Bypassed">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverSlotStateText" TargetType="TextBlock">
+            <!-- `mono 9 / .1em`, GREEN while the slot is live and `#7a8390` when it is
+                 bypassed. It is a WORD, not a dot: "ON" and "BYPASS" survive a
+                 screenshot and a colour-blind reader. -->
+            <Style Selector="^.FirePopoverSlotState">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style Selector="^.FirePopoverSlotState.Bypassed">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverStatePillToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- The ON / BYPASS pill. It is a ToggleButton so the WORD is the control —
+                 the mockup gives a slot no other bypass affordance — but it wears no
+                 chrome of its own: the state is carried entirely by the two
+                 `FirePopoverSlotState` words inside it. -->
+            <Style Selector="^.FirePopoverStatePill">
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="{StaticResource FirePadNone}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+
+            <Style Selector="^.FirePopoverStatePill /template/ ContentPresenter, ^.FirePopoverStatePill:checked /template/ ContentPresenter, ^.FirePopoverStatePill:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
+            <Style Selector="^.FirePopoverStatePill:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverStepText" TargetType="TextBlock">
+            <!-- `mono 9.5 / .06em / #7a8390` — `M97 · lead`. -->
+            <Style Selector="^.FirePopoverStep">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackPopoverStat}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverStampText" TargetType="TextBlock">
+            <!-- `width:52; text-align:right; mono 9.5 / .02em / #687080` — `4s ago`. -->
+            <Style Selector="^.FirePopoverStamp">
+                <Setter Property="Width" Value="{StaticResource FirePopoverValueColumn}" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackPopoverTiny}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="TextAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverChordText" TargetType="TextBlock">
+            <!-- `mono 9.5 / .1em / #687080` — the footer's own chord. `FireKeyHint` is
+                 10 px at 1.4, which is a whole step louder than the mockup's. -->
+            <Style Selector="^.FirePopoverChord">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackPopoverChord}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverPeakText" TargetType="TextBlock">
+            <!-- ─── Two mono readouts the mockup names ───────────────────────────────
+                 `−14.2 dB PEAK` at `mono 10.5 / .06em / #929ba8`, and `IN TUNE` at
+                 `mono 10.5 / .08em / #4ade80`. -->
+            <Style Selector="^.FirePopoverPeak">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackPopoverPeak}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverTuneText" TargetType="TextBlock">
+            <Style Selector="^.FirePopoverTune">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackPopoverTune}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!-- …and the two states the app has that the mockup's one specimen cannot
+                 show: nothing heard yet, and heard but off pitch. -->
+            <Style Selector="^.FirePopoverTune.Off">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+
+            <Style Selector="^.FirePopoverTune.Silent">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+        </ControlTheme>
+        <!-- Panel families are ControlThemes too (#428): a global `StackPanel.X` /
+             `Grid.X` rule was attached to EVERY StackPanel / Grid of the app
+             (1,649 and 2,009 on the prewarmed shell), worn or not. A panel wears
+             Theme="{StaticResource <Family>Panel|Grid}" AND its class. The old
+             CHILD rules (`Grid.FirePopoverRow > TextBlock`, …) were attached to
+             every child of every Grid / StackPanel; their one setter is now a
+             local value on the children that had it. UI/StyleIncludeScopeTests. -->
+        <ControlTheme x:Key="FirePopoverBodyPanel" TargetType="StackPanel">
+            <!-- `padding:11px 13px 12px; gap:4px` — the run of rows above the first
+                 hairline. -->
+            <Style Selector="^.FirePopoverBody">
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceXs}" />
+                <Setter Property="Margin" Value="{StaticResource FirePadPopoverBody}" />
+            </Style>
+            <!-- …and the variant the mockup uses where the rows are CONTROLS rather
+                 than sliders (`gap:9px` — Tools and Tracks). -->
+            <Style Selector="^.FirePopoverBody.Wide">
+                <Setter Property="Spacing" Value="{StaticResource FirePopoverGap}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverKickerGrid" TargetType="Grid">
+            <!-- The section's caption line: `kicker` left, an optional mono STATE right
+                 (`LIVE`, `3 SLOTS`, `UNAVAILABLE`). -->
+            <Style Selector="^.FirePopoverKicker">
+                <Setter Property="ColumnSpacing" Value="{StaticResource FireSpaceMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverRowGrid" TargetType="Grid">
+            <!-- `min-height:34px; gap:14px`. 34 is a MINIMUM, so a wrapped German label
+                 grows the row instead of being sliced. -->
+            <Style Selector="^.FirePopoverRow">
+                <Setter Property="MinHeight" Value="{StaticResource FirePopoverRowHeight}" />
+                <Setter Property="ColumnSpacing" Value="{StaticResource FireSpaceRow}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverControlsPanel" TargetType="StackPanel">
+            <!-- The control cluster on the right: `gap:7px`. -->
+            <Style Selector="^.FirePopoverControls">
+                <Setter Property="Orientation" Value="Horizontal" />
+                <Setter Property="Spacing" Value="{StaticResource FirePopoverGapControl}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePopoverFooterGrid" TargetType="Grid">
+            <!-- ─── Footer strip ─────────────────────────────────────────────────────
+                 `padding:9px 13px; gap:10; border-top:1px rgba(255,255,255,.07);
+                 background:rgba(0,0,0,.28)` — a quiet 11.5 px action on one side and
+                 the panel's own shortcut in mono 9.5 / .1em / #687080 on the other. -->
+            <Style Selector="^.FirePopoverFooter">
+                <Setter Property="ColumnSpacing" Value="{StaticResource FireSpaceMd}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         INSIDE ONE POPOVER — `Play Menus.dc.html`, transcribed.
+
+         The SHELL is the `FirePopover` control (its template is type-keyed in
+         `Styles/ControlThemes.axaml`). What is here is the BODY grammar every
+         popover is filled with, and it lives in THIS file rather than in the
+         editor's chrome grammar for one reason: the profile switcher is a bare
+         `DataTemplate` shared by the status rail AND the Play Mode front door,
+         so a class defined in `ShellChromeStyles.axaml` would silently match
+         nothing in the second host — the exact trap that file's header warns
+         about.
+
+         EVERY NUMBER BELOW IS THE MOCKUP'S. The first pass at these panels was
+         rejected — "not 1:1" — for reaching at each step for the nearest rung
+         the Fire ladder already had: a 26 px chip where the source draws a
+         34 px select, a flat accent where it draws a two-stop gradient, one
+         eyebrow tracking where it uses eight. Each miss is invisible alone;
+         together they are a different design. So a value here comes from the
+         CSS and the token it uses is named for the popover, not borrowed.
+
+         The mockup's own layout rule, and the reason every row is a Grid and
+         never a horizontal StackPanel: LABEL LEFT, CONTROL RIGHT, VALUE IN
+         MONO. A horizontal StackPanel measures with infinite width, so a long
+         German label pushes its control off the 420 px edge with no warning.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ─── Body + sections ──────────────────────────────────────────────── -->
+
+
+
+
+    <!-- ─── One row ──────────────────────────────────────────────────────── -->
+
+
+    <!-- ─── Empty state ──────────────────────────────────────────────────── -->
+
+    <!-- `1px DASHED rgba(255,255,255,.11)` — and an Avalonia Border cannot
+         dash: it has BorderBrush and BorderThickness and nothing else. So the
+         dash is a sibling `Rectangle` in the same `Panel` and the Border below
+         carries only the fill and the inset. -->
+    <Style Selector="Rectangle.FirePopoverDash">
+        <Setter Property="Stroke" Value="{DynamicResource FirePopoverFieldBorder}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeDashArray" Value="4,3" />
+        <Setter Property="RadiusX" Value="10" />
+        <Setter Property="RadiusY" Value="10" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <Style Selector="Border.FirePopoverEmpty > StackPanel">
+        <Setter Property="Spacing" Value="{StaticResource FirePopoverGapHair}" />
+    </Style>
+
+    <Style Selector="Button.FirePopoverIcon PathIcon, ToggleButton.FirePopoverIcon PathIcon">
+        <Setter Property="Width" Value="11" />
+        <Setter Property="Height" Value="11" />
+        <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+
+    <!-- `flex:1; 12.5px/600; #e8ebef` — the value. -->
+    <Style Selector="ToggleButton.FirePopoverSelect TextBlock.FirePopoverSelectValue">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- The `▾`. 8 px, and it flips when the list is open. -->
+    <Style Selector="ToggleButton.FirePopoverSelect PathIcon.FirePopoverChevron">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Height" Value="8" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.FirePopoverSelect:checked PathIcon.FirePopoverChevron">
+        <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+
+    <Style Selector="Button.FirePopoverOption TextBlock.FirePopoverOptionName">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.FirePopoverOption.Picked TextBlock.FirePopoverOptionName">
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Button.FirePopoverOption.Picked TextBlock.FirePopoverMeta">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+
+    <!-- ─── Slider ───────────────────────────────────────────────────────────
+         `track 4px / radius 2 / rgba(255,255,255,.1)`, a `14px` white knob with
+         `0 3px 9px rgba(0,0,0,.75)`, and a fill that is
+         `linear-gradient(90deg,#3c7bd1,COL)` where COL says what the row is
+         ABOUT. `Slider.FireSlider` is 6/18 on a flat accent — right for a
+         settings screen, three steps too heavy for a 34 px popover row.
+
+         The fill brush cannot be a `TemplateBinding` (a `LinearGradientBrush`
+         takes no bound stop), so the four rows are four MODIFIER classes and
+         each restates the decrease-button template. -->
+    <Style Selector="Slider.FirePopoverSlider">
+        <Setter Property="MinHeight" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Slider.FirePopoverSlider:horizontal /template/ Track RepeatButton#PART_IncreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{StaticResource FirePopoverTrackHeight}"
+                        CornerRadius="{StaticResource FireRadiusHair}"
+                        Background="{DynamicResource FireSurfaceTrack}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FirePopoverSlider /template/ Thumb">
+        <Setter Property="Width" Value="{StaticResource FirePopoverThumbSize}" />
+        <Setter Property="Height" Value="{StaticResource FirePopoverThumbSize}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Width="{StaticResource FirePopoverThumbSize}"
+                        Height="{StaticResource FirePopoverThumbSize}"
+                        CornerRadius="{StaticResource FireRadiusPill}"
+                        Background="{DynamicResource FireTextBright}"
+                        BoxShadow="{DynamicResource FirePopoverThumbShadow}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FirePopoverSlider:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <Style Selector="Slider.FirePopoverSlider.Song:horizontal /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{StaticResource FirePopoverTrackHeight}"
+                        CornerRadius="{StaticResource FireRadiusHair}"
+                        Background="{DynamicResource FirePopoverFillSong}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FirePopoverSlider.Guitar:horizontal /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{StaticResource FirePopoverTrackHeight}"
+                        CornerRadius="{StaticResource FireRadiusHair}"
+                        Background="{DynamicResource FirePopoverFillGuitar}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FirePopoverSlider.Midi:horizontal /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{StaticResource FirePopoverTrackHeight}"
+                        CornerRadius="{StaticResource FireRadiusHair}"
+                        Background="{DynamicResource FirePopoverFillMidi}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FirePopoverSlider.Pitch:horizontal /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{StaticResource FirePopoverTrackHeight}"
+                        CornerRadius="{StaticResource FireRadiusHair}"
+                        Background="{DynamicResource FirePopoverFillPitch}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <!-- `+  Add VST3…` — `height:36; radius:9; 1px DASHED rgba(167,139,250,.4)
+         over rgba(139,92,246,.07); 12px #a8ceff`, centred. Dashed again means a
+         sibling Rectangle: the Border carries the fill, the Rectangle the edge. -->
+    <Style Selector="Rectangle.FirePopoverAddDash">
+        <Setter Property="Stroke" Value="{DynamicResource FirePopoverEdgeSoft}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="StrokeDashArray" Value="4,3" />
+        <Setter Property="RadiusX" Value="9" />
+        <Setter Property="RadiusY" Value="9" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- A real dropdown inside a popover wears the SELECT face — `height:34;
+         padding:0 10; radius:9; rgba(0,0,0,.36) inside rgba(255,255,255,.11);
+         12.5px/600`. Fluent's ComboBox template TemplateBinds all five, so a
+         setter on the control reaches them (unlike its POPUP chrome, which is
+         a resource-key override — see `Styles/FireMenuChrome.axaml`). -->
+    <Style Selector="Grid.FirePopoverRow ComboBox, Border.FirePopoverSection ComboBox,
+                     StackPanel.FirePopoverBody ComboBox">
+        <Setter Property="Height" Value="{StaticResource FirePopoverRowHeight}" />
+        <Setter Property="MinHeight" Value="{StaticResource FirePopoverRowHeight}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadPopoverField}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="Background" Value="{DynamicResource FirePopoverFieldFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverFieldBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <!-- …and the one select INSIDE a chain slot (the seat picker): the same
+         face at the slot's own 26 px, so a second seat does not grow the row
+         past the GUI button beside it. After the rule above, so it wins inside
+         the Tools popover's section too; the plugin rack is one view in every
+         host (`Views/PlayMode/VstRackView`) and must look one way in all. -->
+    <Style Selector="Border.FirePopoverSlot ComboBox">
+        <Setter Property="Height" Value="{StaticResource FirePopoverChipHeight}" />
+        <Setter Property="MinHeight" Value="{StaticResource FirePopoverChipHeight}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadPopoverField}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="Background" Value="{DynamicResource FirePopoverFieldFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverFieldBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.FirePopoverSlot ComboBox /template/ PathIcon#DropDownGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+    </Style>
+
+    <Style Selector="Button.FirePopoverHistoryRow TextBlock.FirePopoverHistoryName">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.FirePopoverHistoryRow.Current TextBlock.FirePopoverHistoryName">
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Ellipse.FirePopoverDot">
+        <Setter Property="Width" Value="{StaticResource FireDotSize}" />
+        <Setter Property="Height" Value="{StaticResource FireDotSize}" />
+        <Setter Property="Fill" Value="{DynamicResource FirePopoverDotIdle}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.FirePopoverHistoryRow.Current Ellipse.FirePopoverDot">
+        <Setter Property="Fill" Value="{DynamicResource FireAccent}" />
+    </Style>
+    <!-- The glow is on a Border wrapping the dot: Avalonia puts `BoxShadow` on
+         `Border` and nowhere else (AVLN2000 on anything that is not one). -->
+    <Style Selector="Button.FirePopoverHistoryRow.Current Border.FirePopoverDotGlow">
+        <Setter Property="BoxShadow" Value="{DynamicResource FirePopoverDotGlow}" />
+    </Style>
+
+    <!-- `13px/600` — a profile name is a step above a row label; it is the
+         thing the panel is about. -->
+    <Style Selector="Button.FirePopoverProfileRow TextBlock.FirePopoverProfileName">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="Button.FirePopoverProfileRow.Current TextBlock.FirePopoverProfileName">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <!-- `mono 9.5 / .06em`, UPPERCASE — `18H PLAYED` / `NO STATS KEPT`. -->
+    <Style Selector="Button.FirePopoverProfileRow TextBlock.FirePopoverProfileMeta">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextQuiet}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="Button.FirePopoverProfileRow.Current TextBlock.FirePopoverProfileMeta">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <!-- `height:34; padding:0 11; radius:9; rgba(0,0,0,.36) inside
+         rgba(255,255,255,.11); 12.5px` — the new-profile field, i.e. the select
+         face with a caret in it. -->
+    <Style Selector="TextBox.FirePopoverField">
+        <Setter Property="Height" Value="{StaticResource FirePopoverRowHeight}" />
+        <Setter Property="MinHeight" Value="{StaticResource FirePopoverRowHeight}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadPopoverInput}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="Background" Value="{DynamicResource FirePopoverFieldFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FirePopoverFieldBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+
+</Styles>

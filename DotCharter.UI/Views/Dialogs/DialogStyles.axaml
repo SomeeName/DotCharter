@@ -1,0 +1,118 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ══════════════════════════════════════════════════════════════════
+         THE DIALOG GRAMMAR, ON THE FIRE LAYER. Every dialog in Views/Dialogs
+         shares it, exactly the way every settings tab shares
+         Views/Settings/SettingsStyles.axaml — and it is deliberately the SAME
+         vocabulary one level down, so a dialog opening over Settings or Play
+         Mode reads as the same product rather than as a leftover from an
+         older build.
+
+         Four levels of hierarchy, and nothing else:
+
+            scrim   → Grid.DialogScrim: the modal backdrop. IsVisible + ZIndex
+                      stay inline (each dialog owns its own stacking order).
+            card    → Border.DialogCard, wearing Border.FireScreen's shape:
+                      radius 18, one hairline, one very deep soft shadow. It
+                      holds a Grid RowDefinitions="Auto,*,Auto".
+            head    → Grid.DialogHead: accent icon badge + a CHAKRA PETCH
+                      title (+ Space Grotesk subtitle + a mono context line),
+                      LEFT aligned. Same 30 px badge as a settings group, on
+                      purpose.
+            body    → Grid.DlgRow rows: a Space Grotesk 13.5/Bold label (+ an
+                      11.5 px description) on the left and exactly ONE control
+                      in a fixed-width right column, so every control in a
+                      dialog shares one right edge. Rows may be clustered in a
+                      Border.DlgSection under a MONO EYEBROW.
+            foot    → Border.DialogFooter: a hairline rule, then a left slot
+                      for the tertiary action (Back / Reset) and a right slot
+                      with the secondary actions and exactly ONE Button.Primary,
+                      always last — which is the CHAMFERED Fire primary.
+
+         WHY IT IS ONE FILE: the 38 dialogs each invented their own title size
+         (Display / Heading / Title), their own footer margin (10 / 12 / 16 /
+         20 / 24 px), their own button MinWidth (80 / 90 / 100 / 120 / 150) and
+         their own label-column width (96 / 110 / 120 / 130). Four of them
+         re-declared a local `TextBox`/`TextBlock.Label` style verbatim.
+
+         WHY THE FIRE TOKENS AND NOT THE APP'S: the palette and the typeface
+         are already global (App.axaml's base Colors are the Fire palette;
+         Typography.axaml makes Space Grotesk the inherited default), so what
+         was left of the old grammar was its SHAPES — radius 6/14 against the
+         layer's 8/10/12/18, a 16 px title against Chakra 20, an app-scale
+         12/16/20 rhythm against the Fire 10/12/14/18/22 one. Everything below
+         reaches for FireRadius*/FireSize*/FirePad*/FireGap*/FireSpace* ONLY;
+         mixing two ladders is how a surface ends up half-converted
+         (docs/agents/ui/fire-design-system.md, "the ladders are
+         self-contained").
+
+         THE THREE FIRE COMPONENTS THIS FILE REUSES rather than restates —
+         because a Fire mark re-invented inline in one file is how two surfaces
+         stop being one product:
+           • `FirePrimaryButton`   the footer's primary action (the 45° chamfer)
+           • `FireToggleSwitch`    every boolean in a row
+           • `FireNavRowToggle`    (SettingsShellView's rail; not used here)
+
+         TWO SETTERS THAT MAY NEVER APPEAR HERE, both learned the hard way in
+         SettingsStyles.axaml and both applying to any shared style file:
+           • no `Cursor` setter — building a Cursor resolves ICursorFactory
+             from the platform, which a platform-free test host does not have.
+             Set Cursor="Hand" INLINE on the control instead. (The Fire button
+             CLASSES do set one; that is fine, they live in the app-scoped
+             Styles/Fire.axaml, which is only ever built under a real App.)
+           • no `Transitions` setter — AvaloniaList<ITransition>.Add calls
+             Dispatcher.VerifyAccess, so the file could only be constructed on
+             the UI thread. It is also wrong on principle: dialogs are
+             IsVisible-gated surfaces and a hidden control's style clocks keep
+             ticking (DotCharter.UI/AGENTS.md).
+
+         WHERE IT IS INCLUDED: ONCE, in Views/Shell/DialogContainerView.axaml —
+         every overlay dialog is a child of that host, so one instantiation
+         styles all 34 of them (a per-view StyleInclude would re-instantiate
+         this set 34 times; see the comment in DialogContainerView about the old
+         Theme.axaml double-include). ONE dialog is hosted somewhere else and
+         carries its own include: DiagnosticsWindow (a separate top-level
+         Window, non-modal on purpose). The count is linted in docs/agents/ui/dialogs.md's terms by
+         the includer sweep over Views/Dialogs + Views/Diagnostics.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <Styles.Resources>
+        <!-- State tints. Brush-level Opacity over an EXISTING colour token
+             (the PedalStatus*/PanelGlass pattern) — no new `Color` keys, so
+             the theme-completeness gate is untouched and every one of these
+             re-tints correctly when the user switches theme. The alphas are
+             the Fire spec's 8-14 % chip band. -->
+        <SolidColorBrush x:Key="DlgNoticeFill" Color="{DynamicResource WarningColorValue}" Opacity="0.12" />
+        <SolidColorBrush x:Key="DlgNoticeStroke" Color="{DynamicResource WarningColorValue}" Opacity="0.55" />
+        <SolidColorBrush x:Key="DlgErrorFill" Color="{DynamicResource DangerColorValue}" Opacity="0.12" />
+        <SolidColorBrush x:Key="DlgErrorStroke" Color="{DynamicResource DangerColorValue}" Opacity="0.55" />
+        <SolidColorBrush x:Key="DlgOkFill" Color="{DynamicResource SuccessColorValue}" Opacity="0.12" />
+        <SolidColorBrush x:Key="DlgOkStroke" Color="{DynamicResource SuccessColorValue}" Opacity="0.55" />
+        <SolidColorBrush x:Key="DlgInfoFill" Color="{DynamicResource InfoColorValue}" Opacity="0.12" />
+        <SolidColorBrush x:Key="DlgInfoStroke" Color="{DynamicResource InfoColorValue}" Opacity="0.55" />
+    </Styles.Resources>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         THE GRAMMAR ITSELF, BY LEVEL. Every `<Style>` this file used to
+         declare inline now lives in `Views/Dialogs/DialogStyles/`, sliced
+         along the numbered sections it already carried and moved byte for
+         byte: shell + head, body + the honest states, foot.
+
+         ORDER IS THE CONTRACT. Avalonia applies styles in the order it walks
+         this collection and a later selector wins, so these includes stand in
+         the exact order the sections stood in the one file. The footer's
+         `:not(.Primary)` ghost rules are the case that shows why it matters:
+         they are written to lose to the primary's ControlTheme on purpose,
+         and a shuffle changes which of two rules over one Button wins.
+
+         The `Styles.Resources` block above stays here. It is the eight state
+         tints, and `Perf/DialogConstructionUiPerfSmokeTests` asserts every
+         one of them resolves from a real dialog inside a real
+         `DialogContainerView` — the single place this grammar is included.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles/ShellAndHead.axaml" />
+    <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles/BodyAndStates.axaml" />
+    <StyleInclude Source="avares://DotCharter/Views/Dialogs/DialogStyles/Foot.axaml" />
+
+</Styles>

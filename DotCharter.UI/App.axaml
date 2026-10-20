@@ -1,0 +1,59 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="DotCharter.UI.App"
+             xmlns:ui="using:DotCharter.Tone.UI"
+             xmlns:dockThemes="clr-namespace:Dock.Avalonia.Themes.Fluent;assembly=Dock.Avalonia.Themes.Fluent"
+             xmlns:docking="clr-namespace:DotCharter.UI.Docking;assembly=DotCharter"
+             xmlns:playModeVm="using:DotCharter.UI.ViewModels.PlayMode"
+             xmlns:playModeViews="using:DotCharter.UI.Views.PlayMode"
+             RequestedThemeVariant="Default">
+    <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+
+    <Application.DataTemplates>
+        <!-- Dockable tool panes render the Context (a UserControl) set in
+             code-behind. This template MUST live at application scope: a
+             floated pane is hosted in a separate HostWindow, which never
+             sees window-level DataTemplates — with the template only on
+             MainWindow the float window rendered an empty (black) shell. -->
+        <DataTemplate DataType="{x:Type docking:DockableView}">
+            <ContentControl Content="{Binding Context}" />
+        </DataTemplate>
+        <!-- The rig's Tones mode hosts the AI "Design a tone" panel through a
+             ContentControl (AmpFxRigView lives in DotCharter.Tone.UI, which cannot
+             name the panel). Before the ViewLocator: by name it would look for a
+             ToneDesignView, and the panel's view is ToneDesignPanel. -->
+        <DataTemplate DataType="{x:Type playModeVm:ToneDesignViewModel}">
+            <playModeViews:ToneDesignPanel />
+        </DataTemplate>
+        <ui:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- ═══════════════════════════════════════════════════════════
+                 Colour tokens live in Styles/ColorTokens.axaml (merged below)
+                 so DotCharter.UI.Gallery can include the SAME dictionary and
+                 render every screen on the production palette.
+
+                 They stay APPLICATION-scoped: ThemeService writes
+                 `app.Resources[key] = color`, and an entry set on this
+                 dictionary SHADOWS the merged one, so runtime theme switching
+                 is unchanged (UI/ThemeTokenDictionaryTests pins both halves).
+                 The brush layer lives in Theme.axaml.
+                 ═══════════════════════════════════════════════════════════ -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Styles/ColorTokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <!-- Compact density: slims the dock tool/tab chrome (~30% — header
+             26→22px, tabs 30→22px) via the theme's supported density API
+             instead of forking templates. -->
+        <dockThemes:DockFluentTheme DensityStyle="Compact" />
+        <StyleInclude Source="avares://DotCharter/Styles/Theme.axaml" />
+        <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+    </Application.Styles>
+</Application>

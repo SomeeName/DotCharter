@@ -1,0 +1,30 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         THE APP THEME'S BRUSH + METRIC LAYER, BY SECTION.
+
+         Every `x:Key` this file used to declare inline now lives in
+         `Styles/Resources/`, moved byte for byte. Each part is a `<Styles>`
+         carrying nothing but its own `<Styles.Resources>` — the same shape
+         `Styles/FireTokens.axaml` has always had, which is what proves the
+         keys still resolve app-wide from this depth.
+
+         ORDER IS THE CONTRACT. A resource dictionary merged later wins, so
+         these includes stand in the exact order the sections stood in the
+         one file. Every key here is UNIQUE (a duplicate `x:Key` crashes the
+         app at `App.Initialize()`), so nothing depends on the tie-break
+         today — which is precisely why a shuffle would be silent.
+
+         COLOURS still live in `App.axaml`'s `Application.Resources`, where
+         `ThemeService` mutates them; everything here is the BRUSH layer over
+         them and reaches them by `{DynamicResource}`, across the dictionary
+         boundary, exactly as it always did.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Resources/ThemeSurfaces.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Resources/HardwareMaterials.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Resources/Metrics.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Resources/FluentOverrides.axaml" />
+
+</Styles>

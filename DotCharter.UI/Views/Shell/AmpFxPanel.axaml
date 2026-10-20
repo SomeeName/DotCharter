@@ -1,0 +1,178 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:editorVms="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:playMode="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:playModeVms="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:localization="using:DotCharter.Tone.UI.Localization"
+             xmlns:locSvc="using:DotCharter.Localization"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:vst="using:DotCharter.Tone.Audio.Vst"
+             xmlns:inspector="using:DotCharter.UI.Views.Editor.Inspector"
+             x:Class="DotCharter.UI.Views.Shell.AmpFxPanel"
+             x:CompileBindings="True"
+             x:DataType="editorVms:TransportViewModel">
+    <!-- The guitar's plugins, the note-preview instrument and the drop pedal,
+         bound to the TransportViewModel. Hosted by Play Mode's Amp/FX overlay
+         (`Views/PlayMode/AmpFxOverlayView`).
+
+         2026-09-27: drawn in the rig's Fire language — three `FirePanel` cards,
+         each a title + one line, the same marks as RigLab's tabs and the rig
+         footer. The chain is the SHARED plugin rack (`VstRackView`, in the rig
+         assembly): the Tools popover and RigLab's Plugins tab draw the very
+         same rows, drag reorder and add picker, over the transport's chain
+         through `TransportVstRack`. -->
+
+    <StackPanel x:Name="AmpFxRoot" Spacing="{StaticResource FireSpaceMd}" MinWidth="460">
+
+        <!-- ─── Guitar VST3 chain ─────────────────────────────────────────── -->
+        <Border x:Name="AmpFxPluginsSection" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+            <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+                    <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}"
+                                VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                            <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" VerticalAlignment="Center"
+                                       Text="{localization:Loc Toolbar_FxChain_Header}" />
+                            <!-- The slot count: tells a loaded chain from an empty
+                                 one without reading the list. -->
+                            <Border x:Name="AmpFxSlotCount" Theme="{StaticResource FireTagBorder}" Classes="FireTag" VerticalAlignment="Center"
+                                    IsVisible="{Binding GuitarVstChain.Count}">
+                                <TextBlock>
+                                    <TextBlock.Text>
+                                        <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                                            <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                                     Path="[Toolbar_FxChain_Slots]" />
+                                            <Binding Path="GuitarVstChain.Count" />
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc Toolbar_FxChain_Help}" />
+                    </StackPanel>
+                    <!-- Re-walks the VST3 folders, so a plugin installed since
+                         launch appears without a restart (never re-restores the
+                         chain — that would duplicate every slot). -->
+                    <Button Grid.Column="1" x:Name="AmpFxRescan" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                            VerticalAlignment="Center"
+                            IsEnabled="{Binding !IsRescanningVstPlugins}"
+                            Command="{Binding RescanVstPluginsCommand}"
+                            ToolTip.Tip="{localization:Loc Toolbar_FxChain_Rescan_Tip}"
+                            AutomationProperties.Name="{localization:Loc Toolbar_FxChain_Rescan}">
+                        <Panel>
+                            <TextBlock IsVisible="{Binding !IsRescanningVstPlugins}"
+                                       Text="{localization:Loc Toolbar_FxChain_Rescan}" />
+                            <TextBlock IsVisible="{Binding IsRescanningVstPlugins}"
+                                       Text="{localization:Loc Toolbar_FxChain_Rescanning}" />
+                        </Panel>
+                    </Button>
+                </Grid>
+
+                <playMode:VstRackView x:Name="AmpFxVstRack" DataContext="{Binding VstRack}" />
+            </StackPanel>
+        </Border>
+
+        <!-- ─── Virtual instrument (MIDI VSTi) ─────────────────────────────── -->
+        <Border x:Name="AmpFxInstrumentSection" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" VerticalAlignment="Center"
+                               Text="{localization:Loc Toolbar_VirtualInstrument}" />
+                    <TextBlock Grid.Column="1" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                               Text="{localization:Loc Toolbar_Loading}"
+                               IsVisible="{Binding IsInstrumentVstLoading}" />
+                </Grid>
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <ComboBox Grid.Column="0" x:Name="AmpFxInstrumentPicker" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ItemsSource="{Binding InstrumentVstPlugins}"
+                              SelectedItem="{Binding SelectedInstrumentVst}"
+                              IsEnabled="{Binding !IsInstrumentVstLoading}"
+                              AutomationProperties.Name="{localization:Loc Toolbar_VirtualInstrument}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vst:VstPluginInfo">
+                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ToggleButton Grid.Column="1" Theme="{StaticResource FireGhostToggle}" Classes="FireGhost Compact" VerticalAlignment="Center"
+                                  Content="{localization:Loc Toolbar_OpenGui}"
+                                  ToolTip.Tip="{localization:Loc Toolbar_OpenSynthGui}"
+                                  AutomationProperties.Name="{localization:Loc Toolbar_OpenSynthGui}"
+                                  IsChecked="{Binding InstrumentVstGuiOpen}"
+                                  IsEnabled="{Binding IsInstrumentVstReady}" />
+                    <ToggleButton Grid.Column="2" Theme="{StaticResource FireGhostToggle}" Classes="FireGhost Compact" VerticalAlignment="Center"
+                                  Content="{localization:Loc Toolbar_OutputShort}"
+                                  ToolTip.Tip="{localization:Loc Toolbar_EnableMidiOutput}"
+                                  AutomationProperties.Name="{localization:Loc Toolbar_EnableMidiOutput}"
+                                  IsChecked="{Binding MidiEnabled}" />
+                </Grid>
+                <!-- #138: the same switch as Out above and the editor's Mixer ▸ MIDI
+                     synth card — the built-in synth without a plugin, the plugin with one. -->
+                <CheckBox x:Name="AmpFxChartSynthToggle"
+                          IsChecked="{Binding MidiEnabled}"
+                          IsEnabled="{Binding IsChartSynthAvailable}"
+                          Content="{localization:Loc Mixer_ChartSynth}"
+                          ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_ChartSynth}" />
+                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                           Text="{localization:Loc Mixer_ChartSynth_Unavailable}"
+                           IsVisible="{Binding !IsChartSynthAvailable}" />
+                <!-- #50: the same instrument pickers as the editor's Mixer. -->
+                <inspector:ChartSynthInstrumentView x:Name="AmpFxChartSynthInstrument"
+                                                   DataContext="{Binding ChartSynthInstrument}" />
+                <CheckBox x:Name="AmpFxInstrumentThroughRigToggle"
+                          IsChecked="{Binding RouteInstrumentToRig}"
+                          IsEnabled="{Binding CanRouteInstrumentToRig}"
+                          Content="{localization:Loc Mixer_InstrumentThroughRig}"
+                          ToolTip.Tip="{localization:Loc Mixer_InstrumentThroughRig_Tip}"
+                          AutomationProperties.Name="{localization:Loc Mixer_InstrumentThroughRig}" />
+                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                           Text="{localization:Loc Mixer_InstrumentThroughRig_Sandboxed}"
+                           IsVisible="{Binding !CanRouteInstrumentToRig}" />
+            </StackPanel>
+        </Border>
+
+        <!-- ─── Drop tune ───────────────────────────────────────────────────
+             The transport's `InputPitchShiftSemis` — the SAME value the rig
+             footer's Drop pedal drives (`RigDropTune.Over`), over the same
+             0…−12 list (`RigDropTuneStep.AllSemitones`; down only). It shifts the live
+             input before note detection, the FX chain and monitoring; the long
+             explanation (and its "experimental") is the card's tooltip. -->
+        <Border x:Name="AmpFxDropTuneSection" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel"
+                ToolTip.Tip="{localization:Loc Toolbar_DropTune_Tip}">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}"
+                            VerticalAlignment="Center">
+                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" Text="{localization:Loc Toolbar_DropTune}" />
+                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               Text="{localization:Loc AmpFx_DropTune_Hint}" />
+                </StackPanel>
+                <!-- WHOSE guitar (ABI v31): every seat owns its own shifter. The
+                     same seat list the VST rows offer; hidden for a solo session,
+                     where one seat is not a choice. -->
+                <ComboBox Grid.Column="1" x:Name="DropTuneSeatPicker" Classes="FireCombo"
+                          MinWidth="120" VerticalAlignment="Center"
+                          ItemsSource="{Binding VstSeats}"
+                          SelectedItem="{Binding DropTuneSeat}"
+                          IsVisible="{Binding HasMultipleDropTuneSeats}"
+                          AutomationProperties.Name="{localization:Loc Toolbar_DropTune_Seat}"
+                          ToolTip.Tip="{localization:Loc Toolbar_DropTune_Seat}" />
+                <!-- Fixed width so "−12" and "0" sit in the same box, like the
+                     footer pedal's. -->
+                <ComboBox Grid.Column="2" x:Name="AmpFxDropTunePicker" Classes="FireCombo"
+                          Width="96" VerticalAlignment="Center"
+                          ItemsSource="{x:Static playModeVms:RigDropTuneStep.AllSemitones}"
+                          SelectedValue="{Binding InputPitchShiftSemis}"
+                          AutomationProperties.Name="{localization:Loc Toolbar_DropTune}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="x:Int32">
+                            <TextBlock Text="{Binding StringFormat='{}{0:+0;−0;0}'}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>

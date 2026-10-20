@@ -1,0 +1,13 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- What a screen reader announces (#311). A ColorPicker is named in the view, but the part
+         that takes FOCUS is the DropDownButton in its template, whose face is a panel: UIA read it
+         as "Avalonia.Controls.Panel". It carries the picker's own name instead. The NumericUpDown,
+         ButtonSpinner and editable-ComboBox twins live in DotCharter.Tone.UI's Styles/Inputs.axaml;
+         this one is here because only DotCharter.UI references the ColorPicker package.
+         Measured by Perf/AccessibilityAuditUiPerfSmokeTests. -->
+    <Style Selector="ColorPicker /template/ DropDownButton">
+        <Setter Property="AutomationProperties.Name" Value="{Binding $parent[ColorPicker].(AutomationProperties.Name)}" />
+    </Style>
+</Styles>

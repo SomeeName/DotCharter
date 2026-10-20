@@ -1,0 +1,198 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundNoteTechniqueView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Sound tab's TECHNIQUE section for a note or a multi-selection (#601): DENSE GROUPED
+         rows, one "label | value" row per technique group on one rhythm, so a new option is one
+         more segment or chip in its row and a new group one more row. The rail entry names the
+         section; the scope sentence and the section's own verb (named by what it clears, #118)
+         sit on the first line. -->
+    <StackPanel Spacing="{StaticResource SpaceSm}">
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding AppliesToLabel}"
+                       FontSize="{StaticResource FontSizeXs}"
+                       Foreground="{DynamicResource TextDim}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <Button Grid.Column="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                    Content="{localization:Loc Inspector_ResetFlags}"
+                    Command="{Binding ResetNoteFlagsCommand}"
+                    ToolTip.Tip="{localization:Loc Inspector_ResetFlagsTip}" />
+        </Grid>
+        <Grid x:Name="NoteTechniqueRows" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnSpacing="{StaticResource SpaceMd}" RowSpacing="{StaticResource SpaceXs}">
+            <TextBlock Grid.Row="0" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Mute}" />
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding NoteMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_FullMute}"
+                              ToolTip.Tip="{localization:Loc Inspector_FullMute}"
+                              IsChecked="{Binding NoteMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechMute}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_PalmMute}"
+                              ToolTip.Tip="{localization:Loc Inspector_PalmMute}"
+                              IsChecked="{Binding NoteMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechPalmMute}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Hopo}" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding NoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_HammerOn}"
+                              ToolTip.Tip="{localization:Loc Inspector_HammerOn}"
+                              IsChecked="{Binding NoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechHammerOn}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_PullOff}"
+                              ToolTip.Tip="{localization:Loc Inspector_PullOff}"
+                              IsChecked="{Binding NoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechPullOff}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Tap}"
+                              ToolTip.Tip="{localization:Loc Inspector_Tap}"
+                              IsChecked="{Binding NoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3}">
+                    <PathIcon Data="{DynamicResource IconTechTap}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="2" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Harmonic}" />
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding NoteHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Normal}"
+                              ToolTip.Tip="{localization:Loc Inspector_Normal}"
+                              IsChecked="{Binding NoteHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechHarmonic}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Pinch}"
+                              ToolTip.Tip="{localization:Loc Inspector_Pinch}"
+                              IsChecked="{Binding NoteHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechHarmonicPinch}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="3" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Picking}" />
+            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding NoteBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Pop}"
+                              ToolTip.Tip="{localization:Loc Inspector_Pop}"
+                              IsChecked="{Binding NoteBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechPop}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Slap}"
+                              ToolTip.Tip="{localization:Loc Inspector_Slap}"
+                              IsChecked="{Binding NoteBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechSlap}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="4" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Articulation}" />
+            <WrapPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Accent}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Accent}"
+                              IsChecked="{Binding NoteAccent}"
+                              ToolTip.Tip="{localization:Loc Inspector_AccentTip}" />
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Tremolo}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Tremolo}"
+                              IsChecked="{Binding NoteTremolo}"
+                              ToolTip.Tip="{localization:Loc Inspector_TremoloTip}" />
+            </WrapPanel>
+            <TextBlock Grid.Row="5" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Sustain}" />
+            <WrapPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Vibrato}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Vibrato}"
+                              IsChecked="{Binding NoteVibrato}"
+                              ToolTip.Tip="{localization:Loc Inspector_VibratoTip}" />
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Slide}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Slide}"
+                              IsChecked="{Binding NoteUnpitchedSlide}"
+                              ToolTip.Tip="{localization:Loc Inspector_SlideTip}" />
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_LinkNext}"
+                              AutomationProperties.Name="{localization:Loc Inspector_LinkNext}"
+                              IsChecked="{Binding NoteLinkNext}"
+                              ToolTip.Tip="{localization:Loc Inspector_LinkNextTip}" />
+            </WrapPanel>
+            <TextBlock Grid.Row="6" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Behavior}" />
+            <WrapPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_PassOther}"
+                              AutomationProperties.Name="{localization:Loc Inspector_PassOther}"
+                              IsChecked="{Binding NotePassOtherNotes}"
+                              ToolTip.Tip="{localization:Loc Inspector_PassOtherTip}" />
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Ignore}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Ignore}"
+                              IsChecked="{Binding NoteIgnore}"
+                              ToolTip.Tip="{localization:Loc Inspector_IgnoreTip}" />
+            </WrapPanel>
+            <TextBlock Grid.Row="7" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Finger}" />
+            <StackPanel x:Name="NoteFingerRow" Grid.Row="7" Grid.Column="1" Orientation="Horizontal"
+                        ToolTip.Tip="{localization:Loc Inspector_FingerTip}">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding NoteLeftHandFinger, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=-1}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="T"
+                              AutomationProperties.Name="{localization:Loc Inspector_Thumb}"
+                              ToolTip.Tip="{localization:Loc Inspector_Thumb}"
+                              IsChecked="{Binding NoteLeftHandFinger, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="1"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding NoteLeftHandFinger, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="2"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding NoteLeftHandFinger, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="3"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding NoteLeftHandFinger, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="4"
+                              AutomationProperties.Name="{localization:Loc Inspector_Finger}"
+                              ToolTip.Tip="{localization:Loc Inspector_Finger}"
+                              IsChecked="{Binding NoteLeftHandFinger, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=4}" />
+            </StackPanel>
+            <TextBlock Grid.Row="8" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_PickDirection}" />
+            <StackPanel x:Name="NotePickDirectionRow" Grid.Row="8" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding NotePickDirection, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="↓"
+                              AutomationProperties.Name="{localization:Loc Inspector_PickDown}"
+                              ToolTip.Tip="{localization:Loc Inspector_PickDown}"
+                              IsChecked="{Binding NotePickDirection, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="↑"
+                              AutomationProperties.Name="{localization:Loc Inspector_PickUp}"
+                              ToolTip.Tip="{localization:Loc Inspector_PickUp}"
+                              IsChecked="{Binding NotePickDirection, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}" />
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+</UserControl>

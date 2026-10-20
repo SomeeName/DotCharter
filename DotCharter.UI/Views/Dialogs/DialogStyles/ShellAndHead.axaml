@@ -1,0 +1,225 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="using:DotCharter.UI.Converters">
+
+    <!-- Part of the dialog grammar — see `Views/Dialogs/DialogStyles.axaml`,
+         which merges this file and its siblings IN ORDER. §1 Shell (scrim → card) and §2 Head (the accent icon badge and the
+         title / subtitle / mono-context lockup). -->
+
+    <!-- THE FAMILIES ARE CONTROLTHEMES (#428). A `Border.X` / `TextBlock.X` /
+         `Grid.X` / `StackPanel.X` rule here was attached to EVERY control of that
+         type under the dialog host (886 Borders, 663 TextBlocks, 526 Grids,
+         286 StackPanels, prewarmed), worn or not: ~32,000 value frames. A
+         dialog control wears the theme AND the class,
+         `Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"` (Dynamic:
+         a dialog view is built before it is parented under the host whose
+         Styles hold these). A theme ranks BELOW every style, so the
+         descendant rules in this grammar (`Border.DlgStrip TextBlock`,
+         `Border.DlgSection Grid.DlgRow:nth-last-child(1)`, …) beat a family
+         rule whatever their order: each was checked to be the one that won
+         before as well. The `SelectableTextBlock` halves stay styles: only
+         SelectableTextBlocks carry them. UI/StyleIncludeScopeTests. -->
+    <Styles.Resources>
+        <ControlTheme x:Key="DialogScrimGrid" TargetType="Grid">
+            <!-- The modal backdrop. `IsVisible="{Binding IsOpen}"` and `ZIndex` stay
+                 on the instance: the stacking order is a property of the dialog (the
+                 generic message dialog must be able to surface above any other), not
+                 of the grammar.
+                 It stays the app's own `OverlayScrim` rather than the Fire layer's
+                 `FireScrimFill`. Both are translucent now and for the same reason: a
+                 dialog opens over the CHART the user is editing, and painting that out
+                 removes the context the dialog is about. (This note used to contrast
+                 against a Fire "a scrim is opaque" rule. That rule was reversed — the
+                 opaque `FireOverlayFill` is now only the ground a SCREEN stands on.) -->
+            <Style Selector="^.DialogScrim">
+                <Setter Property="Background" Value="{DynamicResource OverlayScrim}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DialogCardBorder" TargetType="Border">
+            <!-- The card wears Border.FireScreen's silhouette — radius 18, one
+                 hairline, one very deep soft shadow — declared here rather than by
+                 putting `Classes="FireScreen"` on 35 views: the class also brings
+                 `FirePanelFill` (a translucent gradient meant to sit over an animated
+                 backdrop) and `ClipToBounds`, and a dialog over the editor needs an
+                 OPAQUE card. Shape yes, fill no.
+                 The fill is the app ground. This theme used to be split: the fill (and
+                 a radius/edge/shadow/padding this one overrode) in an app-level
+                 DialogCardBorder in Styles/Containers.axaml, the shape in a
+                 `Border.DialogCard` style here. Only dialogs wear the class, so the
+                 one theme lives with the grammar (#428). -->
+            <Style Selector="^.DialogCard">
+                <Setter Property="Background" Value="{DynamicResource AppBackground}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusScreen}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireShadowScreen}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadBody}" />
+            </Style>
+            <!-- The WIDTH LADDER (2026-08-11): four steps, worn as a second class on
+                 the card (`Classes="DialogCard Md"`), replacing seventeen ad-hoc
+                 widths. The tokens live on the Fire ladder (FireDialogWidth*); which
+                 step a dialog takes is the one width decision it still makes.
+                 Lint: UI/DialogWidthLadderTests. -->
+            <Style Selector="^.DialogCard.Sm">
+                <Setter Property="Width" Value="{StaticResource FireDialogWidthSm}" />
+            </Style>
+            <Style Selector="^.DialogCard.Md">
+                <Setter Property="Width" Value="{StaticResource FireDialogWidthMd}" />
+            </Style>
+            <Style Selector="^.DialogCard.Lg">
+                <Setter Property="Width" Value="{StaticResource FireDialogWidthLg}" />
+            </Style>
+            <Style Selector="^.DialogCard.Xl">
+                <Setter Property="Width" Value="{StaticResource FireDialogWidthXl}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DialogHeadGrid" TargetType="Grid">
+            <!-- Declared as
+                     <Grid Classes="DialogHead" ColumnDefinitions="Auto,*">
+                         <Border Grid.Column="0" Classes="DialogIconBox">
+                             <PathIcon Classes="DialogIcon" Data="{DynamicResource IconX}" />
+                         </Border>
+                         <StackPanel Grid.Column="1"> title + subtitle </StackPanel>
+                     </Grid>
+                 The geometry comes through DynamicResource, never StaticResource: a
+                 missing StaticResource throws at construction, and ViewLocator turns
+                 that into a silent "Not Found: …" placeholder.
+
+                 WHY THE BADGE AND NOT A FIRE EYEBROW LOCKUP. The Fire signature is
+                 mono eyebrow over a Chakra title, and it is NOT used here: an eyebrow
+                 is a second string, and adding one to 38 heads would mean inventing 38
+                 pieces of copy (and 76 resx entries) that say nothing the title does
+                 not. `Settings.dc.html`'s own content header is a title with a mark
+                 beside it, which is exactly this shape — so the badge stays and the
+                 TITLE moves to the display face. The eyebrow lives where this grammar
+                 already had one: `TextBlock.DlgSectionLabel`, below. -->
+            <Style Selector="^.DialogHead">
+                <Setter Property="ColumnSpacing" Value="{StaticResource FireSpaceRow}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowLg}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DialogIconBoxBorder" TargetType="Border">
+            <!-- ═══ 2. Head ══════════════════════════════════════════════════════ -->
+            <Style Selector="^.DialogIconBox">
+                <Setter Property="Width" Value="30" />
+                <Setter Property="Height" Value="30" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="VerticalAlignment" Value="Top" />
+            </Style>
+            <!-- The three state variants. A destructive or failing dialog says so in
+                 the badge instead of shouting in the title colour (R4: colour is
+                 information, and it belongs in ONE place per surface). -->
+            <Style Selector="^.DialogIconBox.Warning">
+                <Setter Property="Background" Value="{DynamicResource DlgNoticeFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+            </Style>
+            <Style Selector="^.DialogIconBox.Danger">
+                <Setter Property="Background" Value="{DynamicResource DlgErrorFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+            </Style>
+            <Style Selector="^.DialogIconBox.Info">
+                <Setter Property="Background" Value="{DynamicResource DlgInfoFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DlgInfoStroke}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DialogTitleText" TargetType="TextBlock">
+            <!-- Titles are LEFT aligned, one size, one weight — and on the DISPLAY
+                 face (Chakra Petch), which is what the Fire layer uses for every screen
+                 and modal title. Half the dialogs used to centre theirs and half did
+                 not, at three different sizes; centred text also breaks the eye's
+                 return sweep down the label column. -->
+            <Style Selector="^.DialogTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeTitle}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DialogSubtitleText" TargetType="TextBlock">
+            <Style Selector="^.DialogSubtitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DialogContextText" TargetType="TextBlock">
+            <Style Selector="^.DialogContext">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+
+    <!-- ═══ 1. Shell ═════════════════════════════════════════════════════ -->
+
+
+
+    <!-- Centring the card is the grammar's job, not each dialog's. So is the
+         CLAMP (2026-08-11): MaxWidth/MaxHeight follow the scrim's live bounds
+         (a Width larger than MaxWidth loses — that is the min/max clamp), so
+         an Xl card shrinks on a laptop instead of centring itself off both
+         screen edges, and the body row is the one that scrolls. The height
+         keeps its old 820 cap on top so a tall dialog does not become a tower
+         on a 1440p window.
+         `Grid.DialogFrame` is the same centring box WITHOUT a backdrop: the root
+         of a dialog hosted by `Views/Shell/DialogHost`, whose one shared scrim
+         sits under the top dialog instead. -->
+    <Style Selector="Grid.DialogScrim > Border.DialogCard, Grid.DialogFrame > Border.DialogCard">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="MaxWidth"
+                Value="{Binding $parent[Grid].Bounds, Converter={x:Static conv:DialogCardClampConverter.Instance}, ConverterParameter=Width}" />
+        <Setter Property="MaxHeight"
+                Value="{Binding $parent[Grid].Bounds, Converter={x:Static conv:DialogCardClampConverter.Instance}, ConverterParameter=Height:820}" />
+    </Style>
+
+
+
+    <Style Selector="PathIcon.DialogIcon">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.DialogIconBox.Warning > PathIcon.DialogIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="Border.DialogIconBox.Danger > PathIcon.DialogIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="Border.DialogIconBox.Info > PathIcon.DialogIcon">
+        <Setter Property="Foreground" Value="{DynamicResource InfoColor}" />
+    </Style>
+
+    <!-- A third line under the subtitle: the file / song / path the dialog is
+         about. That is METADATA, which in this vocabulary is mono, tracked and
+         a step quieter still — and it is trimmed rather than wrapped. -->
+    <Style Selector="SelectableTextBlock.DialogContext">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+    </Style>
+
+</Styles>

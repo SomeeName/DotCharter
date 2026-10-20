@@ -1,0 +1,288 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:locsvc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
+             x:Class="DotCharter.UI.Views.Dialogs.ArrangementSettingsDialogView"
+             x:DataType="contracts:IArrangementSettingsScreen"
+             x:CompileBindings="True">
+
+    <!-- The ONLY place the Rocksmith-facing arrangement fields are authored
+         (see docs/agents/ui/dialogs.md). This pass changed LAYOUT AND
+         COPY ONLY: the authored/derived split, the ManualOverride pin and every
+         binding are exactly as they were — the twenty derived flags must still
+         be editable only behind the pin, or every save looks authored.
+         Grammar: Views/Dialogs/DialogStyles.axaml.
+
+         Two pairs that are ONE decision now share a row, as the mockup has
+         them: type + subtype (a subtype is meaningless without its type) and
+         string count + tuning preset (picking "E Standard" is picking six
+         strings). The fields that were bare labels gained the description line
+         the row grammar has always had room for — "Notes shift with it" is the
+         thing a charter needs to know about a capo, and it was nowhere.
+
+         The local `CheckBox.Flag` style is gone: it existed to force 168 px
+         chips into even columns, which is what a UniformGrid does — and it was
+         reaching for the APP ladder (FontSizeSm / TextPrimary / TextDim) inside
+         a dialog whose grammar moved onto the Fire one.
+
+         DELIBERATELY NOT the mockup: it shows only the four undecidable flags.
+         The twenty DERIVED ones stay, because this dialog is the only surface
+         that can pin them (ArrangementProperties.ManualOverride) and dropping
+         them would remove the feature, not restyle it. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconTune}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle"
+                                   Text="{localization:Loc Dialog_ArrangementSettings_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc Dialog_ArrangementSettings_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody" Padding="0,0,16,0" Margin="0,0,-16,0">
+                    <StackPanel>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_Name}" />
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True" Text="{Binding Name}"
+                                     AutomationProperties.Name="{localization:Loc Dialog_Name}" />
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_Type}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_Type_Desc}" />
+                            </StackPanel>
+                            <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="*,*"
+                                  ColumnSpacing="{DynamicResource FireSpaceSm}">
+                                <ComboBox Grid.Column="0" SelectedItem="{Binding Type}"
+                                          HorizontalAlignment="Stretch"
+                                          AutomationProperties.Name="{localization:Loc Dialog_Type}"
+                                          ItemsSource="{Binding ArrangementTypes}" />
+                                <ComboBox Grid.Column="1" SelectedItem="{Binding Subtype}"
+                                          HorizontalAlignment="Stretch"
+                                          ToolTip.Tip="{localization:Loc Dialog_Subtype}"
+                                          AutomationProperties.Name="{localization:Loc Dialog_Subtype}"
+                                          ItemsSource="{Binding ArrangementSubtypes}" />
+                            </Grid>
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_CapoFret}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_CapoFret_Desc}" />
+                            </StackPanel>
+                            <NumericUpDown VerticalAlignment="Center" Grid.Column="1" Value="{Binding Capo}" Minimum="0" Maximum="24"
+                                           AutomationProperties.Name="{localization:Loc Dialog_CapoFret}" />
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_CentOffset}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_CentOffset_Desc}" />
+                            </StackPanel>
+                            <NumericUpDown VerticalAlignment="Center" Grid.Column="1" Value="{Binding CentOffset}"
+                                           AutomationProperties.Name="{localization:Loc Dialog_CentOffset}"
+                                           Minimum="-1200" Maximum="1200" />
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_StringCount}" />
+                            <!-- `*,*` like the Type row above, so the two paired rows
+                                 split at one x. -->
+                            <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="*,*"
+                                  ColumnSpacing="{DynamicResource FireSpaceSm}">
+                                <NumericUpDown Grid.Column="0" Value="{Binding Strings}"
+                                               AutomationProperties.Name="{localization:Loc Dialog_StringCount}"
+                                               Minimum="1" Maximum="10" />
+                                <ComboBox Grid.Column="1" SelectedItem="{Binding TuningPreset}"
+                                          HorizontalAlignment="Stretch"
+                                          ToolTip.Tip="{localization:Loc Dialog_TuningPreset}"
+                                          AutomationProperties.Name="{localization:Loc Dialog_TuningPreset}"
+                                          ItemsSource="{Binding TuningPresets}" />
+                            </Grid>
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Top">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_StringTuning}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                           Text="{localization:Loc Dialog_StringTuning_Desc}" />
+                            </StackPanel>
+                            <ItemsControl Grid.Column="1" x:Name="TuningStepsRow" ItemsSource="{Binding TuningOffsets}"
+                                          VerticalAlignment="Top">
+                                <ItemsControl.ItemsPanel>
+                                    <!-- ONE row of equal cells across the whole control
+                                         column, so six or seven strings end on the shared
+                                         right edge. A WrapPanel of fixed 48 px boxes put the
+                                         seventh string alone on a second line. -->
+                                    <ItemsPanelTemplate>
+                                        <!-- No layout rounding: seven cells of (300 - 36) / 7 = 37.7 px were
+                                             each rounded up to 38, and the seventh box ended 2 px past the
+                                             column, cut by the dialog's edge (2026-09-24). -->
+                                        <UniformGrid Rows="1" ColumnSpacing="6" UseLayoutRounding="False" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:ITuningStep">
+                                        <!-- The open string above each box, the note it ends up
+                                             at below it (#217): "-2 0 0 0 0 0" alone did not say
+                                             which box was which string. -->
+                                        <StackPanel x:Name="TuningStringCell" Spacing="2">
+                                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding StringLabel}"
+                                                       HorizontalAlignment="Center" />
+                                            <!-- `MinWidth="0"` is load-bearing: Fluent's TextBox theme
+                                                 carries a 64 px MinWidth, which would overflow the
+                                                 cells of a seven-string row. -->
+                                            <TextBox Text="{Binding Step}"
+                                                     AutomationProperties.Name="{Binding AccessibleName}"
+                                                     MinWidth="0" HorizontalAlignment="Stretch"
+                                                     ToolTip.Tip="{localization:Loc Dialog_HalfStepsOffset}"
+                                                     TextAlignment="Center" Padding="0" />
+                                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding ResultingNote}"
+                                                       HorizontalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+
+                        <!-- ── Rocksmith: what the exported chart declares about itself ── -->
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                   Text="{localization:Loc Dialog_Rocksmith}" />
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <StackPanel>
+                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                                    <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                   Text="{localization:Loc Dialog_Path}" />
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                   Text="{localization:Loc Dialog_Path_Desc}" />
+                                    </StackPanel>
+                                    <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding PathOptions}"
+                                              AutomationProperties.Name="{localization:Loc Dialog_Path}"
+                                              SelectedItem="{Binding SelectedPath}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IArrangementPathOption">
+                                                <TextBlock Text="{Binding Label}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+
+                                <!-- Absent scroll speed is "no preference", NOT
+                                     1.3 — so the checkbox and the number stay
+                                     separate state. -->
+                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                                    <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                   Text="{localization:Loc Dialog_ScrollSpeed}" />
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                   Text="{localization:Loc Dialog_ScrollSpeed_Desc}" />
+                                    </StackPanel>
+                                    <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                        <CheckBox Grid.Column="0"
+                                                  Content="{localization:Loc Dialog_ScrollSpeed_Set}"
+                                                  IsChecked="{Binding HasScrollSpeed}"
+                                                  FontSize="{DynamicResource FireSizeSm}"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip.Tip="{localization:Loc Dialog_ScrollSpeed_Tip}" />
+                                        <NumericUpDown Grid.Column="1" Value="{Binding ScrollSpeed}"
+                                                       AutomationProperties.Name="{localization:Loc Dialog_ScrollSpeed}"
+                                                       Minimum="0.5" Maximum="5" Increment="0.1"
+                                                       FormatString="0.0"
+                                                       NumberFormat="{Binding Culture.NumberFormat, Source={x:Static locsvc:LocalizationService.Instance}}"
+                                                       IsEnabled="{Binding HasScrollSpeed}"
+                                                       ToolTip.Tip="{localization:Loc Dialog_ScrollSpeed_Tip}" />
+                                    </Grid>
+                                </Grid>
+
+                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300"
+                                      IsVisible="{Binding IsBass}">
+                                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_PickedBass}" />
+                                    <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding PickedBass}"
+                                              AutomationProperties.Name="{localization:Loc Dialog_PickedBass}" />
+                                </Grid>
+
+                                <!-- The FOUR undecidable flags: nothing derives
+                                     them, so they are always editable. -->
+                                <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                           Margin="{DynamicResource FireGapTopSm}"
+                                           Text="{localization:Loc Dialog_Techniques_Authored}" />
+                                <ItemsControl x:Name="AuthoredFlagGrid" ItemsSource="{Binding AuthoredFlags}"
+                                              Margin="{DynamicResource FireGapTopSm}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="3" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IArrangementFlag">
+                                            <CheckBox Content="{Binding Label}" MinHeight="26"
+                                                      HorizontalAlignment="Stretch"
+                                                      FontSize="{DynamicResource FireSizeSm}"
+                                                      IsChecked="{Binding IsSet}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- The TWENTY derived flags: shown as what the
+                                     export would ship right now, and editable
+                                     only behind the pin (ManualOverride). -->
+                                <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                           Margin="{DynamicResource FireGapTopLg}"
+                                           Text="{localization:Loc Dialog_Techniques_Derived}" />
+                                <CheckBox Content="{localization:Loc Dialog_Techniques_Override}"
+                                          IsChecked="{Binding OverrideDerivedFlags}"
+                                          Margin="{DynamicResource FireGapTopSm}"
+                                          FontSize="{DynamicResource FireSizeSm}"
+                                          ToolTip.Tip="{localization:Loc Dialog_Techniques_Override_Tip}" />
+                                <ItemsControl x:Name="DerivedFlagGrid" ItemsSource="{Binding DerivedFlags}"
+                                              IsEnabled="{Binding OverrideDerivedFlags}"
+                                              Margin="{DynamicResource FireGapTopSm}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="3" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IArrangementFlag">
+                                            <CheckBox Content="{Binding Label}" MinHeight="26"
+                                                      HorizontalAlignment="Stretch"
+                                                      FontSize="{DynamicResource FireSizeSm}"
+                                                      IsChecked="{Binding IsSet}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <TextBlock x:Name="ArrangementScopeNote"
+                                       Text="{localization:Loc Dialog_ArrangementSettings_Scope}"
+                                       FontFamily="{DynamicResource FireFontUi}"
+                                       FontSize="{DynamicResource FireSizeXs}"
+                                       Foreground="{DynamicResource FireTextMuted}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" IsCancel="True" />
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_SaveSettings}"
+                                    Command="{Binding SaveCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,449 @@
+name: Build
+
+# MANUAL ONLY: the "Run workflow" button (Actions tab, or
+# `gh workflow run build.yml --ref <branch>`). Nothing starts a run on its own,
+# not a push, not a pull request, not a merge (#63). The owner merges on the
+# local gate + headless run (AGENTS.md "Validation"), so an automatic run was
+# only ever minutes spent: Windows minutes bill at 2x against the 2,000 a month
+# this private repo gets free, and one PR run cost ~240 of them.
+on:
+  workflow_dispatch:
+    inputs:
+      native-tests:
+        description: Also run the native suite and the RT gate (needs the full native build tree; ~25 min on a hosted runner)
+        type: boolean
+        default: false
+      software-gpu-tests:
+        description: Also run the headless GPU golden frames on the software Vulkan rasterizer (Mesa lavapipe; no GPU needed)
+        type: boolean
+        default: false
+
+# A second run of the same branch cancels the one still in progress: only the
+# newest result matters, and the stale run would burn minutes to the end.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The native engine, built ONCE per run and handed to both test jobs as an
+  # artifact (it used to be built in each). juce_sharp.dll is deliberately
+  # gitignored (build output, ABI-coupled to the wrapper), so a clean runner
+  # gets it from the prebuilt release asset for the gitlink (#832) and only
+  # compiles it from source (~36 min cold on 2 vCPUs, #63) when that download
+  # fails or the native suite is requested. Both caches are keyed on the
+  # JuceSharp GITLINK, so a run whose submodule pointer has been built before
+  # restores the runtime and downloads nothing; a new pointer restores the
+  # newest build tree and rebuilds incrementally.
+  native:
+    name: Native runtime (Windows x64)
+    runs-on: windows-latest
+    # A cold build (~36 min) plus, when asked for, the native suite (~25 min).
+    timeout-minutes: 90
+
+    steps:
+      # Main checkout uses the default GITHUB_TOKEN. Do NOT pass
+      # SUBMODULES_TOKEN here: it is a fine-grained PAT scoped to the private
+      # JuceSharp repo ONLY, so using it for the main fetch 403s on
+      # DotCharter itself.
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Fetch the private submodule with the narrowly-scoped PAT via a URL
+      # rewrite that applies to the JuceSharp remote only.
+      - name: Checkout submodules (private JuceSharp)
+        shell: pwsh
+        env:
+          SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
+        run: |
+          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
+          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
+          git submodule sync --recursive
+          git submodule update --init --force --depth=1 --recursive
+
+      - name: JuceSharp gitlink
+        id: gitlink
+        shell: pwsh
+        run: '"sha=$(git rev-parse HEAD:JuceSharp)" >> $env:GITHUB_OUTPUT'
+
+      - name: Cache native runtime
+        id: runtime
+        uses: actions/cache@v6
+        with:
+          path: JuceSharp/src/JuceSharp/runtimes/win-x64/native
+          key: native-runtime-${{ runner.os }}-${{ steps.gitlink.outputs.sha }}
+
+      # The prebuilt pair for this gitlink (#832, tools/setup/native-runtime.json):
+      # a download plus a SHA-256 and dca_abi_version() check instead of ~36 min
+      # of C++. The release is private while JuceSharp is, so the PAT that reads
+      # the submodule reads it too (gh takes GH_TOKEN); once the repos are public
+      # the token is unnecessary. A failure here (asset not uploaded for a new
+      # gitlink, no token) is not fatal: the steps below build from source.
+      - name: Prebuilt native runtime
+        id: prebuilt
+        if: ${{ steps.runtime.outputs.cache-hit != 'true' && !inputs.native-tests }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
+        run: |
+          pwsh -NoProfile -File tools/setup/Get-NativeRuntime.ps1
+          if ($LASTEXITCODE -ne 0) { throw "Get-NativeRuntime.ps1 failed (exit $LASTEXITCODE)" }
+
+      # The CMake build self-fetches JUCE/rubberband via FetchContent; the
+      # build tree makes a rebuild after a JuceSharp bump incremental.
+      - name: Cache native build tree
+        if: ${{ inputs.native-tests || steps.prebuilt.outcome == 'failure' }}
+        uses: actions/cache@v6
+        with:
+          path: JuceSharp/src/JuceSharp.Native/build-ci
+          key: native-tree-${{ runner.os }}-${{ steps.gitlink.outputs.sha }}
+          restore-keys: native-tree-${{ runner.os }}-
+
+      - name: Build JUCE native runtime
+        if: ${{ inputs.native-tests || steps.prebuilt.outcome == 'failure' }}
+        shell: pwsh
+        run: |
+          cmake -S JuceSharp/src/JuceSharp.Native -B JuceSharp/src/JuceSharp.Native/build-ci
+          cmake --build JuceSharp/src/JuceSharp.Native/build-ci --config Release
+          if (-not (Test-Path 'JuceSharp/src/JuceSharp/runtimes/win-x64/native/juce_sharp.dll')) {
+            throw 'Native build did not deploy juce_sharp.dll to the runtimes folder.'
+          }
+
+      # The native real-time gate (juce_sharp_rtcheck), on request only: it
+      # took 23+ min on a hosted runner and timed the job out (#63); locally it
+      # is ~2 min and runs with every native change (.claude/rules/tests.md).
+      # It drives the real audio callback with an allocation hook armed and
+      # fails when the audio thread allocates, blocks in the kernel, or grows a
+      # new lock.
+      #
+      # --no-tests=error is load-bearing: without it a build that silently
+      # stops registering the test still reports success, which is how
+      # "we have a gate" quietly becomes "we had a gate".
+      - name: Native tests (RT gate)
+        if: ${{ inputs.native-tests }}
+        shell: pwsh
+        run: |
+          ctest --test-dir JuceSharp/src/JuceSharp.Native/build-ci `
+                -C Release --output-on-failure --no-tests=error
+
+      - name: Hand the runtime to the test jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-runtime
+          path: JuceSharp/src/JuceSharp/runtimes/win-x64/native/
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build & test (Windows x64)
+    needs: native
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      # Main checkout uses the default GITHUB_TOKEN. Do NOT pass
+      # SUBMODULES_TOKEN here: it is a fine-grained PAT scoped to the private
+      # JuceSharp repo ONLY, so using it for the main fetch 403s on
+      # DotCharter itself.
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Fetch the private submodule with the narrowly-scoped PAT via a URL
+      # rewrite that applies to the JuceSharp remote only.
+      - name: Checkout submodules (private JuceSharp)
+        shell: pwsh
+        env:
+          SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
+        run: |
+          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
+          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
+          git submodule sync --recursive
+          git submodule update --init --force --depth=1 --recursive
+
+      - name: Native runtime (from the native job)
+        uses: actions/download-artifact@v8
+        with:
+          name: native-runtime
+          path: JuceSharp/src/JuceSharp/runtimes/win-x64/native
+
+      # .NET 10 went GA in November 2025, so we pin to the stable 10.0.x channel.
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # global.json pins no SDK, so '10.0.x' means "newest 10.0 on the day". The
+      # step makes the release's floor (SDK 10.0.402 / runtime 10.0.13) a failure.
+      - name: Assert the .NET floor
+        shell: pwsh
+        run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1
+
+      - name: dotnet --info
+        run: dotnet --info
+
+      # Fix: Target specific projects instead of the .sln to legally apply -r win-x64.
+      # This ensures NuGet's runtime-asset resolver still only copies Windows x64 natives.
+      - name: Restore
+        run: |
+          dotnet restore DotCharter.UI/DotCharter.UI.csproj -r win-x64
+          dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64
+
+      # The UI is built SelfContained so the later `dotnet publish --no-build`
+      # finds output of the shape it is asked to publish. Tests stay
+      # framework-dependent — they run on the runner's SDK. The UI build comes
+      # LAST on purpose: the test project references the UI, so building the
+      # tests after it rebuilt the UI framework-dependent into the same bin
+      # folder, and the publish carried the self-contained files with a
+      # framework-dependent runtimeconfig.json (found by the #278 local dry run;
+      # "Verify publish layout" below fails on exactly that).
+      - name: Build (Release)
+        run: |
+          dotnet build DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-restore -p:ContinuousIntegrationBuild=true
+          dotnet build DotCharter.UI/DotCharter.UI.csproj -c Release -r win-x64 --no-restore -p:SelfContained=true -p:ContinuousIntegrationBuild=true
+
+      # UiPerfSmokeTests are excluded because they cannot SHARE A TESTHOST with
+      # the rest of the gate, not because they hang — that was re-measured on
+      # 2026-08-23 and the teardown hang has been gone since 303b2682.
+      # Avalonia.Headless owns a process-global dispatcher and xunit runs the
+      # other collections in parallel with the HeadlessUI one, so an unfiltered
+      # run fails 314 of their 330 cases ("The calling thread cannot access this
+      # object" / "You've caused dispatcher loop"), and takes one unrelated gate
+      # test down with them. They run in the `headless-ui` JOB below — a
+      # separate runner, a separate process. See DotCharter.Tests/AGENTS.md
+      # § Running.
+      - name: Test
+        run: dotnet test --project DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-build --filter-not-class "*UiPerfSmokeTests" --report-xunit-trx --report-xunit-trx-filename test-results.trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # MUST stay self-contained: this is the same shape as the GitHub release
+      # zips, and the in-app updater copies a payload over an install without
+      # purging. A framework-dependent artifact merged onto a self-contained
+      # install strands the old hostfxr.dll next to a new runtimeconfig.json and
+      # the app can never start again (the updater now refuses to do it, which
+      # would instead leave anyone running this artifact unable to update).
+      - name: Publish (win-x64, self-contained)
+        run: >
+          dotnet publish DotCharter.UI/DotCharter.UI.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          --no-build
+          --no-restore
+          -p:ContinuousIntegrationBuild=true
+          -o publish/win-x64
+
+      - name: Verify publish layout
+        shell: pwsh
+        run: |
+          foreach ($file in 'juce_sharp.dll', 'DotCharter.exe', 'hostfxr.dll', 'coreclr.dll') {
+            if (-not (Test-Path "publish/win-x64/$file")) { throw "Missing from publish: $file" }
+          }
+          # hostfxr/coreclr next to the exe is only half the story - the host reads
+          # runtimeconfig.json, so that is what must say self-contained.
+          $config = Get-Content 'publish/win-x64/DotCharter.runtimeconfig.json' -Raw | ConvertFrom-Json
+          if (-not $config.runtimeOptions.includedFrameworks) {
+            throw 'Publish is not self-contained: runtimeconfig.json has no includedFrameworks.'
+          }
+
+
+  # The headless-UI half of the test suite, as its OWN job so it never shares
+  # a testhost — or a runner — with the default gate. It is display-free and
+  # GPU-free; the release script has blocked on it since v0.48
+  # (tools/release/New-Release.ps1, Invoke-HeadlessUiGate) and this is the
+  # same grading, ported to tools/ci/Invoke-HeadlessUiCi.ps1: a case that dies
+  # inside the Avalonia session is re-run in a fresh process, a class that
+  # never reports is re-run and blocks if it still does not, an assertion
+  # failure that passes in isolation is flagged order-dependent rather than
+  # blocking. The script writes wall time and the testhost's PEAK RSS to the
+  # step summary — locally ONE process peaked at 8 GB until the 2026-10-04
+  # ScreenHost-scope leak fix; four shards now peak ~2 GB each, ~7 GB together.
+  # That is the number most likely to bite a small runner.
+  #
+  # The native runtime comes from the `native` job, unpacked where the tests
+  # load it by path (the submodule tree).
+  headless-ui:
+    name: Headless UI suite (Windows x64)
+    needs: native
+    runs-on: windows-latest
+    # One process was 7–8 min on an idle box, 13+ under load; split over two
+    # it is roughly half that; the retries add at most one more
+    # (single-process) pass of the classes they name.
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout submodules (private JuceSharp)
+        shell: pwsh
+        env:
+          SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
+        run: |
+          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
+          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
+          git submodule sync --recursive
+          git submodule update --init --force --depth=1 --recursive
+
+      - name: Native runtime (from the native job)
+        uses: actions/download-artifact@v8
+        with:
+          name: native-runtime
+          path: JuceSharp/src/JuceSharp/runtimes/win-x64/native
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # global.json pins no SDK, so '10.0.x' means "newest 10.0 on the day". The
+      # step makes the release's floor (SDK 10.0.402 / runtime 10.0.13) a failure.
+      - name: Assert the .NET floor
+        shell: pwsh
+        run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1
+
+      - name: Restore
+        run: dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64
+
+      - name: Build tests (Release)
+        run: dotnet build DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-restore -p:ContinuousIntegrationBuild=true
+
+      # Its OWN `dotnet test` processes — never in the same testhost as the
+      # default gate. The script exits 1 on a blocking product failure.
+      # -Shards 2, not the 4 a 16-core dev box uses: this private repo's
+      # windows-latest runner has 2 vCPUs, each shard keeps one core busy, and
+      # each holds its own app heap (the step summary records the peak RSS of
+      # both together — raise this only against that number).
+      - name: Headless UI suite (own testhosts, 2 shards)
+        shell: pwsh
+        run: pwsh -NoProfile -File tools/ci/Invoke-HeadlessUiCi.ps1 -Configuration Release -Runtime win-x64 -Shards 2 -ResultsDir TestResults/headless-ui
+
+      - name: Upload headless UI results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: headless-ui-results
+          path: TestResults/headless-ui/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The headless GPU golden frames (DotCharter.Tests/Rendering/Headless) on a
+  # SOFTWARE Vulkan driver, on request only (#315). A hosted runner has no GPU,
+  # so these tests skip in the `build` job; here the software lane points the
+  # test process's Vulkan loader at Mesa lavapipe, fetched and hash-checked
+  # by tools/ci/Get-SoftwareVulkan.ps1 (nothing is installed on the runner).
+  # The frames are byte-identical run to run on lavapipe and pass the same
+  # structural goldens as the GPU (docs/agents/testing-headless-rendering/).
+  gpu-goldens-software:
+    name: GPU goldens on software Vulkan (Windows x64)
+    if: ${{ inputs.software-gpu-tests }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The test project references JuceSharp's managed projects, so the
+      # private submodule is needed to BUILD it; no test here opens the engine.
+      - name: Checkout submodules (private JuceSharp)
+        shell: pwsh
+        env:
+          SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
+        run: |
+          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
+          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
+          git submodule sync --recursive
+          git submodule update --init --force --depth=1 --recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # global.json pins no SDK, so '10.0.x' means "newest 10.0 on the day". The
+      # step makes the release's floor (SDK 10.0.402 / runtime 10.0.13) a failure.
+      - name: Assert the .NET floor
+        shell: pwsh
+        run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1
+
+      - name: Restore
+        run: dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64
+
+      - name: Build tests (Release)
+        run: dotnet build DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-restore -p:ContinuousIntegrationBuild=true
+
+      # Pinned version + SHA-256 live in the script; a mismatch fails here.
+      - name: Software Vulkan ICD (lavapipe, hash-checked)
+        shell: pwsh
+        run: |
+          $icd = pwsh -NoProfile -File tools/ci/Get-SoftwareVulkan.ps1 -Destination "$env:RUNNER_TEMP/swvk" | Select-Object -Last 1
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $icd)) { throw "Get-SoftwareVulkan.ps1 failed (exit $LASTEXITCODE)" }
+          "DOTCHARTER_SWVK_ICD=$icd" >> $env:GITHUB_ENV
+
+      # SoftwareVulkanLaneTests+OnTheLane fails the run if the device is not
+      # llvmpipe, so a loader that silently fell back cannot pass.
+      - name: GPU goldens (software lane)
+        env:
+          DOTCHARTER_GPU_TESTS: sw
+          DOTCHARTER_GPU_DUMP: '1'
+        run: dotnet test --project DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-build --filter-class "DotCharter.Tests.Rendering.Headless.*" --report-xunit-trx --report-xunit-trx-filename gpu-goldens-software.trx --results-directory TestResults/gpu-goldens-software
+
+      - name: Upload frames and results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gpu-goldens-software
+          path: |
+            TestResults/gpu-goldens-software/
+            DotCharter.Tests/bin/**/TestResults/headless/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Housekeeping job: prune artifacts so we keep at most the latest 5 runs'
+  # worth, mirroring the manual cleanup that recovered us from the quota hit.
+  cleanup-artifacts:
+    name: Prune old artifacts
+    needs: [build, headless-ui]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete artifacts from older workflow runs
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const KEEP_RUNS = 5;
+            const { owner, repo } = context.repo;
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              { owner, repo, per_page: 100 }
+            );
+            const runIds = [...new Set(
+              artifacts
+                .filter(a => a.workflow_run && a.workflow_run.id)
+                .map(a => a.workflow_run.id)
+            )].sort((a, b) => b - a);
+            const keep = new Set(runIds.slice(0, KEEP_RUNS));
+            core.info(`Keeping artifacts from runs: ${[...keep].join(', ')}`);
+            let deleted = 0;
+            for (const a of artifacts) {
+              const runId = a.workflow_run && a.workflow_run.id;
+              if (runId && keep.has(runId)) continue;
+              try {
+                await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: a.id });
+                deleted++;
+                core.info(`Deleted artifact ${a.id} (${a.name}) from run ${runId}`);
+              } catch (err) {
+                core.warning(`Failed to delete artifact ${a.id}: ${err.message}`);
+              }
+            }
+            core.info(`Deleted ${deleted} artifact(s).`);

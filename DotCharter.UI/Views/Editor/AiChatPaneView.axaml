@@ -1,0 +1,411 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.AiChatPaneView"
+             x:DataType="contracts:IAiChatScreen"
+             x:CompileBindings="True">
+
+    <!--
+        The AI chat pane (#559): a conversation about the open chart, docked on the
+        right of the editor like a code editor's chat. Three bands, top to bottom:
+
+        - the HEAD: the open chat's title, which is also the toggle of a
+          SEARCHABLE dropdown of this chart's earlier chats (owner, 2026-10-09:
+          a dropdown under the title, not a panel over the conversation; a
+          delete asks first), and New chat as a + so the title keeps the width —
+          both one compact control tall (#600);
+        - the THREAD: the charter's messages as quiet raised bubbles, the model's
+          replies as plain text under the model's name with their cost line, then
+          the working line or the failure;
+        - the COMPOSER, pinned and SLIM (#600: it was ~250 px of full-height
+          boxes): Task · scope · arrangement as compact pickers on ONE row, what
+          that covers right now on one trimmed line under it, the box (two lines
+          empty, growing with the message to a cap; Enter sends, Shift+Enter
+          starts a new line), and the compact model picker beside Send. With no
+          provider the picker is disabled and the reason sits above it with a
+          way to Settings ▸ AI.
+
+        The pane writes nothing to the chart. The thread and composer reuse the
+        tone designer's chat grammar (FireToneTurn, FireToneComposer and its pads)
+        so the app's two conversations read as one. Built for a 320-420 px dock:
+        every text either wraps in a star column or trims with its tooltip.
+        Pinned by Perf/AiChatPaneConstructionUiPerfSmokeTests (with the head's and the
+        composer's height budgets in every shipped culture).
+    -->
+    <UserControl.Resources>
+        <!-- The dropdown's list scrolls past this; the search box and the caption stay put. -->
+        <x:Double x:Key="AiChatHistoryListMaxHeight">440</x:Double>
+    </UserControl.Resources>
+
+    <Grid x:Name="AiChatRoot" RowDefinitions="Auto,*,Auto" Background="{DynamicResource FireSurfaceChrome}">
+
+        <!-- ══ THE HEAD ════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" x:Name="AiChatHead" Padding="{StaticResource FirePadToneHeadCompact}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="{StaticResource BorderBottomHairline}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                <ToggleButton Grid.Column="0" x:Name="AiChatHistoryToggle"
+                              Theme="{StaticResource FireGhostToggle}" Classes="FireGhost Compact"
+                              Height="{StaticResource FireFieldHeightCompact}" Padding="{StaticResource FirePadFieldCompact}"
+                              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                              IsChecked="{Binding History.IsOpen}"
+                              AutomationProperties.Name="{localization:Loc AiChat_History}"
+                              ToolTip.Tip="{localization:Loc AiChat_History_Tip}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                        <PathIcon Grid.Column="0" Data="{DynamicResource IconHistory}" Width="13" Height="13"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" x:Name="AiChatTitle"
+                                   Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding Title}" />
+                        <PathIcon Grid.Column="2" Data="{DynamicResource IconChevronDown}" Width="10" Height="10"
+                                  VerticalAlignment="Center" />
+                    </Grid>
+                </ToggleButton>
+                <Button Grid.Column="1" x:Name="AiChatNewChat"
+                        Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                        Width="{StaticResource FireFieldHeightCompact}" Height="{StaticResource FireFieldHeightCompact}"
+                        Padding="{StaticResource FirePadNone}"
+                        Command="{Binding NewChatCommand}"
+                        AutomationProperties.Name="{localization:Loc AiChat_NewChat}"
+                        ToolTip.Tip="{localization:Loc AiChat_NewChat}">
+                    <PathIcon Data="{DynamicResource IconPlus}" Width="12" Height="12" VerticalAlignment="Center" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ══ THE HISTORY DROPDOWN ═══════════════════════════════════════════
+             This chart's earlier chats, newest first, under the title and as wide
+             as the pane. The search box narrows by title or model; opening a chat
+             closes the dropdown; a chat of another chart is refused and the notice
+             says so; Delete asks in the row before it deletes. Light dismiss
+             swallows its own click, so pressing the title again only closes it. -->
+        <Popup x:Name="AiChatHistoryPopup" Grid.Row="0"
+               PlacementTarget="{Binding #AiChatHead}" Placement="BottomEdgeAlignedLeft"
+               IsLightDismissEnabled="True"
+               IsOpen="{Binding History.IsOpen, Mode=TwoWay}"
+               Width="{Binding #AiChatHead.Bounds.Width}">
+            <!-- The popover surface (FirePopover's fill and edge): opaque, over the thread. -->
+            <Border x:Name="AiChatHistoryPanel"
+                    Background="{DynamicResource FirePopoverFill}" BorderBrush="{DynamicResource FirePopoverBorder}"
+                    BorderThickness="1" CornerRadius="{StaticResource FireRadiusCardLg}"
+                    Padding="{StaticResource FirePadToneComposer}">
+                <Grid RowDefinitions="Auto,Auto,*" RowSpacing="{StaticResource FireSpaceSm}">
+                    <Border Grid.Row="0" Theme="{StaticResource FireFieldBorder}" Classes="FireField Compact">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+                            <PathIcon Grid.Column="0" Width="13" Height="13" VerticalAlignment="Center"
+                                      Foreground="{DynamicResource FireTextDim}" Data="{DynamicResource IconSearch}" />
+                            <TextBox Grid.Column="1" x:Name="AiChatHistorySearch" Classes="FireFieldInput"
+                                     Text="{Binding History.SearchText}"
+                                     PlaceholderText="{localization:Loc AiChat_HistorySearch}"
+                                     AutomationProperties.Name="{localization:Loc AiChat_HistorySearch}" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Row="1" Spacing="{StaticResource FireSpaceSm}">
+                        <TextBlock x:Name="AiChatHistoryCaption" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding History.Caption}" ToolTip.Tip="{Binding History.Caption}" />
+                        <Border x:Name="AiChatHistoryNotice" Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Accent"
+                                IsVisible="{Binding History.HasNotice}">
+                            <TextBlock Theme="{StaticResource FireBodyText}" Classes="FireBody"
+                                       TextWrapping="Wrap" Text="{Binding History.NoticeText}" />
+                        </Border>
+                        <TextBlock x:Name="AiChatHistoryEmpty" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding !History.HasEntries}" Text="{Binding History.EmptyText}" />
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="2" x:Name="AiChatHistoryScroll" HorizontalScrollBarVisibility="Disabled"
+                                  MaxHeight="{StaticResource AiChatHistoryListMaxHeight}">
+                        <ItemsControl x:Name="AiChatHistoryEntries" ItemsSource="{Binding History.Entries}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IAiChatHistoryEntry">
+                                    <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow"
+                                            Padding="{StaticResource FirePadToneComposer}">
+                                        <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                                <Button Grid.Column="0" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                                        Padding="{StaticResource FirePadNone}"
+                                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                                        Command="{Binding OpenCommand}"
+                                                        AutomationProperties.Name="{Binding Title}"
+                                                        ToolTip.Tip="{Binding Title}">
+                                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding Title}" />
+                                                </Button>
+                                                <Border Grid.Column="1" Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent"
+                                                        VerticalAlignment="Center" IsVisible="{Binding IsCurrent}">
+                                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                               TextWrapping="NoWrap" Text="{localization:Loc AiChat_Current}" />
+                                                </Border>
+                                            </Grid>
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                                <TextBlock Grid.Column="0" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                           VerticalAlignment="Center" Text="{Binding DateText}" />
+                                                <TextBlock Grid.Column="1" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding ModelText}" ToolTip.Tip="{Binding ModelText}" />
+                                            </Grid>
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}"
+                                                  IsVisible="{Binding IsRenaming}">
+                                                <TextBox Grid.Column="0" Text="{Binding TitleDraft}"
+                                                         AutomationProperties.Name="{localization:Loc AiChat_TitleBox}" />
+                                                <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                                        Content="{localization:Loc AiChat_RenameApply}"
+                                                        AutomationProperties.Name="{localization:Loc AiChat_RenameApply}"
+                                                        Command="{Binding CommitRenameCommand}" />
+                                                <Button Grid.Column="2" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                                        Content="{localization:Loc AiChat_RenameCancel}"
+                                                        AutomationProperties.Name="{localization:Loc AiChat_RenameCancel}"
+                                                        Command="{Binding CancelRenameCommand}" />
+                                            </Grid>
+                                            <!-- Delete asks first: the question, then Delete and Keep. -->
+                                            <Border Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Danger"
+                                                    IsVisible="{Binding IsConfirmingDelete}">
+                                                <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                                    <TextBlock Theme="{StaticResource FireBodyText}" Classes="FireBody"
+                                                               TextWrapping="Wrap" Text="{Binding DeletePromptText}" />
+                                                    <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource FireSpaceSm}">
+                                                        <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                                Content="{localization:Loc AiChat_DeleteConfirm}"
+                                                                AutomationProperties.Name="{localization:Loc AiChat_DeleteConfirm}"
+                                                                Command="{Binding ConfirmDeleteCommand}" />
+                                                        <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                                                Content="{localization:Loc AiChat_DeleteKeep}"
+                                                                AutomationProperties.Name="{localization:Loc AiChat_DeleteKeep}"
+                                                                Command="{Binding CancelDeleteCommand}" />
+                                                    </WrapPanel>
+                                                </StackPanel>
+                                            </Border>
+                                            <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource FireSpaceMd}"
+                                                       IsVisible="{Binding !IsRenaming}">
+                                                <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                                        Content="{localization:Loc AiChat_Rename}"
+                                                        AutomationProperties.Name="{localization:Loc AiChat_Rename}"
+                                                        IsVisible="{Binding !IsConfirmingDelete}"
+                                                        Command="{Binding BeginRenameCommand}" />
+                                                <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                                        Content="{localization:Loc AiChat_Delete}"
+                                                        AutomationProperties.Name="{localization:Loc AiChat_Delete}"
+                                                        ToolTip.Tip="{localization:Loc AiChat_Delete_Tip}"
+                                                        IsVisible="{Binding !IsConfirmingDelete}"
+                                                        Command="{Binding DeleteCommand}" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Popup>
+
+        <!-- ══ THE THREAD ═════════════════════════════════════════════════ -->
+        <Panel Grid.Row="1">
+            <ScrollViewer x:Name="AiChatThread" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="{StaticResource FirePadToneThread}" Spacing="{StaticResource FireSpaceLg}">
+                    <TextBlock x:Name="AiChatEmpty" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               Margin="{StaticResource FireGapTopSm}"
+                               IsVisible="{Binding !HasTurns}" Text="{Binding EmptyText}" />
+
+                    <ItemsControl x:Name="AiChatTurns" ItemsSource="{Binding Turns}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="{StaticResource FireSpaceLg}" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IAiChatTurn">
+                                <Panel>
+                                    <!-- The charter's message: a raised bubble, set in from the left. -->
+                                    <Border Theme="{StaticResource FireToneTurnBorder}" Classes="FireToneTurn"
+                                            Margin="{StaticResource FireGapLeftLg}" IsVisible="{Binding IsUser}">
+                                        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                                <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding RoleText}" />
+                                                <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                           VerticalAlignment="Center" Text="{Binding TimeText}" />
+                                            </Grid>
+                                            <TextBlock Theme="{StaticResource FireBodyText}" Classes="FireBody"
+                                                       TextWrapping="Wrap" Text="{Binding Text}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <!-- The reply: plain text under the model's name, its cost under it. -->
+                                    <StackPanel Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding !IsUser}">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                            <PathIcon Grid.Column="0" Data="{DynamicResource IconSparkles}" Width="12" Height="12"
+                                                      Foreground="{DynamicResource FireAccent}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding RoleText}" ToolTip.Tip="{Binding RoleText}" />
+                                            <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                       VerticalAlignment="Center" Text="{Binding TimeText}" />
+                                        </Grid>
+                                        <TextBlock Theme="{StaticResource FireBodyText}" Classes="FireBody"
+                                                   TextWrapping="Wrap" Text="{Binding Text}" />
+                                        <!-- #640: a reply with no answer sends the same message again, in its place. -->
+                                        <Button x:Name="AiChatRetry" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                HorizontalAlignment="Left" IsVisible="{Binding CanRetry}"
+                                                Content="{localization:Loc AiChat_Retry}"
+                                                AutomationProperties.Name="{localization:Loc AiChat_Retry}"
+                                                ToolTip.Tip="{localization:Loc AiChat_Retry_Tip}"
+                                                Command="{Binding RetryCommand}" />
+                                        <!-- #803: the findings a pass or an Accept left in its range, fixed by a follow-up pass. -->
+                                        <Button x:Name="AiChatFixThese" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                HorizontalAlignment="Left" IsVisible="{Binding CanFix}"
+                                                Content="{localization:Loc AiChat_FixThese}"
+                                                AutomationProperties.Name="{localization:Loc AiChat_FixThese}"
+                                                ToolTip.Tip="{localization:Loc AiChat_FixThese_Tip}"
+                                                Command="{Binding FixCommand}" />
+                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                   TextWrapping="Wrap" IsVisible="{Binding HasCost}" Text="{Binding CostText}" />
+                                    </StackPanel>
+                                </Panel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid x:Name="AiChatWorking" ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}"
+                          IsVisible="{Binding IsBusy}">
+                        <PathIcon Grid.Column="0" Data="{DynamicResource IconSparkles}" Width="12" Height="12"
+                                  Foreground="{DynamicResource FireAccent}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                   TextWrapping="Wrap" Text="{Binding BusyText}" />
+                    </Grid>
+
+                    <Border x:Name="AiChatError" Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Danger"
+                            IsVisible="{Binding HasError}">
+                        <TextBlock Theme="{StaticResource FireBodyText}" Classes="FireBody"
+                                   TextWrapping="Wrap" Text="{Binding ErrorText}" />
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Panel>
+
+        <!-- ══ THE COMPOSER ═════════════════════════════════════════════════ -->
+        <Border Grid.Row="2" x:Name="AiChatComposer" Theme="{StaticResource FireToneComposerBorder}" Classes="FireToneComposer">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <!-- No provider: say why the picker is grey, and where to fix it. -->
+                <StackPanel x:Name="AiChatNoProvider" Spacing="{StaticResource FireSpaceXxs}" IsVisible="{Binding !HasProvider}">
+                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               TextWrapping="Wrap" Text="{Binding NoProviderText}" />
+                    <Button x:Name="AiChatOpenSettings" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                            HorizontalAlignment="Left"
+                            Content="{localization:Loc AiChat_OpenSettings}"
+                            AutomationProperties.Name="{localization:Loc AiChat_OpenSettings}"
+                            Command="{Binding OpenAiSettingsCommand}" />
+                </StackPanel>
+
+                <!-- What the next message asks for and is about, on ONE row of compact
+                     pickers (#600): the Task (#561: what the AI may change, explicit and
+                     never guessed from the message) takes the widest slot, its labels
+                     being the longest. Each trims; its list shows the whole label. -->
+                <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                    <Grid x:Name="AiChatScopeRow" ColumnDefinitions="3*,2*,2*" ColumnSpacing="{StaticResource FireSpaceXs}">
+                        <ComboBox Grid.Column="0" x:Name="AiChatJob" Classes="FireCombo Compact" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Jobs}" SelectedItem="{Binding SelectedJob}"
+                                  AutomationProperties.Name="{localization:Loc AiChat_Job}"
+                                  ToolTip.Tip="{localization:Loc AiChat_Job_Tip}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IAiChatOption">
+                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <ComboBox Grid.Column="1" x:Name="AiChatScope" Classes="FireCombo Compact" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Scopes}" SelectedItem="{Binding SelectedScope}"
+                                  AutomationProperties.Name="{localization:Loc AiChat_Scope}"
+                                  ToolTip.Tip="{localization:Loc AiChat_Scope_Tip}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IAiChatOption">
+                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <ComboBox Grid.Column="2" x:Name="AiChatArrangement" Classes="FireCombo Compact" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Arrangements}" SelectedItem="{Binding SelectedArrangement}"
+                                  AutomationProperties.Name="{localization:Loc Toolbar_Arrangement}"
+                                  ToolTip.Tip="{localization:Loc Toolbar_Arrangement}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IAiChatOption">
+                                    <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                    <!-- What that covers right now: one line, the whole of it on hover. -->
+                    <TextBlock x:Name="AiChatScopeSummary" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               Text="{Binding ScopeSummary}" ToolTip.Tip="{Binding ScopeSummary}" />
+                    <!-- #602: why the fingering task is the default here, with the measured numbers:
+                         one line like the summary above it, the whole of it on hover. -->
+                    <TextBlock x:Name="AiChatJobNote" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasJobNote}"
+                               Text="{Binding JobNote}" ToolTip.Tip="{Binding JobNote}" />
+                </StackPanel>
+
+                <!-- Enter sends; Shift+Enter is not the Enter gesture, so it reaches
+                     the box and starts a new line (AcceptsReturn). -->
+                <!-- Two lines empty; it grows with the message up to eight, then scrolls. -->
+                <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField Tall Compact">
+                    <TextBox x:Name="AiChatInput" Classes="FireFieldInput Multiline"
+                             AcceptsReturn="True" TextWrapping="Wrap"
+                             MinLines="2" MaxLines="8"
+                             Text="{Binding InputText}"
+                             PlaceholderText="{Binding InputHint}"
+                             AutomationProperties.Name="{localization:Loc AiChat_InputHint}"
+                             ToolTip.Tip="{localization:Loc AiChat_Input_Tip}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding SendCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                </Border>
+
+                <Grid x:Name="AiChatSendRow" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <ComboBox Grid.Column="0" x:Name="AiChatModel" Classes="FireCombo Compact" HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              IsEnabled="{Binding HasProvider}"
+                              ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}"
+                              PlaceholderText="{localization:Loc AiChat_NoModel}"
+                              AutomationProperties.Name="{localization:Loc AiChat_Model}"
+                              ToolTip.Tip="{Binding ProviderText}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IAiChatOption">
+                                <TextBlock TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           Text="{Binding Label}" ToolTip.Tip="{Binding Detail}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <!-- #603: the reasoning level Settings ▸ AI sends with that model. -->
+                    <TextBlock Grid.Column="1" x:Name="AiChatEffort" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               VerticalAlignment="Center" TextWrapping="NoWrap"
+                               Text="{Binding EffortText}"
+                               ToolTip.Tip="{localization:Loc AiChat_Effort_Tip}" />
+                    <Button Grid.Column="2" x:Name="AiChatSend"
+                            Theme="{StaticResource FirePopoverPrimaryButton}" Classes="FirePopoverPrimary"
+                            VerticalAlignment="Center" Height="{StaticResource FireFieldHeightCompact}"
+                            MinHeight="{StaticResource FireFieldHeightCompact}"
+                            IsVisible="{Binding !IsBusy}"
+                            Command="{Binding SendCommand}"
+                            Content="{localization:Loc AiChat_Send}"
+                            AutomationProperties.Name="{localization:Loc AiChat_Send}"
+                            ToolTip.Tip="{localization:Loc AiChat_Send_Tip}" />
+                    <Button Grid.Column="2" x:Name="AiChatCancel"
+                            Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                            VerticalAlignment="Center" Height="{StaticResource FireFieldHeightCompact}"
+                            Padding="{StaticResource FirePadFieldCompact}"
+                            IsVisible="{Binding IsBusy}"
+                            Command="{Binding CancelCommand}"
+                            Content="{localization:Loc AiChat_Stop}"
+                            AutomationProperties.Name="{localization:Loc AiChat_Stop}"
+                            ToolTip.Tip="{localization:Loc AiChat_Stop_Tip}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

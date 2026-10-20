@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Settings.Tone3000SettingsView"
+             x:DataType="contracts:ITone3000SettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > TONE3000: the client id for the NAM-capture browser, the
+        loopback redirect URI to register against it, and the sign-in that uses
+        both. Every row's IsVisible is the contract's — that is how the
+        cross-tab search filters this tab.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+        <Style Selector="TextBlock.onlineStatus">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.onlineStatus.error">
+            <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <!-- A plain StackPanel, not the SettingsFlow masonry the multi-group
+             tabs use: this screen is ONE card, and two columns of one card is
+             a column and an empty gutter (settings.md). -->
+        <StackPanel Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" x:Name="Tone3000Group"
+                    IsVisible="{Binding IsGroupVisible}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconAmp}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Tone}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Tone3000_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Tone3000_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- The order a user follows: register the redirect URI with
+                         TONE3000, paste the client ID it gives back, sign in. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                          IsVisible="{Binding IsRedirectUriVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Tone3000_RedirectUriLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Tone3000_RedirectUriHint}" />
+                        </StackPanel>
+                        <!-- Read-only, so it selects and copies whole: this is the
+                             one string the user must paste somewhere else exactly. -->
+                        <TextBox VerticalAlignment="Top" Grid.Column="1" x:Name="Tone3000RedirectUri" IsReadOnly="True"
+                                 FontFamily="{StaticResource FireFontMono}"
+                                 AutomationProperties.Name="{localization:Loc Tone3000_RedirectUriLabel}"
+                                 Text="{Binding RedirectUri, Mode=OneWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                          IsVisible="{Binding IsClientIdRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Tone3000_ClientIdLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Tone3000_ClientIdHint}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox Grid.Column="0" x:Name="Tone3000ClientIdBox"
+                                     Text="{Binding ClientId, Mode=TwoWay}"
+                                     PlaceholderText="{localization:Loc Tone3000_ClientIdPlaceholder}"
+                                     AutomationProperties.Name="{localization:Loc Tone3000_ClientIdLabel}" />
+                            <Button Grid.Column="1" Classes="RowAction"
+                                    Content="{localization:Loc Tone3000_SaveClientId}"
+                                    Command="{Binding SaveClientIdCommand}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                          IsVisible="{Binding IsAccountRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Tone3000_Account}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Tone3000_AccountHint}"
+                                       IsVisible="{Binding IsSignedOut}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="Tone3000SignedInText"
+                                       Foreground="{DynamicResource FireTextBody}"
+                                       Text="{Binding SignedInText}"
+                                       IsVisible="{Binding IsSignedIn}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <!-- Sign in is this screen's one primary action. -->
+                            <Button Theme="{StaticResource PrimaryButton}" Classes="Primary" x:Name="Tone3000SignIn"
+                                    Content="{localization:Loc Tone3000_SignIn}"
+                                    Command="{Binding SignInCommand}"
+                                    IsEnabled="{Binding CanSignIn}"
+                                    IsVisible="{Binding IsSignedOut}" />
+                            <Button Classes="RowAction" x:Name="Tone3000CancelSignIn"
+                                    Content="{localization:Loc Tone3000_CancelSignIn}"
+                                    Command="{Binding CancelSignInCommand}"
+                                    IsVisible="{Binding IsBusy}" />
+                            <Button Classes="RowAction" x:Name="Tone3000SignOut"
+                                    Content="{localization:Loc Tone3000_SignOut}"
+                                    Command="{Binding SignOutCommand}"
+                                    IsVisible="{Binding IsSignedIn}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Classes="onlineStatus" x:Name="Tone3000Status"
+                               Classes.error="{Binding IsStatusError}"
+                               Text="{Binding StatusText}"
+                               IsVisible="{Binding HasStatus}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             xmlns:shellVm="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:shellViews="using:DotCharter.UI.Views.Shell"
+             xmlns:localization="using:DotCharter.Tone.UI.Localization"
+             x:Class="DotCharter.UI.Views.PlayMode.AmpFxOverlayView"
+             x:CompileBindings="True"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- Play Mode's Amp/FX overlay ("VST plugins…" on Get ready and the pause
+         menu): the shared AmpFxPanel in a Fire modal — translucent scrim, one
+         centred card, an explicit close. Its own view (lifted out of
+         PlayModeView on 2026-09-27) so it can be built and measured on its own;
+         PlayModeView hosts it once, gated on `IsAmpFxOpen`, and prewarms it with
+         the other hidden screens. -->
+    <Panel>
+        <Border Theme="{StaticResource FireOverlayScrimBorder}" Classes="FireOverlayScrim" />
+
+        <Border x:Name="AmpFxOverlayCard" Theme="{StaticResource FireOverlayCardBorder}" Classes="FireOverlayCard"
+                Width="{StaticResource FireDialogWidthMd}"
+                Margin="{StaticResource FirePadScreen}">
+            <Grid RowDefinitions="Auto,*">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
+                      ColumnSpacing="{StaticResource FireSpaceMd}"
+                      Margin="{StaticResource FirePadHeader}">
+                    <!-- The TITLE key, not the button one: `PlayMode_AmpFx` ends
+                         in an ellipsis because it labels the control that OPENS
+                         this card. -->
+                    <TextBlock Grid.Column="0" Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" VerticalAlignment="Center"
+                               Text="{localization:Loc PlayMode_AmpFx_Title}" />
+                    <Button Grid.Column="1" x:Name="AmpFxOverlayClose" Theme="{StaticResource FireOverlayCloseButton}" Classes="FireOverlayClose"
+                            VerticalAlignment="Center"
+                            Command="{Binding CloseAmpFxCommand}"
+                            ToolTip.Tip="{localization:Loc Action_Close}"
+                            AutomationProperties.Name="{localization:Loc Action_Close}">
+                        <PathIcon Data="{DynamicResource IconClose}" />
+                    </Button>
+                </Grid>
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <shellViews:AmpFxPanel x:Name="AmpFxOverlayPanel"
+                                           Margin="{StaticResource FirePadModalBody}"
+                                           DataContext="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport}" />
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Panel>
+</UserControl>

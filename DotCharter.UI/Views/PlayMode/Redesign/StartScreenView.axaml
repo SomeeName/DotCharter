@@ -1,0 +1,238 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.StartScreenView"
+             x:DataType="contracts:IStartScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Start, redesigned — the front DOOR.
+
+        Two columns, not one island. The shipped door authors its whole hero at
+        a fixed natural size and centres it, which measured 680 x 537 DIPs —
+        17.6 % of a 1080p window and 9.9 % of a 1440p one — and needed a
+        scale-to-fit wrapper to stop reading as a postage stamp. This one is a
+        LAYOUT rather than a picture: the lockup and the one strong action own
+        the left column, the profile switcher owns a fixed rail on the right,
+        and both stretch to whatever the window is.
+
+        What is deliberately NOT here: rename, picture, import and export. Six
+        icon buttons hung off the profile panel is why the shipped door reads as
+        a settings page; those verbs belong in a dialog.
+
+        The three status pills say what this machine is ready to do BEFORE the
+        player commits — library, latency, input. Each is a fact with its own
+        state, and a figure with no source says so rather than showing a zero.
+    -->
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+        <Border Theme="{StaticResource FireWashBorder}" Classes="FireWash UpperLeft" Margin="{StaticResource FireWashBleed}" />
+
+        <Grid x:Name="StartRedesignRoot" RowDefinitions="*,Auto">
+
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
+                  Margin="{StaticResource FirePadScreen}">
+
+                <!-- ══ THE LOCKUP AND THE ONE ACTION ═══════════════════════ -->
+                <StackPanel x:Name="StartRedesignLockup" Grid.Column="0"
+                            VerticalAlignment="Center"
+                            Margin="{StaticResource FireGapRightLg}"
+                            Spacing="{StaticResource FireSpaceSection}">
+
+                    <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Classes="FireSectionHeader">
+                        <TextBlock Theme="{StaticResource FireWordmarkText}" Classes="FireWordmark" Text="DotCharter"
+                                   TextOptions.TextRenderingMode="Antialias" />
+                        <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_Tagline}" />
+                    </StackPanel>
+
+                    <ItemsControl x:Name="StartRedesignStatusFacts" ItemsSource="{Binding StatusFacts}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel ItemSpacing="{StaticResource FireSpaceRow}"
+                                           LineSpacing="{StaticResource FireSpaceRow}" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IFactTile">
+                                <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill" MaxWidth="420">
+                                    <Grid ColumnDefinitions="Auto,*"
+                                          ColumnSpacing="{StaticResource FireSpaceMd}">
+                                        <Panel Grid.Column="0" VerticalAlignment="Center">
+                                            <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Success"
+                                                    IsVisible="{Binding IsReady}" />
+                                            <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn"
+                                                    IsVisible="{Binding IsWarning}" />
+                                        </Panel>
+                                        <StackPanel Grid.Column="1"
+                                                    Spacing="{StaticResource FireSpaceXxs}">
+                                            <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding Caption}" />
+                                            <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding Value}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Spacing="{StaticResource FireSpaceRow}" MaxWidth="480"
+                                HorizontalAlignment="Left">
+                        <Grid ColumnDefinitions="Auto,*"
+                              ColumnSpacing="{StaticResource FireSpaceMd}"
+                              IsVisible="{Binding HasProfiles}">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                       VerticalAlignment="Center"
+                                       Text="{localization:Loc PlayMode_Start_WhoLabel}" />
+                            <TextBlock Grid.Column="1" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                       TextTrimming="CharacterEllipsis"
+                                       Text="{Binding ActiveProfileName}" />
+                        </Grid>
+
+                        <Button x:Name="StartRedesignStartButton" Theme="{StaticResource FireCtaButton}" Classes="FireCta"
+                                HorizontalAlignment="Stretch" MinWidth="320"
+                                IsEnabled="{Binding CanStart}"
+                                Command="{Binding StartCommand}">
+                            <!-- No key chip INSIDE the CTA: Button.FireCta clips to a
+                                 chamfer, so a badge at its right edge is sliced. The
+                                 footer already says ENTER START. -->
+                            <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                                       Text="{localization:Loc PlayMode_Launch_Start}" />
+                        </Button>
+
+                        <CheckBox x:Name="StartRedesignLefty" Classes="FireCheckBox"
+                                  IsChecked="{Binding IsLefty, Mode=TwoWay}"
+                                  ToolTip.Tip="{localization:Loc PlayMode_Launch_LeftyHint}"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_Launch_Lefty}"
+                                  Content="{localization:Loc PlayMode_Launch_Lefty}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- ══ THE PROFILE RAIL ═════════════════════════════════════ -->
+                <Border x:Name="StartRedesignProfileRail" Grid.Column="1" Theme="{StaticResource FireContextRailBorder}" Classes="FireContextRail"
+                        Width="{DynamicResource FireContextRailWidth}">
+                    <Grid RowDefinitions="Auto,*,Auto">
+
+                        <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Grid.Row="0" Classes="FireSectionHeader">
+                            <StackPanel Theme="{StaticResource FireKickerPanel}" Classes="FireKicker">
+                                <Border Theme="{StaticResource FireKickerRuleBorder}" Classes="FireKickerRule" />
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                           IsVisible="{Binding !IsGuestEntryOpen}"
+                                           Text="{localization:Loc PlayMode_Launch_ProfilesPanel}" />
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                           IsVisible="{Binding IsGuestEntryOpen}"
+                                           Text="{localization:Loc PlayMode_Launch_GuestPanel}" />
+                            </StackPanel>
+                            <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" TextWrapping="Wrap"
+                                       Text="{localization:Loc Profile_Title}" />
+                        </StackPanel>
+
+                        <!-- the switcher -->
+                        <Grid Grid.Row="1" IsVisible="{Binding !IsGuestEntryOpen}"
+                              Margin="{StaticResource FireGapTopLg}">
+
+                            <ScrollViewer x:Name="StartRedesignProfileScroll"
+                                          IsVisible="{Binding HasProfiles}"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Profiles}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IProfileTile">
+                                            <Button Theme="{StaticResource FireListRowButton}" Classes="FireListRow"
+                                                    Command="{Binding SelectCommand}"
+                                                    AutomationProperties.Name="{Binding Name}">
+                                                <Grid ColumnDefinitions="Auto,*,Auto"
+                                                      ColumnSpacing="{StaticResource FireSpaceRow}">
+                                                    <Border Grid.Column="0" Theme="{StaticResource FireAvatarBorder}" Classes="FireAvatar"
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Initial}" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1"
+                                                                VerticalAlignment="Center"
+                                                                Spacing="{StaticResource FireSpaceXxs}">
+                                                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding Name}" />
+                                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding DetailLabel}" />
+                                                    </StackPanel>
+                                                    <Border Grid.Column="2" Theme="{StaticResource FireDotBorder}" Classes="FireDot"
+                                                            IsVisible="{Binding IsActive}" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="StartRedesignNoProfilesPanel" Classes="FireEmptyState"
+                                        IsVisible="{Binding !HasProfiles}">
+                                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                                           Text="{localization:Loc Profile_Add_Eyebrow}" />
+                                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                           Text="{localization:Loc PlayMode_Guest_Hint}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- the guest panel -->
+                        <StackPanel x:Name="StartRedesignGuestPanel" Grid.Row="1"
+                                    IsVisible="{Binding IsGuestEntryOpen}"
+                                    VerticalAlignment="Top"
+                                    Margin="{StaticResource FireGapTopLg}"
+                                    Spacing="{StaticResource FireSpaceRow}">
+                            <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                                       Text="{localization:Loc PlayMode_Guest_Hint}" />
+                            <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                                <TextBox Classes="FireFieldInput"
+                                         Text="{Binding GuestName, Mode=TwoWay}"
+                                         PlaceholderText="{localization:Loc PlayMode_Guest_NameWatermark}"
+                                         AutomationProperties.Name="{localization:Loc PlayMode_Guest_NameWatermark}" />
+                            </Border>
+                            <Button x:Name="StartRedesignGuestStart" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary"
+                                    HorizontalAlignment="Stretch"
+                                    IsEnabled="{Binding CanStartGuestSession}"
+                                    Command="{Binding StartGuestSessionCommand}"
+                                    Content="{localization:Loc PlayMode_Guest_Start}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="2" Margin="{StaticResource FireGapTopLg}"
+                                    Spacing="{StaticResource FireSpaceRow}">
+                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+                            <Button x:Name="StartRedesignAddProfile" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding AddProfileCommand}"
+                                    Content="{localization:Loc Profile_Add}" />
+                            <Button x:Name="StartRedesignGuestToggle" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                    HorizontalAlignment="Center"
+                                    Command="{Binding ToggleGuestEntryCommand}"
+                                    Content="{localization:Loc PlayMode_Launch_Guest}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- ══ FOOTER ═══════════════════════════════════════════════════ -->
+            <Border x:Name="StartRedesignFooter" Grid.Row="1" Theme="{StaticResource FireFooterBorder}" Classes="FireFooter">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto"
+                      ColumnSpacing="{StaticResource FireSpaceRow}">
+                    <TextBlock Grid.Column="0" Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint"
+                               TextTrimming="CharacterEllipsis" MaxWidth="320"
+                               Text="{Binding AppVersion}" />
+                    <TextBlock Grid.Column="2" Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint"
+                               Text="{localization:Loc PlayMode_Launch_Hint_Start}" />
+                    <TextBlock Grid.Column="3" Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint"
+                               Text="{localization:Loc PlayMode_Launch_Hint_Settings}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint"
+                               Text="{localization:Loc PlayMode_Launch_Hint_Quit}" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Panel>
+</UserControl>

@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems go through the Security tab
+        (see SECURITY.md), not here.
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: What you did, step by step, and what you saw.
+      placeholder: |
+        1. Open a project with ...
+        2. Click ...
+        3. The editor ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot or recording
+      description: For anything visible, drag an image in. Crop out personal information.
+  - type: input
+    id: version
+    attributes:
+      label: DotCharter version
+      description: Help → About shows it.
+      placeholder: v0.70.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version and GPU
+      placeholder: Windows 11 24H2, RTX 3060
+  - type: input
+    id: audio
+    attributes:
+      label: Audio interface and driver (for audio problems)
+      placeholder: Focusrite Scarlett 2i2, ASIO
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: Lines marked WARN or EROR from the app's log folder around the time it happened. Remove anything personal.
+      render: text

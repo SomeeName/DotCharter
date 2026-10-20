@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundApplyBarView"
+             x:DataType="panels:ChordTemplateEditorViewModel">
+    <!-- The Sound tab's ONE pinned "Apply to" row (#601): the #484 ladder as a picker, pinned
+         over a chord's Shape, Technique and Bends sections only (#604; SoundSectionsViewModel.ShowApplyBar).
+         EVERY edit there reaches exactly the rung it shows: the box shows the rung the next edit
+         TAKES (Ladder.Effective, kept there by the code-behind), so it and the reach beside it
+         always agree; a pick goes through ChooseApplyRung, the ladder's own verb. A rung with
+         nothing to reach is disabled, and every rung keeps its reach and its reason in its
+         tooltip and its accessible name. Under it: the bulk-edit preview (#485) and the refused
+         reshape hint. -->
+    <StackPanel Spacing="{StaticResource SpaceXxs}">
+        <Grid x:Name="SoundApplyRow" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="{StaticResource SpaceSm}"
+              IsVisible="{Binding Ladder.IsVisible}">
+            <TextBlock Grid.Column="0" Text="{localization:Loc ChordTemplate_Scope_Label}" FontSize="{StaticResource FireSizeXs}"
+                       Foreground="{DynamicResource FireTextSecondary}" VerticalAlignment="Center" />
+            <!-- The rungs are the ladder's own ROWS, drawn by a template, so the box shows the
+                 row's label as it is NOW (a bound ComboBoxItem.Content was copied at pick time
+                 and kept "selected (0)" after a chord was selected). -->
+            <ComboBox x:Name="SoundApplyPicker" Grid.Column="1" MinWidth="0" MaxWidth="220" MinHeight="0" Height="24"
+                      Padding="{StaticResource FirePadTag}" FontSize="{StaticResource FireSizeXs}"
+                      AutomationProperties.Name="{localization:Loc ChordTemplate_Scope_Label}"
+                      ToolTip.Tip="{Binding Ladder.EffectiveDetail}"
+                      ItemsSource="{Binding Ladder.Rows}"
+                      SelectionChanged="OnRungPicked">
+                <ComboBox.Styles>
+                    <Style Selector="ComboBoxItem" x:DataType="panels:ChordApplyRungRow">
+                        <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+                        <Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
+                        <Setter Property="ToolTip.ShowOnDisabled" Value="True" />
+                        <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                    </Style>
+                </ComboBox.Styles>
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="panels:ChordApplyRungRow">
+                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <!-- What the lit rung reaches: "4 chords · 2 hand shapes · all levels". -->
+            <TextBlock x:Name="SoundApplyReach" Grid.Column="2" Text="{Binding Ladder.EffectiveDetail}"
+                       ToolTip.Tip="{Binding Ladder.EffectiveDetail}"
+                       FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextMuted}"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </Grid>
+        <!-- The bulk-edit preview (#485): while the rung reaches more than the selection, the
+             marks on the timeline are counted here and the arrows step the playhead between them. -->
+        <Grid x:Name="SoundApplyPreview" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource SpaceXs}"
+              x:DataType="panels:ChordApplyPreview"
+              DataContext="{Binding $parent[UserControl].((panels:ChordTemplateEditorViewModel)DataContext).Preview}"
+              IsVisible="{Binding IsActive}">
+            <TextBlock VerticalAlignment="Center" Text="{Binding Summary}" TextWrapping="Wrap"
+                       FontSize="{StaticResource FireSizeNano}" Foreground="{DynamicResource FireTextSecondary}" />
+            <Button Grid.Column="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                    Command="{Binding PreviousTargetCommand}" IsEnabled="{Binding CanStep}"
+                    ToolTip.Tip="{localization:Loc ChordTemplate_Preview_Previous}"
+                    AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Previous}">
+                <PathIcon Data="{DynamicResource IconChevronLeft}" Width="9" Height="9" />
+            </Button>
+            <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                    Command="{Binding NextTargetCommand}" IsEnabled="{Binding CanStep}"
+                    ToolTip.Tip="{localization:Loc ChordTemplate_Preview_Next}"
+                    AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Next}">
+                <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+            </Button>
+        </Grid>
+        <!-- A reshape with nothing selected is refused (it would rewrite every use). -->
+        <TextBlock Text="{localization:Loc ChordTemplate_SelectToReshape}"
+                   IsVisible="{Binding Ladder.ShowsReshapeHint}"
+                   Foreground="{DynamicResource FireWarning}"
+                   FontSize="{StaticResource FireSizeNano}" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

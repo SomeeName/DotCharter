@@ -1,0 +1,222 @@
+{
+  "page": "playing.md",
+  "shots": [
+    {
+      "id": "play-song-select",
+      "scene": "playmode",
+      "args": {
+        "screen": "SongSelect"
+      },
+      "callouts": [
+        {
+          "title": "Search",
+          "text": "Finds songs by title, artist or album.",
+          "name": "SongSelectSearchBox"
+        },
+        {
+          "title": "Sort",
+          "text": "Sorts the list by artist, title, tuning and more.",
+          "name": "SongSelectBrowseBar"
+        },
+        {
+          "title": "Columns",
+          "text": "Paths, tuning, your best result and length. The funnels filter.",
+          "name": "SongSelectListHeader"
+        },
+        {
+          "title": "Songs",
+          "text": "Your library, grouped by artist.",
+          "name": "SongListBox"
+        },
+        {
+          "title": "Path",
+          "text": "Lead, rhythm or bass, with its note count.",
+          "name": "SongSelectArrangementTiles"
+        },
+        {
+          "title": "Play",
+          "text": "Goes to Get ready for the selected song and path.",
+          "name": "SongSelectPlayButton"
+        },
+        {
+          "title": "Setlist",
+          "text": "Queue several songs and play them in a row.",
+          "name": "SongSelectSetlistPanel"
+        }
+      ]
+    },
+    {
+      "id": "play-get-ready",
+      "scene": "playmode",
+      "args": {
+        "screen": "TuningCheck"
+      },
+      "callouts": [
+        {
+          "title": "Your tuning",
+          "text": "Play in your own tuning instead of the song's.",
+          "name": "GetReadyPathPanel"
+        },
+        {
+          "title": "How it plays",
+          "text": "How strict the timing and chord judging is, the playback speed and how fast the notes scroll.",
+          "name": "GetReadyFeelPanel"
+        },
+        {
+          "title": "Tune up",
+          "text": "Checks each string of your instrument before you start.",
+          "name": "GetReadyTunerPanel"
+        },
+        {
+          "title": "In-game tones",
+          "text": "Plays the song's own tones, or your rig instead.",
+          "name": "GetReadyTonesPanel"
+        },
+        {
+          "title": "Backing track",
+          "text": "Separate the song into stems to mute the part you play.",
+          "name": "GetReadyBackingPanel"
+        },
+        {
+          "title": "Start",
+          "text": "Starts the run (Enter).",
+          "name": "GetReadyStartButton"
+        },
+        {
+          "title": "Skip setup",
+          "text": "Starts without the tuning check.",
+          "name": "GetReadySkipSetup"
+        },
+        {
+          "title": "Input",
+          "text": "Whether your guitar signal arrives.",
+          "name": "GetReadyInputChip"
+        }
+      ]
+    },
+    {
+      "id": "play-playing",
+      "scene": "editor",
+      "args": {
+        "gameplay": "true"
+      },
+      "width": 1120,
+      "height": 630,
+      "callouts": [
+        {
+          "title": "Highway",
+          "text": "Notes come towards you on their string. Play them as they reach the fretboard.",
+          "name": "Preview3DPane"
+        }
+      ]
+    },
+    {
+      "id": "play-paused",
+      "scene": "playmode",
+      "args": {
+        "screen": "Paused"
+      },
+      "callouts": [
+        {
+          "title": "Resume",
+          "text": "Back to the song (Esc).",
+          "name": "PauseResume"
+        },
+        {
+          "title": "Riff repeater",
+          "text": "Loops a hard passage, slowed down, until you have it.",
+          "loc": "PlayMode_Pause_RiffRepeater"
+        },
+        {
+          "title": "Restart song",
+          "text": "Plays the song again from the top.",
+          "loc": "PlayMode_Pause_Restart"
+        },
+        {
+          "title": "Tuner",
+          "text": "Checks your tuning without ending the run.",
+          "loc": "PlayMode_Pause_Tuner_Caption"
+        },
+        {
+          "title": "Rig",
+          "text": "Your pedals, amp and cabinet.",
+          "loc": "PlayMode_Pause_Pedalboard_Caption"
+        },
+        {
+          "title": "Settings",
+          "text": "Audio, gameplay and graphics, applied live.",
+          "loc": "PlayMode_Pause_Settings_Caption"
+        },
+        {
+          "title": "End run",
+          "text": "Stops and shows the results.",
+          "name": "PauseEndRun"
+        }
+      ]
+    },
+    {
+      "id": "play-results",
+      "scene": "playmode",
+      "args": {
+        "screen": "Results"
+      },
+      "callouts": [
+        {
+          "title": "Score",
+          "text": "Score, accuracy, longest streak, and hits against misses.",
+          "name": "ResultsTileBoard"
+        },
+        {
+          "title": "Next",
+          "text": "Play again, pick another song, or open the song in the editor to fix it.",
+          "name": "ResultsActions"
+        },
+        {
+          "title": "Sections",
+          "text": "How each section went, coloured by accuracy.",
+          "name": "ResultsSectionPanel"
+        },
+        {
+          "title": "Leaderboard",
+          "text": "Your best runs of this song on this computer.",
+          "name": "ResultsLeaderboardPanel"
+        }
+      ]
+    },
+    {
+      "id": "play-settings",
+      "scene": "playmode",
+      "args": {
+        "screen": "SongSelect",
+        "overlay": "settings"
+      },
+      "callouts": [
+        {
+          "title": "Sections",
+          "text": "Audio, devices, gameplay, graphics, appearance and keys.",
+          "name": "GameSettingsNav"
+        },
+        {
+          "title": "Search",
+          "text": "Finds a setting by name.",
+          "name": "GameSettingsSearchBox"
+        },
+        {
+          "title": "Settings",
+          "text": "The chosen section. Changes apply at once.",
+          "name": "GameSettingsAudioPane"
+        },
+        {
+          "title": "Reset",
+          "text": "Puts this section back to its defaults.",
+          "name": "GameSettingsResetButton"
+        },
+        {
+          "title": "Full settings",
+          "text": "Every setting, in the main Settings.",
+          "name": "GameSettingsFullSettingsLink"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Neutral physical materials; category and selection keep their Fire identities. -->
+  <SolidColorBrush x:Key="FireHardwareShadow" Color="#080A0D" />
+  <SolidColorBrush x:Key="FireHardwareEdge" Color="#424750" />
+  <SolidColorBrush x:Key="FireHardwareHighlight" Color="#7D858F" />
+  <SolidColorBrush x:Key="FireHardwarePointer" Color="#F3F0E7" />
+  <SolidColorBrush x:Key="FireHardwareGrille" Color="#363A40" />
+  <LinearGradientBrush x:Key="FireHardwareChassis" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0" Color="#292D34" />
+    <GradientStop Offset="0.45" Color="#181B21" />
+    <GradientStop Offset="1" Color="#111318" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="FireHardwareBezel" StartPoint="0%,0%" EndPoint="50%,100%">
+    <GradientStop Offset="0" Color="#747C86" />
+    <GradientStop Offset="0.42" Color="#393F47" />
+    <GradientStop Offset="1" Color="#11151B" />
+  </LinearGradientBrush>
+  <RadialGradientBrush x:Key="FireHardwareKnobFace" Center="34%,24%" GradientOrigin="34%,24%" RadiusX="85%" RadiusY="85%">
+    <GradientStop Offset="0" Color="#555C66" />
+    <GradientStop Offset="0.55" Color="#2B3038" />
+    <GradientStop Offset="1" Color="#15191F" />
+  </RadialGradientBrush>
+  <!-- The tone-rig design's footswitch cap (redesign.css .pedal-footswitch): a
+       chromed dome lit from the top-left, with the dark ring where the cap
+       meets the collar. Same recipe on every family's bypass. -->
+  <RadialGradientBrush x:Key="FireHardwareSwitchCap" Center="38%,24%" GradientOrigin="38%,24%" RadiusX="80%" RadiusY="80%">
+    <GradientStop Offset="0" Color="#F4F3F7" />
+    <GradientStop Offset="0.26" Color="#C9C7D0" />
+    <GradientStop Offset="0.54" Color="#75737D" />
+    <GradientStop Offset="0.61" Color="#33313A" />
+    <GradientStop Offset="0.68" Color="#D8D5DF" />
+    <GradientStop Offset="0.82" Color="#8B8994" />
+    <GradientStop Offset="1" Color="#4A4852" />
+  </RadialGradientBrush>
+  <SolidColorBrush x:Key="FireHardwareSwitchRing" Color="#B9B8C0" />
+  <SolidColorBrush x:Key="FireHardwareSwitchCollar" Color="#3C3742" />
+  <BoxShadows x:Key="FireShadowSwitch">0 4 1 0 #201D25</BoxShadows>
+  <!-- The enclosure's inner bevel: a pale lip, then a shadow step. -->
+  <SolidColorBrush x:Key="FireHardwareBevelLip" Color="#16FFFFFF" />
+  <SolidColorBrush x:Key="FireHardwareBevelStep" Color="#33000000" />
+  <!-- The design's control cells and cards: a violet-tinted plate rather than
+       the grey chassis, so a dial on a face reads as part of the rig's palette
+       (redesign.css .device-control-grid > .parameter-control and
+       .amp-secondary .parameter-control). -->
+  <LinearGradientBrush x:Key="FireRigCellFill" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0" Color="#262A31" />
+    <GradientStop Offset="1" Color="#15181D" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="FireRigCellEdge" Color="#43354C" />
+  <LinearGradientBrush x:Key="FireRigCardFill" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Offset="0" Color="#22262D" />
+    <GradientStop Offset="1" Color="#15181D" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="FireRigCardEdge" Color="#2F3236" />
+  <!-- The value plate under a fader and the recessed rail it rides on. -->
+  <SolidColorBrush x:Key="FireRigPlateFill" Color="#66120F19" />
+  <LinearGradientBrush x:Key="FireRigFaderRail" StartPoint="0%,0%" EndPoint="100%,0%">
+    <GradientStop Offset="0" Color="#020403" />
+    <GradientStop Offset="1" Color="#2A2C33" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="FireRigFaderCap" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Offset="0" Color="#6E7380" />
+    <GradientStop Offset="0.40" Color="#2A2E36" />
+    <GradientStop Offset="0.60" Color="#23272E" />
+    <GradientStop Offset="1" Color="#14171C" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="FireRigFaderCapEdge" Color="#A9B0BE" />
+</ResourceDictionary>

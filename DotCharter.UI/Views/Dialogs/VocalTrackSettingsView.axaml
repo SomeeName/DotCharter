@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             x:Class="DotCharter.UI.Views.Dialogs.VocalTrackSettingsView"
+             x:DataType="contracts:IVocalTrackSettingsScreen"
+             x:CompileBindings="True">
+
+    <!-- Grammar: Views/Dialogs/DialogStyles.axaml.
+
+         The colour row leads with four SWATCHES, which is what the mockup shows
+         and what the choice actually is — a lyric colour is picked to be legible
+         on the timeline, not mixed. The full ColorPicker stays as a dependent
+         `.Sub` row, so nothing that was possible before stopped being possible;
+         both write the SAME `TrackColor`, so a swatch click is indistinguishable
+         from a picked colour by the time Save runs.
+
+         Each swatch's fill is its own colour (HexBrushConverter), not a theme
+         token: it is chart data the timeline renders lyrics with. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconTechPassOther}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_VocalTrack_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_VocalTrack_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,250">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_TrackName}" />
+                        <TextBox VerticalAlignment="Center" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True" Text="{Binding Name}"
+                                 AutomationProperties.Name="{localization:Loc Dialog_TrackName}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,250">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_LyricColor}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_LyricColor_Desc}" />
+                        </StackPanel>
+                        <ItemsControl Grid.Column="1" x:Name="ColorSwatches"
+                                      ItemsSource="{Binding ColorSwatches}"
+                                      VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:ILyricColorSwatch">
+                                    <Button Height="34" Margin="3,0"
+                                            Padding="{DynamicResource FirePadNone}"
+                                            Background="{Binding Color, Converter={x:Static converters:HexBrushConverter.Instance}}"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource FireBorder}"
+                                            CornerRadius="{DynamicResource FireRadiusControl}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Stretch"
+                                            Command="{Binding PickCommand}"
+                                            AutomationProperties.Name="{Binding Name}"
+                                            ToolTip.Tip="{Binding Name}">
+                                        <!-- The pick ring is a child, not a border swap:
+                                             the button's own BorderBrush is what keeps a
+                                             white swatch visible against the card. -->
+                                        <Border x:Name="SwatchRing" IsVisible="{Binding IsSelected}"
+                                                Margin="-3"
+                                                BorderThickness="2"
+                                                BorderBrush="{DynamicResource FireAccentBright}"
+                                                CornerRadius="{DynamicResource FireRadiusControl}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Sub" ColumnDefinitions="*,250">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_LyricColor_Custom}" />
+                        <ColorPicker Grid.Column="1" Color="{Binding TrackColor, Mode=TwoWay, Converter={x:Static converters:HexColorConverter.Instance}}"
+                                     AutomationProperties.Name="{localization:Loc Dialog_LyricColor_Custom}"
+                                     HorizontalAlignment="Right" />
+                    </Grid>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Save}"
+                                Command="{Binding SaveCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,162 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigPedalEditorView"
+             x:DataType="vm:RigDockUnit">
+    <UserControl.Resources>
+        <DataTemplate x:Key="CompactRigKnobTemplate" x:DataType="vm:PedalParamViewModel">
+            <fire:FireKnob Height="112" IsCompact="True" HardwareStyle="True"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                           DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding DisplayName}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+    </UserControl.Resources>
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+            <!-- the design's face knob: "Rate" over the dial, "0.8" on the
+                 plate and "Hz" beside it — the unit is printed once -->
+            <fire:FireKnob HardwareStyle="True" Margin="{StaticResource FireGapRowMd}"
+                           DialSize="{Binding $parent[UserControl].((vm:RigDockUnit)DataContext).EnclosureDialSize}"
+                           IsEnabled="{Binding IsControlActive}" ToolTip.Tip="{Binding InactiveHint}"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}"
+                           Maximum="{Binding Maximum}" DefaultValue="{Binding Default}"
+                           Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+        <!-- A labelled parameter: the node's own picker over the ABI's value
+             labels. In the enclosure grid it takes a knob cell. -->
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel Classes="FireEnclosureChoice">
+                <TextBlock Text="{Binding DisplayName}" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          HorizontalAlignment="Stretch"
+                          AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+    <!-- THE SELECTED GEAR, BIG (RigEditorFamily.Pedal, which every unit with a
+         generated faceplate opens except the cabinet and routing consoles) —
+         the AmpliTube / BIAS FX layout: the chain above shows each unit small,
+         and the selected one opens here at full size with its live controls.
+         What is ABOUT the unit — its file or capture and the searchable library,
+         every parameter's exact value, lyrics, the signal meters — is in the
+         editor host's DETAILS column (RigModuleEditorView), which the gear bar's
+         DETAILS toggle opens beside the stage. A module with no faceplate gets
+         the drawn enclosure.
+
+         ONE scroll region (RigEditorScroll): a scroller inside it would let the
+         wheel land on whichever one the pointer is over. Its bar never AUTO-HIDES:
+         an auto-hidden bar made the cut edge read as the editor being drawn UNDER
+         the footer strip (owner, 2026-09-12). -->
+    <!-- `Auto`, not `Visible`, on THIS family (the AmpliTube layout, 2026-09-27): the
+         faceplate folds into the stage down to RigFaceplateFit's floor, so a
+         permanent bar was an empty track beside every gear. When the drawn
+         enclosure does overflow, the bar comes up SOLID (no auto-hide). -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Auto" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <Grid>
+
+            <Panel x:Name="RigUnitMain">
+                <!-- ══ THE GEAR, BIG ═════════════════════════════════════════════
+                     The selected unit's faceplate with its LIVE controls on the
+                     printed nuts (Controls/Fire/RigFaceplateView) — the same picture
+                     the chain above shows small, so the two can never disagree.
+                     Scaled to fill the dock (RigScaleToFit, both axes); a stompbox's
+                     printed footswitch is its bypass. -->
+                <StackPanel x:Name="RigFaceplateColumn" IsVisible="{Binding ShowsFaceplate}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Spacing="{StaticResource FireSpaceSm}">
+                    <fire:RigScaleToFit x:Name="RigFaceplateFit"
+                                        TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                                        MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                                        MinScale="0.2"
+                                        HorizontalAlignment="Center">
+                        <fire:RigFaceplateView x:Name="RigFaceplate" Node="{Binding Node}"
+                                               fire:FireUnitState.Accent="{Binding EnclosureAccent}"
+                                               fire:FireUnitState.IsBypassed="{Binding Node.Bypassed}" />
+                    </fire:RigScaleToFit>
+                </StackPanel>
+                <!-- ══ THE DRAWN ENCLOSURE, for a module with no faceplate ════════ -->
+                <!-- `MaxScale` is the breakpointed `FireRigFaceMaxScale` token (lane E,
+                     2026-09-13): 1.35, and 2.0 above the wide breakpoint. -->
+                <fire:RigScaleToFit x:Name="RigEnclosureFit" IsVisible="{Binding ShowsDrawnEnclosure}"
+                                    TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                                    MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Top">
+                    <Panel Classes="FireEnclosureStage" Width="{Binding EnclosureNaturalWidth}"
+                           fire:FireUnitState.Accent="{Binding EnclosureAccent}">
+                        <Border Theme="{StaticResource FireEnclosureLedgeBorder}" Classes="FireEnclosureLedge" Background="{Binding CoatShadowBrush}" />
+                        <!-- the side jacks, just outside the body -->
+                        <fire:RigArtworkImage File="jack-socket.webp" Width="9" Height="31" CornerRadius="2"
+                                              HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-8,0,0,0" />
+                        <fire:RigArtworkImage File="jack-socket.webp" Width="9" Height="31" CornerRadius="2"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,-8,0" />
+                        <Border Theme="{StaticResource FireEnclosureBorder}" Classes="FireEnclosure" x:Name="RigEnclosure"
+                                Background="{Binding CoatBrush}" BorderBrush="{Binding CoatEdgeBrush}">
+                            <Panel>
+                                <Border Theme="{StaticResource FireEnclosureGlossBorder}" Classes="FireEnclosureGloss" />
+                                <!-- the design's inner bevel: a pale lip and a shadow
+                                     step just inside the painted edge -->
+                                <Border Theme="{StaticResource FireEnclosureBevelBorder}" Classes="FireEnclosureBevel" />
+                                <Border Theme="{StaticResource FireEnclosureBevelBorder}" Classes="FireEnclosureBevel Step" />
+                                <!-- four chassis screws -->
+                                <fire:RigArtworkImage File="chassis-screw.webp" Width="17" Height="17" CornerRadius="9" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-12,-8,0,0" />
+                                <fire:RigArtworkImage File="chassis-screw.webp" Width="17" Height="17" CornerRadius="9" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-8,-12,0" />
+                                <fire:RigArtworkImage File="chassis-screw.webp" Width="17" Height="17" CornerRadius="9" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-12,0,0,-4" />
+                                <fire:RigArtworkImage File="chassis-screw.webp" Width="17" Height="17" CornerRadius="9" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-12,-4" />
+
+                                <StackPanel>
+                                    <!-- title: eyebrow · name · brand, three tracks so
+                                         the brand can never overlap a long name. The
+                                         eyebrow and brand are AUTO and the name takes the
+                                         rest, centred: as two star halves around the name
+                                         the eyebrow's half shrank to 61 px on a two-column
+                                         box and clipped "HILFSMITTEL" (de) and
+                                         "モジュレーション" (ja) — the release sweep caught
+                                         it in both cultures (2026-09-08). -->
+                                    <Grid Classes="FireEnclosureTitle" ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Theme="{StaticResource FireEnclosureEyebrowText}" Classes="FireEnclosureEyebrow" Foreground="{Binding EnclosureAccentBrush}"
+                                                   Text="{Binding CategoryLabel}" />
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource FireEnclosureNameText}" Classes="FireEnclosureName" HorizontalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" Text="{Binding EnclosureTitle}" />
+                                        <TextBlock Grid.Column="2" Theme="{StaticResource FireEnclosureBrandText}" Classes="FireEnclosureBrand" IsVisible="{Binding ShowsEnclosureBrand}"
+                                                   Text="{Binding BrandMark}" />
+                                    </Grid>
+                                    <Border Theme="{StaticResource FireEnclosureRuleBorder}" Classes="FireEnclosureRule" />
+
+                                    <!-- every control the unit has, in catalogue order,
+                                         on the grid the artwork uses -->
+                                    <ItemsControl x:Name="RigEnclosureControls" ItemsSource="{Binding EnclosureControls}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="{Binding EnclosureGridColumns}" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+
+                                    <TextBlock Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody" IsVisible="{Binding ShowsNoControlsNote}" Text="{localization:Loc Rig_Dock_NoControls}" />
+
+                                    <!-- the LED, the footswitch and its fixed-width label -->
+                                    <StackPanel Classes="FireEnclosureBypass">
+                                        <Border Theme="{StaticResource FireEnclosureLedBorder}" Classes="FireEnclosureLed" Classes.Lit="{Binding IsEngaged}">
+                                            <Border CornerRadius="{StaticResource FireRadiusPill}" Background="{Binding EnclosureLedBrush}"
+                                                    IsVisible="{Binding IsEngaged}" />
+                                        </Border>
+                                        <ToggleButton Theme="{StaticResource FireHardwareFootswitchToggle}" Classes="FireHardwareFootswitch Large" x:Name="RigEnclosureFootswitch"
+                                                      IsChecked="{Binding Node.Bypassed, Mode=TwoWay}"
+                                                      ToolTip.Tip="{localization:Loc Rig_BypassUnit}"
+                                                      AutomationProperties.Name="{localization:Loc Rig_BypassUnit}" />
+                                        <TextBlock Theme="{StaticResource FireFootswitchLabelText}" Classes="FireFootswitchLabel" Text="{Binding FootswitchLabel}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Panel>
+                        </Border>
+                    </Panel>
+                </fire:RigScaleToFit>
+            </Panel>
+
+        </Grid>
+    </ScrollViewer>
+</UserControl>

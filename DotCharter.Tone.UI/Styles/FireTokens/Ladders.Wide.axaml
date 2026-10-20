@@ -1,0 +1,159 @@
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         THE WIDE LAYOUT LADDER.
+
+         Merged over `Styles/FireTokens/Ladders.axaml` at APPLICATION scope
+         while the shell's INNER (post-`RootScaler`) width is above
+         `UiBreakpointController.WideAbove` (2560 logical DIPs), and un-merged
+         when it drops back. One place owns the merge:
+         `Services/UiBreakpointController`.
+
+         WHAT BELONGS HERE — and the line is not a matter of taste:
+
+           LAYOUT CONSTANTS ONLY. A rail width, a reading-column cap, a popover
+           ceiling. These are the numbers that decide the SHAPE of a screen, and
+           shape is the one thing the interface-scale transform provably cannot
+           change: a uniform scale lays the shell out at (W/s) x (H/s) and draws
+           it at s, so every "content px / window px" ratio is INVARIANT under
+           it (2026-09-12 resolution audit, §0). A 520 px hero column is 20 % of
+           the width at every scale and every resolution. That is what this file
+           moves.
+
+           NEVER `FireSize*`, `FontSize*`, `Space*`, `FirePad*`, `FireGap*` or
+           the `*LineHeight*` ladders. Those ARE the transform's job. Ramping a
+           font token here would compound with `RootScaler` and produce a size
+           nobody can reason about or reproduce from a screenshot.
+
+           NEVER `FireDialogWidth*`. It looks like it belongs and it does not:
+           the audit measured all 33 dialogs at `ratio` 1.04 and 98 %/97 % of
+           the window at 4K, because `Converters/DialogCardClampConverter`
+           already binds every card's Max* to the live scrim bounds. Its §4 P2.4
+           is explicit — "NO ACTION … the 4-step ladder (480/600/720/1120) is
+           correct behaviour at 4K; a dialog should not be 3 m wide." Widening
+           it would be a design change to ~38 surfaces that nothing measured
+           asked for.
+
+         THERE IS NO `Ladders.Compact.axaml`, deliberately. Compact starts below
+         1600 inner DIPs, which is already under `FireScreenMinWidth` (1320)
+         territory where the app is designed to SCROLL rather than reflow, and
+         no constant in the base ladder was measured as needing a smaller value
+         there. The `Compact` style CLASS still ships — a view that wants to
+         re-flow at that width opts in with a selector — and a constant may join
+         a Compact ladder later with its own measurement.
+
+         EVERY VALUE BELOW IS A DECISION. Justify a new one from the audit's
+         coverage table, not from taste.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- The front door's two rails. At 3840 inner DIPs the nav rail is 6.8 % of
+         the width and the session queue 10.5 %, against 13.6 %/21.0 % at the
+         1920 the mockups were drawn at — i.e. both rails HALVE as a share of
+         the screen while their content (two-line nav rows, queue cards with
+         art) stays the same. These restore roughly the 1440p share: 320/2560 =
+         12.5 %, 520/2560 = 20.3 %. -->
+    <x:Double x:Key="FireSidebarWidth">320</x:Double>     <!-- base 262 -->
+    <x:Double x:Key="FireContextRailWidth">520</x:Double> <!-- base 404 -->
+
+    <!-- The hero column's floor. The audit's headline number: `LaunchColumn`
+         measures 461x457 and covers 10.2 % of a 1080p window, 5.7 % at 1440p
+         and 2.5 % at 4K (`ratio` 0.25 — pixel-for-pixel identical at every
+         resolution). 720 is the audit's own §4 P0.1 middle rung. Lane A owns
+         the screen itself; this is the token that lets it move. -->
+    <x:Double x:Key="FireHeroMinWidth">720</x:Double>     <!-- base 520 -->
+
+    <!-- Every popover, 8 surfaces. The audit's §4 P2.2 verbatim: the 420 cap is
+         intentional (a popover is a menu, not a dialog) and the one change
+         worth making is "one breakpoint to 520 above 2560 px". -->
+    <x:Double x:Key="FirePopoverMaxWidth">520</x:Double>  <!-- base 420 -->
+
+    <!-- The centred reading columns. Both keep the same share of the window
+         they have at 1440p rather than growing without limit — a settings form
+         at 2600 px wide is a worse screen, not a better one.
+           520  -> 760   (520/1920 = 27 % ; 760/2880 = 26 %)
+           1040 -> 1400  (1040/1920 = 54 % ; 1400/2880 = 49 %)
+         The Lg step is the one consumed today: `Views/Settings/SettingsShellView`'s
+         content cap (and the legacy tabs' under it), which `docs/agents/ui/settings.md` already describes
+         as a page where "nothing in it is ever rescued by a wider window". -->
+    <x:Double x:Key="FireColumnMaxWidth">760</x:Double>      <!-- base 520 -->
+    <x:Double x:Key="FireColumnMaxWidthLg">1400</x:Double>   <!-- base 1040 -->
+
+    <!-- ═══ LANE F (2026-09-13): shell chrome, the LAN surfaces, the palette ══
+         Four constants that were literals on the element until this lane, which
+         is why they could not move: a local value in markup outranks every style
+         setter, so a breakpoint SELECTOR on any of them would have been silently
+         dead. As `DynamicResource` tokens they re-resolve on this dictionary's
+         merge, with no per-view code and no selector at all.
+
+         The FONT rungs those three surfaces also step up are NOT here and must
+         not be — they are `Window.Wide` selectors reaching existing `FireSize*`
+         rungs, for the reason the header above gives. -->
+
+    <!-- One centred card. 560 is ~29 % of a 1920 window and 15 % of a 3840 one;
+         760 restores roughly the 1440p share (760/2560 = 29.7 %), and it is the
+         same step `FireColumnMaxWidth` takes for the same reason. Consumed by
+         `Views/Shell/EditorLaunchCardView` — the 560 px card in the shell. -->
+    <x:Double x:Key="FireCardMaxWidth">760</x:Double>        <!-- base 560 -->
+
+    <!-- The command palette. Its own header calls it "a 680 px centred overlay",
+         which is 35 % of a 1920 window and 17.7 % of a 3840 one. 920/2560 =
+         35.9 %. The HEIGHT is the other half and matters more: the row height is
+         fixed, so the card's ceiling IS the number of commands on screen —
+         500 px shows ~11 rows at 1080p, and 760 shows ~19 at 4K instead of the
+         same 11 with twice as much scrim around them. -->
+    <x:Double x:Key="FirePaletteWidth">920</x:Double>        <!-- base 680 -->
+    <x:Double x:Key="FirePaletteMaxHeight">760</x:Double>    <!-- base 500 -->
+
+    <!-- ── THE AMP & FX RIG (audit lane E) ──────────────────────────────────
+         The gear palette is the rig's context rail and halves as a share of
+         the screen exactly as the front door's did: 320/1920 = 16.7 % against
+         320/3840 = 8.3 %. 420/3840 = 10.9 %, which is the 1440p share, and it
+         buys the palette's gear rows a second line of name before they trim.
+
+         `FireRigFaceMaxScale` is the ceiling `RigScaleToFit` fits a module
+         editor FACE to. This is the one dimensionless number in this file and
+         it belongs here for the same reason the rail widths do: the dock row
+         at 3840x2160 is ~5x the AREA it has at 1920x1080, so a face frozen at
+         its 1.35 ceiling covers a FIFTH of the row it filled at 1080p — the
+         audit's "sitting at design size in a corner", restated in the one
+         place a resolution can still be seen. It is NOT a type step: no font,
+         padding or spacing token moves with it, and the face's own text scales
+         with the face rather than against it.
+
+         2.0 and not higher: the rig's faces carry the texture pack's raster
+         artwork (`Controls/Fire/RigArtworkImage`, .webp), drawn at 17-64 px,
+         and 2x is the last doubling those assets have the pixels for. A face
+         that wants more room should be given more CONTENT, not more zoom.
+
+         `FireRigWorkspaceHeight` is the rig workspace's height before the
+         divider has been dragged (W1). It steps for the same reason the face
+         ceiling does: a 480 px editor in a 2160 px window is the "design size in
+         a corner" the audit exists to catch, and the faces cannot scale into a
+         row that did not grow — measured, `RigAmpFaceView` sat at 0.96 at
+         3840x2160 against 2.0 before the step existed. 860 is the number the
+         WIDEST face needs: `RigCabinetEditorView` is 516 px tall and still only
+         reached 1.29 at 760 — measured, not guessed — and the audit's tripwire
+         is that no face is left at the pre-lane-E 1.35. It keeps the canvas the
+         larger half at 4K (~1,110 px against 860) and stays under
+         `RigWorkspaceViewModel.MaxHeight` (1600), which is what stops a
+         drag pushing the canvas off a tall screen. -->
+    <x:Double x:Key="FireRigGearPanelWidth">420</x:Double>   <!-- base 320 -->
+    <x:Double x:Key="FireRigFaceMaxScale">2.0</x:Double>     <!-- base 1.35 -->
+    <x:Double x:Key="FireRigWorkspaceHeight">860</x:Double>  <!-- base 540 -->
+
+    <!-- The Tones mode (W4). The designer column steps for the reason the gear
+         rail does — it is a FORM in a rail-shaped column, and 420 is 11 % of a
+         3840 window against 26 % of a 1600 one — and the card steps with it so
+         a 3840 grid is five wide rather than nineteen narrow ones. The card's
+         MIN height follows its width: the floor keeps a one-line description's
+         card level with its neighbours, and a long one grows past it either
+         way. `FireRigEmptyStateHeight` steps so an empty state still occupies
+         the space the loaded state would at 4K. -->
+    <x:Double x:Key="FireRigToneDesignerWidth">580</x:Double>   <!-- base 460 -->
+    <x:Double x:Key="FireRigToneCardWidth">236</x:Double>       <!-- base 196 -->
+    <x:Double x:Key="FireRigToneCardMinHeight">96</x:Double>   <!-- base 88 -->
+    <x:Double x:Key="FireRigEmptyStateHeight">170</x:Double>    <!-- base 140 -->
+    <x:Double x:Key="FireRigToneSidebarWidth">216</x:Double>    <!-- base 184 -->
+
+</ResourceDictionary>

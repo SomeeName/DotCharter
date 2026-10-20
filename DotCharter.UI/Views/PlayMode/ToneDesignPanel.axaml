@@ -1,0 +1,279 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             xmlns:sections="clr-namespace:DotCharter.UI.ViewModels.PlayMode.ToneSections;assembly=DotCharter"
+             xmlns:playMode="using:DotCharter.UI.Views.PlayMode"
+             xmlns:playModeRig="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.ToneDesignPanel"
+             x:Name="ToneDesignPanelRoot"
+             x:DataType="vm:ToneDesignViewModel">
+    <!-- DotCharter's "Design a tone": the shared core panel
+         (DotCharter.Tone.UI, ToneDesignCorePanel — the prompt, the conversation,
+         the result) plus the two blocks only this app can offer, "Match from
+         audio" and "Match by section". They sit in the core's ExtrasTemplate,
+         between the conversation and the result, and are realized only when the
+         panel's body is. The type roles and button rules in the core panel's
+         header apply here too.
+         Reference: docs/agents/ui/pedalboard/ai-tone-design.md. -->
+    <playModeRig:ToneDesignCorePanel x:Name="ToneDesignCore">
+        <playModeRig:ToneDesignCorePanel.ExtrasTemplate>
+            <DataTemplate DataType="vm:ToneDesignViewModel">
+                <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                <!-- "Match from audio" — the second way into the
+                                     SAME result block below. Off screen entirely
+                                     when no matcher is registered: a capability
+                                     the app cannot honour must never look live.
+                                     The candidate list is collapsed until a
+                                     search has answered, so an unused match
+                                     block costs this body one invisible
+                                     StackPanel and nothing else.
+                                     Reference: docs/agents/ui/pedalboard/ai-tone-design.md. -->
+                                <StackPanel x:Name="ToneMatchBlock"
+                                            Spacing="{StaticResource FireSpaceXs}"
+                                            IsVisible="{Binding IsMatchAvailable}">
+
+                                    <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                               Text="{localization:Loc ToneMatch_Kicker}" />
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                               Text="{localization:Loc ToneMatch_Subtitle}" />
+
+                                    <!-- The reference DI. Recording the player's
+                                         OWN guitar is what makes a match transfer
+                                         to their rig, so it is offered before the
+                                         search and the bundled clip is the
+                                         fallback the line underneath names. -->
+                                    <WrapPanel ItemSpacing="{StaticResource FireSpaceXs}"
+                                               LineSpacing="{StaticResource FireSpaceXs}">
+                                        <Button x:Name="ToneMatchRecord" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                Content="{localization:Loc ToneMatch_Record}"
+                                                Command="{Binding RecordDiCommand}"
+                                                IsVisible="{Binding CanRecordDi}" />
+                                        <Button x:Name="ToneMatchRun" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
+                                                Content="{localization:Loc ToneMatch_Match}"
+                                                Command="{Binding MatchCommand}" />
+                                        <Button x:Name="ToneMatchCancel" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                Content="{localization:Loc ToneDesign_Cancel}"
+                                                Command="{Binding CancelMatchCommand}"
+                                                IsVisible="{Binding IsMatching}" />
+                                    </WrapPanel>
+
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                               Text="{Binding ReferenceDiLabel}"
+                                               IsVisible="{Binding HasReferenceDi}" />
+                                    <TextBlock x:Name="ToneMatchDiHint" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                               Text="{localization:Loc ToneMatch_DiNone}"
+                                               IsVisible="{Binding !HasReferenceDi}" />
+
+                                    <TextBlock x:Name="ToneMatchStatus" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                               Text="{Binding MatchStatus}"
+                                               IsVisible="{Binding HasMatchStatus}" />
+                                    <!-- Determinate, and only while the library builds
+                                         (2026-09-14): the one stage long enough to need a
+                                         bar, and the one whose line carries a fraction.
+                                         The owner watched "1/4000" with nothing else on
+                                         screen; this is the "something else". -->
+                                    <ProgressBar x:Name="ToneMatchProgress" Height="4"
+                                                 Minimum="0" Maximum="1"
+                                                 Value="{Binding MatchProgressFraction}"
+                                                 IsVisible="{Binding HasMatchProgress}" />
+
+                                    <!-- The trained prior is an optional download, and
+                                         before this row the panel could see it was
+                                         missing but could do nothing about it: the
+                                         estimator was skipped in silence and the
+                                         matcher ran search-only for ever. Same shape
+                                         as lyric auto-sync's offer — the size up
+                                         front, progress on the same line, one click.
+                                         Hidden while a match runs: a model cannot
+                                         join a search already in flight. -->
+                                    <StackPanel x:Name="ToneMatchModelOffer"
+                                                Spacing="{StaticResource FireSpaceXs}"
+                                                IsVisible="{Binding ShowMatchModelOffer}">
+                                        <TextBlock x:Name="ToneMatchModelOfferText"
+                                                   Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                   Text="{Binding MatchModelOffer}" />
+                                        <Button x:Name="ToneMatchModelDownload" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                Content="{localization:Loc ToneMatch_ModelDownload}"
+                                                Command="{Binding DownloadMatchModelCommand}"
+                                                IsVisible="{Binding !MatchModelDownloading}" />
+                                        <ProgressBar x:Name="ToneMatchModelProgress"
+                                                     Height="4" IsIndeterminate="True"
+                                                     IsVisible="{Binding MatchModelDownloading}" />
+                                    </StackPanel>
+
+                                    <Border x:Name="ToneMatchError" Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Danger"
+                                            IsVisible="{Binding HasMatchError}">
+                                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{Binding MatchError}" />
+                                    </Border>
+
+                                    <!-- Collapsed until a search has answered. -->
+                                    <StackPanel x:Name="ToneMatchResults"
+                                                Spacing="{StaticResource FireSpaceXs}"
+                                                IsVisible="{Binding HasMatchCandidates}">
+                                        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                                   Text="{localization:Loc ToneMatch_Results}" />
+
+                                        <!-- A ListBox, not toggle buttons: the
+                                             list IS a single selection over
+                                             SelectedMatchCandidate — setting it
+                                             publishes the candidate as the
+                                             panel's Result, which is what hands
+                                             it to Hear it / Save / Discard /
+                                             Tweak below — and a ListBox gets
+                                             arrow-key navigation for free. The
+                                             inner Border.FireListRow is
+                                             load-bearing: every FireList
+                                             hover/selection setter targets it. -->
+                                        <!-- NOT A SCROLL REGION: this list sits
+                                             inside the Tones mode's ONE scroller,
+                                             and a scroller nested in a scroller is
+                                             the defect — the wheel lands on
+                                             whichever one the pointer happens to be
+                                             over and the outer extent lies about
+                                             the content. Both axes Disabled, and
+                                             no MaxHeight: the list grows and the
+                                             mode's scroller carries it. -->
+                                        <ListBox x:Name="ToneMatchList"
+                                                 Classes="FireList DenseRows"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 ItemsSource="{Binding MatchCandidates}"
+                                                 SelectedItem="{Binding SelectedMatchCandidate}"
+                                                 AutomationProperties.Name="{localization:Loc ToneMatch_Results}">
+                                            <!-- NON-VIRTUALIZED, and that is not an optimisation —
+                                                 it is the other half of "both scroll axes Disabled".
+                                                 A ListBox's default VirtualizingStackPanel realizes
+                                                 what fits its own VIEWPORT, and a scroller that
+                                                 cannot scroll reports a viewport that never grows,
+                                                 so the list silently showed the first two rows and
+                                                 dropped the rest. Measured: three seeded candidates
+                                                 realized TWO containers. These lists are a handful
+                                                 of rows inside the mode's one scroller; a plain
+                                                 StackPanel is what lets them grow into it. -->
+                                            <ListBox.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel />
+                                                </ItemsPanelTemplate>
+                                            </ListBox.ItemsPanel>
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ToneMatchCandidateViewModel">
+                                                    <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                                                        <Grid ColumnDefinitions="*,Auto"
+                                                              ColumnSpacing="{StaticResource FireSpaceSm}">
+                                                            <StackPanel Grid.Column="0"
+                                                                        Spacing="{StaticResource FireSpaceXxs}">
+                                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong"
+                                                                           Text="{Binding Title}" />
+                                                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                                           Text="{Binding ChainSummary}" />
+                                                                <!-- THE SCORE, W5b's vocabulary bound (W4 round 2). Three
+                                                                     rules, and each has a test:
+                                                                       • the pill prints MatchText, which is "46 % match" for a
+                                                                         rated candidate and "Unrated — <reason>" for one the
+                                                                         matcher could not place on the scale;
+                                                                       • UNRATED AND 0 % MUST NOT LOOK ALIKE. A rated score is
+                                                                         bare accent mono; an unrated one is a FireStatusPill
+                                                                         Warn — a framed, amber, differently shaped mark — so a
+                                                                         candidate that could not be measured never reads as one
+                                                                         that measured badly;
+                                                                       • the per-block breakdown says WHERE the remaining
+                                                                         distance is, worst first, and a block the reference rig
+                                                                         does better on wears `.Worse`. A number shown alone is
+                                                                         the thing W5b's report set out to remove. -->
+                                                                <ItemsControl x:Name="ToneMatchBreakdown" ItemsSource="{Binding Breakdown}">
+                                                                    <ItemsControl.ItemsPanel>
+                                                                        <ItemsPanelTemplate>
+                                                                            <WrapPanel Orientation="Horizontal" />
+                                                                        </ItemsPanelTemplate>
+                                                                    </ItemsControl.ItemsPanel>
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate x:DataType="vm:ToneMatchBlockViewModel">
+                                                                            <Border Theme="{StaticResource FireMatchBlockBorder}" Classes="FireMatchBlock"
+                                                                                    Classes.Worse="{Binding WorseThanReference}"
+                                                                                    Margin="{StaticResource FireGapTag}">
+                                                                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{Binding Text}" />
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+
+                                                                <!-- The caveat, not the score: a candidate at or inside the
+                                                                     passage's own variation is as close as this metric can SAY,
+                                                                     and the remaining percent is not reachable by searching
+                                                                     harder. Shown only in that case. -->
+                                                                <TextBlock x:Name="ToneMatchNoiseCaveat" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Warn"
+                                                                           IsVisible="{Binding WithinTargetNoise}"
+                                                                           Text="{Binding NoiseCaveatText}" />
+                                                            </StackPanel>
+                                                            <!-- …and the percentage column is sized for
+                                                                 the WIDEST thing it can print, which is
+                                                                 W5b's "unrated" pill and not "100 %":
+                                                                 an unrated candidate must read as
+                                                                 unrated rather than as a low score, and
+                                                                 a column that grew when the first one
+                                                                 appeared would shift every row beside
+                                                                 it. -->
+                                                            <StackPanel Grid.Column="1"
+                                                                        MinWidth="{StaticResource FireRigMatchScoreWidth}"
+                                                                        VerticalAlignment="Center"
+                                                                        HorizontalAlignment="Right">
+                                                                <TextBlock x:Name="ToneMatchRatedScore" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Accent"
+                                                                           HorizontalAlignment="Right"
+                                                                           IsVisible="{Binding IsRated}"
+                                                                           Text="{Binding MatchText}" />
+                                                                <Border x:Name="ToneMatchUnratedPill" Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Warn"
+                                                                        HorizontalAlignment="Right"
+                                                                        IsVisible="{Binding !IsRated}">
+                                                                    <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Warn" Text="{Binding MatchText}" />
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+
+                                        <!-- WHAT THE SCALE MEANS, once under the
+                                             list rather than on every row: it is
+                                             the same sentence for every candidate,
+                                             and repeating it turns the one line
+                                             that makes the percentage readable
+                                             into noise. Bound through the SELECTED
+                                             candidate because that is the one the
+                                             four actions below are about. -->
+                                        <TextBlock x:Name="ToneMatchScaleNote"
+                                                   Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                   Text="{Binding SelectedMatchCandidate.ScaleText}" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- "Match by section" — one rig per part of the
+                                     song, and a tone SET at the end of it.
+
+                                     A SIBLING of the match block rather than a
+                                     child of it: the section slice registers
+                                     independently of IToneMatcher, so a build
+                                     with a set matcher and no single matcher
+                                     must still show this. Its body is a
+                                     ContentTemplate for the same reason the
+                                     panel's own body is — a template is not
+                                     instantiated until its host is MEASURED, so
+                                     a build without the slice (or a collapsed
+                                     panel) realizes no section subtree at all
+                                     rather than a hidden one.
+                                     Reference: docs/agents/ui/pedalboard/ai-tone-design.md. -->
+                                <ContentControl x:Name="ToneSectionsHost"
+                                                IsVisible="{Binding IsSectionsAvailable}"
+                                                Content="{Binding Sections}">
+                                    <ContentControl.ContentTemplate>
+                                        <DataTemplate DataType="sections:ToneSectionsViewModel">
+                                            <playMode:ToneSectionsPanel />
+                                        </DataTemplate>
+                                    </ContentControl.ContentTemplate>
+                                </ContentControl>
+                </StackPanel>
+            </DataTemplate>
+        </playModeRig:ToneDesignCorePanel.ExtrasTemplate>
+    </playModeRig:ToneDesignCorePanel>
+</UserControl>

@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.CountdownView"
+             x:DataType="vm:PlayModeViewModel">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter/Views/PlayMode/PlayModeThemes.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- Countdown: the last thing you see before a run. It sits on the lit
+         panel so the figure reads over the animated backdrop, and it names
+         the song you are about to play — the old screen was a dim title and
+         a bare number floating in the middle of the backdrop. -->
+    <!-- Rebuilt to `Play Overlays.dc.html`: the card is gone. A count-in is
+         the last two seconds before you play, so it is the WHOLE screen —
+         song, the figure, beat pips, and the four facts you actually check
+         in those two seconds. No panel chrome competes with the number.
+
+         The chips are REAL and only the real ones are here: the mockup also
+         draws a speed chip and a tone-name chip, and this app has no
+         per-run playback-speed label and no in-game tone name at countdown
+         time. A plausible "100 %" would be exactly the stub data the owner
+         ruled out. -->
+    <!-- P0.3 (resolution audit §4): the count-in is a FIGURE, and a figure
+         screen is the textbook Viewbox case. It measured 114x312 px — 1.7 %
+         of a 1080p window and 0.4 % of a 4K one, `ratio` 0.25, i.e. the
+         same pixels on every panel. Inside the Viewbox the group scales
+         UpOnly (never below 1:1 on a small window) to a ceiling that is a
+         SHARE of the surface, so the coverage is now the same fraction at
+         every resolution instead of the same pixel count.
+         The keyboard hint stays OUTSIDE it — a hint scaled 4x is a
+         billboard, and the audit's rule for these screens is that
+         corner-anchored chrome does not ride the figure. -->
+    <!-- Hosted by PlayModeView, which declares this view with the
+         IsCountdownScreen gate. The figure and the keys hint were two gated
+         siblings of PlayModeView's root Panel; here they share this Panel,
+         which fills the same surface, so the Viewbox's $parent[Panel] viewport
+         binding measures the same size. Lifted out of PlayModeView.axaml in
+         #294, markup otherwise unchanged. -->
+    <Panel>
+        <Viewbox x:Name="CountdownScreenFrame"
+                 Stretch="Uniform" StretchDirection="UpOnly"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 MaxWidth="{Binding $parent[Panel].Bounds,
+                     Converter={x:Static conv:ViewportFractionConverter.Instance},
+                     ConverterParameter=Width:0.50}"
+                 MaxHeight="{Binding $parent[Panel].Bounds,
+                     Converter={x:Static conv:ViewportFractionConverter.Instance},
+                     ConverterParameter=Height:0.62}">
+        <StackPanel x:Name="CountdownScreenRoot"
+                    Spacing="{StaticResource SpaceMd}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc PlayMode_Countdown_Eyebrow}" Classes="Eyebrow"
+                       HorizontalAlignment="Center" />
+            <TextBlock Theme="{StaticResource ScreenTitleText}" Text="{Binding FlowSongTitle}" Classes="ScreenTitle"
+                       HorizontalAlignment="Center" TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis" MaxWidth="720" />
+            <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{Binding FlowSongArtist}" Classes="ScreenSubtitle"
+                       HorizontalAlignment="Center" TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis" MaxWidth="720" />
+
+            <TextBlock Text="{Binding CountdownLabel}" HorizontalAlignment="Center"
+                       Margin="{StaticResource GapTopSm}"
+                       FontSize="{StaticResource FontSizeCountdown}" FontWeight="Bold"
+                       Foreground="{DynamicResource AccentColor}" />
+
+            <!-- Beat pips: one per countdown step, from the same counter the
+                 figure prints. -->
+            <ItemsControl x:Name="CountdownPipRow" ItemsSource="{Binding CountdownPips}"
+                          HorizontalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="{StaticResource SpaceSm}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CountInPip">
+                        <Border Width="34" Height="3" CornerRadius="2"
+                                Background="{DynamicResource BorderDefault}">
+                            <Border IsVisible="{Binding IsLit}" CornerRadius="2"
+                                    Background="{DynamicResource AccentColor}" />
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel Orientation="Horizontal" x:Name="CountdownFactChips"
+                        HorizontalAlignment="Center"
+                        Margin="{StaticResource GapTopSm}"
+                        Spacing="{StaticResource SpaceSm}">
+                <!-- `FireTag`, not `ShellChip`: ShellStyles is not in this
+                     view's style scope, so that class would match nothing and
+                     render an unstyled row. Fire.axaml is app-scoped. -->
+                <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag">
+                    <TextBlock Text="{Binding SelectedFlowArrangement.DisplayName}" />
+                </Border>
+                <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag">
+                    <TextBlock Text="{Binding FlowTuningAndCapoLabel}" />
+                </Border>
+            </StackPanel>
+
+        </StackPanel>
+        </Viewbox>
+        <!-- The keys hint: chrome, so it is anchored to the SURFACE and never
+             scaled with the figure above it. -->
+        <TextBlock Theme="{StaticResource StatLabelText}" x:Name="CountdownKeysHint"
+                   Text="{localization:Loc PlayMode_Countdown_Keys}"
+                   HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                   TextAlignment="Center"
+                   Classes="StatLabel" Margin="{StaticResource ScreenInset}" />
+    </Panel>
+</UserControl>

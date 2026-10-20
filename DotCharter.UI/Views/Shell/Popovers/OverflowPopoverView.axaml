@@ -1,0 +1,105 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.OverflowPopoverView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- TOOLBAR OVERFLOW (P2-16). 320 px. Only reachable while the tool rail
+         is narrower than its content: the » button this hangs off appears
+         exactly when groups have scrolled out of reach, so Save / Zoom / the
+         grouped flyouts never silently leave the window. Every row here is a
+         SECOND DOOR onto a command that already lives on the rail — nothing
+         is exclusive to this panel, which is what keeps it honest on wide
+         windows where it never shows. -->
+    <controls:FirePopover Width="320"
+                          Title="{localization:Loc Toolbar_Overflow_Title}"
+                          Icon="{DynamicResource IconChevronDown}">
+        <controls:FirePopover.Footer>
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="*">
+                <TextBlock VerticalAlignment="Center" Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote"
+                           TextWrapping="Wrap"
+                           Text="{localization:Loc Toolbar_Overflow_Note}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody">
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_GroupEdit}" />
+                    <!-- 2 + 1 rather than one three-across row, for the reason
+                         the Groups section below is 2×2: at the card's 320 a
+                         third-column cell is 83 px and "Projekt speichern"
+                         wants 97.4 (measured 2026-08-28, headless suite seeded
+                         de-DE). `FirePopoverGridAction` is a FIXED 32 px high,
+                         so the label cannot wrap its way out — the cell has to
+                         get wider. -->
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="{StaticResource FirePopoverGapTight}"
+                          RowSpacing="{StaticResource FirePopoverGapTight}">
+                        <Button Grid.Row="0" Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Menu_Undo}"
+                                Command="{Binding ChartEditor.UndoCommand}" />
+                        <Button Grid.Row="0" Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Menu_Redo}"
+                                Command="{Binding ChartEditor.RedoCommand}" />
+                        <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Menu_SaveProject}"
+                                Command="{Binding Project.SaveProjectCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_GroupZoom}" />
+                    <Grid ColumnDefinitions="*,*"
+                          ColumnSpacing="{StaticResource FirePopoverGapTight}">
+                        <Button Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Menu_ZoomOut}"
+                                Command="{Binding ZoomOutCommand}" />
+                        <Button Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Menu_ZoomIn}"
+                                Command="{Binding ZoomInCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+
+            <!-- The grouped flyouts, which are the FIRST things to scroll out
+                 of reach (they sit at the rail's trailing end). Click handlers
+                 rather than commands: RequestPopover is the shell's routed
+                 open (the same door the ALT+M/T/A keybinds use), and the
+                 ToolbarView side closes this overflow before opening the
+                 target so two popups never stack. -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_Overflow_Groups}" />
+                    <!-- 2×2 rather than one four-across row: at the card's 320
+                         the quarter-columns clip the German labels. -->
+                    <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                          ColumnSpacing="{StaticResource FirePopoverGapTight}"
+                          RowSpacing="{StaticResource FirePopoverGapTight}">
+                        <Button Grid.Row="0" Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Toolbar_MixFlyout}"
+                                Click="OpenMix" />
+                        <Button Grid.Row="0" Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Toolbar_TempoFlyout}"
+                                Click="OpenTempo" />
+                        <Button Grid.Row="1" Grid.Column="0" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Toolbar_ToolsFlyout}"
+                                Click="OpenTools" />
+                        <Button Grid.Row="1" Grid.Column="1" Theme="{StaticResource FirePopoverGridActionButton}" Classes="FirePopoverGridAction"
+                                Content="{localization:Loc Toolbar_TracksFlyout}"
+                                Click="OpenTracks" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

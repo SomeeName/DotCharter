@@ -1,0 +1,142 @@
+{
+  "_comment": "Character overrides for the RS in-game-tone converter, keyed by REAL Rocksmith 2014 gear catalogue keys (Tones/tone_gear_data.json). Every key is validated against RsGearCatalog.Shared and the cab table must cover the ENTIRE catalogue — enforced by RsGearOverridesLivenessTests. Amps are not here: every amp the game ships converts through its own soundbank chain (`rsamp`, RsAmpChains, #88). Target ints use the NATIVE module semantics: cab model 0 = 1x12 clean / 1 = 2x12 / 2 = 4x12 scooped / 3 = vintage-dark (dcdsp_cab.h).",
+
+  "cabModel": {
+    "_comment": "cab family stem (longest-prefix match of the cab Key, so every mic/position variant of a family resolves) -> the `cab` module's v24 ROSTER IR (0..25: 0 1x12 Combo, 1 2x12 Combo, 2 4x12 Scooped, 3 Vintage 4x12, 4 1x8 Tweed, 5 2x12 AC Open, 6 2x12 Boutique Closed, 7 4x12 Greenback, 8 4x12 V30 Modern, 9 4x10 Bass, 10 8x10 Bass Fridge, 11 1x15 Vintage Bass; and since 2026-10 (#74) the IRs built from measured driver responses: 12 4x10 Tweed Open, 13 1x10 Combo, 14 2x15 Guitar, 15 PA 15 + Horn, 16 PA Column, 17 Hi-Fi Tower, 18 2x10 Bass, 19 3x10 Bass, 20 6x10 Bass, 21 1x12 Bass, 22 2x12 Bass, 23 2x15 Bass, 24 4x15 Bass, 25 1x15 + 1x10 Bass). Picked by speaker layout first (count x size, open/closed back, read off the key and the game's own cabinet art in the game gear package), then era. Until 2026-10 only 0..3 were used and every bass cab rode the guitar 4x12. The mic and position in the key are a separate `micpos` layer (RsToneConverter.BuildCabMic). 'Bass_Cab_' stays as the catch-all for a bass cab this table does not name.",
+
+    "Cab_AT0112C": 0,
+    "Cab_AT1121C": 0,
+    "Cab_BT1120C": 0,
+    "Cab_BT1121C": 0,
+    "Cab_CA112C": 0,
+    "Cab_CS1120C": 0,
+    "Cab_TW112C": 0,
+    "Cab_TW110C": 13,
+    "Cab_Audiophile": 17,
+    "Cab_PA999C": 16,
+    "Cab_PA1152C": 15,
+    "Cab_PA600C": 15,
+    "Cab_CS212C": 1,
+    "Cab_BT410C": 12,
+    "Cab_TW410C": 12,
+    "Cab_CA215C": 14,
+    "Cab_CS1515C": 14,
+    "Cab_HG215C": 14,
+    "Cab_Marshall1960a": 2,
+    "Cab_Marshall1960TV": 7,
+    "Cab_Marshall1960AX": 7,
+    "Cab_GB412CMKI": 7,
+    "Cab_GB412CMKII": 7,
+    "Cab_GB412CMKIII": 7,
+    "Cab_OrangePPC212OB": 5,
+    "Cab_EN212C": 6,
+    "Cab_HG212C": 6,
+    "Cab_HG2120C": 6,
+    "Cab_Marshall1936": 6,
+    "Cab_CA412C": 8,
+    "Cab_EN4120C": 8,
+    "Cab_OrangePPC412": 8,
+    "Cab_OrangeJimmyBean": 8,
+    "Bass_Cab_": 9,
+    "Bass_Cab_BT410BC": 9,
+    "Bass_Cab_CH410BC": 9,
+    "Bass_Cab_CS410BC": 9,
+    "Bass_Cab_EdenD410XST": 9,
+    "Bass_Cab_BT212BC": 22,
+    "Bass_Cab_CH210BC": 18,
+    "Bass_Cab_CH310BC": 19,
+    "Bass_Cab_EdenD212XLT": 22,
+    "Bass_Cab_AT810BC": 10,
+    "Bass_Cab_OrangeOBC810": 10,
+    "Bass_Cab_EdenD610XST": 20,
+    "Bass_Cab_GB415BC": 24,
+    "Bass_Cab_AT1150BC": 11,
+    "Bass_Cab_BT115BC": 11,
+    "Bass_Cab_CS15BC": 11,
+    "Bass_Cab_EdenD115XLT": 11,
+    "Bass_Cab_OrangeOBC115": 11,
+    "Bass_Cab_CA1510BC": 25,
+    "Bass_Cab_CS112BC": 21,
+    "Bass_Cab_TW215BC": 23,
+    "Cab_BoomBox": 3,
+    "Cab_CabinetRadio": 3,
+    "Cab_Gramophone": 3,
+    "Cab_JukeBox": 3,
+    "Cab_VintageHiFi": 17
+  },
+
+  "distortionKeys": [
+    "Pedal_ShredZone"
+  ],
+
+  "overdriveKeys": [
+    "Pedal_CustomDrive",
+    "Pedal_GermaniumDrive",
+    "Pedal_LineDrive",
+    "Pedal_SuperDrive"
+  ],
+
+  "sustainerKeys": [
+    "Pedal_Swole"
+  ],
+
+  "targetModule": {
+    "_comment": "gear Key -> the module id this gear routes to when the generic category builder is not the right voice. Covers the drive family (fuzz / bigmuff / klon / rat / ds1 / hm2 / bassod), dynamics (limiter / multiband / optocomp / compressor), filters (svf / acousticsim / boost / bitcrusher / harmonizer: Pedal_BassEmulator is the game's Wwise Harmonizer), delays (bbddelay / multitap), reverbs (hallreverb), pitch (octfuzz) and modulation (ringmod). RsGearOverridesLivenessTests checks every key is real catalogue gear AND that the routed module is legal for that gear's category. Keys starting with '_' are ignored.",
+    "Pedal_BuzzOne": "fuzz",
+    "Pedal_BuzzToo": "fuzz",
+    "Pedal_CaptFuzzle": "fuzz",
+    "Bass_Pedal_BassFuzz": "fuzz",
+    "Pedal_FuzzWasHe": "bigmuff",
+
+    "_comment09": "0.9 gear wave (native catalogue 57 -> 100). Every block below replaces a target that was an APPROXIMATION, or — for svf / acousticsim — a gear key the converter DROPPED. The per-knob maps live in the matching Build* method in RsToneConverter.cs.",
+
+    "Pedal_VintageDistortion": "rat",
+    "Pedal_MarshallGuvnorPlus": "rat",
+
+    "Pedal_Distortion": "ds1",
+
+    "Pedal_MetalDistortion": "hm2",
+
+    "Bass_Pedal_BassOverdrive": "bassod",
+    "Bass_Pedal_BassDistortion": "bassod",
+
+    "Pedal_Limiter": "limiter",
+
+    "Bass_Pedal_MBComp": "multiband",
+
+    "Pedal_Compression": "compressor",
+    "Pedal_LoFiFilter": "svf",
+    "Pedal_BassEmulator": "harmonizer",
+
+    "Rack_SynthFilter": "svf",
+    "Pedal_BobFilter": "svf",
+
+    "Pedal_AcousticEmulator": "acousticsim",
+
+    "Pedal_RangeBooster": "boost",
+    "Pedal_BitCruncher": "bitcrusher",
+
+    "Pedal_AnalogueDelay": "bbddelay",
+    "Pedal_NPNDelay": "bbddelay",
+
+    "Rack_StudioDelay": "multitap",
+
+    "Rack_StudioChamber": "hallreverb",
+    "Rack_StudioVerb": "hallreverb",
+    "Pedal_DigitalVerb": "hallreverb",
+
+    "Pedal_OctaveUp": "octfuzz",
+    "Pedal_Octavius": "octfuzz",
+
+    "Pedal_RingMod": "ringmod"
+  },
+
+  "staticParams": {
+    "_comment": "gear Key -> { targetParamId: value } pinned unconditionally (converter clamps to the target range). The one remaining metal-zone-like gets a tight low end (Pedal_MetalDistortion moved to hm2, whose colour bells replace the pin); the one-off novelty cabs get their band-limited character.",
+    "Pedal_ShredZone": { "tightHz": 140 },
+    "Rack_StudioChamber": { "space": 1 },
+    "Cab_Gramophone": { "lowCutHz": 200, "highCutHz": 3000 },
+    "Cab_CabinetRadio": { "lowCutHz": 160, "highCutHz": 3500 },
+    "Cab_BoomBox": { "highCutHz": 6000 }
+  }
+}

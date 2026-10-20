@@ -1,0 +1,297 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.GeneralSettingsView"
+             x:DataType="contracts:IGeneralSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > General: language and the screen the app opens on, the
+        first-run wizard, the local crash report, and the log behind the
+        collapsed Advanced section. Row and group visibility is the screen's
+        HiddenKeys, which is how the cross-tab search filters this tab.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <ctl:MasonryPanel Classes="SettingsFlow" Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_LanguageRegion_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_LanguageRegion_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.language}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Language}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_Language}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_Language}"
+                                  ItemsSource="{Binding LanguageOptions}"
+                                  SelectedIndex="{Binding SelectedLanguageIndex, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.startupScreen}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_StartupScreen}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_StartupScreen}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_StartupScreen}"
+                                  SelectedIndex="{Binding SelectedStartupScreenIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Settings_StartupScreen_PlayMode}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_StartupScreen_Editor}" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.runSetup}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_RunSetupAgain}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_RunSetupAgain}" />
+                        </StackPanel>
+                        <WrapPanel Grid.Column="1" Orientation="Horizontal"
+                                   ItemSpacing="{StaticResource FireSpaceSm}"
+                                   LineSpacing="{StaticResource FireSpaceSm}">
+                            <Button Classes="RowAction" Content="{localization:Loc Settings_RunSetupAgain_Button}"
+                                    Command="{Binding RunSetupAgainCommand}" />
+                        </WrapPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.group.1}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Diagnostics}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Diagnostics_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.crashReport}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_CrashReportOptIn}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_CrashReportOptIn_Hint}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_CrashReportOptIn}"
+                                      IsChecked="{Binding CrashReportOptIn, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <ToggleButton Classes="AdvancedHeader" x:Name="GeneralAdvanced"
+                          AutomationProperties.Name="{localization:Loc Settings_Advanced}"
+                          IsChecked="{Binding IsAdvancedOpen, Mode=TwoWay}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Classes="AdvancedLabel" Text="{localization:Loc Settings_Advanced}" />
+                        <TextBlock Classes="AdvancedSubtitle" Text="{localization:Loc Settings_General_AdvancedSubtitle}" />
+                    </StackPanel>
+                    <PathIcon Grid.Column="1" Classes="AdvancedChevron" Data="M 3,2 L 9,7 L 3,12 Z" VerticalAlignment="Center" />
+                </Grid>
+            </ToggleButton>
+            <StackPanel x:Name="GeneralAdvancedBody" IsVisible="{Binding IsAdvancedOpen}">
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.group.2}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Logging}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_LogDescription}" />
+                            </StackPanel>
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.consoleLogging}"
+                              Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_ConsoleOutput}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_ConsoleOutput}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_ConsoleOutput}"
+                                          IsChecked="{Binding EnableConsoleLogging, Mode=TwoWay}" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.consoleColors}"
+                              Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsEnabled="{Binding EnableConsoleLogging}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_ColoredLevels}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_ColoredLevels}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_ColoredLevels}"
+                                          IsChecked="{Binding EnableConsoleColors, Mode=TwoWay}" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.captureLibraries}"
+                              Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_CaptureLibraryLogs}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_CaptureLibraryLogs}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_CaptureLibraryLogs}"
+                                          IsChecked="{Binding CaptureExternalConsoleLogs, Mode=TwoWay}" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.fileLogging}"
+                              Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_LogFile}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_LogFile}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_LogFile}"
+                                          IsChecked="{Binding EnableFileLogging, Mode=TwoWay}" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.logFilePath}"
+                              Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsEnabled="{Binding EnableFileLogging}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_LogFilePath}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_LogFilePath}" />
+                            </StackPanel>
+                            <TextBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_LogFilePath}"
+                                     Text="{Binding LogFilePath, Mode=TwoWay}" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.rotation}"
+                              Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsEnabled="{Binding EnableFileLogging}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_FileRotation}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_FileRotation}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_FileRotation}"
+                                          IsChecked="{Binding RotateLogFiles, Mode=TwoWay}" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.maxMb}"
+                              Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsEnabled="{Binding RotateLogFiles}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_MaxMb}" />
+                            </StackPanel>
+                            <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                                <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_MaxMb}"
+                                               Value="{Binding LogFileMaxMb, Mode=TwoWay}" Minimum="1" Maximum="1024" Increment="1" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                           Text="{localization:Loc Settings_UnitMegabytes}" />
+                            </Grid>
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.keep}"
+                              Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsEnabled="{Binding RotateLogFiles}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Keep}" />
+                            </StackPanel>
+                            <NumericUpDown VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_Keep}"
+                                           Value="{Binding LogFileMaxRollovers, Mode=TwoWay}" Minimum="1" Maximum="20" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.minLevel}"
+                              Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_MinLogLevel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_MinLogLevel}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_MinLogLevel}"
+                                      SelectedIndex="{Binding MinimumLogLevelIndex, Mode=TwoWay}">
+                                <ComboBoxItem Content="{localization:Loc Settings_LogLevel_Trace}" />
+                                <ComboBoxItem Content="{localization:Loc Settings_LogLevel_Debug}" />
+                                <ComboBoxItem Content="{localization:Loc Settings_LogLevel_Info}" />
+                                <ComboBoxItem Content="{localization:Loc Settings_LogLevel_Warning}" />
+                                <ComboBoxItem Content="{localization:Loc Settings_LogLevel_Error}" />
+                            </ComboBox>
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.noiseControl}"
+                              Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_NoiseControl}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_NoiseControl}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_NoiseControl}"
+                                          IsChecked="{Binding CoalesceRepeatedLogs, Mode=TwoWay}" />
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.repeatWindow}"
+                              Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsEnabled="{Binding CoalesceRepeatedLogs}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_WindowMs}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_RepeatTiming}" />
+                            </StackPanel>
+                            <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                                <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_WindowMs}"
+                                               Value="{Binding LogRepeatCoalesceWindowMs, Mode=TwoWay}" Minimum="1" Maximum="60000" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                           Text="{localization:Loc Settings_UnitMilliseconds}" />
+                            </Grid>
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.repeatSummary}"
+                              Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsEnabled="{Binding CoalesceRepeatedLogs}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SummaryMs}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_RepeatTiming}" />
+                            </StackPanel>
+                            <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                                <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_SummaryMs}"
+                                               Value="{Binding LogRepeatSummaryIntervalMs, Mode=TwoWay}" Minimum="250" Maximum="60000" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                           Text="{localization:Loc Settings_UnitMilliseconds}" />
+                            </Grid>
+                        </Grid>
+                
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=general.categories}"
+                              Classes="FormRow" ColumnDefinitions="*">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Categories}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_Categories}" />
+                                <UniformGrid Columns="3" Margin="0,12,0,0">
+                                    <CheckBox Content="{localization:Loc LogCategory_Application}" AutomationProperties.Name="{localization:Loc LogCategory_Application}"
+                                              IsChecked="{Binding LogApplication, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Project}" AutomationProperties.Name="{localization:Loc LogCategory_Project}"
+                                              IsChecked="{Binding LogProject, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Import}" AutomationProperties.Name="{localization:Loc LogCategory_Import}"
+                                              IsChecked="{Binding LogImport, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Editing}" AutomationProperties.Name="{localization:Loc LogCategory_Editing}"
+                                              IsChecked="{Binding LogEditing, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Input}" AutomationProperties.Name="{localization:Loc LogCategory_Input}"
+                                              IsChecked="{Binding LogInput, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Events}" AutomationProperties.Name="{localization:Loc LogCategory_Events}"
+                                              IsChecked="{Binding LogEvents, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_History}" AutomationProperties.Name="{localization:Loc LogCategory_History}"
+                                              IsChecked="{Binding LogHistory, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Settings}" AutomationProperties.Name="{localization:Loc LogCategory_Settings}"
+                                              IsChecked="{Binding LogSettings, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Audio}" AutomationProperties.Name="{localization:Loc LogCategory_Audio}"
+                                              IsChecked="{Binding LogAudio, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_Errors}" AutomationProperties.Name="{localization:Loc LogCategory_Errors}"
+                                              IsChecked="{Binding LogErrors, Mode=TwoWay}" />
+                                    <CheckBox Content="{localization:Loc LogCategory_External}" AutomationProperties.Name="{localization:Loc LogCategory_External}"
+                                              IsChecked="{Binding LogExternal, Mode=TwoWay}" />
+                                </UniformGrid>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+        </ctl:MasonryPanel>
+    </ScrollViewer>
+</UserControl>

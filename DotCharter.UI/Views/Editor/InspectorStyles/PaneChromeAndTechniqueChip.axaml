@@ -1,0 +1,141 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the inspector grammar — see `Views/Editor/InspectorStyles.axaml`,
+         which merges this file and its siblings IN ORDER. The shared inspector chrome — title strip, footer bar, grouping cards,
+         disclosures — and the tri-state technique chip. -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Shared inspector chrome (0.16 redesign, on the Fire layer since
+         0.50). Every tab reuses these so the eight panes read as one surface:
+         a sticky title strip, a pinned footer action bar, grouping cards,
+         aligned label/control rows and a designed empty state.
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- Pinned top row: a tab's summary and its verbs (the Issues count, Auto-fix,
+         Refresh). Since #601 it is the SLIM row the Sound tab's navigation row is
+         — 28 px, one hairline under it — and it never repeats the tab's name:
+         the tab strip already says it. -->
+    <Style Selector="Border.InspectorHeader">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="MinHeight" Value="28" />
+    </Style>
+    <!-- The row's summary, in the navigation row's type. Trimming stays: this is
+         a ~380 px column and a German summary is ~40 % longer than its English
+         source, so a row that cannot ellipsise pushes its own verbs off it. -->
+    <Style Selector="Border.InspectorHeader TextBlock.HeaderTitle">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- Pinned bottom action bar. The layer's footer surface — darker than the
+         body, which is what makes it read as the floor of the pane. -->
+    <Style Selector="Border.InspectorFooter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceFooter}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+    </Style>
+
+    <!-- Grouping card — the layer's quiet card surface, at the pane's own
+         inset. `FirePadCard` (18,14) is a Play Mode card and would eat a
+         third of the column here; `FirePadRow` (12,10) is the same number the
+         app's dock-pane inset already was, so the rhythm inside a card is
+         unchanged while its surface, edge and corner all move. -->
+    <Style Selector="Border.InspectorCard">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+    </Style>
+
+    <!-- Aligned label/control row. The label rail is `FieldLabelRail` (84) —
+         the views set it as a ColumnDefinition, this class owns the row height
+         and the hover tint that makes an editable row feel live. -->
+    <Style Selector="Grid.FieldRow">
+        <Setter Property="MinHeight" Value="{StaticResource RowHeightField}" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Grid.FieldRow:pointerover">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <!-- The label rail, as a fixed-width label inside an Auto column. Applying
+         the token to the TextBlock's Width rather than the ColumnDefinition is
+         deliberate: Width is a double, GridLength is not, so a DynamicResource
+         on the column would silently fail to convert and the rail would drift
+         back to Auto. Identical layout, one source of truth for the 84. -->
+    <Style Selector="TextBlock.FieldLabel">
+        <Setter Property="Width" Value="{StaticResource FieldLabelRail}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- Fretboard well — the framed surface that hosts an interactive
+         ChordBoxControl (the Sound tab's placement picker and the chord
+         shape editor). Shared so both read as the same instrument. -->
+    <Style Selector="Border.FretboardWell">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+
+    <!-- Card caption: the title of a titled block inside a card. It is the
+         DISPLAY face and plain text — the accent belongs to the one glyph
+         beside it (`PathIcon.SectionIcon`), because a column of accent-tinted
+         captions says nothing about which of them matters. -->
+    <Style Selector="TextBlock.InspectorCardTitle">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- The caption over each technique-chip cluster: a MONO EYEBROW, the
+         layer's single most repeated mark. These strings were already
+         eyebrow-shaped, so nothing had to be invented for them. -->
+    <Style Selector="TextBlock.TechniqueGroupLabel">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="Margin" Value="2,0,0,3" />
+    </Style>
+
+    <!-- Designed empty state — centred icon + hint shown when a tab has
+         nothing to edit, instead of dead controls. -->
+    <Style Selector="StackPanel.InspectorEmpty">
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Spacing" Value="{StaticResource FireSpaceMd}" />
+        <Setter Property="MaxWidth" Value="260" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+    <Style Selector="StackPanel.InspectorEmpty PathIcon">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Opacity" Value="0.5" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="StackPanel.InspectorEmpty TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+    </Style>
+
+</Styles>

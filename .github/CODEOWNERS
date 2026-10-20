@@ -1,0 +1,13 @@
+# Review ownership (#841). The last matching line wins.
+* @SomeeName
+
+# Per area, so a second maintainer can take one without touching the rest.
+/DotCharter.Tone/ @SomeeName
+/DotCharter.Tone.UI/ @SomeeName
+/DotCharter.Rendering/ @SomeeName
+/DotCharter.Analysis/ @SomeeName
+/DotCharter.UI/ @SomeeName
+/JuceSharp/ @SomeeName
+/tools/release/ @SomeeName
+/.github/ @SomeeName
+/licenses/ @SomeeName

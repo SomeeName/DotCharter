@@ -1,0 +1,443 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.ResultsScreenView"
+             x:DataType="contracts:IResultsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Results, redesigned.
+
+        A GRADE HERO and a compact stats grid, then three second-read panels
+        side by side: the section breakdown, the timing histogram and the local
+        leaderboard. The verbs live with the hero, not at the bottom of a
+        screen-height scroll — what you do next is the point of the screen.
+
+        Each of the three panels has its OWN empty state and keeps its slot when
+        it has nothing: a chart with no sections, a run with no timing samples
+        and a machine with one profile are all ordinary, and a panel that hides
+        outright leaves the board lopsided.
+
+        The section bars are ProgressBars with Minimum 0 / Maximum 1, never a
+        pixel width — a fraction bound to a Width is a converter and a lie about
+        the layout. The timing histogram cannot be: a star-sized Grid row is not
+        bindable, so its columns carry a measured DIP height the fake and this
+        view agree on.
+    -->
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+        <Border Theme="{StaticResource FireWashBorder}" Classes="FireWash UpperLeft" Margin="{StaticResource FireWashBleed}" />
+
+        <ScrollViewer x:Name="ResultsRedesignScroll" HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="ResultsRedesignRoot"
+                        MaxWidth="{DynamicResource FireColumnMaxWidthLg}"
+                        Margin="{StaticResource FirePadScreen}"
+                        Spacing="{StaticResource FireSpaceSection}">
+
+                <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Classes="FireSectionHeader">
+                    <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" TextWrapping="Wrap"
+                               Text="{localization:Loc PlayMode_Results_Title}" />
+                    <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextWrapping="Wrap"
+                               Text="{Binding SongTitle}" />
+                    <!-- SETLIST (#646): where it stands, or that it is done. -->
+                    <Panel x:Name="ResultsRedesignSetlistStatus" IsVisible="{Binding Setlist.IsRunning}">
+                        <TextBlock x:Name="ResultsRedesignSetlistProgress" Theme="{StaticResource FireMonoText}" Classes="FireMono Accent"
+                                   TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding !Setlist.IsFinished}"
+                                   Text="{Binding Setlist.ProgressLabel}" />
+                        <Border x:Name="ResultsRedesignSetlistDone" Theme="{StaticResource FireTagBorder}" Classes="FireTag Success" HorizontalAlignment="Left"
+                                IsVisible="{Binding Setlist.IsFinished}">
+                            <TextBlock TextTrimming="CharacterEllipsis" Text="{Binding Setlist.FinishedLabel}" />
+                        </Border>
+                    </Panel>
+                    <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="{StaticResource FireSpaceRow}">
+                        <Border Grid.Column="0" Theme="{StaticResource FireTagBorder}" Classes="FireTag">
+                            <TextBlock TextTrimming="CharacterEllipsis" MaxWidth="320"
+                                       Text="{Binding ArrangementName}" />
+                        </Border>
+                        <Border Grid.Column="1" Theme="{StaticResource FireTagBorder}" Classes="FireTag">
+                            <TextBlock TextTrimming="CharacterEllipsis" MaxWidth="320"
+                                       Text="{Binding TuningLabel}" />
+                        </Border>
+                    </Grid>
+                </StackPanel>
+
+                <!-- ══ THE HERO ═════════════════════════════════════════════ -->
+                <Border x:Name="ResultsRedesignHero" Theme="{StaticResource FireHeroPanelBorder}" Classes="FireHeroPanel">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSection}">
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceRow}">
+                            <Viewbox Width="112" Height="112" Stretch="Uniform"
+                                     HorizontalAlignment="Center">
+                                <Border x:Name="ResultsRedesignGradeBadge"
+                                        Theme="{StaticResource FireGradeBadgeBorder}" Classes="FireGradeBadge">
+                                    <TextBlock Text="{Binding GradeLabel}" />
+                                </Border>
+                            </Viewbox>
+                            <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Success" HorizontalAlignment="Center"
+                                    IsVisible="{Binding IsFullCombo}"
+                                    ToolTip.Tip="{localization:Loc PlayMode_FullCombo_Tip}">
+                                <TextBlock Text="{localization:Loc PlayMode_FullCombo_Badge}" />
+                            </Border>
+                            <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent" HorizontalAlignment="Center"
+                                    IsVisible="{Binding IsNewRecord}">
+                                <TextBlock Text="{localization:Loc PlayMode_Results_NewRecord}" />
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceRow}">
+                            <Grid x:Name="ResultsRedesignStatsGrid" ColumnDefinitions="*,*,*,*"
+                                  ColumnSpacing="{StaticResource FireSpaceXl}">
+                                <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding ScoreLabel}" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc LivePlay_Score}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding AccuracyLabel}" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc LivePlay_Accuracy}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding StreakLabel}" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc LivePlay_Streak}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Spacing="{StaticResource FireSpaceXxs}">
+                                    <Grid ColumnDefinitions="Auto,Auto,Auto"
+                                          ColumnSpacing="{StaticResource FireSpaceSm}">
+                                        <TextBlock Grid.Column="0" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Success"
+                                                   HorizontalAlignment="Left" TextAlignment="Left"
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="120"
+                                                   Text="{Binding HitsLabel}" />
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono"
+                                                   VerticalAlignment="Center" Text="/" />
+                                        <TextBlock Grid.Column="2" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Danger"
+                                                   HorizontalAlignment="Left" TextAlignment="Left"
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="120"
+                                                   Text="{Binding MissesLabel}" />
+                                    </Grid>
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc LivePlay_HitsMisses}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Theme="{StaticResource FireBodyText}" Classes="FireBody" Text="{Binding ComparisonLabel}" />
+
+                            <TextBlock x:Name="ResultsRedesignTechniqueLine" Theme="{StaticResource FireBodyText}" Classes="FireBody"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource FireWarning}"
+                                       Text="{Binding TechniqueLabel}" IsVisible="{Binding HasTechniqueLine}" />
+
+                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+                            <!-- While a setlist has a next song, "Next: <song>" is the primary
+                                 action on a row of its own (the title needs the width), Retry
+                                 steps down to an outline button and End setlist takes Song
+                                 select's slot: leaving would end the setlist anyway. -->
+                            <Button x:Name="ResultsRedesignSetlistNext" Theme="{StaticResource FireCtaButton}" Classes="FireCta"
+                                    HorizontalAlignment="Stretch"
+                                    IsVisible="{Binding Setlist.HasNext}"
+                                    AutomationProperties.Name="{Binding Setlist.NextLabel}"
+                                    ToolTip.Tip="{Binding Setlist.NextLabel}"
+                                    Command="{Binding Setlist.NextSetlistSongCommand}">
+                                <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           Text="{Binding Setlist.NextLabel}" />
+                            </Button>
+
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="{StaticResource FireSpaceRow}">
+                                <Button x:Name="ResultsRedesignRetry" Grid.Column="0" Theme="{StaticResource FireCtaButton}" Classes="FireCta"
+                                        HorizontalAlignment="Stretch"
+                                        IsVisible="{Binding !Setlist.HasNext}"
+                                        Command="{Binding RetryCommand}">
+                                    <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                                               Text="{localization:Loc PlayMode_Results_Retry}" />
+                                </Button>
+                                <Button x:Name="ResultsRedesignSetlistRetry" Grid.Column="0"
+                                        Theme="{StaticResource FireOutlineCtaButton}" Classes="FireOutlineCta"
+                                        IsVisible="{Binding Setlist.HasNext}"
+                                        Command="{Binding RetryCommand}"
+                                        Content="{localization:Loc PlayMode_Results_Retry}" />
+                                <Button x:Name="ResultsRedesignPractice" Grid.Column="1"
+                                        Theme="{StaticResource FireOutlineCtaButton}" Classes="FireOutlineCta"
+                                        IsEnabled="{Binding CanPractice}"
+                                        Command="{Binding PracticeCommand}"
+                                        Content="{localization:Loc PlayMode_Results_Practice}" />
+                                <Button x:Name="ResultsRedesignSongSelect" Grid.Column="2"
+                                        Theme="{StaticResource FireOutlineCtaButton}" Classes="FireOutlineCta"
+                                        IsVisible="{Binding !Setlist.HasNext}"
+                                        Command="{Binding SongSelectCommand}"
+                                        Content="{localization:Loc PlayMode_Results_SongSelect}" />
+                                <Button x:Name="ResultsRedesignSetlistEnd" Grid.Column="2"
+                                        Theme="{StaticResource FireOutlineCtaButton}" Classes="FireOutlineCta"
+                                        IsVisible="{Binding Setlist.HasNext}"
+                                        Command="{Binding Setlist.EndSetlistCommand}"
+                                        Content="{localization:Loc PlayMode_Setlist_End}" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="Auto,Auto,*"
+                                  ColumnSpacing="{StaticResource FireSpaceRow}">
+                                <Button Grid.Column="0" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                        IsVisible="{Binding CanListenBack}"
+                                        Command="{Binding ListenBackCommand}"
+                                        Content="{localization:Loc PlayMode_Take_ListenBack}"
+                                        IsEnabled="{Binding !IsTakePlaying}" />
+                                <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                        IsVisible="{Binding IsTakePlaying}"
+                                        Command="{Binding ListenBackCommand}"
+                                        Content="{localization:Loc PlayMode_Take_Stop}" />
+                                <Button Grid.Column="2" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                        HorizontalAlignment="Right"
+                                        Command="{Binding OpenInEditorCommand}"
+                                        Content="{localization:Loc PlayMode_Results_OpenEditor}" />
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ══ THE SECOND READ ══════════════════════════════════════ -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSection}">
+
+                    <!-- section breakdown -->
+                    <Border x:Name="ResultsRedesignBreakdown" Grid.Column="0" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                        <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                            <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                           Text="{localization:Loc PlayMode_Results_BreakdownTitle}" />
+                                <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence"
+                                           Text="{localization:Loc PlayMode_Results_BreakdownSubtitle}" />
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding Sections}"
+                                          IsVisible="{Binding HasSections}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IResultSection">
+                                        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                                            <Grid ColumnDefinitions="*,220,88"
+                                                  ColumnSpacing="{StaticResource FireSpaceRow}">
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                                            Spacing="{StaticResource FireSpaceXxs}">
+                                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding Name}" />
+                                                    <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding TimeLabel}" />
+                                                </StackPanel>
+
+                                                <Panel Grid.Column="1" VerticalAlignment="Center">
+                                                    <ProgressBar Classes="FireMeter Danger"
+                                                                 Minimum="0" Maximum="1"
+                                                                 IsVisible="{Binding IsWeak}"
+                                                                 Value="{Binding Accuracy}" />
+                                                    <ProgressBar Classes="FireMeter Warn"
+                                                                 Minimum="0" Maximum="1"
+                                                                 IsVisible="{Binding IsFair}"
+                                                                 Value="{Binding Accuracy}" />
+                                                    <ProgressBar Classes="FireMeter Success"
+                                                                 Minimum="0" Maximum="1"
+                                                                 IsVisible="{Binding IsStrong}"
+                                                                 Value="{Binding Accuracy}" />
+                                                </Panel>
+
+                                                <TextBlock Grid.Column="2" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding AccuracyLabel}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="ResultsRedesignNoSectionsPanel" Classes="FireEmptyState"
+                                        IsVisible="{Binding !HasSections}">
+                                <!-- No kicker: the panel's own eyebrow already
+                                     says "Section breakdown" two lines above. -->
+                                <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                           Text="{localization:Loc PlayMode_Results_Sections_Empty}" />
+                            </StackPanel>
+
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*"
+                                  ColumnSpacing="{StaticResource FireSpaceRow}"
+                                  IsVisible="{Binding HasSections}">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                            Spacing="{StaticResource FireSpaceSm}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Danger" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc PlayMode_Results_LegendWeak}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                            Spacing="{StaticResource FireSpaceSm}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc PlayMode_Results_LegendFair}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                            Spacing="{StaticResource FireSpaceSm}">
+                                    <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Success" />
+                                    <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                               Text="{localization:Loc PlayMode_Results_LegendStrong}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- timing + leaderboard -->
+                    <StackPanel Grid.Column="1" Width="{DynamicResource FireContextRailWidth}"
+                                Spacing="{StaticResource FireSpaceSection}">
+
+                        <Border x:Name="ResultsRedesignTimingPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                                <Grid ColumnDefinitions="Auto,*"
+                                      ColumnSpacing="{StaticResource FireSpaceRow}">
+                                    <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                               VerticalAlignment="Center"
+                                               Text="{localization:Loc PlayMode_Results_Timing}" />
+                                    <TextBlock Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                               IsVisible="{Binding HasTiming}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Text="{Binding TimingHeadline}" />
+                                </Grid>
+
+                                <StackPanel IsVisible="{Binding HasTiming}"
+                                            Spacing="{StaticResource FireSpaceRow}">
+                                    <Border Height="96" Padding="{StaticResource FirePadNone}">
+                                        <ItemsControl x:Name="ResultsRedesignHistogram"
+                                                      ItemsSource="{Binding TimingBars}"
+                                                      VerticalAlignment="Bottom"
+                                                      HorizontalAlignment="Center">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal"
+                                                                VerticalAlignment="Bottom"
+                                                                Spacing="{StaticResource FireSpaceXxs}" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="contracts:ITimingBar">
+                                                    <Panel Width="20" VerticalAlignment="Bottom">
+                                                        <Border Theme="{StaticResource FireColumnBorder}" Classes="FireColumn" Width="20"
+                                                                IsVisible="{Binding !IsCentre}"
+                                                                Height="{Binding BarHeight}" />
+                                                        <Border Theme="{StaticResource FireColumnBorder}" Classes="FireColumn Success" Width="20"
+                                                                IsVisible="{Binding IsCentre}"
+                                                                Height="{Binding BarHeight}" />
+                                                    </Panel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_EarlyAxis}" />
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   HorizontalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_CentreAxis}" />
+                                        <TextBlock Grid.Column="2" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_LateAxis}" />
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                                          ColumnSpacing="{StaticResource FireSpaceRow}"
+                                          RowSpacing="{StaticResource FireSpaceSm}">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   VerticalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_Mean}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding TimingMeanLabel}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   VerticalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_Spread}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding TimingSpreadLabel}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   VerticalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_Early}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding TimingEarlyLabel}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   VerticalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_Late}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding TimingLateLabel}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                                   VerticalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_OnTimeCount}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding TimingOnTimeLabel}" />
+                                    </Grid>
+                                </StackPanel>
+
+                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="ResultsRedesignNoTimingPanel"
+                                            Classes="FireEmptyState"
+                                            IsVisible="{Binding !HasTiming}">
+                                    <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                               Text="{localization:Loc PlayMode_Results_NoTiming}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="ResultsRedesignLeaderboardPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                           Text="{localization:Loc PlayMode_Results_Leaderboard}" />
+
+                                <ItemsControl ItemsSource="{Binding Leaderboard}"
+                                              IsVisible="{Binding HasLeaderboard}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:ILeaderboardRow">
+                                            <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                                                <Grid ColumnDefinitions="Auto,*,Auto"
+                                                      ColumnSpacing="{StaticResource FireSpaceRow}">
+                                                    <Border Grid.Column="0" Theme="{StaticResource FireMedalBorder}" Classes="FireMedal"
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding RankLabel}" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1"
+                                                                VerticalAlignment="Center"
+                                                                Spacing="{StaticResource FireSpaceXxs}">
+                                                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding ProfileName}" />
+                                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding AccuracyLabel}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="120"
+                                                               Text="{Binding ScoreLabel}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="ResultsRedesignNoLeaderboardPanel"
+                                            Classes="FireEmptyState"
+                                            IsVisible="{Binding !HasLeaderboard}">
+                                    <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                               Text="{localization:Loc PlayMode_Results_NoLeaderboard}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </Panel>
+</UserControl>

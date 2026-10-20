@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigMidiControlsView"
+             x:DataType="vm:RigMidiInputViewModel">
+    <!-- The MIDI input card in the side rack: the device picker on a row of
+         its own, stretched to the card, and the two verbs under it. -->
+    <StackPanel Spacing="{StaticResource FireSpaceSm}">
+        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_MidiInput}" />
+        <StackPanel Spacing="{StaticResource FireSpaceSm}" IsEnabled="{Binding IsAvailable}">
+            <ComboBox Classes="FireCombo" HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}"
+                      PlaceholderText="{localization:Loc Rig_MidiSelect}" AutomationProperties.Name="{localization:Loc Rig_MidiInput}" />
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding RefreshCommand}" Content="{localization:Loc Rig_MidiRefresh}" />
+                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding DisconnectCommand}" Content="{localization:Loc Rig_MidiDisconnect}" />
+            </StackPanel>
+        </StackPanel>
+        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{localization:Loc Rig_MidiUnavailable}" IsVisible="{Binding !IsAvailable}" TextWrapping="Wrap" />
+        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding ConnectionHint}" IsVisible="{Binding IsAvailable}" TextWrapping="Wrap" />
+        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding Status}" TextWrapping="Wrap"
+                   IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+        <!-- PERFORMANCE (2026-09-27): what a program change and the scene CC do.
+             Program n = song n of the active setlist (0 = the first), else the
+             n-th of the player's own tones; CC value 0–7 = scene A–H. Knob
+             assignments keep their own channel and are not filtered here. -->
+        <Grid x:Name="RigMidiPerformance" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto"
+              ColumnSpacing="{StaticResource FireSpaceSm}" RowSpacing="{StaticResource FireSpaceSm}">
+            <CheckBox Grid.Row="0" Grid.ColumnSpan="2" x:Name="RigMidiProgramChange"
+                      IsChecked="{Binding IsProgramChangeEnabled, Mode=TwoWay}"
+                      Content="{localization:Loc Rig_Midi_ProgramChange}"
+                      ToolTip.Tip="{localization:Loc Rig_Midi_ProgramChange_Tip}" />
+            <CheckBox Grid.Row="1" Grid.Column="0" x:Name="RigMidiSceneCcEnabled" VerticalAlignment="Center"
+                      IsChecked="{Binding IsSceneCcEnabled, Mode=TwoWay}"
+                      Content="{localization:Loc Rig_Midi_SceneCc}"
+                      ToolTip.Tip="{localization:Loc Rig_Midi_SceneCc_Tip}" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="RigMidiSceneCc" Width="64" HorizontalAlignment="Left"
+                           ShowButtonSpinner="False"
+                           Minimum="0" Maximum="127" Increment="1" FormatString="0"
+                           IsEnabled="{Binding IsSceneCcEnabled}"
+                           Value="{Binding SceneCc, Mode=TwoWay}"
+                           AutomationProperties.Name="{localization:Loc Rig_Midi_SceneCc}" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                       Text="{localization:Loc Rig_Midi_Channel}" />
+            <ComboBox Grid.Row="2" Grid.Column="1" Classes="FireCombo" x:Name="RigMidiChannel" Width="140"
+                      HorizontalAlignment="Left"
+                      ItemsSource="{Binding ChannelOptions}"
+                      SelectedItem="{Binding SelectedChannel, Mode=TwoWay}"
+                      AutomationProperties.Name="{localization:Loc Rig_Midi_Channel}" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                       Text="{localization:Loc Rig_Midi_Last}" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono" x:Name="RigMidiLastMessage" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       Text="{Binding LastMessageText}" />
+        </Grid>
+    </StackPanel>
+</UserControl>

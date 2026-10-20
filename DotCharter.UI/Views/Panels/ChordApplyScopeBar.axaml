@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Panels.ChordApplyScopeBar"
+             x:DataType="panels:ChordTemplateEditorViewModel">
+
+    <!-- The "Apply to" ladder (#484). EVERY edit on the chord panel — fret,
+         finger, name, arpeggio, the template picker — reaches exactly the
+         lit rung, and each rung's count is read off the same ChordApplyScope
+         the planner writes through, so a rung cannot say one reach while the
+         edit takes another. A rung with nothing to reach is disabled and its
+         tip says why; then the next one up is lit (with nothing selected that
+         is "every use", which browse mode always edited).
+
+         COMPACT since #572: the four rungs wrap side by side instead of
+         stacking one per row, and only the LIT rung prints its count (under
+         them); every rung's count is in its tooltip and its accessible name.
+         The Sound tab pins this bar above its segments, so the reach of an
+         edit is on screen wherever the edit is made. -->
+    <StackPanel Spacing="{StaticResource SpaceXs}">
+        <Border x:Name="ApplyToLadder" Classes="ScopeBar" IsVisible="{Binding Ladder.IsVisible}">
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto"
+                  ColumnSpacing="{StaticResource SpaceSm}">
+                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Top"
+                           Margin="{StaticResource GapTopXs}"
+                           Text="{localization:Loc ChordTemplate_Scope_Label}" />
+                <WrapPanel x:Name="ApplyToRungs" Grid.Row="0" Grid.Column="1" Orientation="Horizontal"
+                           ItemSpacing="{StaticResource SpaceXxs}" LineSpacing="{StaticResource SpaceXxs}">
+                    <!-- A rung with nothing to reach reads as unavailable, not as one
+                         more option (the TechniqueChip's disabled look). -->
+                    <WrapPanel.Styles>
+                        <Style Selector="ToggleButton.Seg:disabled">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Style>
+                    </WrapPanel.Styles>
+                    <!-- Radio behaviour: IsChecked is OneWay and the WRITE is the
+                         command, so clicking the lit rung keeps it lit. -->
+                    <ToggleButton x:Name="ApplyToThisChord" Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  IsEnabled="{Binding Ladder.ThisChord.IsAvailable}"
+                                  IsChecked="{Binding Ladder.ThisChord.IsEffective, Mode=OneWay}"
+                                  Command="{Binding ChooseApplyRungCommand}"
+                                  CommandParameter="{x:Static panels:ChordApplyRung.ThisChord}"
+                                  ToolTip.Tip="{Binding Ladder.ThisChord.ToolTipText}" ToolTip.ShowOnDisabled="True"
+                                  AutomationProperties.Name="{Binding Ladder.ThisChord.AccessibleName}">
+                        <TextBlock Text="{Binding Ladder.ThisChord.Label}" TextTrimming="CharacterEllipsis" />
+                    </ToggleButton>
+                    <ToggleButton x:Name="ApplyToSelected" Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  IsEnabled="{Binding Ladder.Selected.IsAvailable}"
+                                  IsChecked="{Binding Ladder.Selected.IsEffective, Mode=OneWay}"
+                                  Command="{Binding ChooseApplyRungCommand}"
+                                  CommandParameter="{x:Static panels:ChordApplyRung.Selected}"
+                                  ToolTip.Tip="{Binding Ladder.Selected.ToolTipText}" ToolTip.ShowOnDisabled="True"
+                                  AutomationProperties.Name="{Binding Ladder.Selected.AccessibleName}">
+                        <TextBlock Text="{Binding Ladder.Selected.Label}" TextTrimming="CharacterEllipsis" />
+                    </ToggleButton>
+                    <ToggleButton x:Name="ApplyToEveryUse" Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  IsEnabled="{Binding Ladder.EveryUse.IsAvailable}"
+                                  IsChecked="{Binding Ladder.EveryUse.IsEffective, Mode=OneWay}"
+                                  Command="{Binding ChooseApplyRungCommand}"
+                                  CommandParameter="{x:Static panels:ChordApplyRung.EveryUse}"
+                                  ToolTip.Tip="{Binding Ladder.EveryUse.ToolTipText}" ToolTip.ShowOnDisabled="True"
+                                  AutomationProperties.Name="{Binding Ladder.EveryUse.AccessibleName}">
+                        <TextBlock Text="{Binding Ladder.EveryUse.Label}" TextTrimming="CharacterEllipsis" />
+                    </ToggleButton>
+                    <ToggleButton x:Name="ApplyToSameGrip" Theme="{StaticResource SegToggle}" Classes="Seg"
+                                  IsEnabled="{Binding Ladder.SameGrip.IsAvailable}"
+                                  IsChecked="{Binding Ladder.SameGrip.IsEffective, Mode=OneWay}"
+                                  Command="{Binding ChooseApplyRungCommand}"
+                                  CommandParameter="{x:Static panels:ChordApplyRung.SameGrip}"
+                                  ToolTip.Tip="{Binding Ladder.SameGrip.ToolTipText}" ToolTip.ShowOnDisabled="True"
+                                  AutomationProperties.Name="{Binding Ladder.SameGrip.AccessibleName}">
+                        <TextBlock Text="{Binding Ladder.SameGrip.Label}" TextTrimming="CharacterEllipsis" />
+                    </ToggleButton>
+                </WrapPanel>
+
+                <!-- What the lit rung reaches: "4 chords · 2 hand shapes · all levels". -->
+                <TextBlock x:Name="ApplyToReach" Grid.Row="1" Grid.Column="1"
+                           Text="{Binding Ladder.EffectiveDetail}"
+                           IsVisible="{Binding Ladder.HasEffectiveDetail}"
+                           FontSize="{StaticResource FontSizeMicro}" FontWeight="Normal"
+                           Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+
+                <!-- The bulk-edit preview (#485): while the lit rung reaches more
+                     than the selection, what it would change is outlined on the
+                     timeline and marked on the song map. This row counts the marks
+                     (and the uses on other levels, which neither shows) and steps
+                     the playhead between them. -->
+                <Grid x:Name="ApplyToPreview" Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto,Auto"
+                      x:DataType="panels:ChordApplyPreview" DataContext="{Binding $parent[UserControl].((panels:ChordTemplateEditorViewModel)DataContext).Preview}"
+                      ColumnSpacing="{StaticResource SpaceXs}" IsVisible="{Binding IsActive}">
+                    <TextBlock VerticalAlignment="Center" Text="{Binding Summary}"
+                               TextWrapping="Wrap" FontSize="{StaticResource FontSizeMicro}" />
+                    <Button x:Name="PreviewPreviousTarget" Grid.Column="1"
+                            Theme="{StaticResource PillButton}" Classes="Pill" Content="‹"
+                            Command="{Binding PreviousTargetCommand}"
+                            IsEnabled="{Binding CanStep}"
+                            ToolTip.Tip="{localization:Loc ChordTemplate_Preview_Previous}"
+                            AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Previous}" />
+                    <Button x:Name="PreviewNextTarget" Grid.Column="2"
+                            Theme="{StaticResource PillButton}" Classes="Pill" Content="›"
+                            Command="{Binding NextTargetCommand}"
+                            IsEnabled="{Binding CanStep}"
+                            ToolTip.Tip="{localization:Loc ChordTemplate_Preview_Next}"
+                            AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Next}" />
+                </Grid>
+            </Grid>
+        </Border>
+        <!-- A reshape with nothing selected is refused (it would rewrite every
+             use). It used to be refused silently. -->
+        <TextBlock x:Name="ReshapeNeedsSelectionHint" Text="{localization:Loc ChordTemplate_SelectToReshape}"
+                   IsVisible="{Binding Ladder.ShowsReshapeHint}"
+                   Foreground="{DynamicResource FireWarning}"
+                   FontSize="{StaticResource FontSizeMicro}" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,71 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Rendering</RootNamespace>
+        <AssemblyName>DotCharter.Rendering</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Lets the tests reach pure decision seams inside the renderers (e.g.
+             ChordRenderer's repeat-placeholder rule) without widening production
+             visibility. Same seam pattern the other projects already use. -->
+        <InternalsVisibleTo Include="DotCharter.Tests"/>
+    </ItemGroup>
+
+    <!--
+        Embedded SPIR-V / GLSL shaders. Previously loaded via Avalonia AssetLoader
+        (avares://DotCharter/Assets/Shaders/*). Now embedded in this assembly with an
+        explicit LogicalName so Assembly.GetManifestResourceStream(...) can find them.
+
+        Resource name convention: DotCharter.Rendering.Shaders.<filename>
+        (e.g., "DotCharter.Rendering.Shaders.highway.vert.spv")
+    -->
+    <ItemGroup>
+        <EmbeddedResource Include="Shaders\*.spv">
+            <LogicalName>DotCharter.Rendering.Shaders.%(Filename)%(Extension)</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders\*.vert;Shaders\*.frag">
+            <LogicalName>DotCharter.Rendering.Shaders.%(Filename)%(Extension)</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <!--
+        3D chart textures (note gems, fingering digits, inlay markers). These
+        used to live in DotCharter.UI as <AvaloniaResource>s and be opened at
+        runtime through avares://DotCharter/... — a dependency on the UI
+        ASSEMBLY NAME that no csproj expressed and that broke silently (a
+        Debug.WriteLine) if the assets moved. Same embedded-resource mechanism
+        as the shaders above.
+
+        Resource name convention: DotCharter.Rendering.Assets.<filename>
+    -->
+    <ItemGroup>
+        <EmbeddedResource Include="Assets\Textures\*.png">
+            <LogicalName>DotCharter.Rendering.Assets.%(Filename)%(Extension)</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Silk.NET.Core"/>
+        <PackageReference Include="Silk.NET.Maths"/>
+        <PackageReference Include="Silk.NET.Vulkan"/>
+        <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR"/>
+        <!-- Composed-output path (0.16): EXT carries the optional validation
+             debug-utils messenger; Direct3D11/DXGI create the D3D11 shared
+             textures Avalonia's compositor imports (keyed-mutex interop). -->
+        <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT"/>
+        <PackageReference Include="Silk.NET.Direct3D11"/>
+        <PackageReference Include="Silk.NET.DXGI"/>
+        <PackageReference Include="SkiaSharp" />
+    </ItemGroup>
+
+</Project>

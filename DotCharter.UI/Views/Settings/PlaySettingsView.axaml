@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.PlaySettingsView"
+             x:DataType="contracts:IPlaySettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > Play: how a Play Mode run sounds and whether misses can end
+        it. Play Mode's own settings modal writes the same four values.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <!-- A plain StackPanel, not the SettingsFlow masonry: one group in two columns is a column and an empty gutter. -->
+        <StackPanel Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=play.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Gameplay}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_GameplaySubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=play.countIn}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GameplayCountIn_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GameplayCountIn}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GameplayCountIn_RowLabel}"
+                                  SelectedIndex="{Binding GameplayCountInIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Settings_GameplayCountIn_Off}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_GameplayCountIn_2}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_GameplayCountIn_4}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_GameplayCountIn_8}" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=play.metronome}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GameplayMetronome}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GameplayMetronome}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GameplayMetronome}"
+                                      IsChecked="{Binding GameplayMetronomeEnabled, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=play.claps}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GameplayClaps}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GameplayClaps}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GameplayClaps}"
+                                      IsChecked="{Binding GameplayClapsEnabled, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=play.rockMeter}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc PlayMode_RockMeter_SettingLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc PlayMode_RockMeter_SettingDesc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc PlayMode_RockMeter_SettingLabel}"
+                                      IsChecked="{Binding GameplayRockMeterEnabled, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

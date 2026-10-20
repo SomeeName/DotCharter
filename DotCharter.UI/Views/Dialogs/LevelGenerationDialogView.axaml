@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.LevelGenerationDialogView"
+             x:DataType="contracts:ILevelGenerationScreen"
+             x:CompileBindings="True">
+
+    <!-- Difficulty-level generation, hosted by Views/Shell/DialogHost (Esc is
+         refused mid-run). Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconChartLine}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle"
+                                   Text="{localization:Loc Dialog_GenerateLevels_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{Binding Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,200">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_GenerateLevels_Count}" />
+                        <NumericUpDown VerticalAlignment="Center" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True" Value="{Binding LevelCount}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_GenerateLevels_Count}"
+                                       Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                       FormatString="0" Increment="1" />
+                    </Grid>
+                    <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Margin="{DynamicResource GapTopLg}"
+                               Text="{localization:Loc Dialog_GenerateLevels_Hint}" />
+
+                    <!-- The dialog STAYS OPEN for the run, so the progress is on
+                         screen while the work happens. -->
+                    <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" IsVisible="{Binding IsBusy}">
+                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" />
+                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{Binding ProgressLabel}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True"
+                                IsEnabled="{Binding !IsBusy}" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Generate}"
+                                Command="{Binding ApplyCommand}" IsDefault="True"
+                                IsEnabled="{Binding !IsBusy}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

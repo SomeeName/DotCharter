@@ -1,0 +1,605 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire token layer — see `Styles/FireTokens.axaml`, which
+         merges this file and its siblings IN ORDER. The COLOUR half: fonts, ground, surfaces, borders, text, accent, focus,
+         the eight FIXED identities, status, elevation + glow, overlay, the
+         modal scrim, sheen and the podium metals. -->
+
+    <Styles.Resources>
+
+        <!-- ─── Fonts ────────────────────────────────────────────────────────
+             Bundled as `AvaloniaResource` under `Assets/Fonts` (the csproj
+             already globs `Assets\**`), so NOTHING is fetched at runtime — the
+             mockups' `<link href="fonts.googleapis.com">` must never become a
+             product dependency. Both are SIL OFL 1.1; the licence texts ship
+             beside the files as `Assets/Fonts/OFL-*.txt`.
+
+             GRAPHITE's two faces: Atkinson
+             Hyperlegible for everything a person reads — display AND running
+             text, drawn for low-vision readers, legible from the guitar stool —
+             and JetBrains Mono for figures, times and tunings. Display and UI
+             are the same family on purpose; the ladder's sizes and weights do
+             the work a second display face used to.
+
+             ONLY the Regular and Bold cuts are bundled: a static SemiBold
+             instance carries its own nameID 1 ("… SemiBold"), so `#Family`
+             would silently not find it and `FontWeight="SemiBold"` would fall
+             back — the invisible failure this layer's font test exists to
+             catch. `FireWeightUi` / `FireWeightDisplay` name the mapping.
+             Guarded by `DotCharter.Tests/UI/FireFontAssetTests` (assets +
+             family names, default gate) and
+             `FireFontResolutionUiPerfSmokeTests` (the real FontManager). -->
+        <FontFamily x:Key="FireFontDisplay">avares://DotCharter.Tone.UI/Assets/Fonts#Atkinson Hyperlegible</FontFamily>
+        <FontFamily x:Key="FireFontUi">avares://DotCharter.Tone.UI/Assets/Fonts#Atkinson Hyperlegible</FontFamily>
+        <FontFamily x:Key="FireFontMono">avares://DotCharter.Tone.UI/Assets/Fonts#JetBrains Mono</FontFamily>
+
+        <!-- ─── Ground ───────────────────────────────────────────────────────
+             #0d0f13 behind the centred modal screens (Settings), #111317 behind
+             the full-bleed ones. Both mockup grounds carry a purple radial wash;
+             the front door adds a second wash and a vignette. -->
+        <Color x:Key="FireGroundColor">#0D0F13</Color>
+        <SolidColorBrush x:Key="FireGround" Color="{DynamicResource FireGroundColor}" />
+        <Color x:Key="FireGroundScreenColor">#111317</Color>
+        <SolidColorBrush x:Key="FireGroundScreen" Color="{DynamicResource FireGroundScreenColor}" />
+        <Color x:Key="FireInkColor">#0A0C10</Color>
+        <SolidColorBrush x:Key="FireInk" Color="{DynamicResource FireInkColor}" />
+
+        <!-- The two CHROME steps. Neither existed: the mockups' menu bar, tool
+             bars, side panels, footers and status bar sit on their own opaque
+             darks rather than on a wash of white over the ground, and a screen
+             that reached for `FireInk` instead got #0A0C10 — a different, more
+             purple colour that happens to be near enough to look deliberate. -->
+        <Color x:Key="FireSurfaceChromeColor">#15181D</Color>
+        <SolidColorBrush x:Key="FireSurfaceChrome" Color="{DynamicResource FireSurfaceChromeColor}" />
+        <Color x:Key="FireSurfaceChromeAltColor">#171A20</Color>
+        <SolidColorBrush x:Key="FireSurfaceChromeAlt" Color="{DynamicResource FireSurfaceChromeAltColor}" />
+
+        <!-- GRAPHITE IS FLAT: the four washes below are kept as brushes (screens
+             name them) but every stop is transparent, so they paint nothing.
+             The Fire mockups' purple radial washes were the look Graphite
+             replaces — "no glow, no wash". -->
+        <!-- was: the wash over a centred modal (Settings.dc.html). -->
+        <RadialGradientBrush x:Key="FireWashTop"
+                             Center="50%,0%" GradientOrigin="50%,0%"
+                             RadiusX="60%" RadiusY="70%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.62" Color="#00000000" />
+        </RadialGradientBrush>
+
+        <!-- radial-gradient(1100px 620px at 14% -14%, rgba(76,29,149,.30), transparent 62%)
+             — the wash over a full-bleed screen (Statistics / Song Library /
+             Session History / …). -->
+        <!-- A full-screen wash sits INSIDE `ScreenInset` (28,20) when it is a
+             child of the screen root, so it begins exactly where the Back button
+             does and paints a hard rectangular edge across the backdrop — the
+             owner reported it as "you can clearly see that purply line start".
+             This cancels the inset so the wash bleeds to the window edge. It is
+             the exact negative of `ScreenInset`; change both together. -->
+        <Thickness x:Key="FireWashBleed">-28,-20</Thickness>
+
+        <RadialGradientBrush x:Key="FireWashUpperLeft"
+                             Center="14%,-14%" GradientOrigin="14%,-14%"
+                             RadiusX="72%" RadiusY="80%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.62" Color="#00000000" />
+        </RadialGradientBrush>
+
+        <!-- The front door's two stage lights (Main Menu Sidebar.dc.html). -->
+        <RadialGradientBrush x:Key="FireWashStageKey"
+                             Center="46%,42%" GradientOrigin="46%,42%"
+                             RadiusX="50%" RadiusY="62%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.62" Color="#00000000" />
+        </RadialGradientBrush>
+        <RadialGradientBrush x:Key="FireWashStageRim"
+                             Center="96%,8%" GradientOrigin="96%,8%"
+                             RadiusX="42%" RadiusY="52%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.60" Color="#00000000" />
+        </RadialGradientBrush>
+
+        <!-- ─── Surfaces ─────────────────────────────────────────────────────
+             linear-gradient(180deg, rgba(30,21,52,.96), rgba(12,9,20,.98)) is
+             THE panel. Everything else is a wash of white over the ground. -->
+        <LinearGradientBrush x:Key="FirePanelFill" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF1B1F25" />
+            <GradientStop Offset="1" Color="#FF1B1F25" />
+        </LinearGradientBrush>
+        <!-- SURFACE / GLASS — the spec's sidebar-and-practice-rail surface:
+             `linear-gradient(180deg, rgba(28,19,48,.66), rgba(9,7,16,.72))`.
+             The port had this at .55 → .40, i.e. FADING OUT downward, which is
+             the opposite of what the mockups do (they get denser toward the
+             floor so the rail reads as attached to the screen rather than
+             floating on it). Corrected to the spec alphas. -->
+        <LinearGradientBrush x:Key="FireRailFill" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#A81B1F25" />
+            <GradientStop Offset="1" Color="#B80D0F13" />
+        </LinearGradientBrush>
+        <!-- …and the `inset 1px rgba(255,255,255,.03)` that goes with it: a
+             glass surface is lit along its top edge. Draw it as a 1 px child
+             Border, not as a BorderThickness (Avalonia has no inset shadow). -->
+        <Color x:Key="FireGlassInsetColor">#08FFFFFF</Color>
+        <SolidColorBrush x:Key="FireGlassInset" Color="{DynamicResource FireGlassInsetColor}" />
+        <!-- HERO SCRIM: a landing screen's hero puts its song ON the art,
+             bottom-left, so the art has to stop competing with the words
+             toward the floor. Transparent for the top third, because the image
+             is untouched where nothing is written over it. Black rather than a
+             tinted ground on purpose - it darkens ANY cover art predictably,
+             where a tint shifts every one of them a different amount. -->
+        <LinearGradientBrush x:Key="FireHeroScrim" StartPoint="0%,35%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="1" Color="#D9000000" />
+        </LinearGradientBrush>
+        <!-- The hero panel: the ONE figure a screen is about (Statistics'
+             "time on the instrument"). Saturation is information — never a row
+             of these. The mockups draw it at 150deg or 160deg with .40/.42 and
+             two near-identical dark stops; one recipe here, deliberately. -->
+        <LinearGradientBrush x:Key="FireHeroFill" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#FF1E2733" />
+            <GradientStop Offset="1" Color="#FF1B1F25" />
+        </LinearGradientBrush>
+
+        <!-- A SELECTED list row: an accent wash that fades out to the right,
+             behind a 3 px accent bar on the left edge (Session History). -->
+        <LinearGradientBrush x:Key="FireRowSelectedFill" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#385E9FF2" />
+            <GradientStop Offset="1" Color="#085E9FF2" />
+        </LinearGradientBrush>
+        <!-- A row that holds a RECORD (Records in this Room's own-record row). -->
+        <LinearGradientBrush x:Key="FireRowRecordFill" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#1AF0A54A" />
+            <GradientStop Offset="0.6" Color="#00F0A54A" />
+        </LinearGradientBrush>
+
+        <!-- The editor CHROME rails. `rgba(255,255,255,.02)` is the menu bar's
+             own fill — one step below the quiet card, because the bar is a rail
+             the eye must pass over rather than a surface it lands on — and
+             `rgba(18,13,30,.98)` is the DROPDOWN panel every menu, flyout and
+             ComboBox popup opens on (it is nearly opaque on purpose: a popup
+             is a separate HWND and anything it lets through is the desktop). -->
+        <Color x:Key="FireSurfaceBarColor">#05FFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceBar" Color="{DynamicResource FireSurfaceBarColor}" />      <!-- .02 menu / status rail -->
+        <!-- OPAQUE since 2026-08-11: menus and dropdowns are separate HWNDs over
+             arbitrary chrome, and at .98 the toolbar icons ghosted through the
+             panel (owner report). The mockups' rgba(18,13,30,.98) reads
+             identically at 1.0 on this ground. -->
+        <Color x:Key="FireSurfaceMenuColor">#FF1B1F25</Color>
+        <SolidColorBrush x:Key="FireSurfaceMenu" Color="{DynamicResource FireSurfaceMenuColor}" />
+        <!-- ONE POPOVER's ground, verbatim from `Play Menus.dc.html`:
+             `linear-gradient(180deg,#1E2228 0%,#16191e 100%)`. A dropdown panel
+             is FLAT (`FireSurfaceMenu` above); a popover is a small floating
+             card and the mockup lights it from the top, which is what stops a
+             344 px panel reading as a grey box. -->
+        <LinearGradientBrush x:Key="FirePopoverFill" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#1E2228" />
+            <GradientStop Offset="1" Color="#16191E" />
+        </LinearGradientBrush>
+        <!-- …its head, `rgba(139,92,246,.07)`: a violet wash one step under
+             `FireAccentTintSoft` (.13), because a head is a whole 40 px band and
+             the hover tint at that size reads as a selected row. -->
+        <Color x:Key="FirePopoverHeadFillColor">#125E9FF2</Color>
+        <SolidColorBrush x:Key="FirePopoverHeadFill" Color="{DynamicResource FirePopoverHeadFillColor}" />
+        <!-- …and its footer, `rgba(0,0,0,.28)`. -->
+        <Color x:Key="FirePopoverFooterFillColor">#47000000</Color>
+        <SolidColorBrush x:Key="FirePopoverFooterFill" Color="{DynamicResource FirePopoverFooterFillColor}" />     <!-- rgba(18,13,30,.98) dropdown panel -->
+        <Color x:Key="FireSurfaceNavColor">#04FFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceNav" Color="{DynamicResource FireSurfaceNavColor}" />      <!-- rgba(255,255,255,.015) sidebar -->
+        <Color x:Key="FireSurfaceCardColor">#06FFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceCard" Color="{DynamicResource FireSurfaceCardColor}" />     <!-- .025 quiet card -->
+        <Color x:Key="FireSurfaceRaisedColor">#08FFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceRaised" Color="{DynamicResource FireSurfaceRaisedColor}" />   <!-- .03 list row / continue card -->
+        <Color x:Key="FireSurfaceChipColor">#09FFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceChip" Color="{DynamicResource FireSurfaceChipColor}" />     <!-- .035 profile chip -->
+        <Color x:Key="FireSurfaceFieldColor">#0AFFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceField" Color="{DynamicResource FireSurfaceFieldColor}" />    <!-- .04 search field / button -->
+        <Color x:Key="FireSurfaceHoverColor">#0DFFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceHover" Color="{DynamicResource FireSurfaceHoverColor}" />    <!-- .05 hover -->
+        <Color x:Key="FireSurfaceTrackColor">#1AFFFFFF</Color>
+        <SolidColorBrush x:Key="FireSurfaceTrack" Color="{DynamicResource FireSurfaceTrackColor}" />    <!-- .10 slider + meter track -->
+        <Color x:Key="FireSurfaceSunkenColor">#33000000</Color>
+        <SolidColorBrush x:Key="FireSurfaceSunken" Color="{DynamicResource FireSurfaceSunkenColor}" />   <!-- rgba(0,0,0,.2) rail floor -->
+        <Color x:Key="FireSurfaceFooterColor">#40000000</Color>
+        <SolidColorBrush x:Key="FireSurfaceFooter" Color="{DynamicResource FireSurfaceFooterColor}" />   <!-- rgba(0,0,0,.25) footer -->
+
+        <!-- ─── Borders ──────────────────────────────────────────────────────
+             THE SPEC DECLARES EXACTLY TWO: hairline `white .08` ("default 1px
+             border everywhere") and strong `white .12` ("inputs, icon buttons,
+             dividers"). The port had ONE at .10 doing both jobs, which is why
+             a Fire input and a Fire panel used to share an edge weight and
+             neither matched the mockups. The three finer seams below are real
+             values the mockups do use between REGIONS; they are not a third
+             and fourth control weight, and nothing new should reach for them.
+
+             Thickness is always 1 px — colour carries the weight. (1.5 px is
+             sanctioned on a checkbox outline and nowhere else.) -->
+        <Color x:Key="FireBorderColor">#14FFFFFF</Color>
+        <SolidColorBrush x:Key="FireBorder" Color="{DynamicResource FireBorderColor}" />          <!-- .08 THE hairline -->
+        <Color x:Key="FireBorderStrongColor">#1FFFFFFF</Color>
+        <SolidColorBrush x:Key="FireBorderStrong" Color="{DynamicResource FireBorderStrongColor}" />    <!-- .12 inputs, icon buttons, dividers -->
+        <Color x:Key="FireBorderSeamColor">#12FFFFFF</Color>
+        <SolidColorBrush x:Key="FireBorderSeam" Color="{DynamicResource FireBorderSeamColor}" />      <!-- .07 rail + header + footer seams -->
+        <Color x:Key="FireBorderHairColor">#0FFFFFFF</Color>
+        <SolidColorBrush x:Key="FireBorderHair" Color="{DynamicResource FireBorderHairColor}" />      <!-- .06 screen chrome seams -->
+        <Color x:Key="FireBorderRowColor">#0DFFFFFF</Color>
+        <SolidColorBrush x:Key="FireBorderRow" Color="{DynamicResource FireBorderRowColor}" />       <!-- .05 between data-list rows -->
+        <Color x:Key="FireBorderHoverColor">#14FFFFFF</Color>
+        <SolidColorBrush x:Key="FireBorderHover" Color="{DynamicResource FireBorderHoverColor}" />     <!-- .08 — the hairline, named for its state -->
+
+        <!-- ─── Text ─────────────────────────────────────────────────────────
+             Six steps, and each one means something:
+               Bright    a mono figure the eye must land on
+               Primary   titles and row labels
+               Body      button labels and technique names
+               Secondary supporting sentences
+               Muted     descriptions, column captions, inactive segments
+               Dim       eyebrows, units, disabled
+               Faint     version strings, "UNPLAYED", the quietest metadata -->
+        <Color x:Key="FireTextBrightColor">#FFFFFF</Color>
+        <SolidColorBrush x:Key="FireTextBright" Color="{DynamicResource FireTextBrightColor}" />
+        <Color x:Key="FireTextPrimaryColor">#E8EBEF</Color>
+        <SolidColorBrush x:Key="FireTextPrimary" Color="{DynamicResource FireTextPrimaryColor}" />
+        <Color x:Key="FireTextBodyColor">#D3D8DF</Color>
+        <SolidColorBrush x:Key="FireTextBody" Color="{DynamicResource FireTextBodyColor}" />
+        <Color x:Key="FireTextSecondaryColor">#AEB6C1</Color>
+        <SolidColorBrush x:Key="FireTextSecondary" Color="{DynamicResource FireTextSecondaryColor}" />
+        <Color x:Key="FireTextMutedColor">#929BA8</Color>
+        <SolidColorBrush x:Key="FireTextMuted" Color="{DynamicResource FireTextMutedColor}" />
+        <Color x:Key="FireTextDimColor">#7A8390</Color>
+        <SolidColorBrush x:Key="FireTextDim" Color="{DynamicResource FireTextDimColor}" />
+        <Color x:Key="FireTextFaintColor">#687080</Color>
+        <SolidColorBrush x:Key="FireTextFaint" Color="{DynamicResource FireTextFaintColor}" />
+        <Color x:Key="FireTextOnAccentColor">#0A1522</Color>
+        <SolidColorBrush x:Key="FireTextOnAccent" Color="{DynamicResource FireTextOnAccentColor}" />
+        <Color x:Key="FireTextOnAccentInkColor">#0A1522</Color>
+        <SolidColorBrush x:Key="FireTextOnAccentInk" Color="{DynamicResource FireTextOnAccentInkColor}" />   <!-- text ON a filled accent chip -->
+        <Color x:Key="FireLinkColor">#7AB6FF</Color>
+        <SolidColorBrush x:Key="FireLink" Color="{DynamicResource FireLinkColor}" />
+
+        <!-- ─── Accent ───────────────────────────────────────────────────────
+             One hue, five jobs: the bar beside a selected row, the fill of a
+             primary action, the tint behind a selection, the border of a
+             focused control, and a mono figure that is doing well. -->
+        <Color x:Key="FireAccentColor">#7AB6FF</Color>
+        <SolidColorBrush x:Key="FireAccent" Color="{DynamicResource FireAccentColor}" />
+        <Color x:Key="FireAccentStrongColor">#5E9FF2</Color>
+        <SolidColorBrush x:Key="FireAccentStrong" Color="{DynamicResource FireAccentStrongColor}" />
+        <Color x:Key="FireAccentDeepColor">#3C7BD1</Color>
+        <SolidColorBrush x:Key="FireAccentDeep" Color="{DynamicResource FireAccentDeepColor}" />
+        <Color x:Key="FireAccentBrightColor">#A8CEFF</Color>
+        <SolidColorBrush x:Key="FireAccentBright" Color="{DynamicResource FireAccentBrightColor}" />
+        <Color x:Key="FireAccentPaleColor">#CFE2FF</Color>
+        <SolidColorBrush x:Key="FireAccentPale" Color="{DynamicResource FireAccentPaleColor}" />
+        <Color x:Key="FireAccentPaperColor">#E8EEF6</Color>
+        <SolidColorBrush x:Key="FireAccentPaper" Color="{DynamicResource FireAccentPaperColor}" />
+        <Color x:Key="FireAccentTintColor">#385E9FF2</Color>
+        <SolidColorBrush x:Key="FireAccentTint" Color="{DynamicResource FireAccentTintColor}" />       <!-- .22 selected nav row -->
+        <Color x:Key="FireAccentTintSoftColor">#215E9FF2</Color>
+        <SolidColorBrush x:Key="FireAccentTintSoft" Color="{DynamicResource FireAccentTintSoftColor}" />   <!-- .13 hover -->
+        <Color x:Key="FireAccentTintStrongColor">#475E9FF2</Color>
+        <SolidColorBrush x:Key="FireAccentTintStrong" Color="{DynamicResource FireAccentTintStrongColor}" /> <!-- .28 selected segment -->
+        <Color x:Key="FireAccentBorderColor">#807AB6FF</Color>
+        <SolidColorBrush x:Key="FireAccentBorder" Color="{DynamicResource FireAccentBorderColor}" />     <!-- .50 selected edge -->
+        <!-- The spec's hover edge is `rgba(139,92,246,.34)` — violet MID, not
+             the light violet. The port used a78bfa at the same alpha, which is
+             a visibly cooler, paler line beside the .13 mid-violet fill it sits
+             on top of. -->
+        <Color x:Key="FireAccentBorderSoftColor">#575E9FF2</Color>
+        <SolidColorBrush x:Key="FireAccentBorderSoft" Color="{DynamicResource FireAccentBorderSoftColor}" /> <!-- .34 hover edge -->
+        <Color x:Key="FireAccentBorderFaintColor">#387AB6FF</Color>
+        <SolidColorBrush x:Key="FireAccentBorderFaint" Color="{DynamicResource FireAccentBorderFaintColor}" /><!-- .22 hero panel edge -->
+        <Color x:Key="FireAccentBarColor">#597AB6FF</Color>
+        <SolidColorBrush x:Key="FireAccentBar" Color="{DynamicResource FireAccentBarColor}" />        <!-- .35 idle nav bar -->
+
+        <!-- Graphite's lit action is FLAT: one accent fill, dark ink on it.
+             Still gradient brushes (both stops equal) so a theme can bring a
+             ramp back without retyping every consumer. -->
+        <LinearGradientBrush x:Key="FireAccentAction" StartPoint="0%,0%" EndPoint="100%,30%">
+            <GradientStop Offset="0" Color="#7AB6FF" />
+            <GradientStop Offset="1" Color="#7AB6FF" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="FireAccentActionHero" StartPoint="0%,0%" EndPoint="100%,25%">
+            <GradientStop Offset="0" Color="#7AB6FF" />
+            <GradientStop Offset="1" Color="#7AB6FF" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="FireAccentFill" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#3C7BD1" />
+            <GradientStop Offset="1" Color="#7AB6FF" />
+        </LinearGradientBrush>
+        <!-- A CHART COLUMN, lit from the top (Statistics' daily bars, Practice
+             Trends' weekly accuracy chart). The meter tokens above all run
+             horizontally; a column is read vertically, so its light has to come
+             from the top or a tall bar looks like a horizontal meter stood on
+             end. Mockup: linear-gradient(180deg,#a8ceff,#3c7bd1). -->
+        <LinearGradientBrush x:Key="FireColumnFill" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#A8CEFF" />
+            <GradientStop Offset="1" Color="#3C7BD1" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="FireMarkFill" StartPoint="0%,0%" EndPoint="80%,100%">
+            <GradientStop Offset="0" Color="#7AB6FF" />
+            <GradientStop Offset="1" Color="#3C7BD1" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="FireAvatarFill" StartPoint="0%,0%" EndPoint="70%,100%">
+            <GradientStop Offset="0" Color="#5E9FF2" />
+            <GradientStop Offset="1" Color="#2D3B4C" />
+        </LinearGradientBrush>
+
+        <!-- ─── Focus ────────────────────────────────────────────────────────
+             REQUIRED, not optional: this menu is keyboard AND controller
+             navigable, so every interactive Fire control has a visible focus
+             state. The spec gives two shapes.
+
+             On a primary control it is a ring — `2px solid #cfe2ff`, offset
+             3-4 px OUTSIDE the control so it never eats into the layout. The
+             colour is `FireAccentPale`; these two carry the geometry, as
+             Thicknesses, because that is what `FocusAdornerTemplate` wants.
+
+             On a LIST ROW a ring around a full-width row reads as a second
+             selection, so focus is a tint instead: `rgba(139,92,246,.16)`
+             behind `rgba(167,139,250,.6)`. -->
+        <Thickness x:Key="FireFocusRingThickness">2</Thickness>
+        <Thickness x:Key="FireFocusRingOffset">-4</Thickness>
+        <Color x:Key="FireFocusRowFillColor">#295E9FF2</Color>
+        <SolidColorBrush x:Key="FireFocusRowFill" Color="{DynamicResource FireFocusRowFillColor}" />    <!-- .16 -->
+        <Color x:Key="FireFocusRowBorderColor">#997AB6FF</Color>
+        <SolidColorBrush x:Key="FireFocusRowBorder" Color="{DynamicResource FireFocusRowBorderColor}" />  <!-- .60 -->
+
+        <!-- ─── FIXED IDENTITIES ─────────────────────────────────────────────
+             STRING IDENTITY · FIXED, DO NOT REASSIGN. Six strings, six
+             colours, in the order the spec lists them (6 = low E at the top of
+             the gutter). These are not palette entries and not theme tokens:
+             a string is this colour on the highway, in the string gutter, in
+             the tuner and on a chord diagram, so a "harmonisation" toward the
+             accent hue would break the one thing a player reads without
+             looking. Exact values pinned by `UI/FireTokenValueTests`. -->
+        <Color x:Key="FireString6EColor">#E05A5A</Color>
+        <SolidColorBrush x:Key="FireString6E" Color="{DynamicResource FireString6EColor}" />   <!-- E (6, low) -->
+        <Color x:Key="FireString5AColor">#E0C04A</Color>
+        <SolidColorBrush x:Key="FireString5A" Color="{DynamicResource FireString5AColor}" />   <!-- A (5) -->
+        <Color x:Key="FireString4DColor">#4A90E0</Color>
+        <SolidColorBrush x:Key="FireString4D" Color="{DynamicResource FireString4DColor}" />   <!-- D (4) -->
+        <Color x:Key="FireString3GColor">#E08A3C</Color>
+        <SolidColorBrush x:Key="FireString3G" Color="{DynamicResource FireString3GColor}" />   <!-- G (3) -->
+        <Color x:Key="FireString2BColor">#4ADE80</Color>
+        <SolidColorBrush x:Key="FireString2B" Color="{DynamicResource FireString2BColor}" />   <!-- B (2) -->
+        <Color x:Key="FireString1eColor">#A78BFA</Color>
+        <SolidColorBrush x:Key="FireString1e" Color="{DynamicResource FireString1eColor}" />   <!-- e (1, high) -->
+
+        <!-- GEAR CATEGORY IDENTITY · used in the rig, the gear list and tone
+             chips. Same rule: the category IS the colour. Two of these collide
+             with a signal colour on purpose — Amps share amber and EQ shares
+             green — because the rig reads them positionally, in a category
+             rail, where nothing else is competing for the same meaning. -->
+        <Color x:Key="FireGearDynamicsColor">#8FA3BD</Color>
+        <SolidColorBrush x:Key="FireGearDynamics" Color="{DynamicResource FireGearDynamicsColor}" />
+        <Color x:Key="FireGearAmpsColor">#F0A54A</Color>
+        <SolidColorBrush x:Key="FireGearAmps" Color="{DynamicResource FireGearAmpsColor}" />
+        <Color x:Key="FireGearCabinetsColor">#C98F5E</Color>
+        <SolidColorBrush x:Key="FireGearCabinets" Color="{DynamicResource FireGearCabinetsColor}" />
+        <Color x:Key="FireGearDriveColor">#E05A5A</Color>
+        <SolidColorBrush x:Key="FireGearDrive" Color="{DynamicResource FireGearDriveColor}" />
+        <Color x:Key="FireGearEqColor">#4ADE80</Color>
+        <SolidColorBrush x:Key="FireGearEq" Color="{DynamicResource FireGearEqColor}" />
+        <Color x:Key="FireGearModulationColor">#E879B9</Color>
+        <SolidColorBrush x:Key="FireGearModulation" Color="{DynamicResource FireGearModulationColor}" />
+        <Color x:Key="FireGearDelayReverbColor">#3EC9C0</Color>
+        <SolidColorBrush x:Key="FireGearDelayReverb" Color="{DynamicResource FireGearDelayReverbColor}" />
+        <Color x:Key="FireGearUtilityColor">#A78BFA</Color>
+        <SolidColorBrush x:Key="FireGearUtility" Color="{DynamicResource FireGearUtilityColor}" />
+
+        <!-- PARALLEL LANE IDENTITY · the rig board's split region
+             (`Amp and FX Rig v8.dc.html`, its fixed PATH_COLORS). A lane's
+             badge and its wire stubs carry the same colour, so "lane B" is one
+             thing across the region. Another positional domain, minted rather
+             than aliased for the EQ bands' reason below: violet is also the
+             accent and red is also Drive, and "recolour lane B" must never
+             mean "recolour every drive pedal". -->
+        <Color x:Key="FireLaneAColor">#E5A748</Color>
+        <SolidColorBrush x:Key="FireLaneA" Color="{DynamicResource FireLaneAColor}" />
+        <Color x:Key="FireLaneBColor">#E85FD2</Color>
+        <SolidColorBrush x:Key="FireLaneB" Color="{DynamicResource FireLaneBColor}" />
+        <Color x:Key="FireLaneCColor">#3ED5E8</Color>
+        <SolidColorBrush x:Key="FireLaneC" Color="{DynamicResource FireLaneCColor}" />
+
+        <!-- EQ BAND IDENTITY · the inspector's six-band parametric EQ
+             (`EQ and Filters.dc.html`). Band N is a colour, and that colour is
+             carried by its numbered handle on the plot, its chip in the row
+             below it and the dot on the band editor's header — three places
+             that must agree at a glance, on a module whose whole premise is
+             "one band at a time".
+
+             A FOURTH positional domain, minted rather than aliased for exactly
+             the reason the gear rail above gives: four of these values already
+             exist under other names (amber is Amps, green is EQ-the-category,
+             violet is the accent, red is Drive), and a band's identity is its
+             INDEX, not a category — so aliasing would make "recolour band 4"
+             indistinguishable from "recolour every amp". Nothing else competes
+             for meaning inside the plot. -->
+        <Color x:Key="FireEqBand1Color">#4A90E0</Color>
+        <SolidColorBrush x:Key="FireEqBand1" Color="{DynamicResource FireEqBand1Color}" />
+        <Color x:Key="FireEqBand2Color">#4ADE80</Color>
+        <SolidColorBrush x:Key="FireEqBand2" Color="{DynamicResource FireEqBand2Color}" />
+        <Color x:Key="FireEqBand3Color">#7AB6FF</Color>
+        <SolidColorBrush x:Key="FireEqBand3" Color="{DynamicResource FireEqBand3Color}" />
+        <Color x:Key="FireEqBand4Color">#F0A54A</Color>
+        <SolidColorBrush x:Key="FireEqBand4" Color="{DynamicResource FireEqBand4Color}" />
+        <Color x:Key="FireEqBand5Color">#EC6BA8</Color>
+        <SolidColorBrush x:Key="FireEqBand5" Color="{DynamicResource FireEqBand5Color}" />
+        <Color x:Key="FireEqBand6Color">#E05A5A</Color>
+        <SolidColorBrush x:Key="FireEqBand6" Color="{DynamicResource FireEqBand6Color}" />
+
+        <!-- The plot's own surfaces. The analyser fill and its outline are the
+             accent at low alpha (it sits BEHIND everything and must never
+             compete with the response curve); the curve itself is plain white,
+             because it is the one line the user is reading. -->
+        <SolidColorBrush x:Key="FireEqPlotFill" Color="#5E9FF2" Opacity="0.22" />
+        <SolidColorBrush x:Key="FireEqPlotStroke" Color="#7AB6FF" Opacity="0.45" />
+        <Color x:Key="FireEqCurveColor">#FFFFFF</Color>
+        <SolidColorBrush x:Key="FireEqCurve" Color="{DynamicResource FireEqCurveColor}" />
+        <Color x:Key="FireEqCurveBypassedColor">#5D5675</Color>
+        <SolidColorBrush x:Key="FireEqCurveBypassed" Color="{DynamicResource FireEqCurveBypassedColor}" />
+        <SolidColorBrush x:Key="FireEqGrid" Color="#FFFFFF" Opacity="0.055" />
+        <SolidColorBrush x:Key="FireEqZeroLine" Color="#FFFFFF" Opacity="0.16" />
+        <Color x:Key="FireEqHandleOffColor">#262A31</Color>
+        <SolidColorBrush x:Key="FireEqHandleOff" Color="{DynamicResource FireEqHandleOffColor}" />
+        <!-- The five NAMED regions of the spectrum (weight / mud / honk /
+             presence / fizz) as one wash. Deliberately a single value rather
+             than five: they are a MAP of where you are, not five categories,
+             and five tints would compete with the six band identities above. -->
+        <SolidColorBrush x:Key="FireEqZone" Color="#7AB6FF" Opacity="0.03" />
+        <!-- The curve's halo. The mockup spells it
+             `drop-shadow(0 0 7px rgba(167,139,250,.85))`; Avalonia has no
+             per-geometry shadow, so the control strokes this twice at low alpha
+             UNDER the white line. Full-strength colour here — the alpha is the
+             control's, because it needs two of them. -->
+        <Color x:Key="FireEqCurveGlowColor">#7AB6FF</Color>
+        <SolidColorBrush x:Key="FireEqCurveGlow" Color="{DynamicResource FireEqCurveGlowColor}" />
+        <!-- The chip behind an in-plot axis label. Without it an 8.5 px mono
+             label over the analyser fill and the amber string ticks is
+             unreadable, which is the only reason the mockup has one. -->
+        <SolidColorBrush x:Key="FireEqAxisPill" Color="#0A0812" Opacity="0.75" />
+
+        <!-- SEPARATED-STEM IDENTITY · the mixer's channel strips. `Chart
+             Editor.dc.html` colours a stem's fader by what it PLAYS — guitar
+             green, bass blue, drums amber, vocals pink — and those four values
+             are already in this file under other names, which is the point: a
+             stem row is a third positional domain (a labelled fader in one
+             column) where nothing competes for the meaning, exactly the case
+             the gear/string collision above is argued from. They are named
+             here rather than bound to `FireString4D` so a reader is never left
+             wondering why the bass stem is the D string, and so a future
+             correction to either set moves only its own consumers.
+
+             The 6-source model also emits `piano` and `other`; `other` is the
+             leftovers, so it takes the neutral slate, and so does any stem a
+             user dropped into the project's own `stems/` folder. The master
+             mix is the whole song rather than one instrument, hence the
+             accent. Mapping: `Converters/StemIdentity.TokenFor`. -->
+        <Color x:Key="FireStemGuitarColor">#4ADE80</Color>
+        <SolidColorBrush x:Key="FireStemGuitar" Color="{DynamicResource FireStemGuitarColor}" />
+        <Color x:Key="FireStemBassColor">#4A90E0</Color>
+        <SolidColorBrush x:Key="FireStemBass" Color="{DynamicResource FireStemBassColor}" />
+        <Color x:Key="FireStemDrumsColor">#E08A3C</Color>
+        <SolidColorBrush x:Key="FireStemDrums" Color="{DynamicResource FireStemDrumsColor}" />
+        <Color x:Key="FireStemVocalsColor">#E879B9</Color>
+        <SolidColorBrush x:Key="FireStemVocals" Color="{DynamicResource FireStemVocalsColor}" />
+        <Color x:Key="FireStemPianoColor">#3EC9C0</Color>
+        <SolidColorBrush x:Key="FireStemPiano" Color="{DynamicResource FireStemPianoColor}" />
+        <Color x:Key="FireStemOtherColor">#8FA3BD</Color>
+        <SolidColorBrush x:Key="FireStemOther" Color="{DynamicResource FireStemOtherColor}" />
+        <Color x:Key="FireStemMixColor">#7AB6FF</Color>
+        <SolidColorBrush x:Key="FireStemMix" Color="{DynamicResource FireStemMixColor}" />
+
+        <!-- ─── Status ───────────────────────────────────────────────────────
+             Three colours, each with the same three parts: the colour itself
+             (dot + text), a tint and a border. The spec fixes the tint band at
+             8-14 % (`Status chip`); green was at .07, i.e. under it, which is
+             why a green pill read as chrome beside an amber one. -->
+        <Color x:Key="FireSuccessColor">#5BD08F</Color>
+        <SolidColorBrush x:Key="FireSuccess" Color="{DynamicResource FireSuccessColor}" />
+        <Color x:Key="FireSuccessTintColor">#144ADE80</Color>
+        <SolidColorBrush x:Key="FireSuccessTint" Color="{DynamicResource FireSuccessTintColor}" />
+        <Color x:Key="FireSuccessBorderColor">#404ADE80</Color>
+        <SolidColorBrush x:Key="FireSuccessBorder" Color="{DynamicResource FireSuccessBorderColor}" />
+        <Color x:Key="FireWarningColor">#F2B557</Color>
+        <SolidColorBrush x:Key="FireWarning" Color="{DynamicResource FireWarningColor}" />
+        <Color x:Key="FireWarningTintColor">#14F0A54A</Color>
+        <SolidColorBrush x:Key="FireWarningTint" Color="{DynamicResource FireWarningTintColor}" />
+        <Color x:Key="FireWarningBorderColor">#59F0A54A</Color>
+        <SolidColorBrush x:Key="FireWarningBorder" Color="{DynamicResource FireWarningBorderColor}" />
+        <Color x:Key="FireDangerColor">#F07A7A</Color>
+        <SolidColorBrush x:Key="FireDanger" Color="{DynamicResource FireDangerColor}" />
+        <Color x:Key="FireDangerTintColor">#24EF6F6F</Color>
+        <SolidColorBrush x:Key="FireDangerTint" Color="{DynamicResource FireDangerTintColor}" />
+        <Color x:Key="FireDangerBorderColor">#66EF6F6F</Color>
+        <SolidColorBrush x:Key="FireDangerBorder" Color="{DynamicResource FireDangerBorderColor}" />
+
+        <!-- ─── Elevation + glow ─────────────────────────────────────────────
+             THE SPEC DECLARES EXACTLY THREE, and all three are large, soft and
+             very negative-spread — "no small drop shadows":
+
+               card     0 26 56 -28 #000
+               overlay  0 60 140 -50 #000
+               glow     0 24 60 -20 <accent>
+
+             The port's card shadow was `0 26 60 -22` at 70 % black (too tight a
+             spread and too weak), and its glow existed TWICE at two different
+             sizes, so a lit button was a different brightness depending on
+             which one a screen happened to pick. One glow now; the ring/halo
+             recipes below are a different effect (they surround a small mark
+             rather than lifting a surface) and stay separate. -->
+        <BoxShadows x:Key="FireShadowScreen">0 60 140 -50 #FF000000</BoxShadows>
+        <BoxShadows x:Key="FireShadowPanel">0 26 56 -28 #FF000000</BoxShadows>
+        <!-- A DROPDOWN sits between the two: `0 32 70 -24 #000` in both editor
+             mockups' menus. It is its own step because a menu panel is smaller
+             than a card and much closer to the pointer than a modal. -->
+        <BoxShadows x:Key="FireShadowMenu">0 32 70 -24 #FF000000</BoxShadows>
+        <!-- Graphite: no glow on the lit action. Geometry kept, alpha zero. -->
+        <BoxShadows x:Key="FireGlowAction">0 24 60 -20 #003C7BD1</BoxShadows>
+        <BoxShadows x:Key="FireGlowAccent">0 0 10 0 #E67AB6FF</BoxShadows>
+        <BoxShadows x:Key="FireGlowAccentSoft">0 0 14 -2 #E67AB6FF</BoxShadows>
+        <BoxShadows x:Key="FireGlowAccentRing">0 0 28 -8 #E65E9FF2</BoxShadows>
+
+        <BoxShadows x:Key="FireGlowSuccess">0 0 9 1 #CC4ADE80</BoxShadows>
+        <BoxShadows x:Key="FireGlowWarning">0 0 10 1 #B3F0A54A</BoxShadows>
+        <BoxShadows x:Key="FireGlowDanger">0 0 9 1 #CCEF6F6F</BoxShadows>
+
+        <!-- ─── Overlay ──────────────────────────────────────────────────────
+             THE BASE OF A MODAL OVERLAY IS OPAQUE. Both stops carry alpha FF,
+             deliberately: a translucent scrim that let the app bleed through
+             was a real shipped bug, and expressing the scrim as one fully
+             opaque gradient makes it unrepresentable rather than merely
+             discouraged. The recipe is the spec's base `#111317` with the
+             standard `rgba(76,29,149,.22)` wash already composited into the
+             top stop — a gradient ON an opaque base, flattened to one brush. -->
+        <LinearGradientBrush x:Key="FireOverlayFill" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF15181D" />
+            <GradientStop Offset="1" Color="#FF111317" />
+        </LinearGradientBrush>
+
+        <!-- ─── Modal scrim ──────────────────────────────────────────────────
+             What a DIALOG lays over the surface it opened on top of — and it is
+             TRANSLUCENT, unlike `FireOverlayFill` above.
+
+             That distinction is the whole point. `FireOverlayFill` is the opaque
+             ground a SCREEN stands on: a screen has nothing behind it and must
+             not let the app bleed through. A MODAL is the opposite — it is about
+             the thing behind it, and covering that thing completely is what made
+             every dialog in the app read as "its own screen" rather than as a
+             dialog. The owner reported exactly that: "all modals should stay
+             modals not own screen — just like it was before, just with the new
+             better design".
+
+             Same base colour, so the tint is unchanged; only the alpha differs.
+             It is deep enough (≈85 %) that body text over it stays readable,
+             which is the reason the opaque one was reached for. -->
+        <Color x:Key="FireScrimFillColor">#D9111317</Color>
+        <SolidColorBrush x:Key="FireScrimFill" Color="{DynamicResource FireScrimFillColor}" />
+
+        <!-- ─── Sheen ────────────────────────────────────────────────────────
+             The hover/press wash a templated action lays over its own fill. -->
+        <Color x:Key="FireSheenHoverColor">#26FFFFFF</Color>
+        <SolidColorBrush x:Key="FireSheenHover" Color="{DynamicResource FireSheenHoverColor}" />
+        <Color x:Key="FireSheenPressedColor">#1F000000</Color>
+        <SolidColorBrush x:Key="FireSheenPressed" Color="{DynamicResource FireSheenPressedColor}" />
+
+        <!-- ─── Podium metals ────────────────────────────────────────────────
+             The one place in these mockups where colour is NOT the accent hue.
+             Fixed like the string and gear identities. -->
+        <Color x:Key="FireMedalSilverColor">#CBD5E1</Color>
+        <SolidColorBrush x:Key="FireMedalSilver" Color="{DynamicResource FireMedalSilverColor}" />
+        <Color x:Key="FireMedalSilverFillColor">#2ECBD5E1</Color>
+        <SolidColorBrush x:Key="FireMedalSilverFill" Color="{DynamicResource FireMedalSilverFillColor}" />
+        <Color x:Key="FireMedalSilverBorderColor">#66CBD5E1</Color>
+        <SolidColorBrush x:Key="FireMedalSilverBorder" Color="{DynamicResource FireMedalSilverBorderColor}" />
+        <Color x:Key="FireMedalGoldInkColor">#2A1A06</Color>
+        <SolidColorBrush x:Key="FireMedalGoldInk" Color="{DynamicResource FireMedalGoldInkColor}" />
+        <Color x:Key="FireMedalBronzeColor">#C99B6E</Color>
+        <SolidColorBrush x:Key="FireMedalBronze" Color="{DynamicResource FireMedalBronzeColor}" />
+        <Color x:Key="FireMedalBronzeFillColor">#33B47846</Color>
+        <SolidColorBrush x:Key="FireMedalBronzeFill" Color="{DynamicResource FireMedalBronzeFillColor}" />
+        <Color x:Key="FireMedalBronzeBorderColor">#73B47846</Color>
+        <SolidColorBrush x:Key="FireMedalBronzeBorder" Color="{DynamicResource FireMedalBronzeBorderColor}" />
+    </Styles.Resources>
+</Styles>

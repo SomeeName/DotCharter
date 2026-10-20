@@ -1,0 +1,105 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ══════════════════════════════════════════════════════════════════
+         THE INSPECTOR'S CHROME GRAMMAR, ON THE FIRE LAYER (0.50).
+
+         The FOURTH converted grammar file, after `Views/Dialogs/DialogStyles`,
+         `Views/Settings/SettingsStyles` and `Views/Shell/ShellChromeStyles`.
+         Same mechanism, and the reason it is the right one: this file is
+         included by exactly four views — `InspectorView` (which hosts all
+         eight tabs, so the classes cascade to every one of them regardless of
+         its own DataContext), `MixerInspectorView`, `PhraseCatalogView` and
+         `StemMixerView` — so re-pointing it moves ~76 KB of tab markup at once.
+         Editing eight views by hand would have converted eight things that
+         then drift apart.
+
+         WHAT CHANGED AND WHAT DID NOT: every class NAME survives, and several
+         are load-bearing (`InspectorCard` is asserted by name in
+         `Perf/InspectorConstructionUiPerfSmokeTests`, `Disclosure` +
+         `DisclosureLabel` by `UI/InspectorDisclosureWiringTests`). Every SHAPE
+         moved: radius 4/6/10 became the Fire 4/6/10 ladder, the opaque
+         `#181A1E`/`#131519` surfaces became washes of white over the pane, the
+         app's `#24272B` border became the layer's ONE hairline, and the
+         section labels became the layer's signature mark — a MONO EYEBROW
+         (9.5 px, .24em, dim) over the card it opens.
+
+         ─── THE LADDER RULE ──────────────────────────────────────────────
+         Only `FireRadius*` / `FireSize*` / `FirePad*` / `FireGap*` /
+         `FireSpace*` may appear below. Several app steps do not exist on the
+         Fire ladders, so one stray `RadiusSm` is a corner 2 px rounder than
+         its neighbours — invisible in a diff. Pinned by the default-gate
+         `UI/FireStyleClassTests.EachConvertedGrammar_ReachesOnlyForFireLadderTokens`
+         (plus the companion proving the file really SPEAKS the layer, so "no
+         app tokens because no tokens at all" cannot pass).
+
+         TWO app keys survive on purpose and are NOT ladder steps:
+         `FieldLabelRail` (84) and `RowHeightField` (32) are this pane's own
+         geometry. The Fire ladder's nearest row height is `FireFieldHeight`
+         = 36, which is a full-width settings row — the inspector is a ~380 px
+         dock pane where density IS the design, and four extra pixels per row
+         costs a whole field over a card.
+
+         ─── NO `Transitions` SETTER, EVER ────────────────────────────────
+         Every one of the eight tabs is `IsVisible`-gated and a hidden
+         control's style clocks keep ticking (DotCharter.UI/AGENTS.md), and it
+         is also the Fire layer's own rule — hover is instant on every other
+         converted surface. The two that used to be here (the M/S buttons and
+         the technique chip) are gone. Pinned by
+         `UI/FireStyleClassTests.TheInspectorGrammar_CarriesNoTransitionsSetter`.
+
+         A `Cursor` setter IS allowed here, unlike in the other three grammars:
+         nothing constructs an inspector view without an Avalonia platform
+         (`SettingsSearchTests` is the reason that ban exists and it does not
+         reach these views), and 42 `Button.Subtle` actions losing the hand
+         cursor would be a real regression. The same test states that in
+         reverse so the difference is deliberate rather than forgotten.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- A DROPDOWN'S CHROME IS A RESOURCE KEY, NEVER A STYLE
+                     SELECTOR. Avalonia's ComboBox template sets its popup
+                     Border's Background / BorderBrush / BorderThickness /
+                     CornerRadius / Padding from a `{DynamicResource …}` written
+                     INSIDE the template — a LOCAL value, which beats any style
+                     setter. `Styles/FireMenuChrome.axaml` restates those keys in
+                     Fire values, and merging it HERE scopes it: a resource
+                     lookup from inside a popup walks up to the control that
+                     opened it, i.e. to this grammar. Without it the inspector's
+                     ~26 pickers keep opening in Fluent's #1c1d28 at radius 5
+                     while everything around them is on the layer. Read that
+                     file's own header before touching a popup, and see
+                     `UI/EditorChromeTests`, which pins every literal in it
+                     against the Fire token it restates. -->
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Styles/FireMenuChrome.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         THE GRAMMAR ITSELF, BY SECTION. Every `<Style>` this file used to
+         declare inline now lives in `Views/Editor/InspectorStyles/`, sliced
+         along the section banners it already carried and moved byte for byte.
+
+         ORDER IS THE CONTRACT. Avalonia applies styles in the order it walks
+         this collection and a later selector wins, so these includes stand in
+         the exact order the sections stood in the one file. It matters more
+         here than in most grammars: this file RESTATES app classes
+         (`Button.Subtle`, `ToggleButton.Seg`, …) that are also declared
+         app-wide, and a restatement only wins because it is applied later.
+
+         The `Styles.Resources` block above stays in this file. Merging
+         `FireMenuChrome.axaml` HERE is what SCOPES it — a resource lookup
+         from inside a popup walks up to the control that opened it, i.e. to
+         this grammar — and pushing it down into a part would change the node
+         that walk arrives at.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/PickersAndAppClasses.axaml" />
+    <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/TabStripAndMixerRow.axaml" />
+    <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/PaneChromeAndTechniqueChip.axaml" />
+    <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/ScopeAndIssueChrome.axaml" />
+    <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles/EqModule.axaml" />
+
+</Styles>

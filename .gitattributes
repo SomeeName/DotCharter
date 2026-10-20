@@ -1,0 +1,7 @@
+# Check every file out byte-for-byte as it is committed: git never converts
+# line endings here, whatever core.autocrlf says. Git for Windows' system
+# config and GitHub's Windows runners set it to true, which rewrote LF files to
+# CRLF on checkout, and the code style enforced in the build (.editorconfig,
+# IDE0055) then failed on them. Most files are LF; the CRLF-committed ones are
+# declared in .editorconfig. Pinned by Infrastructure/CheckoutLineEndingsTests.
+* -text

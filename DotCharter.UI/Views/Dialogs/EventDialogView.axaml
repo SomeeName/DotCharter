@@ -1,0 +1,198 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.EventDialogView"
+             x:DataType="contracts:IEventScreen"
+             x:CompileBindings="True">
+
+    <!-- Section / phrase / tone event at the playhead. Grammar:
+         Views/Dialogs/DialogStyles.axaml.
+         Editing dialog: the scrim deliberately does NOT dismiss (scrim-click discards work; Esc cancels via IsCancel - see docs/agents/ui/dialogs.md, the scrim rule). -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm" MinHeight="280">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconMapMarker}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_Event_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_Event_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Scrolls: a long German phrase, an off-list section and several
+                     arrangements outgrow a short window, and without it the last
+                     section ran under the footer. -->
+                <ScrollViewer Grid.Row="1" Classes="DialogBody">
+                <StackPanel>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Section}" />
+                        <!-- A real picker, like EOF's own section dialog. It was an
+                             AutoCompleteBox until 0.39.2, which only opens its list
+                             once you have typed — so it read as a plain text box and
+                             the preselection was undiscoverable. A closed list is
+                             also more honest: getSectionUIName has no fallback, so
+                             there is no such thing as a valid custom section name.
+                             An off-list name an import left here is added as a
+                             trailing entry rather than being rewritten. -->
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True"
+                                  ItemsSource="{Binding SectionOptions}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Section}"
+                                  SelectedItem="{Binding SelectedSection}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IEventSectionOption">
+                                    <TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- A warning, so the notice strip — not the grey hint a
+                         dependent row prints. -->
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" IsVisible="{Binding SectionNameIsUnknown}">
+                        <TextBlock Text="{localization:Loc Dialog_SectionUnknown}" />
+                    </Border>
+
+                    <!-- v0.29 section-status tracker: only meaningful ON a
+                         section, so the combo disables while the name is blank. -->
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Sub" ColumnDefinitions="*,240">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_Event_Status}" />
+                            <!-- A greyed control with the reason only in a source
+                                 comment is a dead affordance: say it on screen. -->
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                       IsVisible="{Binding SectionName, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                       Text="{localization:Loc Dialog_Event_Status_NeedsSection}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding SectionStatusOptions}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Event_Status}"
+                                  SelectedIndex="{Binding SectionStatusIndex}"
+                                  IsEnabled="{Binding SectionName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Phrase}" />
+                        <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding PhraseName}"
+                                 AutomationProperties.Name="{localization:Loc Dialog_Phrase}"
+                                 PlaceholderText="{localization:Loc Dialog_PhrasePlaceholder}" />
+                    </Grid>
+
+                    <!-- Solo is a property of the PHRASE, so it disables while the
+                         phrase name is blank — same rule as the section status. -->
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Sub" ColumnDefinitions="*,240">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_Event_SoloPhrase}"
+                                       ToolTip.Tip="{localization:Loc Dialog_Event_SoloPhrase_Tip}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                       IsVisible="{Binding PhraseName, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                       Text="{localization:Loc Dialog_Event_SoloPhrase_NeedsPhrase}" />
+                        </StackPanel>
+                        <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding SoloPhrase}" HorizontalAlignment="Right"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Event_SoloPhrase}"
+                                  ToolTip.Tip="{localization:Loc Dialog_Event_SoloPhrase_Tip}"
+                                  IsEnabled="{Binding PhraseName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Tone}" />
+                        <!-- A picker over the tones this chart actually has, but an
+                             EDITABLE one — unlike Section, whose catalogue is closed,
+                             a tone name is open: naming a tone before authoring it is
+                             a legitimate order of work and imports carry arbitrary
+                             keys. It is a ComboBox rather than an AutoCompleteBox for
+                             the reason the section field was changed in 0.39.2: an
+                             AutoCompleteBox only opens its list once you have typed,
+                             so it reads as a plain text box and the options are
+                             undiscoverable. Until 0.57 this WAS a bare TextBox: the
+                             key had to be typed from memory and a typo produced a
+                             marker that silently never applied. -->
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" IsEditable="True"
+                                  ItemsSource="{Binding ToneOptions}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Tone}"
+                                  Text="{Binding ToneName, Mode=TwoWay}"
+                                  PlaceholderText="{localization:Loc Dialog_TonePlaceholder}" />
+                    </Grid>
+
+                    <!-- The tone will be placed and will export, but there is no body
+                         to build a rig from, so it plays SILENTLY. A warning, not a
+                         refusal — this is the state every psarc-opened chart was in,
+                         without one word anywhere in the editor. -->
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" IsVisible="{Binding ToneHasNoBody}">
+                        <TextBlock Text="{localization:Loc Dialog_ToneNoBody}" />
+                    </Border>
+
+                    <!-- Rocksmith EVENT codes: the two metronome ticks and the
+                         crowd controls (EOF's Beat > Rocksmith > event dialog).
+                         The field round-tripped through both importers and the
+                         project format since forever; until 0.39.2 nothing could
+                         author one. Several can sit on one marker, hence
+                         checkboxes rather than a picker. -->
+                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{localization:Loc Dialog_Event_RsEvents}" />
+                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                        <StackPanel>
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_Event_RsEvents_Desc}"
+                                       TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding EventToggles}"
+                                          Margin="{DynamicResource GapTopSm}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IEventCodeToggle">
+                                        <CheckBox IsChecked="{Binding IsSelected}" Content="{Binding Display}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel IsVisible="{Binding HasMultipleArrangements}">
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                   Text="{localization:Loc Dialog_Event_ApplyTo}" />
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <ItemsControl ItemsSource="{Binding Arrangements}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IEventArrangementTarget">
+                                        <!-- The clicked arrangement is always written: it
+                                             ignores clicks rather than greying out, so the
+                                             one that is certainly included reads clearly. -->
+                                        <CheckBox Content="{Binding DisplayName}"
+                                                  IsChecked="{Binding IsSelected}"
+                                                  IsHitTestVisible="{Binding !IsActive}"
+                                                  Focusable="{Binding !IsActive}" Margin="0,0,12,4" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Save}"
+                                Command="{Binding SaveCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

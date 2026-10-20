@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:local="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigControlAssignmentView"
+             x:DataType="vm:RigControlAssignmentEditorViewModel">
+    <UserControl.Resources>
+        <local:RigControlPresentationConverter x:Key="ControlPresentation" />
+    </UserControl.Resources>
+    <!-- The assignment editor as a FORM for the 300 px rack: every field
+         stretches to the card's width, the two range values share one row,
+         and the actions sit in rows of their own — a WrapPanel of fixed-width
+         cells used to wrap into a ragged staircase here. -->
+    <StackPanel Spacing="{StaticResource FireSpaceMd}">
+        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{localization:Loc Rig_AssignmentTitle}" />
+
+        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+            <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc Rig_AssignmentParameter}" />
+            <ComboBox Classes="FireCombo" ItemsSource="{Binding Parameters}" SelectedItem="{Binding SelectedParameter, Mode=TwoWay}"
+                      HorizontalAlignment="Stretch" AutomationProperties.Name="{localization:Loc Rig_AssignmentParameter}">
+                <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalParamViewModel"><TextBlock Text="{Binding DisplayName}" /></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+            <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc Rig_AssignmentMacro}" />
+            <ComboBox Classes="FireCombo" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Stretch"
+                      SelectedIndex="{Binding MacroIndex, Mode=TwoWay, Converter={StaticResource ControlPresentation}, ConverterParameter=macroIndex}"
+                      AutomationProperties.Name="{localization:Loc Rig_AssignmentMacro}">
+                <ComboBoxItem Content="{localization:Loc Rig_AssignmentNone}" />
+                <ComboBoxItem Content="{localization:Loc Rig_MacroDrive}" />
+                <ComboBoxItem Content="{localization:Loc Rig_MacroSpace}" />
+                <ComboBoxItem Content="{localization:Loc Rig_MacroMotion}" />
+                <ComboBoxItem Content="{localization:Loc Rig_MacroLevel}" />
+            </ComboBox>
+        </StackPanel>
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="{StaticResource FireSpaceSm}" RowDefinitions="Auto,Auto" RowSpacing="{StaticResource FireSpaceXs}">
+            <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc Rig_AssignmentMin}" />
+            <TextBlock Grid.Column="1" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc Rig_AssignmentMax}" />
+            <NumericUpDown Grid.Row="1" Classes="FireNumeric" Value="{Binding Min, Mode=TwoWay}" Minimum="{Binding SelectedParameter.Minimum}" Maximum="{Binding SelectedParameter.Maximum}"
+                           Increment="0.01" FormatString="0.###" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{localization:Loc Rig_AssignmentMin}" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Classes="FireNumeric" Value="{Binding Max, Mode=TwoWay}" Minimum="{Binding SelectedParameter.Minimum}" Maximum="{Binding SelectedParameter.Maximum}"
+                           Increment="0.01" FormatString="0.###" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{localization:Loc Rig_AssignmentMax}" />
+        </Grid>
+        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap"
+                   Text="{localization:Loc Rig_AssignmentRangeHint}" />
+
+        <!-- one verb per row: side by side, "Remove assignment" ran off the
+             300 px card's right edge -->
+        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+            <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Command="{Binding AssignCommand}" IsEnabled="{Binding CanEdit}" Content="{localization:Loc Rig_AssignmentSave}" />
+            <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Command="{Binding RemoveCommand}" IsVisible="{Binding HasAssignment}" Content="{localization:Loc Rig_AssignmentRemove}" />
+        </StackPanel>
+
+        <!-- MIDI: what is learned, then the learn / cancel / clear verbs -->
+        <StackPanel Spacing="{StaticResource FireSpaceXs}" Margin="{StaticResource FireGapTopSm}">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}" VerticalAlignment="Center">
+                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc Rig_AssignmentMidiChannel}" VerticalAlignment="Center" />
+                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong" Text="{Binding MidiChannel, Converter={StaticResource ControlPresentation}, ConverterParameter=midiChannel}" VerticalAlignment="Center" />
+                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc Rig_AssignmentMidiController}" VerticalAlignment="Center" Margin="{StaticResource FireGapLeftSm}" />
+                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong" Text="{Binding MidiController, Converter={StaticResource ControlPresentation}, ConverterParameter=midiController}" VerticalAlignment="Center" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding BeginMidiLearnCommand}" IsEnabled="{Binding CanEdit}" Content="{localization:Loc Rig_AssignmentLearn}" />
+                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding CancelMidiLearnCommand}" IsVisible="{Binding IsLearning}" Content="{localization:Loc Rig_AssignmentCancel}" />
+                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding ClearMidiCommand}" IsVisible="{Binding HasAssignment}" Content="{localization:Loc Rig_AssignmentClearMidi}" />
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap" Text="{localization:Loc Rig_AssignmentStatusSaved}"
+                   IsVisible="{Binding Status, Converter={StaticResource ControlPresentation}, ConverterParameter=Saved}" />
+        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap" Text="{localization:Loc Rig_AssignmentStatusRemoved}"
+                   IsVisible="{Binding Status, Converter={StaticResource ControlPresentation}, ConverterParameter=Removed}" />
+        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap" Text="{localization:Loc Rig_AssignmentStatusInvalid}"
+                   IsVisible="{Binding Status, Converter={StaticResource ControlPresentation}, ConverterParameter=Invalid}" />
+        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap" Text="{localization:Loc Rig_AssignmentStatusUnavailable}"
+                   IsVisible="{Binding Status, Converter={StaticResource ControlPresentation}, ConverterParameter=Unavailable}" />
+        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap" Text="{localization:Loc Rig_AssignmentStatusLearning}"
+                   IsVisible="{Binding Status, Converter={StaticResource ControlPresentation}, ConverterParameter=Learning}" />
+    </StackPanel>
+</UserControl>

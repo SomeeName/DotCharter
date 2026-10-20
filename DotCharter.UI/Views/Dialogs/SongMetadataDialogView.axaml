@@ -1,0 +1,220 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.SongMetadataDialogView"
+             x:DataType="contracts:ISongMetadataScreen"
+             x:CompileBindings="True">
+
+    <!-- Grammar: Views/Dialogs/DialogStyles.axaml. Same label/field pair as a
+         settings row, over one 320 px control column.
+
+         Rebuilt from `Editor Dialogs.dc.html` (the `metadata()` surface). Three
+         things moved and each is a content decision, not a restyle:
+           • ALBUM AND YEAR SHARE ONE ROW. They are one fact, and as two rows the
+             year — four characters — got the same 320 px of field as the album
+             title and read as an unrelated setting.
+           • GENRE GAINS QUICK-PICKS, and they are REAL: the genres this user has
+             already authored in their own charts (IChartGenreIndex.KnownGenres).
+             A Rocksmith package carries no genre at all, so there is no
+             catalogue to fall back on; with nothing scanned the strip is simply
+             absent rather than showing invented words.
+           • MAJOR/MINOR IS A MODE SWITCH, not a checkbox on a dependent row. It
+             is the shared Fire segment (RadioButtons — a ToggleButton unchecks
+             itself when the current choice is clicked again, and the strip would
+             then show no mode while the chart still has one), and it sits inside
+             the key section next to the spelled-out key, so flipping it visibly
+             moves "C major" to "A minor" instead of ticking a hidden flag. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconLibraryMusic}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_SongMetadata_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc Dialog_SongMetadata_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody">
+                    <StackPanel>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Inspector_Project_Artist}" />
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Artist, Mode=TwoWay}" dlgv:FocusOnOpen.IsTarget="True"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Project_Artist}" />
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Inspector_Project_Song}" />
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding SongName, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Project_Song}" />
+                        </Grid>
+
+                        <!-- The ORIGINAL script, kept beside the Latin names
+                             rather than instead of them: Rocksmith carries both
+                             (JapaneseArtistName / JapaneseSongName) and shows the
+                             original in-game. No album counterpart exists in the
+                             manifest, so there is no row for one. -->
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Inspector_Project_JapaneseArtist}" />
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseArtist, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseArtist}" />
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Inspector_Project_JapaneseSong}" />
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseTitle, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseSong}" />
+                        </Grid>
+
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Inspector_Project_Album}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                           Text="{localization:Loc Dialog_SongMetadata_AlbumHint}" />
+                            </StackPanel>
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding AlbumName, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Project_Album}" />
+                        </Grid>
+
+                        <!-- The year is the only date Rocksmith's manifest (SongYear)
+                             takes, so it is the only date
+                             asked for (#218) — a labelled row, as in New project. -->
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_AlbumYear}" />
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" x:Name="SongMetadataYear"
+                                     Text="{Binding AlbumYear, Mode=TwoWay}"
+                                     PlaceholderText="{localization:Loc Dialog_AlbumYearPlaceholder}"
+                                     AutomationProperties.Name="{localization:Loc Dialog_AlbumYear}" />
+                        </Grid>
+
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Inspector_Project_Charter}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                           Text="{localization:Loc Dialog_SongMetadata_CharterHint}" />
+                            </StackPanel>
+                            <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Charter, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Project_Charter}" />
+                        </Grid>
+
+                        <!-- Genre + quick-picks. The chips sit UNDER the field, not
+                             beside it: five of them plus a field do not fit one
+                             320 px column in English and are ~40 % wider in
+                             German, and a horizontal StackPanel would slice them
+                             off the card edge with no warning. -->
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                            <!-- Top, beside the field: centred on the field-plus-chips block
+                                 it floated half way down, level with nothing. -->
+                            <StackPanel Grid.Column="0" VerticalAlignment="Top">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{localization:Loc Inspector_Project_Genre}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                           Text="{localization:Loc Dialog_SongMetadata_GenreHint}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Center" Grid.Column="1" Spacing="{DynamicResource FireSpaceSm}">
+                                <TextBox Text="{Binding Genre, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Inspector_Project_Genre}" />
+                                <ItemsControl ItemsSource="{Binding GenreSuggestions}"
+                                              IsVisible="{Binding HasGenreSuggestions}"
+                                              AutomationProperties.Name="{localization:Loc Dialog_SongMetadata_GenreSuggestions}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Button Classes="DlgChip" Content="{Binding}"
+                                                    CommandParameter="{Binding}"
+                                                    Command="{Binding $parent[ItemsControl].((contracts:ISongMetadataScreen)DataContext).PickGenreCommand}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Key signature. The stepper is the control; beside it
+                             is what the number MEANS ("2 ♯", "7 ♭"), because a
+                             bare -7 is only readable if you already know that
+                             negative means flats. The mode switch and the
+                             spelled-out key stand on the same line, so ticking
+                             Minor visibly moves C major → A minor instead of
+                             changing a hidden flag. -->
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                   Text="{localization:Loc Dialog_SongMetadata_KeySection}" />
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource FireSpaceRow}">
+                                <!-- DlgDesc, not DlgHint: this line is the one that
+                                     stops a charter fearing the control, so it is
+                                     the muted step and not the faint one. -->
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Margin="{DynamicResource FirePadNone}"
+                                           Text="{localization:Loc Dialog_SongMetadata_KeyHint}" />
+                                <Grid ColumnDefinitions="Auto,Auto,*"
+                                      ColumnSpacing="{DynamicResource FireSpaceRow}">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                                VerticalAlignment="Center"
+                                                Spacing="{DynamicResource FireSpaceMd}">
+                                        <NumericUpDown Width="112"
+                                                       Value="{Binding KeyAccidentals, Mode=TwoWay}"
+                                                       Minimum="-7" Maximum="7" Increment="1" FormatString="0"
+                                                       AutomationProperties.Name="{localization:Loc Inspector_Project_Key}" />
+                                        <TextBlock Theme="{DynamicResource DlgValueText}" Classes="DlgValue" x:Name="KeyAccidentalCount"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding KeyAccidentalsLabel}" />
+                                    </StackPanel>
+
+                                    <Border Grid.Column="1" x:Name="KeyModeSwitch" Theme="{DynamicResource FireSegmentBorder}" Classes="FireSegment">
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="{DynamicResource FireSpaceXxs}">
+                                            <RadioButton Classes="FireSegmentItem" GroupName="SongKeyMode"
+                                                         Content="{localization:Loc Dialog_SongMetadata_Major}"
+                                                         IsChecked="{Binding KeyIsMajor, Mode=TwoWay}" />
+                                            <RadioButton Classes="FireSegmentItem" GroupName="SongKeyMode"
+                                                         Content="{localization:Loc Dialog_SongMetadata_Minor}"
+                                                         IsChecked="{Binding KeyIsMinor, Mode=TwoWay}" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Spacing="{DynamicResource FireSpaceMd}">
+                                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FirePadNone}"
+                                                   VerticalAlignment="Center"
+                                                   Text="{localization:Loc Dialog_SongMetadata_ReadsAs}" />
+                                        <TextBlock Theme="{DynamicResource DlgKeyNameText}" Classes="DlgKeyName" x:Name="KeySpelledOut"
+                                                   Text="{Binding KeySignatureLabel}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{DynamicResource FireSpaceXl}">
+                        <TextBlock Theme="{DynamicResource DialogContextText}" Grid.Column="0" Classes="DialogContext"
+                                   Margin="{DynamicResource FirePadNone}" VerticalAlignment="Center"
+                                   Text="{localization:Loc Dialog_SongMetadata_FooterNote}" />
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="1" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" IsCancel="True" />
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Save}"
+                                    Command="{Binding SaveCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

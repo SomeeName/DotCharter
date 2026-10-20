@@ -1,0 +1,276 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DotCharter.RigLab;assembly=DotCharter.RigLab"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.RigLab.AiSettingsView"
+             Foreground="{DynamicResource FireTextPrimary}"
+             x:DataType="local:AiSettingsViewModel">
+
+    <!-- RigLab's AI tab: the provider behind "Design a tone", and the TONE3000
+         account a design downloads amp captures through. Every change applies
+         at once, like the Audio tab. Rows appear per provider rather than
+         greying out: a key box for a CLI that takes no key invites a secret into
+         a field that does nothing with it. -->
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="AiSettingsBody"
+                    MaxWidth="760"
+                    Margin="{StaticResource FirePadScreen}"
+                    Spacing="{StaticResource FireSpaceLg}">
+
+            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" Text="{localization:Loc Ai_Title}" />
+                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                           Text="{localization:Loc Ai_Subtitle}" />
+            </StackPanel>
+
+            <!-- Label column | control column, as on the Audio tab. -->
+            <Border x:Name="AiProviderCard"
+                    Background="{DynamicResource FireSurfaceCard}"
+                    CornerRadius="{StaticResource FireRadiusCard}"
+                    Padding="{StaticResource FirePadCard}">
+                <StackPanel Spacing="{StaticResource FireSpaceMd}">
+
+                    <Grid ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                                   Text="{localization:Loc Ai_ProviderLabel}" />
+                        <ComboBox Grid.Column="1" x:Name="AiProviderPicker"
+                                  HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="{localization:Loc Ai_ProviderLabel}"
+                                  ItemsSource="{Binding Providers}"
+                                  SelectedItem="{Binding SelectedProvider, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="local:RigLabAiProvider">
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- Whose usage a CLI design spends. Never removed: the CLIs
+                         answer under the player's own login. -->
+                    <TextBlock x:Name="AiClaudeCliNote" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               IsVisible="{Binding IsClaudeCliNoteVisible}"
+                               Text="{localization:Loc Ai_ClaudeCli_Note}" />
+                    <TextBlock x:Name="AiCodexCliNote" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               IsVisible="{Binding IsCodexCliNoteVisible}"
+                               Text="{localization:Loc Ai_CodexCli_Note}" />
+
+                    <Grid x:Name="AiModelRow" ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                          IsVisible="{Binding IsModelRowVisible}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Ai_ModelLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" Text="{Binding ModelDesc}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}">
+                            <TextBox x:Name="AiModelBox"
+                                     Text="{Binding ModelId, Mode=TwoWay}"
+                                     PlaceholderText="{localization:Loc Ai_ModelPlaceholder}"
+                                     AutomationProperties.Name="{localization:Loc Ai_ModelLabel}" />
+                            <WrapPanel x:Name="AiClaudePresets"
+                                       ItemSpacing="{StaticResource FireSpaceXs}"
+                                       LineSpacing="{StaticResource FireSpaceXs}"
+                                       IsVisible="{Binding AreClaudePresetsVisible}">
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_ClaudeHaiku}"
+                                        Command="{Binding UseClaudeHaikuCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_ClaudeOpus}"
+                                        Command="{Binding UseClaudeOpusCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_ClaudeSonnet}"
+                                        Command="{Binding UseClaudeSonnetCommand}" />
+                            </WrapPanel>
+                            <WrapPanel x:Name="AiCodexPresets"
+                                       ItemSpacing="{StaticResource FireSpaceXs}"
+                                       LineSpacing="{StaticResource FireSpaceXs}"
+                                       IsVisible="{Binding AreCodexPresetsVisible}">
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_CodexSol}"
+                                        Command="{Binding UseCodexSolCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_CodexLuna}"
+                                        Command="{Binding UseCodexLunaCommand}" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Reasoning (#644), beside the model it is sent with: the same keys and rule
+                         as DotCharter's Settings ▸ AI row (AiReasoningText). Where this model
+                         cannot take a level the picker is disabled and the description says why. -->
+                    <Grid x:Name="AiEffortRow" ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                          IsVisible="{Binding IsEffortRowVisible}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Ai_EffortLabel}" />
+                            <TextBlock x:Name="AiEffortDesc" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       Text="{Binding EffortDesc}" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="AiEffortPicker" VerticalAlignment="Top"
+                                  HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="{localization:Loc Ai_EffortLabel}"
+                                  IsEnabled="{Binding IsEffortSupported}"
+                                  ItemsSource="{Binding EffortLevels}"
+                                  SelectedItem="{Binding SelectedEffort, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="local:RigLabAiEffortOption">
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid x:Name="AiServerRow" ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                          IsVisible="{Binding IsServerRowVisible}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Ai_BaseUrlLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       Text="{localization:Loc Ai_BaseUrlDesc}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}">
+                            <TextBox x:Name="AiServerBox"
+                                     Text="{Binding BaseUrl, Mode=TwoWay}"
+                                     PlaceholderText="http://localhost:1234"
+                                     AutomationProperties.Name="{localization:Loc Ai_BaseUrlLabel}" />
+                            <WrapPanel ItemSpacing="{StaticResource FireSpaceXs}"
+                                       LineSpacing="{StaticResource FireSpaceXs}">
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_LmStudio}"
+                                        Command="{Binding UseLmStudioCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_Ollama}"
+                                        Command="{Binding UseOllamaCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_Preset_OpenAi}"
+                                        Command="{Binding UseOpenAiCommand}" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="AiCliPathRow" ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                          IsVisible="{Binding IsCliPathRowVisible}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{Binding CliPathLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" Text="{Binding CliPathDesc}" />
+                        </StackPanel>
+                        <TextBox Grid.Column="1" x:Name="AiCliPathBox" VerticalAlignment="Top"
+                                 Text="{Binding BaseUrl, Mode=TwoWay}"
+                                 PlaceholderText="{localization:Loc Ai_CliPathPlaceholder}"
+                                 AutomationProperties.Name="{Binding CliPathLabel}" />
+                    </Grid>
+
+                    <Grid x:Name="AiWebResearchRow" ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                          IsVisible="{Binding IsWebResearchRowVisible}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Ai_WebResearchLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" Text="{localization:Loc Ai_WebResearchDesc}" />
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="AiWebResearch" VerticalAlignment="Top"
+                                  Content="{localization:Loc Ai_WebResearchCheck}"
+                                  IsChecked="{Binding WebResearch, Mode=TwoWay}"
+                                  AutomationProperties.Name="{localization:Loc Ai_WebResearchLabel}" />
+                    </Grid>
+
+                    <Grid x:Name="AiKeyRow" ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                          IsVisible="{Binding IsApiKeyRowVisible}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Ai_ApiKeyLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       Text="{localization:Loc Ai_ApiKeyDesc}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}">
+                            <TextBox x:Name="AiKeyBox"
+                                     PasswordChar="•"
+                                     Text="{Binding ApiKeyEntry, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Ai_ApiKeyLabel}" />
+                            <WrapPanel ItemSpacing="{StaticResource FireSpaceXs}"
+                                       LineSpacing="{StaticResource FireSpaceXs}">
+                                <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body" Content="{localization:Loc Ai_SaveKey}"
+                                        Command="{Binding SaveKeyCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Content="{localization:Loc Ai_ClearKey}"
+                                        Command="{Binding ClearKeyCommand}" />
+                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                           Text="{Binding KeyStateText}" />
+                            </WrapPanel>
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       IsVisible="{Binding IsKeySessionOnly}"
+                                       Text="{localization:Loc Ai_KeySessionOnly}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="AiTestRow" ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                          IsVisible="{Binding IsTestRowVisible}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Ai_TestLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       Text="{localization:Loc Ai_TestDesc}" />
+                        </StackPanel>
+                        <Button Grid.Column="1" x:Name="AiTestButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                Content="{localization:Loc Ai_TestConnection}"
+                                Command="{Binding TestConnectionCommand}" />
+                    </Grid>
+
+                    <TextBlock x:Name="AiStatus" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                               IsVisible="{Binding HasStatus}"
+                               Text="{Binding StatusText}" />
+                </StackPanel>
+            </Border>
+
+            <!-- TONE3000: a design can download the amp capture it needs while the
+                 player is signed in. TONE3000 refuses every request without an
+                 account, and signing in needs a client id of the player's own. -->
+            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" Text="{localization:Loc Tone3000_Title}" />
+                <TextBlock x:Name="AiCaptureSearchLine" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                           Text="{Binding CaptureSearchText}" />
+            </StackPanel>
+
+            <Border x:Name="AiTone3000Card"
+                    Background="{DynamicResource FireSurfaceCard}"
+                    CornerRadius="{StaticResource FireRadiusCard}"
+                    Padding="{StaticResource FirePadCard}">
+                <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                    <Grid ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Tone3000_ClientIdLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       Text="{localization:Loc Tone3000_ClientIdHint}" />
+                        </StackPanel>
+                        <TextBox Grid.Column="1" x:Name="AiTone3000ClientId" VerticalAlignment="Top"
+                                 Text="{Binding Tone3000ClientId, Mode=TwoWay}"
+                                 PlaceholderText="{localization:Loc Tone3000_ClientIdPlaceholder}"
+                                 AutomationProperties.Name="{localization:Loc Tone3000_ClientIdLabel}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}">
+                        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                            <TextBlock Text="{localization:Loc Tone3000_RedirectUriLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       Text="{localization:Loc Tone3000_RedirectUriHint}" />
+                        </StackPanel>
+                        <SelectableTextBlock Grid.Column="1" VerticalAlignment="Top"
+                                             Text="{Binding Tone3000RedirectUri}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceLg}">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Top"
+                                   Text="{localization:Loc Tone3000_Account}" />
+                        <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXs}">
+                            <TextBlock x:Name="AiTone3000Account" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       Text="{Binding Tone3000AccountText}" />
+                            <WrapPanel ItemSpacing="{StaticResource FireSpaceXs}"
+                                       LineSpacing="{StaticResource FireSpaceXs}">
+                                <Button x:Name="AiTone3000SignIn" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
+                                        Content="{localization:Loc Tone3000_SignIn}"
+                                        IsVisible="{Binding !IsTone3000SignedIn}"
+                                        Command="{Binding SignInCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        Content="{localization:Loc Tone3000_CancelSignIn}"
+                                        IsVisible="{Binding IsSigningIn}"
+                                        Command="{Binding CancelSignInCommand}" />
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        Content="{localization:Loc Tone3000_SignOut}"
+                                        IsVisible="{Binding IsTone3000SignedIn}"
+                                        Command="{Binding SignOutCommand}" />
+                            </WrapPanel>
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                       IsVisible="{Binding HasTone3000Status}"
+                                       Text="{Binding Tone3000Status}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

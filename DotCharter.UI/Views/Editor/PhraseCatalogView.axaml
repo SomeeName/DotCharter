@@ -1,0 +1,156 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:catalog="clr-namespace:DotCharter.Services.Editing.Catalog;assembly=DotCharter.Services"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.PhraseCatalogView"
+             x:DataType="vm:PhraseCatalogViewModel">
+    <!-- Shares the Inspector's card / field / empty-state vocabulary: it is an Inspector
+         tab, so a second hand-rolled look reads as two different apps in one pane. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Editor/InspectorStyles.axaml" />
+    </UserControl.Styles>
+    <!-- #601: it is an Inspector TAB (since 0.42.4), so it carries no header repeating its name —
+         the tab strip says it — and sits on the pane's own inset with compact verbs. -->
+    <Grid Background="{DynamicResource FireSurfaceChrome}">
+        <Grid ColumnDefinitions="240,6,*" Margin="{StaticResource PaddingRow}">
+
+            <!-- Left: the find / paste-by-name box (EOF's F3 + SHIFT+~ in one
+                 control) over the library itself. -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*">
+                <TextBox Grid.Row="0"
+                         AutomationProperties.Name="{localization:Loc PhraseCatalog_FindWatermark}"
+                         x:Name="SearchBox"
+                         KeyDown="OnSearchKeyDown"
+                         Text="{Binding SearchText, Mode=TwoWay}"
+                         PlaceholderText="{localization:Loc PhraseCatalog_FindWatermark}"
+                         ToolTip.Tip="{localization:Loc PhraseCatalog_FindTip}" />
+
+                <ListBox Grid.Row="1"
+                         AutomationProperties.Name="{localization:Loc Panel_PhraseCatalog_Title}"
+                         Margin="{StaticResource GapTopSm}"
+                         ItemsSource="{Binding Entries}"
+                         SelectedItem="{Binding SelectedEntry, Mode=TwoWay}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="catalog:PhraseCatalogEntry">
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+
+            <!-- Right: preview + details + verbs -->
+            <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+
+                <!-- With nothing selected the preview used to simply VANISH,
+                     leaving a hole above the details. It now keeps its footprint
+                     and says what to do. -->
+                <Panel Grid.Row="0" Height="110">
+                    <Border Classes="InspectorCard"
+                            Padding="0"
+                            ClipToBounds="True"
+                            IsVisible="{Binding HasSelection}">
+                        <controls:PhrasePreviewControl Entry="{Binding SelectedEntry}" />
+                    </Border>
+                    <Border Classes="InspectorCard"
+                            IsVisible="{Binding !HasSelection}">
+                        <StackPanel Classes="InspectorEmpty">
+                            <TextBlock Text="{localization:Loc PhraseCatalog_NoSelection}"
+                                       TextWrapping="Wrap"
+                                       HorizontalAlignment="Center"
+                                       TextAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Panel>
+
+                <Border Grid.Row="1" Grid.RowSpan="2"
+                        Margin="{StaticResource GapTopSm}"
+                        IsVisible="{Binding HasSelection}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding SelectedSummary}" />
+                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding SelectedSourceSummary}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- The compatibility verdict, shown BEFORE the paste. Two
+                     TextBlocks rather than a bool→brush converter so the colour
+                     stays a plain DynamicResource token. -->
+                <Panel Grid.Row="3" Margin="{StaticResource GapTopXs}">
+                    <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding !CompatibilityIsProblem}"
+                               Text="{Binding CompatibilityMessage}" />
+                    <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource FireWarning}"
+                               IsVisible="{Binding CompatibilityIsProblem}"
+                               Text="{Binding CompatibilityMessage}" />
+                </Panel>
+
+                <WrapPanel Grid.Row="4"
+                           Orientation="Horizontal"
+                           ItemSpacing="6"
+                           LineSpacing="6"
+                           Margin="{StaticResource GapTopSm}">
+                    <TextBox Width="150"
+                             AutomationProperties.Name="{localization:Loc PhraseCatalog_NameWatermark}"
+                             Text="{Binding NewPhraseName, Mode=TwoWay}"
+                             PlaceholderText="{localization:Loc PhraseCatalog_NameWatermark}" />
+                    <Button Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
+                            Content="{localization:Loc PhraseCatalog_AddSelection}"
+                            ToolTip.Tip="{localization:Loc PhraseCatalog_AddSelectionTip}"
+                            Command="{Binding CaptureSelectionCommand}" />
+                    <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                            Content="{localization:Loc PhraseCatalog_PasteAtPlayhead}"
+                            ToolTip.Tip="{localization:Loc PhraseCatalog_PasteAtPlayheadTip}"
+                            IsEnabled="{Binding HasSelection}"
+                            Command="{Binding PasteSelectedCommand}" />
+                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                            Content="{localization:Loc PhraseCatalog_Rename}"
+                            ToolTip.Tip="{localization:Loc PhraseCatalog_RenameTip}"
+                            IsEnabled="{Binding HasSelection}"
+                            Command="{Binding RenameSelectedCommand}" />
+                    <!-- Two-click confirm latch: the caption swaps to
+                         DeleteCaption's confirm text on the first click. A
+                         stored riff is the ONLY copy — it is not in the project
+                         and no undo reaches it. The Danger class is colour, not
+                         a gate (docs/agents/ui/dialogs.md). -->
+                    <Button Theme="{StaticResource DangerButton}" Classes="Danger"
+                            Content="{Binding DeleteCaption}"
+                            AutomationProperties.Name="{localization:Loc PhraseCatalog_Delete}"
+                            IsEnabled="{Binding HasSelection}"
+                            Command="{Binding DeleteSelectedCommand}" />
+                </WrapPanel>
+
+                <StackPanel Grid.Row="5" Margin="{StaticResource GapTopSm}">
+                    <Panel>
+                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding !StatusIsProblem}"
+                                   Text="{Binding StatusMessage}" />
+                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource FireWarning}"
+                                   IsVisible="{Binding StatusIsProblem}"
+                                   Text="{Binding StatusMessage}" />
+                    </Panel>
+                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText"
+                               Margin="{StaticResource GapTopXs}"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding !HasEntries}"
+                               Text="{localization:Loc PhraseCatalog_EmptyHint}" />
+                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText"
+                               Margin="{StaticResource GapTopXs}"
+                               TextWrapping="Wrap"
+                               ToolTip.Tip="{Binding StorageDirectory}"
+                               Text="{localization:Loc PhraseCatalog_StorageHint}" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

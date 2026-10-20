@@ -1,0 +1,101 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.ChartSynthInstrumentView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:ChartSynthInstrumentViewModel">
+    <!-- The built-in chart synth's INSTRUMENT (#50): which guitar and which bass
+         it sounds like, the pickup selector, and the coil split for the models
+         with a humbucker. One view in two hosts — the editor's Mixer ▸ MIDI synth
+         card and Play Mode's Amp/FX panel — over the transport's one
+         ChartSynthInstrumentViewModel, so the two can never offer different choices. The line under the pickers says
+         whether that choice is REAL recordings or simulated. The pickers show the
+         EFFECTIVE choice (#66): the player profile's, or — while a song tone that
+         has its own plays — that tone's, which the last row names and can drop. -->
+    <StackPanel x:Name="ChartSynthInstrumentRoot" Spacing="{StaticResource FireSpaceXs}"
+                Grid.IsSharedSizeScope="True"
+                IsEnabled="{Binding IsAvailable}">
+        <!-- Guitar, its coil split (under the guitar it belongs to), then bass;
+             the label column is shared so the pickers line up. -->
+        <Grid ColumnSpacing="{StaticResource FireSpaceSm}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="ChartSynthLabel" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                       Text="{localization:Loc Mixer_ChartSynth_Guitar}" />
+            <ComboBox x:Name="ChartSynthGuitarModelPicker" Grid.Column="1"
+                      HorizontalAlignment="Stretch" MinWidth="0"
+                      ItemsSource="{Binding GuitarModels}"
+                      SelectedItem="{Binding SelectedGuitarModel}"
+                      ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Model_Tip}"
+                      AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Guitar}" />
+            <ComboBox x:Name="ChartSynthGuitarPickupPicker" Grid.Column="2"
+                      HorizontalAlignment="Stretch" MinWidth="0"
+                      ItemsSource="{Binding GuitarPickups}"
+                      SelectedItem="{Binding SelectedGuitarPickup}"
+                      ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Pickup_Tip}"
+                      AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_GuitarPickup}" />
+        </Grid>
+        <Grid ColumnSpacing="{StaticResource FireSpaceSm}" IsVisible="{Binding GuitarHasCoilSplit}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="ChartSynthLabel" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <CheckBox x:Name="ChartSynthCoilSplitToggle" Grid.Column="1"
+                      IsChecked="{Binding GuitarCoilSplit}"
+                      Content="{localization:Loc Mixer_ChartSynth_CoilSplit}"
+                      ToolTip.Tip="{localization:Loc Mixer_ChartSynth_CoilSplit_Tip}"
+                      AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_CoilSplit}" />
+        </Grid>
+        <Grid ColumnSpacing="{StaticResource FireSpaceSm}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="ChartSynthLabel" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                       Text="{localization:Loc Mixer_ChartSynth_Bass}" />
+            <ComboBox x:Name="ChartSynthBassModelPicker" Grid.Column="1"
+                      HorizontalAlignment="Stretch" MinWidth="0"
+                      ItemsSource="{Binding BassModels}"
+                      SelectedItem="{Binding SelectedBassModel}"
+                      ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Model_Tip}"
+                      AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_Bass}" />
+            <ComboBox x:Name="ChartSynthBassPickupPicker" Grid.Column="2"
+                      HorizontalAlignment="Stretch" MinWidth="0"
+                      ItemsSource="{Binding BassPickups}"
+                      SelectedItem="{Binding SelectedBassPickup}"
+                      ToolTip.Tip="{localization:Loc Mixer_ChartSynth_Pickup_Tip}"
+                      AutomationProperties.Name="{localization:Loc Mixer_ChartSynth_BassPickup}" />
+        </Grid>
+        <TextBlock x:Name="ChartSynthGuitarSoundText" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                   Text="{Binding GuitarSound}" />
+        <TextBlock x:Name="ChartSynthBassSoundText" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                   Text="{Binding BassSound}" />
+        <!-- A playing song tone (#66): offer it its own instrument, or say that it
+             has one and offer the player's own back. -->
+        <Button x:Name="ChartSynthOverrideToneButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                HorizontalAlignment="Left"
+                IsVisible="{Binding CanOverrideTone}"
+                Command="{Binding OverrideToneCommand}"
+                Content="{localization:Loc ChartSynth_Override_ThisTone}"
+                ToolTip.Tip="{localization:Loc ChartSynth_Override_ThisTone_Tip}"
+                AutomationProperties.Name="{localization:Loc ChartSynth_Override_ThisTone}" />
+        <Grid x:Name="ChartSynthToneOverrideRow" ColumnDefinitions="*,Auto"
+              ColumnSpacing="{StaticResource FireSpaceSm}"
+              IsVisible="{Binding HasToneOverride}">
+            <TextBlock x:Name="ChartSynthToneOverrideText" Grid.Column="0" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                       TextWrapping="Wrap" VerticalAlignment="Center"
+                       Text="{Binding ToneOverrideText}" />
+            <Button x:Name="ChartSynthUseMyInstrumentButton" Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                    VerticalAlignment="Center"
+                    Command="{Binding UseMyInstrumentCommand}"
+                    Content="{localization:Loc ChartSynth_Override_UseMine}"
+                    ToolTip.Tip="{localization:Loc ChartSynth_Override_UseMine_Tip}"
+                    AutomationProperties.Name="{localization:Loc ChartSynth_Override_UseMine}" />
+        </Grid>
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,2 @@
+T:DotCharter.Tone.Audio.JuceAudioPlaybackService;Presentation depends on the focused audio interfaces, never the engine class (target-architecture.md § 2.3)
+T:DotCharter.Tone.Audio.Abstractions.IAudioPlaybackService;Presentation depends on the focused audio interfaces; IAudioPlaybackService is for Services-internal callers (target-architecture.md § 2.3)

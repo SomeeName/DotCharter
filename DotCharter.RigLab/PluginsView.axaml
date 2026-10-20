@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DotCharter.RigLab;assembly=DotCharter.RigLab"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:localization="using:DotCharter.Tone.UI.Localization"
+             x:Class="DotCharter.RigLab.PluginsView"
+             Foreground="{DynamicResource FireTextPrimary}"
+             x:DataType="local:VstRackViewModel">
+
+    <!-- The Plugins tab: the tab's own heading and rescan, around the SHARED
+         plugin rack (`Views/PlayMode/VstRackView` in DotCharter.Tone.UI) — the
+         same rows, drag reorder and add picker DotCharter's Tools popover and
+         Amp/FX panel draw. -->
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="VstRackBody"
+                    MaxWidth="760"
+                    Margin="{StaticResource FirePadScreen}"
+                    Spacing="{StaticResource FireSpaceLg}">
+
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceLg}">
+                <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXs}">
+                    <TextBlock Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" Text="{localization:Loc Toolbar_FxChain_Header}" />
+                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" Text="{localization:Loc RigLab_Vst_Help}" />
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="VstRescanButton" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton"
+                        VerticalAlignment="Center"
+                        IsEnabled="{Binding !IsScanning}"
+                        AutomationProperties.Name="{localization:Loc Toolbar_FxChain_Rescan}"
+                        ToolTip.Tip="{localization:Loc RigLab_Vst_RescanTip}"
+                        Command="{Binding RescanCommand}">
+                    <Panel>
+                        <TextBlock IsVisible="{Binding !IsScanning}" Text="{localization:Loc Toolbar_FxChain_Rescan}" />
+                        <TextBlock IsVisible="{Binding IsScanning}" Text="{localization:Loc Toolbar_FxChain_Rescanning}" />
+                    </Panel>
+                </Button>
+            </Grid>
+
+            <Border Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+                <views:VstRackView x:Name="RigLabVstRack" />
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

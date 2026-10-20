@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:markdown="clr-namespace:DotCharter.UI.Controls.Markdown;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.UpdateAvailableDialogView"
+             x:DataType="contracts:IUpdateAvailableScreen"
+             x:CompileBindings="True">
+
+    <!-- Update prompt, hosted by Views/Shell/DialogHost (Esc = Later).
+         Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconUpdate}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Update_DialogTitle}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{Binding VersionText}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <StackPanel IsVisible="{Binding HasReleaseNotes}">
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{localization:Loc Update_ReleaseNotes}" />
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection" MaxHeight="320">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <markdown:MarkdownView Markdown="{Binding ReleaseNotes}" Margin="0,0,8,2" />
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- A DETERMINATE bar, so deliberately not StackPanel.DlgBusy
+                         (that class forces IsIndeterminate). -->
+                    <ProgressBar Minimum="0" Maximum="100" Height="6"
+                                 Value="{Binding DownloadProgress}"
+                                 IsVisible="{Binding IsDownloading}"
+                                 Margin="{DynamicResource GapBottomMd}" />
+
+                    <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{Binding StatusText}"
+                               IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Update_Later}"
+                                Command="{Binding LaterCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Update_DownloadInstall}"
+                                Command="{Binding DownloadAndInstallCommand}"
+                                IsEnabled="{Binding CanInstall}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

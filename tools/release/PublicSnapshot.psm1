@@ -1,0 +1,444 @@
+# The public export: dev `main` becomes ONE snapshot commit per release on the
+# public DotCharter and JuceSharp repos. Their history is linear - each snapshot's parent
+# is the previous public snapshot (a root commit the first time) - and no dev commit id,
+# trailer or private repo name reaches them. Export-PublicSnapshot.ps1 drives it; the
+# leak check also runs alone through Test-PublicLeaks.ps1.
+#
+# Everything is git plumbing in scratch repositories that borrow the dev object stores
+# through objects/info/alternates (read-only): the dev checkout's working tree, index,
+# branches and refs are never written. Commit dates are the dev commits' own dates, so
+# the same inputs give the same snapshot ids on a re-run.
+#
+# Every private name below is assembled from pieces, so this file neither matches its own
+# leak check nor is rewritten by its own rename map when it is exported.
+#
+# Tested by DotCharter.Tests/Infrastructure/PublicSnapshotExportTests (pwsh, fixture repos).
+# Requires PowerShell 7.
+
+Set-StrictMode -Version Latest
+
+$script:DevSuffix = '-' + 'Dev'
+$script:Owner = 'SomeeName'
+$script:AddOnName = 'DotCharter' + '.Rock' + 'smith'
+$script:PendingHash = 'PENDING: pin with tools/release/Publish-NativeRuntime.ps1 (or re-run Export-PublicSnapshot.ps1 -NativeDir)'
+
+# --- the rename map ----------------------------------------------------------
+
+# The dev repos are renamed back to the public names. Ordered: the owner-qualified forms
+# first (documentation), then the bare names, which also cover anything the first missed.
+# Case-sensitive on purpose; a different casing is left for the leak check to report.
+function Get-PublicRenameMap {
+    $map = foreach ($name in 'DotCharter', 'JuceSharp') {
+        [pscustomobject]@{ From = "$script:Owner/$name$script:DevSuffix"; To = "$script:Owner/$name" }
+    }
+    $map += foreach ($name in 'DotCharter', 'JuceSharp') {
+        [pscustomobject]@{ From = "$name$script:DevSuffix"; To = $name }
+    }
+    return $map
+}
+
+# Applies the rename map. A name followed by a word character ("...-Development",
+# "jucesharp-devrate") is another word and stays.
+function Convert-PublicText {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    foreach ($rename in Get-PublicRenameMap) {
+        $Text = [regex]::Replace($Text, [regex]::Escape($rename.From) + '(?![A-Za-z0-9_])', $rename.To.Replace('$', '$$'))
+    }
+    return $Text
+}
+
+# --- paths that never ship ------------------------------------------------------
+
+# Every entry is git-ignored in dev today, so a dev tree holds none of them; they are
+# removed again here because the export must not depend on .gitignore staying right.
+function Get-PublicExcludedPaths {
+    @(
+        [pscustomobject]@{ Path = 'plugins/'; Reason = 'plugin checkouts (git-ignored; never public)' }
+        [pscustomobject]@{ Path = 'add' + 'ons/'; Reason = 'the old plugin folder name, in case a stale checkout is still there' }
+        [pscustomobject]@{ Path = '.claude/worktrees/'; Reason = 'agent worktrees: whole embedded checkouts' }
+        [pscustomobject]@{ Path = '.claude/settings.local.json'; Reason = 'personal Claude Code permissions' }
+        [pscustomobject]@{ Path = 'TestData/'; Reason = "junction to the owner's local corpus" }
+        [pscustomobject]@{ Path = 'artifacts/'; Reason = 'build and release output' }
+        [pscustomobject]@{ Path = 'DotCharter.Tests/LocalOnly_'; Reason = "owner-only probes that read the owner's own files" }
+    )
+}
+
+function Test-PublicExcludedPath {
+    param([Parameter(Mandatory)][string]$Path)
+    $normal = $Path.Replace('\', '/')
+    foreach ($excluded in Get-PublicExcludedPaths) {
+        if ($normal.StartsWith($excluded.Path, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
+# --- the leak check -------------------------------------------------------------
+
+# The patterns of DotCharter.Tests/Infrastructure/PersonalDataLintTests, in its order and
+# with its options. PublicSnapshotExportTests fails when the two lists differ.
+function Get-PersonalDataPatterns {
+    function Escape([string]$s) { [regex]::Escape($s) }
+    @(
+        [pscustomobject]@{ Pattern = 'lu' + 'kas'; IgnoreCase = $true }
+        [pscustomobject]@{ Pattern = 'stad' + 'ler'; IgnoreCase = $true }
+        [pscustomobject]@{ Pattern = '\b' + 'Be' + 'la' + '\b'; IgnoreCase = $false }
+        [pscustomobject]@{ Pattern = (Escape ('luk.' + 'stad' + 'ler' + '@' + 'outlook.com')); IgnoreCase = $true }
+        [pscustomobject]@{ Pattern = (Escape ('somee.' + 'name1' + '@' + 'gmail.com')); IgnoreCase = $true }
+        [pscustomobject]@{ Pattern = (Escape ('beci.' + 'music' + '@' + 'outlook.com')); IgnoreCase = $true }
+        [pscustomobject]@{ Pattern = '\b' + 'F' + ':[\\/]+' + 'Rock' + 'smith'; IgnoreCase = $true }
+        [pscustomobject]@{ Pattern = '\b' + 'D' + ':[\\/]+' + 'Sort' + 'ed'; IgnoreCase = $true }
+    )
+}
+
+# The user-folder names the tree uses as made-up examples (sample data, test inputs, the
+# redactor's own docs). Exactly the ones in use; any other name under the profile folder is
+# a finding. Matched whole: "you" passes, "youngster" does not. As regex fragments: the
+# umlaut and the ellipsis are escapes so this file stays ASCII, and the JSON-escaped
+# spelling of the umlaut name is one of the inputs.
+function Get-UserPathPlaceholders {
+    @('you', 'sie', 'me', 'u', 'player', 'someone', 'alice', 'Alex', 'Test', 'A B', 'NAME',
+        'Müller', 'M\\+u00fcller', '<name>', '&lt;name&gt;', '<user>', '…')
+}
+
+function Get-UserPathPlaceholderLookahead {
+    $names = (Get-UserPathPlaceholders | ForEach-Object { if ($_ -match '\\') { $_ } else { [regex]::Escape($_) } }) -join '|'
+    return '(?!(?:' + $names + ')(?![\p{L}\p{N}_]))'
+}
+
+# One rule per kind of leak. Key material is gitleaks' job (.gitleaks.toml), which
+# Export-PublicSnapshot.ps1 runs on the snapshot when gitleaks is installed.
+function Get-PublicLeakRules {
+    $ci = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    $cs = [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    $rules = @(
+        [pscustomobject]@{ Name = 'dev-repo'; Regex = [regex]::new('\b(?:DotCharter|JuceSharp)' + $script:DevSuffix + '(?![A-Za-z0-9_])', $ci) }
+        [pscustomobject]@{ Name = 'archive-repo'; Regex = [regex]::new('\b(?:DotCharter|JuceSharp)-' + 'Archive(?![A-Za-z0-9_])', $ci) }
+        [pscustomobject]@{ Name = 'addon-name'; Regex = [regex]::new([regex]::Escape($script:AddOnName), $ci) }
+        [pscustomobject]@{ Name = 'addons-path'; Regex = [regex]::new('(?<![A-Za-z0-9_.-])' + 'add' + 'ons[\\/]', $ci) }
+        # A dev-repo pull request, issue or commit link: the public repos start from one root
+        # commit, so every such link is dead there (the numbers name the dev history).
+        [pscustomobject]@{ Name = 'history-link'; Regex = [regex]::new('github\.com/' + 'SomeeName/(?:DotCharter|JuceSharp)(?:' + $script:DevSuffix + ')?/(?:' + 'pull|issues|commit)/', $ci) }
+        [pscustomobject]@{ Name = 'user-profile-path'; Regex = [regex]::new('\b' + 'C' + ':[\\/]+' + 'Users(?>[\\/]+)' + (Get-UserPathPlaceholderLookahead), $ci) }
+    )
+    $rules += foreach ($p in Get-PersonalDataPatterns) {
+        [pscustomobject]@{ Name = 'personal-data'; Regex = [regex]::new($p.Pattern, $(if ($p.IgnoreCase) { $ci } else { $cs })) }
+    }
+    return $rules
+}
+
+# Findings in one text: Rule, Path, Line (1-based), Text (the trimmed line).
+function Find-PublicLeaksInText {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    $lines = $null
+    foreach ($rule in Get-PublicLeakRules) {
+        foreach ($m in $rule.Regex.Matches($Text)) {
+            if ($null -eq $lines) { $lines = $Text.Split("`n") }
+            $line = 1
+            for ($i = $Text.IndexOf("`n"); $i -ge 0 -and $i -lt $m.Index; $i = $Text.IndexOf("`n", $i + 1)) { $line++ }
+            $content = $lines[$line - 1].Trim()
+            if ($content.Length -gt 160) { $content = $content.Substring(0, 160) + '...' }
+            [pscustomobject]@{ Rule = $rule.Name; Path = $Path; Line = $line; Text = $content }
+        }
+    }
+}
+
+# Findings in a file's own path (a file in the add-on folder, or named after the add-on). Line 0.
+function Find-PublicLeaksInPath {
+    param([Parameter(Mandatory)][string]$Path)
+    foreach ($rule in Get-PublicLeakRules) {
+        if ($rule.Regex.IsMatch($Path)) { [pscustomobject]@{ Rule = $rule.Name; Path = $Path; Line = 0; Text = '(the path itself)' } }
+    }
+}
+
+function Test-BinaryBytes([byte[]]$Bytes) {
+    $n = [Math]::Min($Bytes.Length, 8192)
+    return [Array]::IndexOf($Bytes, [byte]0, 0, $n) -ge 0
+}
+
+# Every finding under $Root (a materialised tree; .git folders are skipped). Paths are
+# relative with forward slashes. Binary files (a NUL in the first 8 KB, as
+# PersonalDataLintTests decides) are checked by path only.
+function Find-PublicTreeLeaks {
+    param([Parameter(Mandatory)][string]$Root)
+    $Root = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\', '/')
+    $files = [System.IO.Directory]::EnumerateFiles($Root, '*', [System.IO.SearchOption]::AllDirectories)
+    foreach ($file in $files) {
+        $relative = $file.Substring($Root.Length + 1).Replace('\', '/')
+        if ($relative -match '(^|/)\.git(/|$)') { continue }
+        Find-PublicLeaksInPath -Path $relative
+        $bytes = [System.IO.File]::ReadAllBytes($file)
+        if (Test-BinaryBytes $bytes) { continue }
+        Find-PublicLeaksInText -Path $relative -Text ([System.Text.Encoding]::UTF8.GetString($bytes))
+    }
+}
+
+# The report: a count per rule, then file:line per finding, grouped by rule.
+function Format-PublicLeakReport {
+    param([AllowEmptyCollection()][object[]]$Findings = @(), [int]$PerRule = 0)
+    $Findings = @($Findings)
+    if ($Findings.Count -eq 0) { return 'leak check: clean (0 findings)' }
+    $out = [System.Collections.Generic.List[string]]::new()
+    $out.Add("leak check: $($Findings.Count) finding(s) in $(@($Findings.Path | Sort-Object -Unique).Count) file(s)")
+    foreach ($group in $Findings | Group-Object Rule | Sort-Object Name) {
+        $out.Add("  [$($group.Name)] $($group.Count) finding(s) in $(@($group.Group.Path | Sort-Object -Unique).Count) file(s)")
+        $shown = if ($PerRule -gt 0) { $group.Group | Select-Object -First $PerRule } else { $group.Group }
+        foreach ($f in $shown) { $out.Add("    $($f.Path):$($f.Line): $($f.Text)") }
+        if ($PerRule -gt 0 -and $group.Count -gt $PerRule) { $out.Add("    ... $($group.Count - $PerRule) more") }
+    }
+    return ($out -join "`n")
+}
+
+# --- native-runtime.json ----------------------------------------------------------
+
+function Get-NativeRuntimePendingHash { $script:PendingHash }
+
+# Adds the pin for the PUBLIC JuceSharp commit. With $Files (name -> SHA-256 of a pair
+# built from that tree) the pin is real; without, each hash is the PENDING marker, which
+# NativeRuntime.psm1 refuses to install and NativeRuntimeFetchTests fails on, so the
+# snapshot cannot pass its gate until the publish step has pinned the pair.
+function Add-PublicNativeRuntimeEntry {
+    param(
+        [Parameter(Mandatory)][string]$Json,
+        [Parameter(Mandatory)][string]$Commit,
+        [Parameter(Mandatory)][int]$Abi,
+        [System.Collections.IDictionary]$Files
+    )
+    $manifest = $Json | ConvertFrom-Json
+    if (@($manifest.runtimes | Where-Object { $_.commit -eq $Commit }).Count -gt 0) { return $Json }
+    $pins = [ordered]@{}
+    foreach ($name in 'juce_sharp.dll', 'juce_vst_host.exe') {
+        $pins[$name] = if ($Files) { [string]$Files[$name] } else { $script:PendingHash }
+    }
+    $entry = [pscustomobject][ordered]@{ commit = $Commit; abi = $Abi; files = [pscustomobject]$pins }
+    $manifest.runtimes = @($manifest.runtimes) + $entry
+    return ($manifest | ConvertTo-Json -Depth 5) + "`n"
+}
+
+# The dev pin's hashes for $DevCommit, reusable for the public JuceSharp commit ONLY when
+# the two trees are byte-identical (same tree id): then the pair built from one is the
+# pair of the other. $null otherwise, or when the dev pin is missing or not real hashes.
+function Get-InheritedNativePins {
+    param(
+        [Parameter(Mandatory)][string]$Json,
+        [Parameter(Mandatory)][string]$DevCommit,
+        [Parameter(Mandatory)][string]$DevTree,
+        [Parameter(Mandatory)][string]$PublicTree
+    )
+    if ($DevTree -ne $PublicTree) { return $null }
+    $entry = @(($Json | ConvertFrom-Json).runtimes | Where-Object { $_.commit -eq $DevCommit }) | Select-Object -First 1
+    if (-not $entry) { return $null }
+    $pins = [ordered]@{}
+    foreach ($name in 'juce_sharp.dll', 'juce_vst_host.exe') {
+        $hash = "$($entry.files.$name)"
+        if ($hash -cnotmatch '^[0-9a-f]{64}$') { return $null }
+        $pins[$name] = $hash
+    }
+    return $pins
+}
+
+function Get-MsBuildVersion {
+    param([Parameter(Mandatory)][string]$Text)
+    $m = [regex]::Match($Text, '(?m)^\s*<Version>([^<]+)</Version>')
+    if (-not $m.Success) { throw 'No <Version> element.' }
+    return $m.Groups[1].Value.Trim()
+}
+
+# --- git plumbing -------------------------------------------------------------------
+
+# Runs git with an exact argument list. -InputBytes feeds stdin; -AsBytes returns stdout
+# raw (blob contents); otherwise stdout is UTF-8 text, trimmed. Throws on a non-zero exit
+# unless -AllowExitCodes lists it.
+function Invoke-SnapshotGit {
+    param(
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [hashtable]$Environment = @{},
+        [byte[]]$InputBytes,
+        [switch]$AsBytes,
+        [int[]]$AllowExitCodes = @()
+    )
+    $info = [System.Diagnostics.ProcessStartInfo]::new('git')
+    foreach ($a in $Arguments) { $info.ArgumentList.Add($a) }
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $info.RedirectStandardInput = $null -ne $InputBytes
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    foreach ($key in $Environment.Keys) { $info.Environment[$key] = [string]$Environment[$key] }
+    $process = [System.Diagnostics.Process]::Start($info)
+    try {
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $buffer = [System.IO.MemoryStream]::new()
+        $copy = $process.StandardOutput.BaseStream.CopyToAsync($buffer)
+        if ($null -ne $InputBytes) {
+            $process.StandardInput.BaseStream.Write($InputBytes, 0, $InputBytes.Length)
+            $process.StandardInput.Close()
+        }
+        $copy.Wait()
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0 -and $AllowExitCodes -notcontains $process.ExitCode) {
+            throw "git $($Arguments -join ' ') failed ($($process.ExitCode)): $($stderr.Result.Trim())"
+        }
+        if ($AsBytes) { return , $buffer.ToArray() }
+        return [System.Text.Encoding]::UTF8.GetString($buffer.ToArray()).Trim()
+    }
+    finally { $process.Dispose() }
+}
+
+# A scratch repository that reads the dev objects through alternates and writes only its
+# own. core.autocrlf off: what is checked out is byte-for-byte the snapshot.
+function New-SnapshotScratchRepo {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string[]]$AlternateObjectDirs, [switch]$Bare)
+    New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    $init = @('init', '-q', '-b', 'main')
+    if ($Bare) { $init += '--bare' }
+    Invoke-SnapshotGit -Arguments ($init + $Path) | Out-Null
+    $gitDir = Invoke-SnapshotGit -Arguments @('-C', $Path, 'rev-parse', '--path-format=absolute', '--git-dir')
+    $alternates = Join-Path $gitDir 'objects/info/alternates'
+    [System.IO.File]::WriteAllText($alternates, (($AlternateObjectDirs | ForEach-Object { $_.Replace('\', '/') }) -join "`n") + "`n")
+    Invoke-SnapshotGit -Arguments @('-C', $Path, 'config', 'core.autocrlf', 'false') | Out-Null
+    return $gitDir
+}
+
+# The previous public snapshot: the tip of `main` at $Url (a URL or a local repo path),
+# fetched into $Repo - fetch only, nothing is pushed. $null when no URL is given, or
+# when the repo has no `main` yet (a freshly created, empty public repo).
+function Get-PreviousSnapshot {
+    param([Parameter(Mandatory)][string]$Repo, [string]$Url)
+    if (-not $Url) { return $null }
+    if (-not (Invoke-SnapshotGit -Arguments @('ls-remote', '--heads', $Url, 'main'))) { return $null }
+    Invoke-SnapshotGit -Arguments @('-C', $Repo, 'fetch', '-q', '--no-tags', $Url, '+refs/heads/main:refs/remotes/public/main') | Out-Null
+    return Invoke-SnapshotGit -Arguments @('-C', $Repo, 'rev-parse', 'refs/remotes/public/main^{commit}')
+}
+
+# Rewrites the tree $SourceTree (readable in $Repo) for the public repo: excluded paths
+# dropped, the rename map applied to every text blob that holds a dev name, then
+# $Edit (a scriptblock given the index environment) for anything path-specific.
+# Returns the new tree id. Uses a private index file; $Repo's own index is untouched.
+function New-PublicTree {
+    param(
+        [Parameter(Mandatory)][string]$Repo,
+        [Parameter(Mandatory)][string]$SourceTree,
+        [scriptblock]$Edit
+    )
+    $index = Join-Path ([System.IO.Path]::GetTempPath()) ('dc-snapshot-index-' + [guid]::NewGuid().ToString('N'))
+    $envIndex = @{ GIT_INDEX_FILE = $index }
+    try {
+        Invoke-SnapshotGit -Arguments @('-C', $Repo, 'read-tree', $SourceTree) -Environment $envIndex | Out-Null
+
+        $listed = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'ls-files', '-z') -Environment $envIndex
+        $drop = @($listed.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries) | Where-Object { Test-PublicExcludedPath $_ })
+        foreach ($path in $drop) {
+            Invoke-SnapshotGit -Arguments @('-C', $Repo, 'update-index', '--force-remove', '--', $path) -Environment $envIndex | Out-Null
+        }
+
+        # Candidates by a fast grep over the tree (-I: text only), then the exact rewrite.
+        $pattern = '(DotCharter|JuceSharp)' + $script:DevSuffix
+        $grep = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'grep', '-z', '-l', '-I', '-E', $pattern, $SourceTree) -AllowExitCodes @(1)
+        $prefix = $SourceTree + ':'
+        $latin1 = [System.Text.Encoding]::Latin1
+        foreach ($hit in $grep.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)) {
+            $path = if ($hit.StartsWith($prefix)) { $hit.Substring($prefix.Length) } else { $hit }
+            if (Test-PublicExcludedPath $path) { continue }
+            $entry = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'ls-files', '-s', '--', $path) -Environment $envIndex
+            if ($entry -notmatch '^(\d{6}) ([0-9a-f]{40}) \d\t') { continue }
+            $mode = $Matches[1]; $blob = $Matches[2]
+            $bytes = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'cat-file', 'blob', $blob) -AsBytes
+            # Latin-1 maps every byte to one char and back, so untouched bytes stay exact.
+            $text = $latin1.GetString($bytes)
+            $renamed = Convert-PublicText -Text $text
+            if ($renamed -ceq $text) { continue }
+            $newBlob = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'hash-object', '-w', '--stdin') -InputBytes $latin1.GetBytes($renamed)
+            Invoke-SnapshotGit -Arguments @('-C', $Repo, 'update-index', '--cacheinfo', "$mode,$newBlob,$path") -Environment $envIndex | Out-Null
+        }
+
+        if ($Edit) { & $Edit $envIndex }
+        return Invoke-SnapshotGit -Arguments @('-C', $Repo, 'write-tree') -Environment $envIndex
+    }
+    finally { Remove-Item -LiteralPath $index -Force -ErrorAction SilentlyContinue }
+}
+
+# Replaces one file's content in the index given by $IndexEnvironment.
+function Set-SnapshotIndexText {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][hashtable]$IndexEnvironment,
+        [Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Text)
+    $blob = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'hash-object', '-w', '--stdin') -InputBytes ([System.Text.UTF8Encoding]::new($false).GetBytes($Text))
+    Invoke-SnapshotGit -Arguments @('-C', $Repo, 'update-index', '--add', '--cacheinfo', "100644,$blob,$Path") -Environment $IndexEnvironment | Out-Null
+}
+
+function Get-SnapshotIndexText {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][hashtable]$IndexEnvironment, [Parameter(Mandatory)][string]$Path)
+    $entry = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'ls-files', '-s', '--', $Path) -Environment $IndexEnvironment
+    if ($entry -notmatch '^\d{6} ([0-9a-f]{40}) ') { return $null }
+    $bytes = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'cat-file', 'blob', $Matches[1]) -AsBytes
+    return [System.Text.Encoding]::UTF8.GetString($bytes)
+}
+
+# The snapshot commit: $Tree on top of $Parent (none: a root commit), the owner as author
+# AND committer, the given date, and exactly the one-line message - no trailer, no dev id.
+# Reuses $Parent when the tree did not change. Moves refs/heads/main and the tag.
+# The one-line message of a snapshot commit and of its tag, after SomeeName/rs7string's
+# public history: the first snapshot (no public parent: a root commit) is "Initial public
+# commit of <product>", every later one "Update to v<version>".
+function Get-SnapshotMessage {
+    param([Parameter(Mandatory)][string]$Product, [Parameter(Mandatory)][string]$Version, [string]$Parent)
+    if (-not $Parent) { return "Initial public commit of $Product" }
+    return "Update to v$Version"
+}
+
+function New-SnapshotCommit {
+    param(
+        [Parameter(Mandatory)][string]$Repo,
+        [Parameter(Mandatory)][string]$Tree,
+        [string]$Parent,
+        [Parameter(Mandatory)][string]$Message,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Email,
+        [Parameter(Mandatory)][string]$Date,
+        [string]$Tag
+    )
+    if ($Message -match '[\r\n]') { throw 'A snapshot message is one line: no body, no trailer.' }
+    # The owner is author, committer and (for the tag) tagger, all at $Date.
+    $identity = @{
+        GIT_AUTHOR_NAME = $Name; GIT_AUTHOR_EMAIL = $Email; GIT_AUTHOR_DATE = $Date
+        GIT_COMMITTER_NAME = $Name; GIT_COMMITTER_EMAIL = $Email; GIT_COMMITTER_DATE = $Date
+    }
+    if ($Parent -and (Invoke-SnapshotGit -Arguments @('-C', $Repo, 'rev-parse', "$Parent^{tree}")) -eq $Tree) {
+        $commit = $Parent
+        $created = $false
+        # Same tree, same version: the tag annotates the reused commit with ITS message, so a
+        # re-export recreates the tag already public instead of one a push would reject.
+        $Message = (Invoke-SnapshotGit -Arguments @('-C', $Repo, 'log', '-1', '--format=%B', $Parent)).Trim()
+    }
+    else {
+        $arguments = @('-C', $Repo, 'commit-tree', $Tree)
+        if ($Parent) { $arguments += @('-p', $Parent) }
+        $arguments += @('-m', $Message)
+        $commit = Invoke-SnapshotGit -Arguments $arguments -Environment $identity
+        $created = $true
+    }
+    Invoke-SnapshotGit -Arguments @('-C', $Repo, 'update-ref', 'refs/heads/main', $commit) | Out-Null
+    # An annotated tag whose message is the commit's one line.
+    if ($Tag) { Invoke-SnapshotGit -Arguments @('-C', $Repo, 'tag', '-a', '-f', '-m', $Message, $Tag, $commit) -Environment $identity | Out-Null }
+    return [pscustomobject]@{ Commit = $commit; Created = $created; Parent = $Parent; Tag = $Tag }
+}
+
+# Writes the tree of $Commit (in $GitDir) into $Destination through a private index.
+function Export-SnapshotWorkTree {
+    param([Parameter(Mandatory)][string]$GitDir, [Parameter(Mandatory)][string]$Commit, [Parameter(Mandatory)][string]$Destination)
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    $index = Join-Path ([System.IO.Path]::GetTempPath()) ('dc-snapshot-index-' + [guid]::NewGuid().ToString('N'))
+    try {
+        $envIndex = @{ GIT_INDEX_FILE = $index }
+        $base = @("--git-dir=$GitDir", "--work-tree=$Destination", '-c', 'core.autocrlf=false', '-c', 'core.longpaths=true')
+        Invoke-SnapshotGit -Arguments ($base + @('read-tree', $Commit)) -Environment $envIndex | Out-Null
+        Invoke-SnapshotGit -Arguments ($base + @('checkout-index', '-a', '-f')) -Environment $envIndex | Out-Null
+    }
+    finally { Remove-Item -LiteralPath $index -Force -ErrorAction SilentlyContinue }
+}
+
+Export-ModuleMember -Function Get-PublicRenameMap, Convert-PublicText, Get-PublicExcludedPaths, Test-PublicExcludedPath,
+    Get-PersonalDataPatterns, Get-PublicLeakRules, Find-PublicLeaksInText, Find-PublicLeaksInPath, Find-PublicTreeLeaks,
+    Format-PublicLeakReport, Get-NativeRuntimePendingHash, Add-PublicNativeRuntimeEntry, Get-MsBuildVersion,
+    Get-InheritedNativePins, Get-UserPathPlaceholders, Get-UserPathPlaceholderLookahead,
+    Invoke-SnapshotGit, New-SnapshotScratchRepo, Get-PreviousSnapshot, New-PublicTree, Set-SnapshotIndexText,
+    Get-SnapshotIndexText, Get-SnapshotMessage, New-SnapshotCommit, Export-SnapshotWorkTree

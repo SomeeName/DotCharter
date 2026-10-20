@@ -1,0 +1,222 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellVm="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GameSettingsGameplayView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- The Gameplay section pane of the Play Mode settings modal. Its host,
+         Screens/GameplaySettingsView.axaml, declares it with the pane's x:Name
+         (GameSettingsGameplayPane, which PlayModeView.GameplaySettingsPaneNames prewarms) and
+         its IsVisible gate. Lifted out of PlayModeView.axaml in #294, markup
+         unchanged. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  BringIntoViewOnFocusChange="False"
+                  Padding="{StaticResource FirePadBody}">
+        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Judging}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_HitWindow}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_HitWindow_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              AutomationProperties.Name="{localization:Loc PlayMode_HitWindow}"
+                              SelectedIndex="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.HitWindowIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Lenient}" />
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Normal}" />
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Strict}" />
+                    </ComboBox>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_ChordStrictness}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_ChordStrictness_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              AutomationProperties.Name="{localization:Loc PlayMode_ChordStrictness}"
+                              SelectedIndex="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.ChordStrictnessIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Lenient}" />
+                        <ComboBoxItem Content="{localization:Loc PlayMode_Chord_Standard}" />
+                        <ComboBoxItem Content="{localization:Loc LivePlay_HitWindow_Strict}" />
+                    </ComboBox>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_CqtVerifier}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GameSettings_CqtVerifier_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_CqtVerifier}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.UseCqtVerifier, Mode=TwoWay}" />
+                </Grid>
+
+                <!-- #645 / #730: one switch per technique. Bends are on by default (measured on
+                     real DI); slides and vibrato are off until they measure well. The contour
+                     comes from the CQT, so each switch is visibly disabled while the CQT verifier
+                     is off (the descriptions say why). -->
+                <Grid x:Name="GameSettingsJudgeBendsRow" ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_JudgeBends}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GameSettings_JudgeBends_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_JudgeBends}"
+                                  IsEnabled="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.UseCqtVerifier}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.JudgeBends, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid x:Name="GameSettingsJudgeSlidesRow" ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_JudgeSlides}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GameSettings_JudgeSlides_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_JudgeSlides}"
+                                  IsEnabled="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.UseCqtVerifier}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.JudgeSlides, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid x:Name="GameSettingsJudgeVibratoRow" ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_JudgeVibrato}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GameSettings_JudgeVibrato_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_JudgeVibrato}"
+                                  IsEnabled="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.UseCqtVerifier}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.JudgeVibrato, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_DetectionMonitor}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GameSettings_DetectionMonitor_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_DetectionMonitor}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).LivePlay.ShowDetectionMonitor, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Practice}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_Speed}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_Speed_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ItemsSource="{Binding SpeedOptions}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_Speed}"
+                              SelectedItem="{Binding PracticeSpeedPercent, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="x:Int32">
+                                <TextBlock Text="{Binding StringFormat='{}{0} %'}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_ResumeRewind}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GameSettings_ResumeRewind_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_ResumeRewind}"
+                              SelectedIndex="{Binding Settings.GameplayResumeRewindIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="{localization:Loc Settings_GameplayCountIn_Off}" />
+                        <ComboBoxItem Content="{localization:Loc PlayMode_GameSettings_ResumeRewind_1s}" />
+                        <ComboBoxItem Content="{localization:Loc PlayMode_GameSettings_ResumeRewind_15s}" />
+                        <ComboBoxItem Content="{localization:Loc PlayMode_GameSettings_ResumeRewind_2s}" />
+                    </ComboBox>
+                </Grid>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_OnScreen}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_RockMeter_SettingLabel}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_RockMeter_SettingDesc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_RockMeter_SettingLabel}"
+                                  IsChecked="{Binding Settings.GameplayRockMeterEnabled, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_InGameTones_Use}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_InGameTones_Tip}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_InGameTones_Use}"
+                                  IsChecked="{Binding UseInGameTones, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_ToneHud_Show}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_ToneHud_Tip}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_ToneHud_Show}"
+                                  IsChecked="{Binding ShowGameplayToneHud, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,195 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vst="clr-namespace:DotCharter.Tone.Audio.Vst;assembly=DotCharter.Tone"
+             xmlns:locSvc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             xmlns:playMode="using:DotCharter.Tone.UI.Views.PlayMode"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.ToolsPopoverView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- TOOLS — `Play Menus.dc.html`, `tools()`. 400 px, the widest popover the
+         mockup draws, because the VST3 chain has five cells in a row. -->
+    <UserControl.Resources>
+        <!-- `Play Menus.dc.html`'s `select('0 semitones', 'E STD', 150)`: a
+             PRIMARY value, a SECONDARY mono meta, and the caret the ComboBox
+             template already draws. Avalonia renders the closed face with the
+             same ItemTemplate as the popup rows, so stating the pair here is
+             what makes the field read as a dropdown rather than a printed
+             number — which is exactly how the bare `0 st` read.
+
+             The meta comes off the ComboBox's `Tag`. It is a property of the
+             ARRANGEMENT, not of the semitone in the row, so it cannot be bound
+             from inside a template whose DataContext is an `x:Int32`; the row
+             reaches back out to the one place that knows it. -->
+        <DataTemplate x:Key="FirePopoverSemitoneItem" x:DataType="x:Int32">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FirePopoverGap}">
+                <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis">
+                    <TextBlock.Text>
+                        <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                            <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                     Path="[Toolbar_DropTune_Format]" />
+                            <Binding Path="." />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+                <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                           Text="{Binding $parent[ComboBox].Tag}" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <controls:FirePopover Width="420"
+                          Title="{localization:Loc Toolbar_ToolsFlyout}"
+                          Icon="{DynamicResource IconTuneVertical}">
+        <controls:FirePopover.Footer>
+            <!-- "Rescan plugin folders" is REAL: it re-walks the VST3 folders
+                 and rebuilds both plugin lists, so a plugin installed after
+                 launch appears without a restart. It deliberately does not
+                 re-run the chain restore — that would duplicate every slot. -->
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="*,Auto,Auto">
+                <Button Grid.Column="0" Theme="{StaticResource FirePopoverLinkButton}" Classes="FirePopoverLink"
+                        HorizontalAlignment="Left"
+                        Content="{localization:Loc Toolbar_FxChain_Rescan}"
+                        ToolTip.Tip="{localization:Loc Toolbar_FxChain_Rescan_Tip}"
+                        Command="{Binding Transport.RescanVstPluginsCommand}" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="1" Theme="{StaticResource FirePopoverStateText}" Classes="FirePopoverState"
+                           Text="{localization:Loc Toolbar_FxChain_Rescanning}"
+                           IsVisible="{Binding Transport.IsRescanningVstPlugins}" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="2" Theme="{StaticResource FirePopoverChordText}" Classes="FirePopoverChord"
+                           Text="{Binding ProjectState.Keybinds.OpenToolsPopover, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <StackPanel>
+            <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody Wide">
+                <!-- TUNER. The `IN TUNE` readout is LIVE: opening this popover
+                     takes a lease on the shared `LiveTuner` (`TunerReadout.Begin`),
+                     the same ~15 Hz detection the dialog reads, and closing it
+                     releases the lease. -->
+                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto"
+                      ToolTip.Tip="{localization:Loc Toolbar_Tuner_Tip}">
+                    <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                               Text="{localization:Loc Toolbar_Tuner}" />
+                    <StackPanel Theme="{StaticResource FirePopoverControlsPanel}" VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverControls">
+                        <TextBlock Theme="{StaticResource FirePopoverTuneText}" Classes="FirePopoverTune"
+                                   Classes.Silent="{Binding ToneRig.TunerReadout.IsSilent, FallbackValue=True}"
+                                   Classes.Off="{Binding !ToneRig.TunerReadout.IsInTune, FallbackValue=True}"
+                                   Text="{Binding ToneRig.TunerReadout.Text, FallbackValue=—}" />
+                        <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
+                                Content="{localization:Loc Action_Open}"
+                                Command="{Binding ShellDialogs.OpenTunerCommand}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Digital drop-tune pedal: shifts the live input in semitones
+                     (negative = drop) before detection, the FX chain and
+                     monitoring. Lives under Tools (owner, 0.32.2) — it is an
+                     input tool, not tempo. -->
+                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto"
+                      ToolTip.Tip="{localization:Loc Toolbar_DropTune_Tip}">
+                    <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                               Text="{localization:Loc Toolbar_DropTune}" />
+                    <StackPanel Theme="{StaticResource FirePopoverControlsPanel}" VerticalAlignment="Center" Grid.Column="1" Classes="FirePopoverControls">
+                        <!-- The mockup's face reads "0 semitones"; a bare `0`
+                             in a 150 px field names no unit at all. Same
+                             `+0;-0;0` shape as the Tempo popover's readout, so
+                             the two semitone numbers in this app are printed one
+                             way. -->
+                        <!-- 190, not the mockup's 150: "0 semitones" and the "E STD" meta did
+                             not both fit, and the face read "0 semi…" (live capture, 2026-09-24). -->
+                        <ComboBox Width="190"
+                                  AutomationProperties.Name="{localization:Loc Toolbar_DropTune}"
+                                  SelectedValue="{Binding Transport.InputPitchShiftSemis}"
+                                  ItemTemplate="{StaticResource FirePopoverSemitoneItem}"
+                                  Tag="{Binding ChartEditor.ActiveArrangement,
+                                        Converter={x:Static converters:ArrangementTuningConverter.Instance},
+                                        ConverterParameter=short}">
+                            <x:Int32>0</x:Int32>
+                            <x:Int32>-1</x:Int32>
+                            <x:Int32>-2</x:Int32>
+                            <x:Int32>-3</x:Int32>
+                            <x:Int32>-4</x:Int32>
+                            <x:Int32>-5</x:Int32>
+                            <x:Int32>-6</x:Int32>
+                            <x:Int32>-7</x:Int32>
+                            <x:Int32>-12</x:Int32>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto"
+                      ToolTip.Tip="{localization:Loc Toolbar_VirtualInstrument}">
+                    <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                               Text="{localization:Loc Toolbar_MidiInstrument}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceSm}"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{localization:Loc Toolbar_Loading}"
+                                   Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                   IsVisible="{Binding Transport.IsInstrumentVstLoading}" />
+                        <ComboBox Width="118"
+                                  ItemsSource="{Binding Transport.InstrumentVstPlugins}"
+                                  AutomationProperties.Name="{localization:Loc Toolbar_MidiInstrument}"
+                                  SelectedItem="{Binding Transport.SelectedInstrumentVst}"
+                                  IsEnabled="{Binding !Transport.IsInstrumentVstLoading}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vst:VstPluginInfo">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <!-- The mockup's two 26 px caption buttons. -->
+                        <ToggleButton Theme="{StaticResource FirePopoverIconToggle}" Classes="FirePopoverIcon"
+                                      Content="{localization:Loc Toolbar_OpenGui}"
+                                      ToolTip.Tip="{localization:Loc Toolbar_OpenSynthGui}"
+                                      IsChecked="{Binding Transport.InstrumentVstGuiOpen}"
+                                      IsEnabled="{Binding Transport.IsInstrumentVstReady}" />
+                        <ToggleButton Theme="{StaticResource FirePopoverIconToggle}" Classes="FirePopoverIcon"
+                                      Content="{localization:Loc Toolbar_OutputShort}"
+                                      ToolTip.Tip="{localization:Loc Toolbar_EnableMidiOutput}"
+                                      IsChecked="{Binding Transport.MidiEnabled}" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+
+            <!-- GUITAR VST3 CHAIN. The kicker's right-hand state is the slot
+                 count — the one fact that tells a loaded rig from an empty one
+                 without reading the list. -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <Grid Theme="{StaticResource FirePopoverKickerGrid}" Classes="FirePopoverKicker" ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                                   Text="{localization:Loc Toolbar_FxChain_Header}" />
+                        <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverStateText}" Classes="FirePopoverState"
+                                   IsVisible="{Binding Transport.GuitarVstChain.Count}">
+                            <TextBlock.Text>
+                                <MultiBinding Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                                    <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                             Path="[Toolbar_FxChain_Slots]" />
+                                    <Binding Path="Transport.GuitarVstChain.Count" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </Grid>
+                    <!-- "Signal runs top to bottom. Drag to reorder." — and it
+                         does: the rack below is the SHARED plugin rack
+                         (`Views/PlayMode/VstRackView`, the same view the Amp/FX
+                         panel and RigLab's Plugins tab draw), whose drag drives
+                         `TransportViewModel.MoveGuitarSlot` through
+                         `TransportVstRack`. Only with something to reorder: over
+                         the empty well it said the same thing as the well's own
+                         hint, one line apart. -->
+                    <TextBlock Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote"
+                               IsVisible="{Binding Transport.GuitarVstChain.Count}"
+                               Text="{localization:Loc Toolbar_FxChain_Help}" />
+
+                    <playMode:VstRackView x:Name="ToolsVstRack" DataContext="{Binding Transport.VstRack}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

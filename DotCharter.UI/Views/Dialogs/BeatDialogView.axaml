@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.BeatDialogView"
+             x:DataType="contracts:IBeatScreen"
+             x:CompileBindings="True">
+
+    <!-- Grammar: Views/Dialogs/DialogStyles.axaml. Hosted by Views/Shell/DialogHost,
+         which focuses `BpmInput` on open (FocusOnOpen) — keep the x:Name. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconMapMarker}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_Beat_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_Beat_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,180">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Beat_Bpm}" />
+                        <NumericUpDown VerticalAlignment="Center" x:Name="BpmInput" dlgv:FocusOnOpen.IsTarget="True" Grid.Column="1" Value="{Binding Bpm}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_Beat_Bpm}"
+                                       Minimum="1" Maximum="999" FormatString="0.###" Increment="1" />
+                    </Grid>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,180">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Beat_BeatsInMeasure}" />
+                        <NumericUpDown VerticalAlignment="Center" Grid.Column="1" Value="{Binding BeatsInMeasure}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_Beat_BeatsInMeasure}"
+                                       Minimum="1" Maximum="32" FormatString="0"
+                                       ParsingNumberStyle="Integer" Increment="1" />
+                    </Grid>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,180">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Beat_NoteDenominator}" />
+                        <NumericUpDown VerticalAlignment="Center" Grid.Column="1" Value="{Binding NoteDenominator}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_Beat_NoteDenominator}"
+                                       Minimum="1" Maximum="64" FormatString="0"
+                                       ParsingNumberStyle="Integer" Increment="1" />
+                    </Grid>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,180">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Beat_IsAnchor}" />
+                        <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding IsAnchor}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_Beat_IsAnchor}" />
+                    </Grid>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Save}"
+                                Command="{Binding SaveCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

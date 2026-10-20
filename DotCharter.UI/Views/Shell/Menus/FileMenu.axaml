@@ -1,0 +1,175 @@
+<MenuItem xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+          xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+          xmlns:converters="using:DotCharter.UI.Converters"
+          xmlns:menus="using:DotCharter.UI.Views.Shell.Menus"
+          x:Class="DotCharter.UI.Views.Shell.Menus.FileMenu"
+          x:DataType="viewModels:MainWindowViewModel"
+          Classes="FireMenuTop" Header="{localization:Loc Menu_File}">
+    <MenuItem Header="{localization:Loc Menu_NewProject}" Command="{Binding Imports.OpenNewProjectCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.NewProject, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M13,9V3.5L18.5,9H13Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_OpenProject}" Command="{Binding Project.OpenProjectCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.OpenProject, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10.7C6.4,9.81 7.21,9.2 8.14,9.2H23L19,20Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <!-- OPEN RECENT (P1-5). Dynamic rows over the session's MRU list —
+         each item VM carries its OWN open command (no ancestor-
+         DataContext lookup inside a popup's namescope), and opening
+         goes through the SAME funnel as File ▸ Open, discard guard
+         included. Disabled rather than hidden when the list is empty,
+         so the entry never reads as missing. NOTE for the menu lints:
+         this submenu has no STATIC MenuItem children, so the
+         three-row-floor test correctly does not count it as a group. -->
+    <MenuItem Header="{localization:Loc Menu_OpenRecent}"
+              ItemsSource="{Binding Project.RecentProjects}"
+              IsEnabled="{Binding Project.HasRecentProjects}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconHistory}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem.ItemContainerTheme>
+            <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}"
+                          x:DataType="viewModels:RecentProjectItem">
+                <Setter Property="Header" Value="{Binding DisplayName}" />
+                <Setter Property="Command" Value="{Binding OpenCommand}" />
+                <Setter Property="ToolTip.Tip" Value="{Binding Path}" />
+            </ControlTheme>
+        </MenuItem.ItemContainerTheme>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_SaveProject}" Command="{Binding Project.SaveProjectCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.SaveProject, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_SaveProjectAs}" Command="{Binding Project.SaveProjectAsCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.SaveProjectAs, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <Separator />
+
+    <!-- AUDIO. Two verbs, deliberately NOT a submenu: one level for two
+         items is an extra click for nothing (the rule the Tools pass set
+         and this one follows). -->
+    <MenuItem Header="{localization:Loc Menu_AttachAudio}" Command="{Binding Project.AttachAudioCommand}"
+              ToolTip.Tip="{localization:Loc Menu_AttachAudio_Tip}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M12,3V13.55C11.41,13.21 10.73,13 10,13A3,3 0 0,0 7,16A3,3 0 0,0 10,19A3,3 0 0,0 13,16V7H17V5H12V3Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_ChartFromAudio}"
+              Command="{Binding ShellDialogs.OpenChartFromAudioCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconSparkles}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+
+    <!-- IN and OUT, one pair of submenus. Import was already grouped;
+         the four exports sat flat beside it, which read as "four ways to
+         save" next to "one way to import". -->
+    <MenuItem Header="{localization:Loc Menu_Import}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M14,13V17H10V13H7L12,8L17,13M19.35,10.03C18.67,6.59 15.64,4 12,4C9.11,4 6.6,5.64 5.35,8.03C2.34,8.36 0,10.9 0,14A6,6 0 0,0 6,20H19A5,5 0 0,0 24,15C24,12.36 21.95,10.22 19.35,10.03Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_ImportGuitarPro}" Command="{Binding Imports.ImportGuitarProCommand}" />
+        <MenuItem Header="{localization:Loc Menu_ImportEof}" Command="{Binding Imports.ImportEofCommand}" />
+        <MenuItem Header="{localization:Loc Menu_ImportRsXml}" Command="{Binding Imports.ImportRsXmlCommand}" />
+        <MenuItem Header="{localization:Loc Menu_ImportMidi}" Command="{Binding Imports.ImportMidiCommand}" />
+        <!-- #820: the downloader is a contested feature, so this row is REMOVED (not
+             greyed) when the public-build switch is off (ContestedMenu.Prune). -->
+        <MenuItem Header="{localization:Loc Menu_AttachYoutubeAudio}" menus:ContestedMenu.Feature="youtube-import"
+                  Command="{Binding Imports.AttachYoutubeAudioCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_AttachYoutubeAudio_Tip}" />
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_GroupExport}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_ExportRocksmith}"
+                  Command="{Binding ShellDialogs.OpenRocksmithExportCommand}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_ExportDcSong}"
+                  Command="{Binding ShellDialogs.OpenDcSongExportCommand}" />
+        <MenuItem Header="{localization:Loc Menu_ExportGuitarPro}"
+                  Command="{Binding Export.ExportGuitarProCommand}" />
+        <MenuItem Header="{localization:Loc Menu_ExportEof}"
+                  Command="{Binding Export.ExportEditorOnFireCommand}" />
+        <MenuItem Header="{localization:Loc Menu_ExportSheetPdf}"
+                  Command="{Binding Export.ExportSheetPdfCommand}">
+            <MenuItem.Icon>
+                <PathIcon Data="{DynamicResource IconSheetMusic}"
+                          Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+    </MenuItem>
+    <Separator />
+    <!-- No Song Browser row (0.58): File was at the 14-entry cap and
+         LIBRARY sits in the MainNavSwitcher beside this bar (palette:
+         `file.songBrowser`). Settings stays: it is the desktop convention. -->
+    <!-- The GAME SHELL's one route since the icon rail went (else Play
+         Mode hides behind AppConfig.StartInPlayMode). Not in the CHART /
+         LIBRARY / SETTINGS switcher: Play Mode leaves the editor. -->
+    <MenuItem Header="{localization:Loc PlayMode_NavTip}" Command="{Binding OpenPlayModeCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconGuitar}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_RevealProjectInExplorer}"
+              Command="{Binding Project.RevealProjectInExplorerCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_SongMetadata}"
+              Command="{Binding ShellDialogs.OpenSongMetadataCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M19,11C19,14.53 16.39,17.44 13,17.93V21H11V17.93C7.61,17.44 5,14.53 5,11H7A5,5 0 0,0 12,16A5,5 0 0,0 17,11H19Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_Settings}" Command="{Binding OpenSettingsCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconCog}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_Exit}" InputGesture="Alt+F4"
+              Command="{Binding ExitApplicationCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"
+                Width="14" Height="14" Foreground="{DynamicResource DangerColor}" />
+        </MenuItem.Icon>
+    </MenuItem>
+</MenuItem>

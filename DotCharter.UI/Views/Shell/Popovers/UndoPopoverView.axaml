@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:dialogVms="clr-namespace:DotCharter.UI.ViewModels.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.UndoPopoverView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- UNDO — `Play Menus.dc.html`, `undo(false)`. 348 px.
+
+         Its twin is `RedoPopoverView`, and the ROW is declared once in
+         `HistoryRow.axaml` and shared: two hand-written copies of a four-cell
+         row is exactly how the two lists drift apart. -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter/Views/Shell/Popovers/HistoryRow.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <controls:FirePopover Width="348"
+                          Title="{localization:Loc Menu_Undo}"
+                          Icon="{DynamicResource IconUndo}">
+        <controls:FirePopover.Footer>
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="Auto,*">
+                <!-- The LIVE chord, never a literal: every one of these is
+                     rebindable, and a stale legend names a different shortcut. -->
+                <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverChordText}" Classes="FirePopoverChord"
+                           Text="{Binding ProjectState.Keybinds.Undo, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+                <Button Grid.Column="1" Theme="{StaticResource FirePopoverLinkButton}" Classes="FirePopoverLink"
+                        HorizontalAlignment="Right"
+                        IsVisible="{Binding ChartEditor.UndoPreview.Count}"
+                        Content="{localization:Loc Toolbar_History_Full}"
+                        Command="{Binding ShellDialogs.OpenHistoryCommand}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <Panel>
+            <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto"
+                          IsVisible="{Binding ChartEditor.UndoPreview.Count}">
+                <ItemsControl ItemsSource="{Binding ChartEditor.UndoPreview}"
+                              ItemTemplate="{StaticResource FirePopoverHistoryRow}"
+                              Margin="{StaticResource FirePadPopoverList}" />
+            </ScrollViewer>
+            <!-- A real empty state, not a stray grey line: it says what is
+                 missing AND how to make it appear. -->
+            <Panel IsVisible="{Binding !ChartEditor.UndoPreview.Count}"
+                   Margin="{StaticResource FirePadPopoverSection}">
+                <Rectangle Classes="FirePopoverDash" />
+                <Border Theme="{StaticResource FirePopoverEmptyBorder}" Classes="FirePopoverEmpty">
+                    <StackPanel>
+                        <TextBlock Theme="{StaticResource FirePopoverEmptyTitleText}" Classes="FirePopoverEmptyTitle"
+                                   Text="{localization:Loc Toolbar_UndoPreview_Empty}" />
+                        <TextBlock Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote"
+                                   Text="{localization:Loc Toolbar_UndoPreview_EmptyHint}" />
+                    </StackPanel>
+                </Border>
+            </Panel>
+        </Panel>
+    </controls:FirePopover>
+</UserControl>

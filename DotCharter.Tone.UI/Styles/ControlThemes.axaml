@@ -1,0 +1,285 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:DotCharter.Tone.UI.Controls">
+
+    <Styles.Resources>
+
+        <!--
+            ONE POPOVER SHELL — `Play Menus.dc.html`.
+
+            Its SHELL RULES panel is the whole spec and every number below is
+            from it: head 40, rows 34, radius 14/9, label left / control right /
+            value in mono, never wider than 420.
+
+            Type-keyed for the same reason KeybindCaptureBox is, only more so: a
+            popover is realized inside a FlyoutPresenter, i.e. in a popup's own
+            namescope, so a Style in the hosting view's UserControl.Styles would
+            resolve to nothing and the shell would render as a bare stack of
+            rows — measuring perfectly, with no warning.
+        -->
+        <ControlTheme x:Key="{x:Type controls:FirePopover}" TargetType="controls:FirePopover">
+            <Setter Property="MaxWidth" Value="{DynamicResource FirePopoverMaxWidth}" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <!-- ClipToBounds so the head's tint and the footer's fill
+                         are cut by the 14 px radius rather than squaring off
+                         the corners the popover just rounded. -->
+                    <Border Background="{DynamicResource FirePopoverFill}"
+                            BorderBrush="{DynamicResource FirePopoverBorder}"
+                            BorderThickness="{StaticResource BorderHairline}"
+                            CornerRadius="{StaticResource FireRadiusCardLg}"
+                            ClipToBounds="True">
+                        <Grid RowDefinitions="Auto,*,Auto">
+
+                            <!-- HEAD. A bar that states its own height carries
+                                 NO vertical padding (FireTokens' own note): 40
+                                 px minus a 12 px inset leaves a badge and a
+                                 title measuring nothing, with no warning. -->
+                            <Border x:Name="PART_Head" Grid.Row="0"
+                                    Height="{StaticResource FirePopoverHeadHeight}"
+                                    Padding="{StaticResource FirePadPopoverHead}"
+                                    Background="{DynamicResource FirePopoverHeadFill}"
+                                    BorderBrush="{DynamicResource FireBorderSeam}"
+                                    BorderThickness="{StaticResource BorderBottomHairline}">
+                                <!-- `gap:9px` — the head lockup's own spacing.
+                                     The badge is 20 × 20 at radius 6 over
+                                     `rgba(139,92,246,.22)` inside
+                                     `rgba(167,139,250,.35)`, the title is
+                                     Chakra Petch 700 / 13.5 / .02em, and the
+                                     dismiss cap is mono 9 / .16em / #5d5675 —
+                                     a step quieter than `FireKeyHint` (10/1.4),
+                                     which at 40 px read as a second title. -->
+                                <Grid ColumnDefinitions="Auto,*,Auto"
+                                      ColumnSpacing="{StaticResource FirePopoverGap}">
+                                    <Border Grid.Column="0"
+                                            Width="{StaticResource FirePopoverBadgeSize}"
+                                            Height="{StaticResource FirePopoverBadgeSize}"
+                                            VerticalAlignment="Center"
+                                            CornerRadius="{StaticResource FireRadiusInner}"
+                                            Background="{DynamicResource FireAccentTint}"
+                                            BorderBrush="{DynamicResource FireAccentBar}"
+                                            BorderThickness="{StaticResource BorderHairline}">
+                                        <PathIcon Width="11" Height="11"
+                                                  Data="{TemplateBinding Icon}"
+                                                  Foreground="{DynamicResource FireAccentBright}" />
+                                    </Border>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{TemplateBinding Title}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               FontFamily="{StaticResource FireFontDisplay}"
+                                               FontWeight="{StaticResource FireWeightDisplay}"
+                                               FontSize="{StaticResource FireSizeRow}"
+                                               LetterSpacing="0.27"
+                                               Foreground="{DynamicResource FireTextPrimary}" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{TemplateBinding DismissHint}"
+                                               VerticalAlignment="Center"
+                                               FontFamily="{StaticResource FireFontMono}"
+                                               FontSize="{StaticResource FireSizeTag}"
+                                               LetterSpacing="{StaticResource FireTrackPopoverEsc}"
+                                               Foreground="{DynamicResource FireTextQuiet}" />
+                                </Grid>
+                            </Border>
+
+                            <!-- BODY. The surface owns its own sections; all the
+                                 shell gives it is the slot, plus an inset the
+                                 surface asks for with Padding (a list of
+                                 checkboxes, which has no sections of its own,
+                                 takes FirePadPopoverBody). -->
+                            <ContentPresenter Grid.Row="1"
+                                              Padding="{TemplateBinding Padding}"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+
+                            <!-- FOOTER. Hidden whole — hairline, fill and inset
+                                 — when the surface has no footer action. -->
+                            <Border x:Name="PART_Footer" Grid.Row="2"
+                                    IsVisible="{TemplateBinding HasFooter}"
+                                    Padding="{StaticResource FirePadPopoverFooter}"
+                                    Background="{DynamicResource FirePopoverFooterFill}"
+                                    BorderBrush="{DynamicResource FireBorderSeam}"
+                                    BorderThickness="{StaticResource BorderTopHairline}">
+                                <ContentPresenter Content="{TemplateBinding Footer}" />
+                            </Border>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+        <ControlTheme x:Key="WindowBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                    <BrushTransition Property="Foreground" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+            <Style Selector="^.CloseBtn:pointerover">
+                <Setter Property="Background" Value="{DynamicResource CloseButtonBg}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextOnAccent}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ToolbarBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+            <Setter Property="RenderTransform" Value="scale(1.0)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                    <BrushTransition Property="Foreground" Duration="0:0:0.15" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="BounceEaseOut" />
+                </Transitions>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:CompileBindings="False" Background="{TemplateBinding Background}"
+                            CornerRadius="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                <Setter Property="RenderTransform" Value="scale(1.03)" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="RenderTransform" Value="scale(0.95)" />
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ToolbarToggleBtn" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+            <Setter Property="RenderTransform" Value="scale(1.0)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                    <BrushTransition Property="Foreground" Duration="0:0:0.15" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" />
+                </Transitions>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:CompileBindings="False" Background="{TemplateBinding Background}"
+                            CornerRadius="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+            <!-- Graphite: an ON toggle is a tint with an accent glyph, not a
+                 solid accent block (two open panels read as two alarms). -->
+            <Style Selector="^:checked">
+                <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+                <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+            </Style>
+            <Style Selector="^:checked:pointerover">
+                <Setter Property="Background" Value="{DynamicResource AccentSelected}" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="RenderTransform" Value="scale(0.95)" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Inline reset button (small, muted, appears on slider rows) -->
+        <ControlTheme x:Key="ResetBtn" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                    <BrushTransition Property="Foreground" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+</Styles>

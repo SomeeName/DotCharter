@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        DotCharter RigLab: the tone rig on its own — the Amp & FX rig, the audio
+        device, NAM captures and a VST3 chain, and nothing of the charting app.
+        It references the rig's two assemblies (DotCharter.Tone, DotCharter.Tone.UI)
+        and NEVER DotCharter.Services or DotCharter.UI: that is what keeps stem
+        separation (ONNX Runtime), note detection, psarc, export and the AI
+        providers out of its install. RigLabDependencyTests pins it.
+    -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.RigLab</RootNamespace>
+        <AssemblyName>DotCharter.RigLab</AssemblyName>
+        <Product>DotCharter RigLab</Product>
+        <AssemblyTitle>DotCharter RigLab</AssemblyTitle>
+        <Company>DotCharter</Company>
+        <Description>DotCharter RigLab - the DotCharter guitar rig as a standalone amp and effects host.</Description>
+        <Version>0.3.6</Version>
+        <ApplicationIcon>..\DotCharter.UI\Assets\app-icon.ico</ApplicationIcon>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <ServerGarbageCollection>false</ServerGarbageCollection>
+        <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+        <TieredPGO>true</TieredPGO>
+        <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+        <PublishReadyToRun Condition="'$(RuntimeIdentifier)' == 'win-x64'">true</PublishReadyToRun>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj" />
+        <ProjectReference Include="..\DotCharter.Localization\DotCharter.Localization.csproj" />
+        <ProjectReference Include="..\DotCharter.Tone\DotCharter.Tone.csproj" />
+        <ProjectReference Include="..\DotCharter.Tone.UI\DotCharter.Tone.UI.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp\JuceSharp.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The same bundled, freely-licensed NAM captures DotCharter ships,
+             installed into the capture library on first run. Linked, not
+             copied, so there is one set in the repository. -->
+        <Content Include="..\DotCharter.UI\NamCaptures\**"
+                 Link="NamCaptures\%(RecursiveDir)%(Filename)%(Extension)"
+                 CopyToOutputDirectory="PreserveNewest" />
+        <AvaloniaResource Include="..\DotCharter.UI\Assets\app-icon.png" Link="Assets\app-icon.png" />
+        <Content Include="..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.HarfBuzz" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
+        <PackageReference Include="Avalonia.Fonts.Inter" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+    </ItemGroup>
+    <!-- Publish-RigLab.ps1 -Tone3000ClientId: a PUBLISHABLE TONE3000 key baked in
+         as RigLab's default (RigLabBuild). Never committed, never the secret key. -->
+    <ItemGroup Condition="'$(Tone3000ClientId)' != ''">
+        <AssemblyMetadata Include="Tone3000ClientId" Value="$(Tone3000ClientId)" />
+    </ItemGroup>
+</Project>

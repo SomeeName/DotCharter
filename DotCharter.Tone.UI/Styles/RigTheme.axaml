@@ -1,0 +1,21 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The design system WITHOUT DotCharter's app chrome, for a host that
+         shows the rig and nothing else (DotCharter.RigLab). Same files in the
+         same order as DotCharter.UI/Styles/Theme.axaml, which additionally
+         merges its keybind control theme, Markdown, Chrome and Dock styles
+         between Containers and Fire. Keep the two orders in step:
+         RigThemeOrderTests compares them. -->
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Resources.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/FireTokens.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/FireControls.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Icons.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/ControlThemes.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Typography.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Buttons.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Inputs.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Containers.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire.axaml" />
+
+</Styles>

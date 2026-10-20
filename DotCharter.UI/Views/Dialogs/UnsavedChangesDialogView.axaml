@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.UnsavedChangesDialogView"
+             x:DataType="contracts:IUnsavedChangesScreen"
+             x:CompileBindings="True">
+
+    <!-- The close gate (MainWindow.OnClosing runs this BEFORE App.TerminateNow;
+         see DotCharter.UI/AGENTS.md). Hosted by Views/Shell/DialogHost, which
+         owns the scrim, the stacking and Esc (Esc answers Cancel).
+         Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox Warning">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconAlert}" />
+                    </Border>
+                    <TextBlock Theme="{DynamicResource DialogTitleText}" Grid.Column="1" Classes="DialogTitle"
+                               Text="{localization:Loc Dialog_UnsavedChanges_Title}" />
+                </Grid>
+
+                <TextBlock Theme="{DynamicResource DlgBodyText}" Grid.Row="1" Classes="DlgBody"
+                           Text="{localization:Loc Dialog_UnsavedChanges_Message}" />
+
+                <!-- Discard first, Cancel next, the safe action last and primary
+                     — the house footer order. Discard wears the DANGER tier:
+                     it is the one button here that loses work. -->
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource DangerButton}" Classes="DlgAction Danger" Content="{localization:Loc Action_DontSave}"
+                                Command="{Binding DiscardCommand}" />
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Save}"
+                                Command="{Binding SaveCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,32 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Aggregator: theme is split into component dictionaries.
+         Order matters — design tokens and control themes must load
+         before the styles that reference them. -->
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Resources.axaml" />
+    <!-- The "Fire" design layer (0.43): a SECOND, self-contained visual
+         vocabulary extracted from the owner's mockups. It redefines nothing —
+         every key and class is `Fire`-prefixed — so a surface opts in and the
+         editor, pedalboard and dialogs are untouched. Tokens load beside the
+         others; the component styles go LAST so a Fire class wins over a
+         generic one on a control that wears both. -->
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/FireTokens.axaml" />
+    <!-- The tokens the four shared Fire CUSTOM-DRAWN controls need on top of
+         the base ladder: the eight fixed gear-category identity colours and
+         the knob dial. Separate file, deliberately — see its header. -->
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/FireControls.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Icons.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/ControlThemes.axaml" />
+    <StyleInclude Source="avares://DotCharter/Styles/KeybindControlTheme.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Typography.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Buttons.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Inputs.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Containers.axaml" />
+    <StyleInclude Source="avares://DotCharter/Styles/Markdown.axaml" />
+    <StyleInclude Source="avares://DotCharter/Styles/Chrome.axaml" />
+    <StyleInclude Source="avares://DotCharter/Styles/Dock.axaml" />
+    <StyleInclude Source="avares://DotCharter/Styles/AutomationNames.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire.axaml" />
+
+</Styles>

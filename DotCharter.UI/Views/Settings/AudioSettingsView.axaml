@@ -1,0 +1,425 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.AudioSettingsView"
+             x:DataType="contracts:IAudioSettingsScreen"
+             x:CompileBindings="True">
+    <!-- Shared row grammar (SettingsStyles.axaml): title + description left,
+         one control in the 300 px column right. The descriptions here were
+         previously either tooltips nobody hovers or a HelpText line wedged
+         under a checkbox, which is why no two rows lined up. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,0,72">
+            <!-- The readout: what the rows below add up to, read like the
+                 display on the interface itself. The one bold thing on the
+                 tab — every figure in mono, the device in the reading face,
+                 labels quiet. It reports; nothing in it is a control. -->
+            <Border Theme="{StaticResource SettingsReadoutBorder}" x:Name="AudioReadout" Classes="SettingsReadout" Margin="0,4,0,28">
+                <Grid ColumnDefinitions="2*,Auto,*,Auto,*,Auto,*">
+                    <StackPanel Theme="{StaticResource ReadoutCellPanel}" Grid.Column="0" Classes="ReadoutCell">
+                        <TextBlock Theme="{StaticResource ReadoutLabelText}" Classes="ReadoutLabel" Text="{localization:Loc Settings_Audio_ReadoutDevice}" />
+                        <TextBlock Theme="{StaticResource ReadoutValueText}" Classes="ReadoutValue Name" Text="{Binding ReadoutDevice}"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ReadoutDevice}" />
+                    </StackPanel>
+                    <Border Theme="{StaticResource ReadoutRuleBorder}" Grid.Column="1" Classes="ReadoutRule" />
+                    <StackPanel Theme="{StaticResource ReadoutCellPanel}" Grid.Column="2" Classes="ReadoutCell">
+                        <TextBlock Theme="{StaticResource ReadoutLabelText}" Classes="ReadoutLabel" Text="{localization:Loc Settings_Audio_ReadoutRate}" />
+                        <TextBlock Theme="{StaticResource ReadoutValueText}" Classes="ReadoutValue" Text="{Binding ReadoutRate}" />
+                    </StackPanel>
+                    <Border Theme="{StaticResource ReadoutRuleBorder}" Grid.Column="3" Classes="ReadoutRule" />
+                    <StackPanel Theme="{StaticResource ReadoutCellPanel}" Grid.Column="4" Classes="ReadoutCell">
+                        <TextBlock Theme="{StaticResource ReadoutLabelText}" Classes="ReadoutLabel" Text="{localization:Loc Settings_Audio_ReadoutBuffer}" />
+                        <TextBlock Theme="{StaticResource ReadoutValueText}" Classes="ReadoutValue" Text="{Binding ReadoutBuffer}" />
+                    </StackPanel>
+                    <Border Theme="{StaticResource ReadoutRuleBorder}" Grid.Column="5" Classes="ReadoutRule" />
+                    <StackPanel Theme="{StaticResource ReadoutCellPanel}" Grid.Column="6" Classes="ReadoutCell">
+                        <TextBlock Theme="{StaticResource ReadoutLabelText}" Classes="ReadoutLabel" Text="{localization:Loc Settings_Audio_ReadoutLatency}" />
+                        <TextBlock Theme="{StaticResource ReadoutValueText}" Classes="ReadoutValue" Text="{Binding ReadoutLatency}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <ctl:MasonryPanel Classes="SettingsFlow">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSpeaker}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Audio}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_OutputRouting}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_OutputRouting_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.driver}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_AudioDriver}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_AudioDriver}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_AudioDriver}" Grid.Column="1"
+                                  ItemsSource="{Binding DriverOptions}"
+                                  SelectedItem="{Binding SelectedDriver}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.device}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Device}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_Device}" />
+                        </StackPanel>
+                        <Panel VerticalAlignment="Top" Grid.Column="1">
+                            <ComboBox AutomationProperties.Name="{localization:Loc Settings_Device}" HorizontalAlignment="Stretch"
+                                      IsVisible="{Binding IsWasapiOutput}"
+                                      ItemsSource="{Binding WasapiDevices}"
+                                      SelectedIndex="{Binding SelectedWasapiOutputIndex}"
+                                      PlaceholderText="{localization:Loc Settings_Audio_ChooseDevice}" />
+                            <ComboBox AutomationProperties.Name="{localization:Loc Settings_Device}" HorizontalAlignment="Stretch"
+                                      IsVisible="{Binding IsAsioOutput}"
+                                      ItemsSource="{Binding AsioDevices}"
+                                      SelectedIndex="{Binding SelectedAsioOutputIndex}"
+                                      PlaceholderText="{localization:Loc Settings_Audio_ChooseDevice}" />
+                        </Panel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300">
+                        <Grid.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="IsAsioOutput" />
+                                <Binding Path="HiddenKeys" Converter="{x:Static settings:SettingsKeyVisibility.Instance}" ConverterParameter="audio.asioOutChannels" />
+                            </MultiBinding>
+                        </Grid.IsVisible>
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_AsioOutChannels}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_AsioOutChannels}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <TextBox Grid.Column="0" Text="{Binding AsioOutputChannelLeft}" TextAlignment="Center"
+                                     AutomationProperties.Name="{localization:Loc Settings_AsioOutChannelLeft}" />
+                            <TextBox Grid.Column="1" Text="{Binding AsioOutputChannelRight}" TextAlignment="Center"
+                                     AutomationProperties.Name="{localization:Loc Settings_AsioOutChannelRight}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.group.1}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconGuitar}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Input}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_InstrumentInput}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_InstrumentInput_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.enableInput}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_EnableLiveInput_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_EnableLiveInput}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_EnableLiveInput_RowLabel}" Grid.Column="1" IsChecked="{Binding EnableInput}" />
+                    </Grid>
+
+                    <StackPanel IsEnabled="{Binding EnableInput}">
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.inputDriver}" Classes="FormRow Sub" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_InputDriver}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_InputDriver}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_InputDriver}" Grid.Column="1" ItemsSource="{Binding DriverOptions}" SelectedItem="{Binding SelectedInputDriver}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.inputDevice}" Classes="FormRow Sub" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_InputDevice}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_InputDevice}" />
+                            </StackPanel>
+                            <Panel VerticalAlignment="Top" Grid.Column="1">
+                                <ComboBox AutomationProperties.Name="{localization:Loc Settings_InputDevice}" HorizontalAlignment="Stretch"
+                                          IsVisible="{Binding IsWasapiInput}"
+                                          ItemsSource="{Binding WasapiInputDevicesList}" SelectedIndex="{Binding SelectedWasapiInputIndex}" />
+                                <ComboBox AutomationProperties.Name="{localization:Loc Settings_InputDevice}" HorizontalAlignment="Stretch"
+                                          IsVisible="{Binding IsAsioInput}"
+                                          ItemsSource="{Binding AsioInputDevicesList}" SelectedIndex="{Binding SelectedAsioInputIndex}" />
+                            </Panel>
+                        </Grid>
+
+                        <!-- Input channels. Shown on BOTH drivers on purpose: the
+                             CHANNEL COUNT the engine opens is Mono ? 1 : 2 whatever
+                             the driver (JuceAudioPlaybackService.ApplyAudioConfigurationCore),
+                             and only the channel INDEXES are ASIO-only, because the
+                             input mask is. Hiding the whole row on WASAPI left the
+                             second input unreachable there while a (since removed) co-op HUD told
+                             the player to go and open it in Settings. -->
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.inputChannels}" Classes="FormRow Sub" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_InChannels}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_AsioInChannels}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc Note"
+                                           IsVisible="{Binding !AreInputChannelIndexesUsed}"
+                                           Text="{localization:Loc Settings_InChannels_WasapiNote}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10"
+                                      IsVisible="{Binding AreInputChannelIndexesUsed}">
+                                    <!-- The guitar's jack is a PICK, not a typed index:
+                                         the same option list the rig footer and the
+                                         first-run wizard offer (GuitarInputChannels),
+                                         so "Input 2" reads the same everywhere. The
+                                         right box stays numeric - it is the second
+                                         guitar / the stereo pickup's other side. -->
+                                    <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
+                                              AutomationProperties.Name="{localization:Loc Settings_InputJack}"
+                                              ItemsSource="{Binding InputJackOptions}"
+                                              SelectedIndex="{Binding SelectedInputJackIndex}" />
+                                    <TextBox Grid.Column="1" Text="{Binding AsioInputChannelRight}" TextAlignment="Center"
+                                             AutomationProperties.Name="{localization:Loc Settings_AsioInChannelRight}"
+                                             IsEnabled="{Binding !AsioInputMono}" />
+                                </Grid>
+                                <CheckBox Content="{localization:Loc Settings_Mono}"
+                                          IsChecked="{Binding AsioInputMono}" />
+                                <CheckBox Content="{localization:Loc Settings_InputTwoGuitars}"
+                                          IsChecked="{Binding InputChannelsAreSeparateGuitars}"
+                                          IsEnabled="{Binding !AsioInputMono}"
+                                          ToolTip.Tip="{localization:Loc Settings_InputTwoGuitars_Tip}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.dropTuner}" Classes="FormRow Sub" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc DropTuner_Engine}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc DropTuner_Engine_Tip}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc DropTuner_Engine}" Grid.Column="1"
+                                      ItemsSource="{Binding DropTunerEngineOptions}"
+                                      SelectedIndex="{Binding SelectedDropTunerEngineIndex}" />
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.group.2}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconPulse}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Audio}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_CalibrationSync}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_CalibrationSync_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.autoFollow}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_AutoFollowDevice}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_AutoFollowDeviceDescription}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_AutoFollowDevice}" Grid.Column="1" IsChecked="{Binding AutoFollowDeviceSettings}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.sampleRate}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SampleRate}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SampleRate}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_SampleRate}" Grid.Column="1" IsEnabled="{Binding IsManualAudioConfig}"
+                                  ItemsSource="{Binding SampleRateOptions}" SelectedItem="{Binding SampleRate}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.bufferSize}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_BufferSize}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_BufferSize}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                            <ComboBox AutomationProperties.Name="{localization:Loc Settings_BufferSize}" HorizontalAlignment="Stretch"
+                                      IsEnabled="{Binding IsManualAudioConfig}"
+                                      ItemsSource="{Binding BufferSizeOptions}" SelectedItem="{Binding BufferSizeFrames}" />
+                            <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0" Text="{Binding BufferLatencyDescription}" />
+                            <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0" Text="{Binding ActualBufferDescription}"
+                                       IsVisible="{Binding ActualBufferDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <Grid.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="IsAsioActive" />
+                                <Binding Path="HiddenKeys" Converter="{x:Static settings:SettingsKeyVisibility.Instance}" ConverterParameter="audio.asioPanel" />
+                            </MultiBinding>
+                        </Grid.IsVisible>
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_AsioDriver}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_AsioControlPanelHint}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                            <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Right"
+                                    Content="{localization:Loc Settings_OpenAsioControlPanel}"
+                                    Command="{Binding OpenAsioControlPanelCommand}"
+                                    ToolTip.Tip="{localization:Loc Settings_OpenAsioControlPanelTooltip}" />
+                            <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0" Foreground="{DynamicResource DangerColor}"
+                                       IsVisible="{Binding AsioControlPanelError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                       Text="{Binding AsioControlPanelError}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.audioDelay}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_AudioDelay}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_AudioDelayHelp}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                            <NumericUpDown HorizontalAlignment="Stretch"
+                                           AutomationProperties.Name="{localization:Loc Settings_AudioDelay}"
+                                           Value="{Binding AudioDelayMs}" Minimum="-2000" Maximum="2000" />
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Button Grid.Column="0" Theme="{StaticResource SecondaryButton}" Classes="Secondary"
+                                        Content="{localization:Loc Settings_MeasureLatency}"
+                                        Command="{Binding MeasureLatencyCommand}"
+                                        ToolTip.Tip="{localization:Loc Settings_MeasureLatencyTooltip}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0" VerticalAlignment="Center">
+                                    <Run Text="{localization:Loc Settings_MeasuredLatencyPrefix}" />
+                                    <Run Text="{Binding MeasuredAudioDelayMs, StringFormat='{}{0:0.##} ms'}" />
+                                </TextBlock>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.autoCalibrate}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_AutoCalibrateTiming}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_AutoCalibrateTimingDescription}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_AutoCalibrateTiming}" Grid.Column="1" IsChecked="{Binding AutoCalibrateTiming}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.calibration}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Calibration}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_CalibrateLatencyHelp}" />
+                        </StackPanel>
+                        <Button VerticalAlignment="Top" Grid.Column="1" Theme="{StaticResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Right"
+                                Content="{localization:Loc Settings_CalibrateLatency}"
+                                Command="{Binding OpenLatencyWizardCommand}" />
+                    </Grid>
+
+                    <!-- Take recorder (listen-back). Config-file-only until now,
+                         which is why nobody ever had a take to play back. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.takeRecorder}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_TakeRecorder}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_TakeRecorderDescription}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_TakeRecorder}" Grid.Column="1" IsChecked="{Binding TakeRecorderEnabled}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.highPriority}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_HighPriority}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_HighPriorityDescription}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_HighPriority}" Grid.Column="1" IsChecked="{Binding EnableHighProcessPriority}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.vstSandbox}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_VstSandbox}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_VstSandboxDescription}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_VstSandbox}" Grid.Column="1" IsChecked="{Binding OutOfProcessVst}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ── Advanced (streaming mirror + MIDI out) ────────────────────
+                 Collapsed by default so the common device/latency setup is the
+                 short path. Bare toggle + the original cards nested in an
+                 IsVisible-bound panel so search still finds every row (inline in
+                 the LOGICAL tree, never an Expander); the search box force-opens
+                 this while a query is active. -->
+            <ToggleButton AutomationProperties.Name="{localization:Loc Settings_Advanced}" Classes="AdvancedHeader" x:Name="AudioAdvanced" Cursor="Hand"
+                          IsChecked="{Binding IsAdvancedOpen, Mode=TwoWay}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Classes="AdvancedLabel" Text="{localization:Loc Settings_Advanced}" />
+                        <TextBlock Classes="AdvancedSubtitle" Text="{localization:Loc Settings_Audio_AdvancedSubtitle}" />
+                    </StackPanel>
+                    <PathIcon Grid.Column="1" Classes="AdvancedChevron" Data="M 3,2 L 9,7 L 3,12 Z" VerticalAlignment="Center" />
+                </Grid>
+            </ToggleButton>
+            <StackPanel x:Name="AudioAdvancedBody" IsVisible="{Binding IsAdvancedOpen}">
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.group.3}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                <PathIcon Classes="GroupIcon" Data="{DynamicResource IconVolumeHigh}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Audio}" />
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_StreamingMirror}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_StreamingMirror_Subtitle}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.mirror}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_StreamingMirrorToggle}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_StreamingMirrorTip}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_StreamingMirrorToggle}" Grid.Column="1" IsChecked="{Binding EnableStreamingMirror}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.mirrorDevice}" Classes="FormRow Sub" ColumnDefinitions="*,300" IsEnabled="{Binding EnableStreamingMirror}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_StreamingMirrorDevice}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_StreamingMirrorDevice}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_StreamingMirrorDevice}" Grid.Column="1"
+                                      ItemsSource="{Binding StreamingMirrorDevices}"
+                                      SelectedIndex="{Binding SelectedStreamingMirrorIndex}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.group.4}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                <PathIcon Classes="GroupIcon" Data="{DynamicResource IconPiano}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Audio}" />
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_MidiOutput}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_MidiOutput_Subtitle}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.midiDevice}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_MidiDevice}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_MidiDevice}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_MidiDevice}" Grid.Column="1"
+                                      ItemsSource="{Binding MidiOutputDevices}"
+                                      SelectedIndex="{Binding SelectedMidiOutputIndex}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+            </ctl:MasonryPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

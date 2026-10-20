@@ -1,0 +1,203 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             x:Class="DotCharter.UI.Views.Dialogs.RecoveryDialogView"
+             x:DataType="contracts:IRecoveryScreen"
+             x:CompileBindings="True">
+
+    <!-- Crash-recovery prompt: pick one of N autosaved sessions.
+         Grammar: Views/Dialogs/DialogStyles.axaml — the per-row actions are
+         Secondary/Subtle, NOT Primary: N rows of Primary is exactly the "which
+         one do I press" problem the footer rule exists to stop.
+
+         The reassurance moved OUT of the head and into a Notice strip, which is
+         what it is: this dialog opens unasked, at startup, after a crash, and
+         the first thing it has to say is that nothing has been overwritten. The
+         head's second line is now the COUNT, which is the only thing there that
+         changes between two openings.
+
+         The row prints three separate facts rather than one run-on detail line —
+         name + kind tag, the project file (mono, because it is a path), and the
+         autosave stamp in its own right-hand column.
+
+         The name line is a GRID, not a horizontal StackPanel, and that is a bug
+         fix rather than a preference. A horizontal StackPanel measures its
+         children with INFINITE width and then arranges each one at its own
+         DesiredSize starting from x=0 — so the panel's own DesiredSize is
+         clamped to the slot it was given while its children are laid out past
+         it, and nothing clips. Measured in the real dialog: the star column gave
+         the name block 216 px, the name measured 188 and the kind tag was
+         arranged at x=194..284, i.e. 68 px INTO the autosave stamp's column
+         (which starts at 230). The stamp is declared later, so it painted on
+         top. Neither TextWrapping nor TextTrimming can help there — a NoWrap
+         TextBlock inside a horizontal StackPanel is never told a width to trim
+         to. In a Grid the name gets a real `*` slot and its CharacterEllipsis
+         engages, and the tag's `Auto` column is measured against what is left.
+
+         Three things now make the overlap impossible rather than unlikely: the
+         name/tag Grid; the stamp's MaxWidth + trimming, so a longer localized
+         stamp trims instead of starving the star column; and ClipToBounds on
+         the column-0 block, which bounds PAINTING at any card width whatever
+         the content does. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox Warning">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconHistory}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Recovery_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{Binding Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Theme="{DynamicResource DlgStripBorder}" Grid.Row="1" Classes="DlgStrip Notice">
+                    <TextBlock Text="{localization:Loc Recovery_Notice}" />
+                </Border>
+
+                <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="2" Classes="DlgListFrame">
+                    <Panel>
+                        <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty"
+                                IsVisible="{Binding Sessions.Count, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}">
+                            <TextBlock Text="{localization:Loc Dialog_List_Empty}" />
+                        </Border>
+                        <!-- Rows are PICKED (ListBox.DlgList — hover/focus/selected
+                             live on the row's own DlgListRow, so no inline chrome
+                             here), and the footer's primary acts on the pick. The
+                             per-row action that remains is Discard: "not this one"
+                             is a per-row decision, restoring is the dialog's. -->
+                        <!-- The scrollbar stays: with more rows than fit, a half-cut
+                             last row must read as "scroll", not as a clipping bug. -->
+                        <ListBox Classes="DlgList" MaxHeight="340"
+                                 ScrollViewer.AllowAutoHide="False"
+                                 AutomationProperties.Name="{localization:Loc Recovery_SessionList}"
+                                 ItemsSource="{Binding Sessions}"
+                                 SelectedItem="{Binding SelectedSession, Mode=TwoWay}">
+                            <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IRecoverySession">
+                                        <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                            <!-- Three columns: WHAT (name, then kind tag + path), WHEN
+                                                 (a caption over the date — the one fact that tells two
+                                                 snapshots apart, so the date never trims) and the row's
+                                                 own Discard. The name has the whole first line; the tag
+                                                 lives on the path line. -->
+                                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                                  ColumnSpacing="{DynamicResource FireSpaceRow}">
+                                                <StackPanel x:Name="SessionFacts" Grid.Column="0"
+                                                            VerticalAlignment="Center"
+                                                            ClipToBounds="True"
+                                                            Spacing="{DynamicResource FireSpaceXxs}">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding DisplayName}"
+                                                               HorizontalAlignment="Left"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <!-- Both tags sit in the SAME Auto column: exactly one is
+                                                         ever visible. Amber when the session was NEVER saved:
+                                                         nothing is on disk behind it, so discarding it is the
+                                                         only irreversible choice on this screen. -->
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{DynamicResource FireSpaceSm}">
+                                                    <Border Grid.Column="0" x:Name="KindTagSaved"
+                                                            VerticalAlignment="Center"
+                                                            CornerRadius="{DynamicResource FireRadiusTag}"
+                                                            Padding="{DynamicResource FirePadTag}"
+                                                            BorderThickness="1"
+                                                            Background="{DynamicResource FireSurfaceChip}"
+                                                            BorderBrush="{DynamicResource FireBorder}"
+                                                            IsVisible="{Binding !IsUntitled}">
+                                                        <TextBlock Text="{Binding KindLabel}"
+                                                                   FontSize="{DynamicResource FireSizeEyebrow}"
+                                                                   Foreground="{DynamicResource FireTextMuted}" />
+                                                    </Border>
+                                                    <Border Grid.Column="0" x:Name="KindTagUnsaved"
+                                                            VerticalAlignment="Center"
+                                                            CornerRadius="{DynamicResource FireRadiusTag}"
+                                                            Padding="{DynamicResource FirePadTag}"
+                                                            BorderThickness="1"
+                                                            Background="{DynamicResource FireWarningTint}"
+                                                            BorderBrush="{DynamicResource FireWarningBorder}"
+                                                            IsVisible="{Binding IsUntitled}">
+                                                        <TextBlock Text="{Binding KindLabel}"
+                                                                   FontSize="{DynamicResource FireSizeEyebrow}"
+                                                                   Foreground="{DynamicResource FireWarning}" />
+                                                    </Border>
+                                                        <TextBlock x:Name="SessionPath" Grid.Column="1"
+                                                                   Text="{Binding PathLine}"
+                                                                   VerticalAlignment="Center"
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   FontFamily="{DynamicResource FireFontMono}"
+                                                                   FontSize="{DynamicResource FireSizeMicro}"
+                                                                   Foreground="{DynamicResource FireTextMuted}" />
+                                                    </Grid>
+                                                </StackPanel>
+                                                <StackPanel x:Name="SessionSavedAt" Grid.Column="1"
+                                                            VerticalAlignment="Center"
+                                                            Spacing="{DynamicResource FireSpaceXxs}"
+                                                            IsVisible="{Binding SavedAt, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                    <!-- The caption is a culture's sentence (German runs ~40 %
+                                                         longer), so it alone is bounded and may trim. -->
+                                                    <TextBlock Text="{localization:Loc Recovery_LastAutosavedCaption}"
+                                                               MaxWidth="180"
+                                                               HorizontalAlignment="Right"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               FontSize="{DynamicResource FireSizeMicro}"
+                                                               Foreground="{DynamicResource FireTextMuted}" />
+                                                    <TextBlock x:Name="SessionSavedAtValue" Text="{Binding SavedAt}"
+                                                               HorizontalAlignment="Right"
+                                                               TextWrapping="NoWrap"
+                                                               FontFamily="{DynamicResource FireFontMono}"
+                                                               FontSize="{DynamicResource FireSizeMeta}"
+                                                               Foreground="{DynamicResource FireTextBody}" />
+                                                </StackPanel>
+                                                <!-- The danger tier's caption colour, no chrome: "Discard all"
+                                                     in the footer is the loud one (DialogDangerTierTests). -->
+                                                <Button Grid.Column="2" Theme="{DynamicResource SubtleButton}" Classes="Subtle Danger" MinWidth="90"
+                                                        HorizontalContentAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Content="{localization:Loc Recovery_Discard}"
+                                                        IsEnabled="{Binding !$parent[ListBox].((contracts:IRecoveryScreen)DataContext).IsBusy}"
+                                                        Command="{Binding $parent[ListBox].((contracts:IRecoveryScreen)DataContext).DiscardCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Panel>
+                </Border>
+
+                <!-- One primary, last, IsDefault — this dialog's whole point is
+                     "get my work back", so Enter restores the picked session.
+                     Discard-all is the one action here that DESTROYS work: it
+                     gets the DANGER tier's real chrome in the tertiary slot,
+                     not a chrome-less link that reads like a footnote. -->
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <Button Theme="{DynamicResource DangerButton}" Classes="DlgAction Danger" Content="{localization:Loc Recovery_DiscardAll}"
+                                    IsVisible="{Binding !IsBusy}"
+                                    Command="{Binding DiscardAllCommand}" />
+                            <!-- While a restore runs, the slot says so instead. -->
+                            <TextBlock Theme="{DynamicResource DialogContextText}" x:Name="RestoringLine" Classes="DialogContext"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding IsBusy}"
+                                       Text="{localization:Loc Recovery_Restoring}" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Recovery_AskLater}"
+                                    IsEnabled="{Binding !IsBusy}"
+                                    Command="{Binding AskLaterCommand}" IsCancel="True" />
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Recovery_RestoreSelected}"
+                                    Command="{Binding RecoverSelectedCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

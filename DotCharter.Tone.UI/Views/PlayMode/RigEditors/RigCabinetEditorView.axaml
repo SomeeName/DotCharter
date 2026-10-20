@@ -1,0 +1,207 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigCabinetEditorView"
+             x:DataType="vm:RigDockUnit">
+    <UserControl.Resources>
+        <DataTemplate x:Key="CompactRigKnobTemplate" x:DataType="vm:PedalParamViewModel">
+            <fire:FireKnob Height="112" IsCompact="True" HardwareStyle="True"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                           DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding DisplayName}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+    </UserControl.Resources>
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel Classes="FireEnclosureChoice" HorizontalAlignment="Stretch">
+                <TextBlock Text="{Binding DisplayName}" HorizontalAlignment="Left" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          HorizontalAlignment="Stretch"
+                          AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+    <!-- The CABINET family (design 6.4 and 7), laid out BY FUNCTION rather than
+         as one run of knobs: the shell with the speaker and its mic and the cab model on the
+         left; the two IR slots and the voicing row in the middle; the response
+         guide and the mic (distance, type, the way to the full placement) on the right. -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <!-- SCALE TO FIT THE DOCK ROW (lane E, 2026-09-13). The face is laid
+             out at its NATURAL size and the whole thing is scaled once, the way
+             RigPedalEditorView's enclosure already was — so at 1920x1080 it is
+             shrunk into the row instead of being cut by it, and at 3840x2160 it
+             GROWS to use a row that has ~5x the area. `TargetHeight` has to be
+             the scroller's viewport because a ScrollViewer offers its content
+             infinite height and the vertical fit would otherwise never engage;
+             the WIDTH binds on its own now that the horizontal bar is Disabled.
+             Stretch, not Left: the scale comes from the face's NATURAL size, but
+             a face with a star column has to be ARRANGED at the slot the
+             transform leaves it or its sliders collapse to their content.
+             `MaxScale` is the breakpointed `FireRigFaceMaxScale` token. -->
+        <fire:RigScaleToFit x:Name="RigFaceFit"
+                            TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                            MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <Grid ColumnDefinitions="296,11,*,11,300" x:Name="RigCabinetColumns">
+
+                    <!-- ── the shell: tolex, cloth, speaker, mic ──────────── -->
+                    <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceSm}">
+                        <Border Theme="{StaticResource FireCabShellBorder}" Classes="FireCabShell" x:Name="RigCabShell">
+                            <Panel>
+                                <fire:RigArtworkImage File="black-tolex.webp" Fill="True" CornerRadius="9" />
+                                <Border Theme="{StaticResource FireCabGrilleBorder}" Classes="FireCabGrille" Margin="8">
+                                    <Panel>
+                                        <fire:RigArtworkImage File="woven-grille.webp" Fill="True" CornerRadius="4" />
+                                        <!-- the speaker and the REAL mic on it: the mic unit after
+                                             this cab (RigDockUnit.CabMic). With none, the speaker alone
+                                             and the way to put a mic on it. -->
+                                        <fire:RigMicStage x:Name="RigCabMicStage" Margin="{StaticResource FireGapTag}"
+                                                          IsVisible="{Binding HasCabMic}"
+                                                          Position="{Binding CabMic.Position, Mode=TwoWay, FallbackValue={x:Static fire:RigMicStage.DefaultPosition}}"
+                                                          DistanceCm="{Binding CabMic.DistanceCm, Mode=TwoWay, FallbackValue=5}"
+                                                          BearingDegrees="{Binding CabMic.BearingDegrees, Mode=TwoWay, FallbackValue=60}"
+                                                          MicType="{Binding CabMic.MicIndex, FallbackValue=0}"
+                                                          SecondMicBlend="{Binding CabMic.SecondMic.Value, FallbackValue=0}"
+                                                          ToolTip.Tip="{localization:Loc Rig_Mic_Hint}" ToolTip.ShowDelay="0"
+                                                          AutomationProperties.Name="{localization:Loc Rig_Editor_MicPlacement}" />
+                                        <fire:RigMicStage Margin="{StaticResource FireGapTag}" ShowsMic="False" IsHitTestVisible="False"
+                                                          IsVisible="{Binding !HasCabMic}" />
+                                        <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" x:Name="RigCabAddMicOnSpeaker" HorizontalAlignment="Center"
+                                                VerticalAlignment="Center" IsVisible="{Binding CanAddCabMic}"
+                                                Command="{Binding AddCabMicCommand}" Content="{localization:Loc Rig_Mic_Add}" />
+                                        <Border Theme="{StaticResource FireCabBadgeBorder}" Classes="FireCabBadge" VerticalAlignment="Bottom" HorizontalAlignment="Center">
+                                            <TextBlock Text="{Binding BrandMark}" />
+                                        </Border>
+                                    </Panel>
+                                </Border>
+                            </Panel>
+                        </Border>
+                        <ContentControl Content="{Binding ModelRail}" IsVisible="{Binding HasModelRail}" />
+                    </StackPanel>
+
+                    <!-- ── the IR slots and the voicing row ───────────────── -->
+                    <StackPanel Grid.Column="2" Spacing="{StaticResource FireSpaceSm}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center" Text="{localization:Loc Rig_Editor_ImpulseResponses}" />
+                            <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" x:Name="RigCabUseBuiltIn"
+                                    Command="{Binding ClearImpulseResponsesCommand}" IsEnabled="{Binding HasAnyImpulseResponse}"
+                                    Content="{localization:Loc Rig_Editor_UseBuiltInCab}" />
+                        </Grid>
+                        <ItemsControl x:Name="RigCabSlots" ItemsSource="{Binding CabinetSlots}" IsVisible="{Binding IsCabFace}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RigCabinetSlot">
+                                    <Border Theme="{StaticResource FireSubpanelBorder}" Classes="FireSubpanel" Margin="{StaticResource FireGapTag}">
+                                        <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                            <TextBlock Theme="{StaticResource FireSubpanelTitleText}" Classes="FireSubpanelTitle" Text="{Binding Title}" />
+                                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding File.PickFileCommand}" Content="{localization:Loc Rig_Choose}" />
+                                                <Button Grid.Column="2" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" Content="×" Command="{Binding File.ClearCommand}"
+                                                        IsVisible="{Binding File.HasValue}" ToolTip.Tip="{localization:Loc Rig_ClearFile}" AutomationProperties.Name="{localization:Loc Rig_ClearFile}" />
+                                            </Grid>
+                                            <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding CanControl}">
+                                                <ItemsControl ItemsSource="{Binding Knobs}" ItemTemplate="{StaticResource CompactRigKnobTemplate}">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                </ItemsControl>
+                                                <ContentControl Grid.Column="1" Content="{Binding Polarity}" VerticalAlignment="Bottom" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- voicing: blend · mix · low cut · high cut · output. The
+                             blend only means something with a second IR loaded. -->
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_Voicing}" />
+                        <ItemsControl x:Name="RigCabVoicing" ItemsSource="{Binding CabVoicingKnobs}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PedalParamViewModel">
+                                    <Border Theme="{StaticResource FireCabKnobCardBorder}" Classes="FireCabKnobCard" Margin="{StaticResource FireGapTag}">
+                                        <fire:FireKnob Height="112" IsCompact="True" HardwareStyle="True"
+                                                       IsEnabled="{Binding IsControlActive}" ToolTip.Tip="{Binding InactiveHint}"
+                                                       Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                                       DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding DisplayName}" ValueText="{Binding DisplayText}" />
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <!-- the blend is also the slider the reachability lint pins; it
+                             reads the same param the voicing knob writes -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding HasBlend}" IsEnabled="{Binding SecondaryIr.HasValue}" ToolTip.Tip="{localization:Loc Rig_IrBlendHint}">
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{localization:Loc Rig_IrBlend}" VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Classes="FireSlider" Minimum="0" Maximum="1" Value="{Binding Blend.Value, Mode=TwoWay}" AutomationProperties.Name="{localization:Loc Rig_IrBlend}" />
+                            <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding Blend.Value, StringFormat={}{0:P0}}" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- ── the response guide and the mic placement ───────── -->
+                    <StackPanel Grid.Column="4" Spacing="{StaticResource FireSpaceSm}">
+                        <Border Theme="{StaticResource FireSubpanelBorder}" Classes="FireSubpanel" IsVisible="{Binding HasFilterResponse}">
+                            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Theme="{StaticResource FireSubpanelTitleText}" Classes="FireSubpanelTitle" Text="{localization:Loc Rig_Editor_FilterResponse}" />
+                                <fire:RigFilterResponsePlot x:Name="RigCabResponse" Height="132"
+                                                            LowCutHz="{Binding LowCut.Value}" HighCutHz="{Binding HighCut.Value}" />
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                    <Border Theme="{StaticResource FireResponseKeyBorder}" Classes="FireResponseKey" VerticalAlignment="Center" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{localization:Loc Rig_Editor_FilterKey}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <!-- THE MIC: how far off the grille (the side view), which mic,
+                             and the way to the full placement - or, with no mic unit
+                             after this cab, the way to add one. -->
+                        <Border Theme="{StaticResource FireSubpanelBorder}" Classes="FireSubpanel" x:Name="RigCabMicPanel">
+                            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Theme="{StaticResource FireSubpanelTitleText}" Classes="FireSubpanelTitle" Text="{localization:Loc Rig_Editor_MicPlacement}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" x:Name="RigCabOpenMic" IsVisible="{Binding HasCabMic}"
+                                            Command="{Binding OpenCabMicCommand}" Content="{localization:Loc Rig_Mic_Open}" />
+                                </Grid>
+                                <StackPanel x:DataType="vm:RigMicPlacementViewModel" DataContext="{Binding $parent[UserControl].((vm:RigDockUnit)DataContext).CabMic}"
+                                            IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                            Spacing="{StaticResource FireSpaceXs}">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding PositionReadout}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding DistanceText}" />
+                                    </Grid>
+                                    <fire:RigMicSideView x:Name="RigCabMicSide" Height="72"
+                                                         DistanceCm="{Binding DistanceCm, Mode=TwoWay}" MicType="{Binding MicIndex}"
+                                                         AutomationProperties.Name="{localization:Loc Rig_Editor_MicDistance}" />
+                                    <ItemsControl x:Name="RigCabMicTypes" ItemsSource="{Binding Mics}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:RigMicChoice">
+                                                <ToggleButton Theme="{StaticResource FireMicCardToggle}" Classes="FireMicCard Chip" IsChecked="{Binding IsActive, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                                              ToolTip.Tip="{Binding Name}" ToolTip.ShowDelay="0" AutomationProperties.Name="{Binding Name}">
+                                                    <fire:RigMicGlyph Height="18" MicType="{Binding Index}" />
+                                                </ToggleButton>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                                <StackPanel IsVisible="{Binding CanAddCabMic}" Spacing="{StaticResource FireSpaceSm}">
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" Text="{localization:Loc Rig_Mic_AddHint}" />
+                                    <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" x:Name="RigCabAddMic" HorizontalAlignment="Left"
+                                            Command="{Binding AddCabMicCommand}" Content="{localization:Loc Rig_Mic_Add}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Theme="{StaticResource FireSubpanelBorder}" Classes="FireSubpanel">
+                            <views:RigNodeMetersView DataContext="{Binding Meters}" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+                <TextBlock Theme="{StaticResource FireEditorFootnoteText}" Classes="FireEditorFootnote" Text="{localization:Loc Rig_Editor_Hint}" />
+
+            </StackPanel>
+        </fire:RigScaleToFit>
+    </ScrollViewer>
+</UserControl>

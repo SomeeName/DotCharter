@@ -1,0 +1,62 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ══════════════════════════════════════════════════════════════════
+         The song-list CAPTION ROW's two button looks, shared by BOTH lists
+         (the unified browser): the Library (Views/Library/LibraryView) and
+         Play Mode's Song Select include this from UserControl.Styles. A
+         second hand-written copy of these is the drift the unification
+         exists to remove — edit here, never inline.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <!-- A sortable column caption: a Button whose whole look IS the
+         caption — chrome stripped (Fluent paints its hover on the
+         template's presenter, hence the /template/ rule), hover brightens
+         the caption text instead. -->
+    <Style Selector="Button.ColumnSort">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.ColumnSort:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.ColumnSort:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.ColumnSort:pointerover TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+
+    <!-- The caption funnel that opens a column's facet popover. Same
+         stripped chrome as the sort caption; the `.on` class (bound to the
+         facet's IsActive) lights it accent so an applied filter is visible
+         from the header itself. -->
+    <Style Selector="Button.FacetFunnel">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.FacetFunnel:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.FacetFunnel:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.FacetFunnel PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+    </Style>
+    <Style Selector="Button.FacetFunnel:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Button.FacetFunnel.on PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+</Styles>

@@ -1,0 +1,183 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellVm="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GameSettingsAudioView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- The Audio section pane of the Play Mode settings modal. Its host,
+         Screens/GameplaySettingsView.axaml, declares it with the pane's x:Name
+         (GameSettingsAudioPane, which PlayModeView.GameplaySettingsPaneNames prewarms) and
+         its IsVisible gate. Lifted out of PlayModeView.axaml in #294, markup
+         unchanged. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  BringIntoViewOnFocusChange="False"
+                  Padding="{StaticResource FirePadBody}">
+        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Levels}" />
+
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_MasterVolume}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_MasterVolume_Desc}" />
+                    </StackPanel>
+                    <Slider Grid.Column="2" Classes="FireSlider"
+                            Minimum="0.0" Maximum="1.0" VerticalAlignment="Center"
+                            AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_MasterVolume}"
+                            Value="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.Volume}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                               Text="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.Volume, StringFormat=\{0:0.00\}}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_SongVolume}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_SongVolume_Desc}" />
+                    </StackPanel>
+                    <Slider Grid.Column="2" Classes="FireSlider"
+                            Minimum="0.0" Maximum="1.0" VerticalAlignment="Center"
+                            AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_SongVolume}"
+                            Value="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.SongVolume}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                               Text="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.SongVolume, StringFormat=\{0:0.00\}}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_InputVolume}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_InputVolume_Desc}" />
+                    </StackPanel>
+                    <Slider Grid.Column="2" Classes="FireSlider"
+                            Minimum="0.0" Maximum="2.0" VerticalAlignment="Center"
+                            AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_InputVolume}"
+                            Value="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.InputVolume}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                               Text="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.InputVolume, StringFormat=\{0:0.00\}}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_MonitorVolume}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_MonitorVolume_Desc}" />
+                    </StackPanel>
+                    <Slider Grid.Column="2" Classes="FireSlider"
+                            Minimum="0.0" Maximum="2.0" VerticalAlignment="Center"
+                            AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_MonitorVolume}"
+                            Value="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.MonitorVolume}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                               Text="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Transport.MonitorVolume, StringFormat=\{0:0.00\}}" />
+                </Grid>
+
+                <!-- The live input meter. `LevelDb`
+                     is the REAL capture peak, polled
+                     by the view at ~20 Hz from the
+                     same tap the menu backdrop's EQ
+                     bars read — no second audio
+                     pump, and nothing polls while
+                     the modal is closed. The bars'
+                     colours come from the dB each
+                     one represents, not its index. -->
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GS_InputLevel}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_InputLevel_Desc}" />
+                    </StackPanel>
+                    <fire:FireLevelMeter Grid.Column="2" x:Name="GameSettingsInputMeter"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"
+                                         SegmentCount="14"
+                                         BarWidth="8" BarGap="3"
+                                         MinBarHeight="14" MaxBarHeight="14"
+                                         LevelDb="{Binding Settings.GameplayInputLevelDb}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Quiet"
+                               Text="{Binding Settings.GameplayInputLevelText}" />
+                </Grid>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Guides}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_GameplayMetronomeLabel}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_Metronome_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_GameplayMetronomeLabel}"
+                                  IsChecked="{Binding Settings.GameplayMetronomeEnabled, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_GameplayClapsLabel}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_Claps_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_GameplayClapsLabel}"
+                                  IsChecked="{Binding Settings.GameplayClapsEnabled, Mode=TwoWay}" />
+                </Grid>
+
+                <!-- Count-in: the shared segmented
+                     control, built once in
+                     Fire.axaml and reused here. -->
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_GameplayCountIn_RowLabel}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_CountIn_Desc}" />
+                    </StackPanel>
+                    <Border Grid.Column="2" x:Name="GameSettingsCountIn"
+                            Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment" HorizontalAlignment="Right">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <RadioButton Classes="FireSegmentItem" GroupName="GameSettingsCountIn"
+                                         IsChecked="{Binding Settings.IsCountInOff, Mode=OneWay}"
+                                         Command="{Binding Settings.SetGameplayCountInCommand}"
+                                         CommandParameter="0"
+                                         Content="{localization:Loc Settings_GameplayCountIn_Off}" />
+                            <RadioButton Classes="FireSegmentItem" GroupName="GameSettingsCountIn"
+                                         IsChecked="{Binding Settings.IsCountIn2, Mode=OneWay}"
+                                         Command="{Binding Settings.SetGameplayCountInCommand}"
+                                         CommandParameter="1"
+                                         Content="{localization:Loc Settings_GameplayCountIn_2}" />
+                            <RadioButton Classes="FireSegmentItem" GroupName="GameSettingsCountIn"
+                                         IsChecked="{Binding Settings.IsCountIn4, Mode=OneWay}"
+                                         Command="{Binding Settings.SetGameplayCountInCommand}"
+                                         CommandParameter="2"
+                                         Content="{localization:Loc Settings_GameplayCountIn_4}" />
+                            <RadioButton Classes="FireSegmentItem" GroupName="GameSettingsCountIn"
+                                         IsChecked="{Binding Settings.IsCountIn8, Mode=OneWay}"
+                                         Command="{Binding Settings.SetGameplayCountInCommand}"
+                                         CommandParameter="3"
+                                         Content="{localization:Loc Settings_GameplayCountIn_8}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

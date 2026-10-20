@@ -1,0 +1,320 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             xmlns:sections="clr-namespace:DotCharter.UI.ViewModels.PlayMode.ToneSections;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.ToneSectionsPanel"
+             x:DataType="sections:ToneSectionsViewModel">
+    <!-- "Match by section" — one rig per part of the song.
+         Reference: docs/agents/ui/pedalboard/ai-tone-design.md § Match by section.
+
+         A SEPARATE view, hosted by ToneDesignPanel through a ContentControl's
+         ContentTemplate, so a drawer whose build has no section slice never
+         builds this subtree at all. The rule is the one PlayModeView learned the
+         hard way: a big screen declared inline inside another screen is not a
+         type a second host can name, and it makes every open of the outer screen
+         pay its first layout. -->
+    <StackPanel x:Name="ToneSectionsRoot" Spacing="{StaticResource FireSpaceXs}">
+
+        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{localization:Loc ToneSections_Kicker}" />
+        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{localization:Loc ToneSections_Subtitle}" />
+
+        <!-- Which stem a NEW section starts on, and the one "Propose" scans.
+             One picker for the list, plus a per-row one: a song is usually all
+             guitar and setting it five times is five chances to get it wrong. -->
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceXs}">
+            <TextBlock Grid.Column="0" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" VerticalAlignment="Center"
+                       Text="{localization:Loc ToneSections_DefaultStem}" />
+            <ComboBox Grid.Column="1" x:Name="ToneSectionsDefaultStem" Classes="FireCombo"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding Stems}"
+                      SelectedItem="{Binding DefaultStem}"
+                      AutomationProperties.Name="{localization:Loc ToneSections_DefaultStem}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="sections:ToneStemOption">
+                        <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Grid>
+
+        <!-- Sized to their own content and allowed to wrap: equal columns size
+             to the NARROWEST label, which slices "Match all" long before German
+             gets near it. -->
+        <WrapPanel ItemSpacing="{StaticResource FireSpaceXs}"
+                   LineSpacing="{StaticResource FireSpaceXs}">
+            <Button x:Name="ToneSectionsAdd" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                    Content="{localization:Loc ToneSections_Add}"
+                    Command="{Binding ProposeCommand}" />
+            <Button x:Name="ToneSectionsPropose" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                    Content="{localization:Loc ToneSections_Propose}"
+                    Command="{Binding AddSectionCommand}"
+                    IsVisible="{Binding CanPropose}" />
+            <Button x:Name="ToneSectionsMatchAll" Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body"
+                    Content="{localization:Loc ToneSections_MatchAll}"
+                    Command="{Binding MatchAllCommand}"
+                    IsVisible="{Binding CanMatchAll}" />
+            <!-- NOT RENDERED until there is a section to apply (W4). Disabled it
+                 was the constraint's own example of "no container": a
+                 `FireGhost` at the 0.45 disabled opacity has a 1 px white .08
+                 border, which on this ground is invisible — so the row read as
+                 bare text beside two framed buttons. With nothing to apply
+                 there is also nothing to SAY beyond "add a section first",
+                 which the Add button next to it already is. -->
+            <Button x:Name="ToneSectionsApply" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                    Content="{localization:Loc ToneSections_Apply}"
+                    IsVisible="{Binding HasSections}"
+                    Command="{Binding ApplyCommand}" />
+            <Button x:Name="ToneSectionsCancel" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                    Content="{localization:Loc ToneSections_Cancel}"
+                    Command="{Binding CancelCommand}"
+                    IsVisible="{Binding IsBusy}" />
+            <!-- …and the same rule for this block's verb. See the note beside
+                 Design in ToneDesignPanel. -->
+            <TextBlock x:Name="ToneSectionsNeedsASection"
+                       Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Warn"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding NeedsASection}"
+                       Text="{localization:Loc ToneSections_NeedsASection}" />
+        </WrapPanel>
+
+        <TextBlock x:Name="ToneSectionsStatus" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                   Text="{Binding Status}"
+                   IsVisible="{Binding HasStatus}" />
+
+        <Border x:Name="ToneSectionsError" Theme="{StaticResource FireEmptyBannerBorder}" Classes="FireEmptyBanner Danger"
+                IsVisible="{Binding HasError}">
+            <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{Binding ErrorText}" />
+        </Border>
+
+        <!-- PROPOSALS. Never applied silently: the chart's tone changes are a
+             charter's decision and the audio's are a guess, and a button that had
+             already rewritten the player's list would be destructive. -->
+        <StackPanel x:Name="ToneSectionsProposals"
+                    Spacing="{StaticResource FireSpaceXs}"
+                    IsVisible="{Binding HasProposals}">
+            <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{localization:Loc ToneSections_Proposals}" />
+            <ItemsControl x:Name="ToneSectionsProposalList" ItemsSource="{Binding Proposals}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="sections:ToneSectionProposalViewModel">
+                        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceXs}">
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong" Text="{Binding Title}" />
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{Binding RangeText}" />
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" Text="{Binding MetaText}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        VerticalAlignment="Center"
+                                        Content="{localization:Loc ToneSections_Accept}"
+                                        Command="{Binding AcceptCommand}" />
+                                <Button Grid.Column="2" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        VerticalAlignment="Center"
+                                        Content="{localization:Loc ToneSections_Reject}"
+                                        Command="{Binding RejectCommand}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- THE SECTIONS. Collapsed entirely while the list is empty, so an
+             unused block costs this body one invisible StackPanel. -->
+        <StackPanel x:Name="ToneSectionsList"
+                    Spacing="{StaticResource FireSpaceXs}"
+                    IsVisible="{Binding HasSections}">
+            <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{localization:Loc ToneSections_Sections}" />
+            <ItemsControl x:Name="ToneSectionsRows" ItemsSource="{Binding Sections}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="sections:ToneSectionRowViewModel">
+                        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+
+                                <Grid ColumnDefinitions="*,Auto"
+                                      ColumnSpacing="{StaticResource FireSpaceXs}">
+                                    <Border Grid.Column="0" Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                                        <TextBox Classes="FireFieldInput"
+                                                 Text="{Binding Label, Mode=TwoWay}"
+                                                 PlaceholderText="{localization:Loc ToneSections_LabelHint}"
+                                                 AutomationProperties.Name="{localization:Loc ToneSections_LabelHint}" />
+                                    </Border>
+                                    <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                            VerticalAlignment="Center"
+                                            Content="{localization:Loc ToneSections_Remove}"
+                                            Command="{Binding RemoveCommand}" />
+                                </Grid>
+
+                                <WrapPanel ItemSpacing="{StaticResource FireSpaceXs}"
+                                           LineSpacing="{StaticResource FireSpaceXs}">
+                                    <ComboBox Classes="FireCombo" MinWidth="110"
+                                              ItemsSource="{Binding Stems}"
+                                              SelectedItem="{Binding SelectedStem}"
+                                              AutomationProperties.Name="{localization:Loc ToneSections_Stem}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="sections:ToneStemOption">
+                                                <TextBlock Text="{Binding Label}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+
+                                    <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                                        <TextBox Classes="FireFieldInput" MinWidth="64"
+                                                 Text="{Binding FromText, Mode=TwoWay}"
+                                                 PlaceholderText="{localization:Loc ToneSections_FromHint}"
+                                                 AutomationProperties.Name="{localization:Loc ToneSections_FromHint}" />
+                                    </Border>
+                                    <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                            Content="{localization:Loc ToneSections_SetFrom}"
+                                            Command="{Binding SetFromPlayheadCommand}" />
+
+                                    <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                                        <TextBox Classes="FireFieldInput" MinWidth="64"
+                                                 Text="{Binding ToText, Mode=TwoWay}"
+                                                 PlaceholderText="{localization:Loc ToneSections_ToHint}"
+                                                 AutomationProperties.Name="{localization:Loc ToneSections_ToHint}" />
+                                    </Border>
+                                    <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                            Content="{localization:Loc ToneSections_SetTo}"
+                                            Command="{Binding SetToPlayheadCommand}" />
+                                </WrapPanel>
+
+                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                           Text="{Binding DurationText}"
+                                           IsVisible="{Binding !HasTimeError}" />
+                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Danger"
+                                           Text="{Binding TimeError}"
+                                           IsVisible="{Binding HasTimeError}" />
+                                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                           Text="{Binding StatusText}"
+                                           IsVisible="{Binding HasStatus}" />
+
+                                <!-- This section's candidates. A ListBox, not
+                                     toggle buttons: the list IS a single
+                                     selection, and setting it publishes the
+                                     candidate as the PANEL's result — which is
+                                     what hands it to Hear it / Save as tone /
+                                     Discard unchanged. The inner
+                                     Border.FireListRow is load-bearing: every
+                                     FireList hover/selection setter targets it. -->
+                                <!-- NOT A SCROLL REGION: hosted inside the
+                                     tone-design panel, which is inside the Tones
+                                     mode's ONE scroller (RigTonesScroll). Both axes
+                                     Disabled and no MaxHeight, so this list never
+                                     nests a second scroller inside it. -->
+                                <ListBox Classes="FireList DenseRows"
+                                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         IsVisible="{Binding HasCandidates}"
+                                         ItemsSource="{Binding Candidates}"
+                                         SelectedItem="{Binding SelectedCandidate}"
+                                         AutomationProperties.Name="{localization:Loc ToneSections_Candidates}">
+                                    <!-- NON-VIRTUALIZED, and that is not an optimisation —
+                                         it is the other half of "both scroll axes Disabled".
+                                         A ListBox's default VirtualizingStackPanel realizes
+                                         what fits its own VIEWPORT, and a scroller that
+                                         cannot scroll reports a viewport that never grows,
+                                         so the list silently showed the first two rows and
+                                         dropped the rest. Measured: three seeded candidates
+                                         realized TWO containers. These lists are a handful
+                                         of rows inside the mode's one scroller; a plain
+                                         StackPanel is what lets them grow into it. -->
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel />
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ToneMatchCandidateViewModel">
+                                            <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                                                <Grid ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="{StaticResource FireSpaceSm}">
+                                                    <StackPanel Grid.Column="0"
+                                                                Spacing="{StaticResource FireSpaceXxs}">
+                                                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong" Text="{Binding Title}" />
+                                                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                                                   Text="{Binding ChainSummary}" />
+                                                        <!-- THE SCORE, W5b's vocabulary bound (W4 round 2). Three
+                                                             rules, and each has a test:
+                                                               • the pill prints MatchText, which is "46 % match" for a
+                                                                 rated candidate and "Unrated — <reason>" for one the
+                                                                 matcher could not place on the scale;
+                                                               • UNRATED AND 0 % MUST NOT LOOK ALIKE. A rated score is
+                                                                 bare accent mono; an unrated one is a FireStatusPill
+                                                                 Warn — a framed, amber, differently shaped mark — so a
+                                                                 candidate that could not be measured never reads as one
+                                                                 that measured badly;
+                                                               • the per-block breakdown says WHERE the remaining
+                                                                 distance is, worst first, and a block the reference rig
+                                                                 does better on wears `.Worse`. A number shown alone is
+                                                                 the thing W5b's report set out to remove. -->
+                                                        <ItemsControl x:Name="ToneSectionBreakdown" ItemsSource="{Binding Breakdown}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="vm:ToneMatchBlockViewModel">
+                                                                    <Border Theme="{StaticResource FireMatchBlockBorder}" Classes="FireMatchBlock"
+                                                                            Classes.Worse="{Binding WorseThanReference}"
+                                                                            Margin="{StaticResource FireGapTag}">
+                                                                        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{Binding Text}" />
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+
+                                                        <!-- The caveat, not the score: a candidate at or inside the
+                                                             passage's own variation is as close as this metric can SAY,
+                                                             and the remaining percent is not reachable by searching
+                                                             harder. Shown only in that case. -->
+                                                        <TextBlock x:Name="ToneSectionNoiseCaveat" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Warn"
+                                                                   IsVisible="{Binding WithinTargetNoise}"
+                                                                   Text="{Binding NoiseCaveatText}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1"
+                                                                MinWidth="{StaticResource FireRigMatchScoreWidth}"
+                                                                VerticalAlignment="Center"
+                                                                HorizontalAlignment="Right">
+                                                        <TextBlock x:Name="ToneSectionRatedScore" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Accent"
+                                                                   HorizontalAlignment="Right"
+                                                                   IsVisible="{Binding IsRated}"
+                                                                   Text="{Binding MatchText}" />
+                                                        <Border x:Name="ToneSectionUnratedPill" Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Warn"
+                                                                HorizontalAlignment="Right"
+                                                                IsVisible="{Binding !IsRated}">
+                                                            <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel Warn" Text="{Binding MatchText}" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <!-- …and the scale, once per section's list. See
+                                     the same note on ToneDesignPanel's list. -->
+                                <TextBlock x:Name="ToneSectionScaleNote"
+                                           Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                           IsVisible="{Binding HasCandidates}"
+                                           Text="{Binding SelectedCandidate.ScaleText}" />
+
+                                <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        HorizontalAlignment="Left"
+                                        Content="{localization:Loc ToneSections_Explain}"
+                                        Command="{Binding ExplainCommand}"
+                                        IsVisible="{Binding HasCandidates}" />
+
+                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                           Text="{Binding Explanation}"
+                                           IsVisible="{Binding HasExplanation}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

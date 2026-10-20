@@ -1,0 +1,149 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GameSettingsKeybindsView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- The Keybinds section pane of the Play Mode settings modal. Its host,
+         Screens/GameplaySettingsView.axaml, declares it with the pane's x:Name
+         (GameSettingsKeybindsPane, which PlayModeView.GameplaySettingsPaneNames prewarms) and
+         its IsVisible gate. Lifted out of PlayModeView.axaml in #294, markup
+         unchanged. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  BringIntoViewOnFocusChange="False"
+                  Padding="{StaticResource FirePadBody}">
+        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Transport}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_PlayPause}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbPlayPause_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.PlayPause, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_ToggleMetronome}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbMetronome_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.ToggleMetronome, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_ToggleClaps}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbClaps_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.ToggleClaps, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_SpeedUp}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbSpeedUp_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.SpeedUp, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_SpeedDown}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbSpeedDown_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.SpeedDown, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Loop}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_SetLoopStart}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbLoopStart_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.SetLoopStart, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_SetLoopEnd}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbLoopEnd_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.SetLoopEnd, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_ToggleLoop}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbToggleLoop_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.ToggleLoop, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Seek}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_SeekStart}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbSeekStart_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.SeekStart, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Keybind_SeekEnd}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_KbSeekEnd_Desc}" />
+                    </StackPanel>
+                    <controls:KeybindCaptureBox Grid.Column="2" VerticalAlignment="Center"
+                                                Chord="{Binding Settings.GameplayKeybinds.SeekEnd, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

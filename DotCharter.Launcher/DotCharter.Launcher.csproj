@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- The top-level DotCharter.exe of a release (#413). The app and its ~390
+         files live in app\; this exe starts app\DotCharter.exe with the same
+         command line, waits for it and hands back its exit code. Published
+         NativeAOT by tools/release/New-Release.ps1 (one native exe, no runtime
+         beside it); a plain `dotnet build` of the solution compiles it as an
+         ordinary exe so the gate still style-checks it. It references nothing
+         first-party on purpose: every DotCharter assembly lives in app\. -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>DotCharter.Launcher</RootNamespace>
+        <AssemblyName>DotCharter.Launcher</AssemblyName>
+        <Product>DotCharter</Product>
+        <AssemblyTitle>DotCharter</AssemblyTitle>
+        <Description>DotCharter - starts the app in the app folder.</Description>
+        <ApplicationIcon>..\DotCharter.UI\Assets\app-icon.ico</ApplicationIcon>
+        <InvariantGlobalization>true</InvariantGlobalization>
+    </PropertyGroup>
+
+    <!-- NativeAOT, sized down: no globalization data, no stack-trace metadata,
+         no resource strings, no EventSource. What is left is a P/Invoke shim
+         around CreateProcessW. -->
+    <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+        <PublishAot>true</PublishAot>
+        <OptimizationPreference>Size</OptimizationPreference>
+        <StackTraceSupport>false</StackTraceSupport>
+        <UseSystemResourceKeys>true</UseSystemResourceKeys>
+        <EventSourceSupport>false</EventSourceSupport>
+        <DebuggerSupport>false</DebuggerSupport>
+        <GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
+    </PropertyGroup>
+
+</Project>

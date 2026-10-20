@@ -1,0 +1,364 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.StemModelsSettingsView"
+             x:DataType="contracts:IStemModelsSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > Stem models, in the order a user decides things: WHICH model
+        (the catalogue, first), then HOW it runs (provider, GPU, the old CUDA runtime),
+        then WHERE it lives (models folder and the stem cache), and last the
+        advanced custom-model import. Every group's and row's IsVisible is the
+        contract's — that is how the cross-tab search filters this tab.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+
+        <!-- A model is a ROW on a hairline, not a card: name bright, one line of
+             description (the rest in its tooltip), the figures in mono. -->
+        <Style Selector="Border.ModelRow">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="Padding" Value="0,14" />
+        </Style>
+        <Style Selector="TextBlock.ModelName">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.ModelMeta">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        </Style>
+        <Style Selector="TextBlock.ModelMeta.Installed">
+            <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+        </Style>
+        <!-- Why a model cannot be downloaded right now (a GitHub sign-in): printed, never
+             only a greyed button, because a capability that cannot work must say why. -->
+        <Style Selector="TextBlock.ModelMeta.Unavailable">
+            <Setter Property="Foreground" Value="{DynamicResource FireAccent}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <!-- The diagnostics disclosure is a quiet text toggle. -->
+        <Style Selector="ToggleButton.DetailsToggle">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        </Style>
+        <Style Selector="ToggleButton.DetailsToggle /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton.DetailsToggle:pointerover /template/ ContentPresenter">
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccent}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,0,72">
+
+            <!-- ── Which model ─────────────────────────────────────────── -->
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" x:Name="StemCatalogGroup"
+                    IsVisible="{Binding IsCatalogGroupVisible}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_StemModels_AvailableTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_StemModels_AvailableSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Models}" x:Name="StemCatalogRows">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IStemModelRow">
+                                <Border Classes="ModelRow">
+                                    <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,300" ColumnSpacing="24">
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                                            <TextBlock Classes="ModelName" Text="{Binding DisplayName}" />
+                                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Margin="0" MaxLines="1"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding Description}"
+                                                       ToolTip.Tip="{Binding Description}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,2,0,0">
+                                                <TextBlock Classes="ModelMeta" Text="{Binding SourceLabel}" />
+                                                <TextBlock Classes="ModelMeta" Text="{Binding SizeLabel}" />
+                                                <TextBlock Classes="ModelMeta Installed" Text="{Binding DownloadedSizeLabel}" />
+                                            </StackPanel>
+                                            <TextBlock Classes="ModelMeta Unavailable" x:Name="StemModelUnavailableReason"
+                                                       Text="{Binding DownloadUnavailableReason}"
+                                                       IsVisible="{Binding IsDownloadUnavailable}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"
+                                                    HorizontalAlignment="Right" Spacing="10" VerticalAlignment="Top">
+                                            <CheckBox Content="{localization:Loc Settings_StemModels_Active}"
+                                                      AutomationProperties.Name="{localization:Loc Settings_StemModels_Active}"
+                                                      IsChecked="{Binding IsActive, Mode=TwoWay}"
+                                                      IsVisible="{Binding CanSetActive}"
+                                                      ToolTip.Tip="{localization:Loc Settings_StemModels_ActiveTooltip}" />
+                                            <Button Classes="RowAction"
+                                                    Content="{localization:Loc Action_Download}"
+                                                    Command="{Binding DownloadCommand}"
+                                                    IsVisible="{Binding CanDownload}" />
+                                            <!-- The same verb, visibly OFF while it cannot work; the
+                                                 reason is printed under the row and on the tooltip. -->
+                                            <Button Classes="RowAction" x:Name="StemModelDownloadUnavailable"
+                                                    Content="{localization:Loc Action_Download}"
+                                                    AutomationProperties.Name="{localization:Loc Action_Download}"
+                                                    IsEnabled="False"
+                                                    ToolTip.ShowOnDisabled="True"
+                                                    ToolTip.Tip="{Binding DownloadUnavailableReason}"
+                                                    IsVisible="{Binding IsDownloadUnavailable}" />
+                                            <Button Classes="RowAction"
+                                                    Content="{localization:Loc Action_Cancel}"
+                                                    Command="{Binding CancelCommand}"
+                                                    IsVisible="{Binding CanCancel}" />
+                                            <Button Theme="{StaticResource DangerButton}" Classes="RowAction Danger"
+                                                    Content="{localization:Loc Action_Delete}"
+                                                    Command="{Binding DeleteCommand}"
+                                                    IsVisible="{Binding CanDelete}" />
+                                            <Button Classes="RowAction"
+                                                    Content="{localization:Loc Action_Remove}"
+                                                    ToolTip.Tip="{localization:Loc Settings_StemModels_RemoveTooltip}"
+                                                    Command="{Binding RemoveCustomCommand}"
+                                                    IsVisible="{Binding IsCustom}" />
+                                        </StackPanel>
+
+                                        <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                     Margin="0,10,0,0" Height="4"
+                                                     Minimum="0" Maximum="1"
+                                                     Value="{Binding ProgressFraction}"
+                                                     IsVisible="{Binding IsDownloading}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                                   Classes="ModelMeta" Margin="0,6,0,0"
+                                                   Text="{Binding ProgressText}"
+                                                   IsVisible="{Binding IsDownloading}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- ── How it runs ─────────────────────────────────────────── -->
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" x:Name="StemBackendGroup"
+                    IsVisible="{Binding Backend.IsGroupVisible}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_StemModels_GpuTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{Binding Backend.Hint}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                          IsVisible="{Binding Backend.IsExecutionProviderRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"
+                                       Text="{localization:Loc Settings_StemModels_ExecutionProvider}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_StemModels_GpuInfo}" />
+                        </StackPanel>
+                        <!-- A provider this machine cannot run stays in the list, greyed
+                             and unpickable, with its reason under it: a capability
+                             the app cannot honour must never look live. -->
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" x:Name="StemExecutionProvider"
+                                  AutomationProperties.Name="{localization:Loc Settings_StemModels_ExecutionProvider}"
+                                  ItemsSource="{Binding Backend.ExecutionProviderOptions}"
+                                  SelectedItem="{Binding Backend.SelectedExecutionProvider, Mode=TwoWay}">
+                            <ComboBox.Styles>
+                                <Style Selector="ComboBoxItem" x:DataType="contracts:IStemExecutionProviderOption">
+                                    <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+                                </Style>
+                            </ComboBox.Styles>
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IStemExecutionProviderOption">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Label}" />
+                                        <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc"
+                                                   TextWrapping="Wrap" MaxWidth="280"
+                                                   Text="{Binding UnavailableReason}"
+                                                   IsVisible="{Binding !IsAvailable}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- Which GPU DirectML runs on: only on a machine with two or more
+                         GPUs, and only while DirectML is the provider. A GPU that cannot
+                         run the model is listed greyed with its reason, never live. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                          IsVisible="{Binding Backend.IsGpuRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"
+                                       Text="{localization:Loc Settings_StemModels_GpuAdapter}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_StemModels_GpuAdapterDesc}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" x:Name="StemGpuAdapter"
+                                  AutomationProperties.Name="{localization:Loc Settings_StemModels_GpuAdapter}"
+                                  ItemsSource="{Binding Backend.GpuOptions}"
+                                  SelectedItem="{Binding Backend.SelectedGpu, Mode=TwoWay}">
+                            <ComboBox.Styles>
+                                <Style Selector="ComboBoxItem" x:DataType="contracts:IStemGpuOption">
+                                    <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+                                </Style>
+                            </ComboBox.Styles>
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IStemGpuOption">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Label}" TextWrapping="Wrap" MaxWidth="280" />
+                                        <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc"
+                                                   TextWrapping="Wrap" MaxWidth="280"
+                                                   Text="{Binding UnavailableReason}"
+                                                   IsVisible="{Binding !IsAvailable}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- The CUDA runtime an earlier version downloaded: nothing loads it
+                         any more, so the row only offers to reclaim the disk space, and
+                         only while there is some. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" x:Name="StemGpuRuntimeGroup"
+                          IsVisible="{Binding Gpu.IsGroupVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_StemModels_GpuAccelTitle}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_StemModels_GpuAccelSubtitle}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="StemGpuDetail"
+                                       Text="{Binding Gpu.Detail}"
+                                       IsVisible="{Binding Gpu.HasDetail}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="8">
+                            <SelectableTextBlock Classes="ValueText"
+                                                 x:Name="StemGpuStatus" TextWrapping="Wrap"
+                                                 IsVisible="{Binding Gpu.IsStatusRowVisible}"
+                                                 Text="{Binding Gpu.Status}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button Theme="{StaticResource DangerButton}" Classes="RowAction Danger" x:Name="StemGpuRemove"
+                                        Content="{localization:Loc Action_Remove}"
+                                        ToolTip.Tip="{localization:Loc Settings_StemModels_GpuAccelRemoveTooltip}"
+                                        Command="{Binding Gpu.RemoveCommand}"
+                                        IsVisible="{Binding Gpu.CanRemove}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- The engine's own status is diagnostics: behind a toggle,
+                         with the one refresh that re-reads every part. -->
+                    <ToggleButton Classes="DetailsToggle" x:Name="StemDetailsToggle" Cursor="Hand"
+                                  Content="{localization:Loc Settings_StemModels_Details}"
+                                  IsVisible="{Binding Backend.IsStatusRowVisible}" />
+                    <StackPanel Spacing="8" Margin="0,0,0,12">
+                        <StackPanel.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="#StemDetailsToggle.IsChecked" />
+                                <Binding Path="Backend.IsStatusRowVisible" />
+                            </MultiBinding>
+                        </StackPanel.IsVisible>
+                        <Border Theme="{StaticResource StatusBlockBorder}" Classes="StatusBlock" Margin="0">
+                            <SelectableTextBlock Classes="Mono" x:Name="StemBackendStatus"
+                                                 Text="{Binding Backend.Status}" TextWrapping="Wrap" />
+                        </Border>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="RowAction" x:Name="StemBackendRefresh"
+                                    Content="{localization:Loc Settings_StemModels_RefreshStatus}"
+                                    Command="{Binding Backend.RefreshCommand}" />
+                            <Button Classes="RowAction" x:Name="StemGpuRefresh"
+                                    Content="{localization:Loc Settings_StemModels_RefreshGpu}"
+                                    Command="{Binding Gpu.RefreshCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ── Where it lives ──────────────────────────────────────── -->
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" x:Name="StemCacheGroup"
+                    IsVisible="{Binding Cache.IsGroupVisible}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_StemModels_CacheTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_StemModels_CacheSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" x:Name="StemFolderGroup"
+                          IsVisible="{Binding IsFolderGroupVisible}">
+                        <TextBlock Margin="0,8,0,0" VerticalAlignment="Top" Theme="{StaticResource SettingTitleText}" Grid.Column="0" Classes="SettingTitle"
+                                   Text="{localization:Loc Settings_StemModels_ModelsFolder}" />
+                        <SelectableTextBlock VerticalAlignment="Top" Grid.Column="1" Classes="Mono" x:Name="StemModelsDirectory"
+                                             TextAlignment="Right" TextWrapping="Wrap"
+                                             Text="{Binding ModelsDirectory}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                          IsVisible="{Binding Cache.IsUsageRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"
+                                       Text="{localization:Loc Settings_StemModels_CacheUsageLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="StemCacheDetail"
+                                       Text="{Binding Cache.Detail}"
+                                       IsVisible="{Binding Cache.HasDetail}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="8">
+                            <SelectableTextBlock Classes="Mono" TextAlignment="Right"
+                                                 x:Name="StemCacheUsage" TextWrapping="Wrap"
+                                                 Text="{Binding Cache.Usage}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button Classes="RowAction" x:Name="StemCacheRefresh"
+                                        Content="{localization:Loc Settings_StemModels_RefreshStatus}"
+                                        Command="{Binding Cache.RefreshCommand}" />
+                                <Button Theme="{StaticResource DangerButton}" Classes="RowAction Danger" x:Name="StemCacheClear"
+                                        Content="{localization:Loc Settings_StemModels_CacheClear}"
+                                        ToolTip.Tip="{localization:Loc Settings_StemModels_CacheClearTooltip}"
+                                        Command="{Binding Cache.ClearCommand}"
+                                        IsEnabled="{Binding Cache.HasEntries}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ── Advanced: bring your own model ─────────────────────── -->
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" x:Name="StemCustomGroup"
+                    IsVisible="{Binding IsCustomGroupVisible}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_StemModels_CustomTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_StemModels_CustomSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,0,0,10">
+                        <TextBox Grid.Column="0" x:Name="StemCustomUrl"
+                                 AutomationProperties.Name="{localization:Loc Settings_StemModels_CustomTitle}"
+                                 PlaceholderText="https://huggingface.co/owner/repo/resolve/main/model.onnx"
+                                 Text="{Binding CustomModelUrl, Mode=TwoWay}" />
+                        <Button Grid.Column="1" Classes="RowAction" x:Name="StemCustomAdd"
+                                Content="{localization:Loc Action_Add}"
+                                Command="{Binding ImportCustomModelCommand}" />
+                    </Grid>
+                    <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="StemCustomStatus"
+                               Text="{Binding CustomModelImportStatus}"
+                               IsVisible="{Binding HasCustomModelImportStatus}" />
+                    <ProgressBar Margin="0,8,0,12" Height="4" Minimum="0" Maximum="1"
+                                 Value="{Binding CustomModelImportProgress}"
+                                 IsVisible="{Binding IsCustomModelImportInProgress}" />
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

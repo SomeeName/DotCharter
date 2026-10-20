@@ -1,0 +1,205 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.DcSongExportDialogView"
+             x:DataType="contracts:IDcSongExportScreen"
+             x:CompileBindings="True">
+
+    <!-- File ▸ Export ▸ DotCharter song (#707). Grammar: Views/Dialogs/DialogStyles.axaml;
+         rows over ONE 380 px control column. Why Export is grey is said once, in
+         ExportBlockedStrip above the footer — no ffmpeg first, because every package
+         needs it. Hosted by Views/Shell/DialogHost, which focuses `QualityPicker` on open. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconLibraryMusic}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_DcSong_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" TextWrapping="Wrap"
+                                   Text="{localization:Loc Dialog_DcSong_Subtitle}" />
+                        <TextBlock Theme="{DynamicResource DialogContextText}" x:Name="SongLineText" Classes="DialogContext"
+                                   Text="{Binding SongLine}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer x:Name="DcSongBody" Grid.Row="1" Classes="DialogBody">
+                    <StackPanel IsEnabled="{Binding !IsWriting}">
+
+                        <!-- ── Audio ──────────────────────────────────────── -->
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                   Text="{localization:Loc Dialog_DcSong_Section_Audio}" />
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,380">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_DcSong_Quality}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" x:Name="QualityNoteText" Classes="DlgDesc"
+                                           Text="{Binding AudioQualityNote}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Center" x:Name="QualityPicker" dlgv:FocusOnOpen.IsTarget="True" Grid.Column="1"
+                                      HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AudioQualityOptions}"
+                                      SelectedIndex="{Binding AudioQualityIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_DcSong_Quality}" />
+                        </Grid>
+                        <!-- Off by default (stems roughly triple the size) and only live when
+                             separated stems exist; the line under the label says which, or why not. -->
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,380">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_DcSong_Stems}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" x:Name="StemsNoteText" Classes="DlgDesc"
+                                           Text="{Binding StemsNote}" />
+                            </StackPanel>
+                            <CheckBox VerticalAlignment="Center" x:Name="StemsToggle" Grid.Column="1"
+                                      IsChecked="{Binding IncludeStems, Mode=TwoWay}" IsEnabled="{Binding CanIncludeStems}"
+                                      AutomationProperties.Name="{localization:Loc Dialog_DcSong_Stems}" />
+                        </Grid>
+
+                        <!-- ── Arrangements ───────────────────────────────── -->
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FireGapSection}"
+                                   Text="{localization:Loc Dialog_DcSong_Section_Arrangements}" />
+                        <Border Theme="{DynamicResource DlgSectionBorder}" x:Name="ArrangementSection" Classes="DlgSection">
+                            <Panel>
+                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{localization:Loc Dialog_Export_NoArrangements}"
+                                       TextWrapping="Wrap" IsVisible="{Binding !Arrangements.Count}" />
+                            <ItemsControl x:Name="ArrangementList" ItemsSource="{Binding Arrangements}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IDcSongArrangementRow">
+                                        <CheckBox AutomationProperties.Name="{Binding Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  Margin="0,0,16,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding TypeLabel}" VerticalAlignment="Center"
+                                                           IsVisible="{Binding TypeLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                           Foreground="{DynamicResource TextDim}"
+                                                           FontSize="{DynamicResource FontSizeSm}" />
+                                            </StackPanel>
+                                        </CheckBox>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </Panel>
+                        </Border>
+
+                        <!-- ── Images ─────────────────────────────────────── -->
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FireGapSection}"
+                                   Text="{localization:Loc Dialog_DcSong_Section_Images}" />
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,380">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_DcSong_Cover}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding CoverNote}" />
+                            </StackPanel>
+                            <Grid VerticalAlignment="Center" x:Name="CoverField" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" Text="{Binding CoverPath, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_DcSong_Cover}" />
+                                <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle Compact"
+                                        Content="{localization:Loc Action_Browse}"
+                                        Command="{Binding BrowseCoverCommand}" />
+                            </Grid>
+                        </Grid>
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,380">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_DcSong_Banner}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_DcSong_Banner_Desc}" />
+                            </StackPanel>
+                            <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" Text="{Binding BannerPath, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_DcSong_Banner}" />
+                                <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle Compact"
+                                        Content="{localization:Loc Action_Browse}"
+                                        Command="{Binding BrowseBannerCommand}" />
+                            </Grid>
+                        </Grid>
+
+                        <!-- ── Output ─────────────────────────────────────── -->
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FireGapSection}"
+                                   Text="{localization:Loc Dialog_DcSong_Section_Output}" />
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,380">
+                            <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_DcSong_OutputFile}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" x:Name="OutputNoteText" Classes="DlgDesc" Text="{Binding OutputNote}" />
+                            </StackPanel>
+                            <Grid VerticalAlignment="Center" x:Name="OutputField" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <TextBox Grid.Column="0" Text="{Binding OutputPath, Mode=TwoWay}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_DcSong_OutputFile}" />
+                                <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle Compact"
+                                        Content="{localization:Loc Action_Browse}"
+                                        Command="{Binding BrowseOutputCommand}" />
+                            </Grid>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Why Export is grey, the failure, the progress and the result: directly above the action bar. -->
+                <StackPanel Grid.Row="2" Margin="{DynamicResource GapTopLg}">
+                    <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ExportBlockedStrip" Classes="DlgStrip Notice"
+                            IsVisible="{Binding IsExportBlocked}">
+                        <TextBlock x:Name="ExportBlockedText" Text="{Binding ExportBlockedReason}" TextWrapping="Wrap" />
+                    </Border>
+                    <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ErrorStrip" Classes="DlgStrip Error"
+                            IsVisible="{Binding HasError}">
+                        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                    </Border>
+                    <StackPanel x:Name="ProgressBlock" IsVisible="{Binding IsWriting}">
+                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding ProgressFraction}" Height="6" />
+                        <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" Classes="DlgBusyText" Text="{Binding ProgressMessage}"
+                                   Margin="{DynamicResource GapTopSm}" />
+                    </StackPanel>
+                    <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ResultStrip" Classes="DlgStrip Ok" IsVisible="{Binding HasResult}">
+                        <StackPanel Spacing="{DynamicResource SpaceSm}">
+                            <SelectableTextBlock Text="{Binding ResultMessage}" TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding ResultWarnings}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <TextBlock Text="{Binding}" FontFamily="{DynamicResource FireFontUi}" Foreground="{DynamicResource WarningColor}"
+                                                   FontSize="{DynamicResource FontSizeSm}" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- The estimate in the footer's meta slot, so it is in view at any scroll;
+                             once a package is written the slot holds its folder instead. -->
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <TextBlock x:Name="SizeValue" Text="{Binding EstimatedSize}" IsVisible="{Binding !HasResult}"
+                                       FontFamily="{DynamicResource FireFontMono}"
+                                       FontSize="{DynamicResource FireSizeMicro}"
+                                       LetterSpacing="{DynamicResource FireTrackMicro}"
+                                       Foreground="{DynamicResource FireTextFaint}"
+                                       VerticalAlignment="Center"
+                                       ToolTip.Tip="{localization:Loc Dialog_DcSong_Size_Desc}" />
+                            <Button Classes="DlgLink" Content="{localization:Loc Dialog_Export_OpenFolder}"
+                                    Command="{Binding OpenOutputFolderCommand}" IsVisible="{Binding HasResult}" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                    Content="{localization:Loc Dialog_Export_CancelExport}"
+                                    Command="{Binding CancelWriteCommand}" IsVisible="{Binding IsWriting}" />
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Close}"
+                                    Command="{Binding CloseCommand}" IsCancel="True" />
+                            <Button x:Name="ExportButton" Classes="DlgAction Primary"
+                                    Content="{localization:Loc Dialog_Export_Export}"
+                                    Command="{Binding ExportCommand}" IsDefault="True"
+                                    ToolTip.Tip="{Binding ExportBlockedReason}"
+                                    ToolTip.ServiceEnabled="{Binding IsExportBlocked}"
+                                    ToolTip.ShowOnDisabled="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

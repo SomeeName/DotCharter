@@ -1,0 +1,611 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. Section: Actions. -->
+
+    <Styles.Resources>
+        <!-- Also carries the `Compact` rules: its buttons wear that class too, and a
+             Button has ONE theme. The copies stay identical in every theme
+             (UI/ButtonControlThemeTests). -->
+        <ControlTheme x:Key="FireGhostButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+            <!-- The outlined secondary: "Song library", "Section trainer", "History". -->
+            <Style Selector="^.FireGhost">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusControl}" />
+                <Setter Property="Height" Value="{StaticResource FireButtonHeight}" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusAdorner">
+                    <FocusAdornerTemplate>
+                        <Border BorderBrush="{DynamicResource FireAccentPale}"
+                                BorderThickness="{StaticResource FireFocusRingThickness}"
+                                Margin="{StaticResource FireFocusRingOffset}"
+                                CornerRadius="{StaticResource FireRadiusControl}" />
+                    </FocusAdornerTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireGhost.Compact">
+                <Setter Property="Height" Value="{StaticResource FireActionHeight}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+            </Style>
+            <Style Selector="^.FireGhost /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+            </Style>
+            <Style Selector="^.FireGhost:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="^.FireGhost:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+            <Style Selector="^.FireGhost:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+            </Style>
+            <Style Selector="^.FireGhost:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <!-- The accented secondary: "RESUME SESSION". Between Ghost and Primary —
+                 it carries the accent as an outline and a tint, never as a fill. -->
+            <Style Selector="^.FireGhost.Accent">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackDisplay}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentPaper}" />
+            </Style>
+            <Style Selector="^.FireGhost.Accent /template/ ContentPresenter">
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentPaper}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Also carries the rig's `FireGearStep` and `FireMapTool` (+`Accent`)
+             rules (from FireRigStage.axaml) and `FireQuiet.Stepper` (from
+             FireRigHardware.axaml), in their old global order: those classes are
+             only ever worn WITH `FireQuiet`, and a Button has ONE theme. -->
+        <ControlTheme x:Key="FireQuietButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- A text-only tertiary ("Reset audio to defaults", "Open calendar"). -->
+            <Style Selector="^.FireQuiet">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireQuiet /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextMuted}" />
+            </Style>
+            <Style Selector="^.FireQuiet:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="^.FireQuiet.Link /template/ ContentPresenter">
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireLink}" />
+            </Style>
+            <Style Selector="^.FireQuiet:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <!-- A text-only action has no chrome for a ring to sit outside of, so its
+                 focus ring hugs the label with a 3 px offset instead of 4. -->
+            <Style Selector="^.FireQuiet">
+                <Setter Property="FocusAdorner">
+                    <FocusAdornerTemplate>
+                        <Border BorderBrush="{DynamicResource FireAccentPale}"
+                                BorderThickness="{StaticResource FireFocusRingThickness}"
+                                Margin="-3"
+                                CornerRadius="{StaticResource FireRadiusTag}" />
+                    </FocusAdornerTemplate>
+                </Setter>
+            </Style>
+            <!-- up / down through the chain -->
+            <Style Selector="^.FireGearStep">
+                <Setter Property="Width" Value="28" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            </Style>
+            <Style Selector="^.FireMapTool">
+                <Setter Property="Height" Value="28" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+            </Style>
+            <Style Selector="^.FireMapTool:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+            </Style>
+            <!-- ADD, not a second zoom-in: the accent disc -->
+            <Style Selector="^.FireMapTool.Accent /template/ ContentPresenter">
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="BorderThickness" Value="{StaticResource FireBorderHairline}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+            </Style>
+            <!-- The tone stepper's two halves: ▲ over ▼ inside one 36 px segment. -->
+            <Style Selector="^.FireQuiet.Stepper">
+                <Setter Property="Width" Value="22" />
+                <Setter Property="Height" Value="17" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeNanoSm}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireIconActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- A square icon action. `.Close` turns danger-red on hover, which is the
+                 mockup's one use of red as an affordance rather than a state. -->
+            <Style Selector="^.FireIconAction">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Width" Value="{StaticResource FireIconButtonSize}" />
+                <Setter Property="Height" Value="{StaticResource FireIconButtonSize}" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusAdorner">
+                    <FocusAdornerTemplate>
+                        <Border BorderBrush="{DynamicResource FireAccentPale}"
+                                BorderThickness="{StaticResource FireFocusRingThickness}"
+                                Margin="-3"
+                                CornerRadius="{StaticResource FireRadiusField}" />
+                    </FocusAdornerTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireIconAction:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <Style Selector="^.FireIconAction /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="^.FireIconAction:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+            </Style>
+            <Style Selector="^.FireIconAction:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+            <Style Selector="^.FireIconAction.Close:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+            </Style>
+            <Style Selector="^.FireIconAction.Close:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireBackButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- The `← Back` button. Byte-identical in five of the six full-screen
+                 mockups, so it is a component rather than a per-screen decision. -->
+            <Style Selector="^.FireBack">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceRaised}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Padding" Value="14,8" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusAdorner">
+                    <FocusAdornerTemplate>
+                        <Border BorderBrush="{DynamicResource FireAccentPale}"
+                                BorderThickness="{StaticResource FireFocusRingThickness}"
+                                Margin="-3"
+                                CornerRadius="{StaticResource FireRadiusField}" />
+                    </FocusAdornerTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireBack:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <Style Selector="^.FireBack /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextSecondary}" />
+            </Style>
+            <Style Selector="^.FireBack:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="^.FireBack:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireListRowButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- …and the same row as something you can CLICK. Every list row in the
+                 mockups is a `<button>`; a row that only LOOKS like one is the fault
+                 design 6 shipped (a bare `Border` practice queue that did nothing).
+                 Two shapes, because this app models "pick a row" two different ways
+                 and both are real:
+
+                 • `Button.FireListRow` — the row IS a command (start this plan item).
+                 • `ListBox.FireList`   — the row is a SELECTION that fills a detail
+                                          pane (Song Library, Session History). The
+                                          ListBoxItem already carries click, keyboard
+                                          and focus; all this does is strip the Fluent
+                                          container chrome so the row's own
+                                          `Border.FireListRow` is what the user sees,
+                                          and hand it the `.selected` look — which is
+                                          the mockups' 3 px accent bar. -->
+            <Style Selector="^.FireListRow">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderRow}" />
+                <Setter Property="BorderThickness" Value="0,0,0,1" />
+                <Setter Property="CornerRadius" Value="0" />
+                <Setter Property="Padding" Value="{StaticResource FirePadListRow}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Cursor" Value="Hand" />
+                <!-- A ring around a full-width row reads as a second selection, so a
+                     focused row is a violet TINT plus a violet border (the spec's own
+                     carve-out for list rows). -->
+                <Setter Property="FocusAdorner">
+                    <FocusAdornerTemplate>
+                        <Border BorderBrush="{DynamicResource FireFocusRowBorder}"
+                                BorderThickness="{StaticResource FireBorderHairline}"
+                                Background="{DynamicResource FireFocusRowFill}" />
+                    </FocusAdornerTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireListRow /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="^.FireListRow:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.FireListRow:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+            </Style>
+            <Style Selector="^.FireListRow:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <!-- …and the same "this one is yours" wash. It has to be restated for the
+                 Button: `Border.FireListRow.Record` matches a Border, so putting
+                 `Classes.Record` on a clickable row silently did nothing. The theme's
+                 template root paints {TemplateBinding Background}, so setting it here
+                 reaches the row; hover and press still win, which is what a clickable
+                 row should do. -->
+            <Style Selector="^.FireListRow.Record">
+                <Setter Property="Background" Value="{DynamicResource FireRowRecordFill}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePresetCardButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- The PRESET CARD — the tone browser's grid cell.
+
+                 It is a third sibling of `FireListRow`/`FireList` rather than a variant,
+                 because the shape is different in the one way that matters: those two
+                 are FULL-WIDTH rows separated by a hairline, and a hairline under a
+                 228 px card in a wrap grid draws an underline, not a card. This one is
+                 an actual bordered tile with its own fill, which is what a grid of
+                 choices needs to read as a grid.
+
+                 Selection is `.Record` (the amber wash) and NOT `.selected`: the row
+                 grammar's `.selected` swaps the hairline for a 3 px left spine, and a
+                 spine on a free-standing tile just clips its left rounding. -->
+            <Style Selector="^.FirePresetCard">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                <!-- A row of cards shares the tallest one's height; centred, a short card
+                     floated down its row and the grid read ragged. -->
+                <Setter Property="VerticalAlignment" Value="Stretch" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FirePresetCard /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="^.FirePresetCard:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+            </Style>
+            <Style Selector="^.FirePresetCard:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.FirePresetCard:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+            </Style>
+            <Style Selector="^.FirePresetCard.Record">
+                <Setter Property="Background" Value="{DynamicResource FireRowRecordFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Border families are ControlThemes (#240): a Border wears
+             Theme="{StaticResource <Family>Border}" AND its class, and every
+             rule here is gated on that class. UI/BorderControlThemeTests. -->
+        <ControlTheme x:Key="FireListRowBorder" TargetType="Border">
+            <!-- A row in a long list (songs, runs, records, queue items). Selection is
+                 the 3 px bar + a wash that fades to the right; `.Record` is the amber
+                 "this one is yours" tint. Bar and row are one Border so a list stays a
+                 flat two-element repeat instead of a nested grid per row. -->
+            <Style Selector="^.FireListRow">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderRow}" />
+                <Setter Property="BorderThickness" Value="0,0,0,1" />
+                <Setter Property="Padding" Value="{StaticResource FirePadListRow}" />
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="^.FireListRow.selected">
+                <Setter Property="Background" Value="{DynamicResource FireRowSelectedFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BorderThickness" Value="3,0,0,0" />
+            </Style>
+            <Style Selector="^.FireListRow.Record">
+                <Setter Property="Background" Value="{DynamicResource FireRowRecordFill}" />
+            </Style>
+            <!-- A row the screen is WARNING about, lifted out of the flat list: the
+                 mockups pull it in from the dividers, round it and tint it red
+                 (Practice Trends' stalled section). `.Record` is the amber sibling and
+                 stays flat, because "this one is yours" is a fact, not an alarm. -->
+            <!-- A row that is listed but cannot be acted on — the LAN modal's sessions
+                 whose song this machine does not have, or whose lobby is full. It is
+                 still shown (that is information) and still selectable, so the dim is
+                 the whole difference; the mockup's own value. -->
+            <Style Selector="^.FireListRow.Unavailable">
+                <Setter Property="Opacity" Value="0.55" />
+            </Style>
+            <Style Selector="^.FireListRow.Alert">
+                <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireGhostToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- Compact modifier for a ToggleButton. The Button half is a `^.Compact`
+                 rule inside each button theme that a Compact button can wear (#240). -->
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+
+            <!-- The same outlined chip as a TOGGLE — the browse bar's FILTERS pill and
+                 its sort-direction arrow. It is declared for `ToggleButton` explicitly
+                 rather than reached through `:is()`: a Fire class must be declared for
+                 the element type it is worn on or `FireClassReachabilityTests` cannot
+                 tell it from a typo, and a class that matches no selector is a SILENT
+                 no-op (the FILTERS pill wore `FireSegmentItem`, which only draws chrome
+                 inside a `FireSegment` strip, so standing alone it rendered as bare
+                 grey text). Checked wears the accent as an outline and a tint, never as
+                 a fill — that is what separates it from `FirePrimary`. -->
+            <Style Selector="^.FireGhost">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusControl}" />
+                <Setter Property="Height" Value="{StaticResource FireButtonHeight}" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+
+            <Style Selector="^.FireGhost.Compact">
+                <Setter Property="Height" Value="{StaticResource FireActionHeight}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+            </Style>
+
+            <Style Selector="^.FireGhost /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+            </Style>
+
+            <Style Selector="^.FireGhost:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+
+            <Style Selector="^.FireGhost:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+
+            <Style Selector="^.FireGhost:checked">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+
+            <Style Selector="^.FireGhost:checked /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccentPaper}" />
+            </Style>
+
+            <Style Selector="^.FireGhost:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- ══ Actions ═════════════════════════════════════════════════════════ -->
+
+    <Style Selector="Button.FireCta TextBlock.FireCtaLabel">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCta}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackCta}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccent}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <!-- A CTA label that outgrows its button is not merely cramped: the
+             chamfer CLIPS it, so it is sliced through a glyph at 45° and reads
+             as a rendering bug ("SITZUNG HOSTEN" came out "SITZUNG HOSTEI").
+             German runs ~40 % longer than the mockups' English, so this is
+             reachable by translation alone. Trimming is the honest failure. -->
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- A disabled lit action is neutral (see Fire.axaml); its label sets its
+         own ink, so it has to follow, or dark ink sits on the dark fill. -->
+    <Style Selector="Button:disabled TextBlock.FireCtaLabel">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+    </Style>
+
+    <Style Selector="Button.FireCta.Compact TextBlock.FireCtaLabel">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackDisplay}" />
+    </Style>
+
+    <Style Selector="ToggleButton.FireGhost PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="ToggleButton.FireGhost:checked PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+
+    <Style Selector="Button.FireIconAction PathIcon">
+        <Setter Property="Width" Value="13" />
+        <Setter Property="Height" Value="13" />
+        <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+
+    <!-- …and the RADIO spelling, for a rail that picks exactly one of N. Same
+         reason `RadioButton.FireSegmentItem` exists: a ToggleButton UNCHECKS
+         itself when the row that is already selected is clicked again, so a
+         ToggleButton rail reports "no section selected" until the next real
+         switch. A RadioButton is single-select by construction. The theme is
+         `TargetType="ToggleButton"`, which a RadioButton satisfies; the class
+         has to be declared for the element type it is worn on or
+         `FireClassReachabilityTests` cannot tell it from a typo. -->
+    <Style Selector="RadioButton.FireNavRow">
+        <Setter Property="Theme" Value="{DynamicResource FireNavRowToggle}" />
+    </Style>
+
+    <!-- DenseRows: a ListBox that is a fixed NAV taxonomy (the rig drawer's
+         12 categories), not an open-ended data list — every row on screen
+         beats comfortable rows a scroll away. -->
+    <Style Selector="ListBox.DenseRows Border.FireListRow">
+        <Setter Property="Padding" Value="{StaticResource FirePadListRowDense}" />
+    </Style>
+
+
+    <!-- The BOARD list: a sibling of `FireList`, not a variant of it, and the
+         difference is which question selection answers. In `FireList`
+         selection IS the interaction (pick a song, fill the detail pane) so a
+         selected row wears the 3 px accent spine. A leaderboard's ListBox
+         exists only so the board is arrow-key navigable; its "this one is
+         yours" marking is `Border.FireListRow.Record`, and giving those rows a
+         spine would swap the bottom hairline for a left border and shift the
+         row's content out from under the column captions. So this one
+         neutralizes the Fluent frame and paints selection as a soft wash on
+         the container instead.
+         Promoted here from LanOverallView's own `UserControl.Styles`: a
+         Fire-named class defined inside one view is how nine screens stop
+         being one screen, which is exactly what `FireStyleClassTests` refuses. -->
+    <!-- The board list's own chrome, neutralized. The rows ARE the design
+         (Border.FireListRow); the ListBox exists only so the board is
+         arrow-key navigable, so its Fluent frame, item padding and
+         selection fill all have to get out of the way — otherwise the
+         theme's selection brush paints over the Fire row grammar. Local to
+         this view: it is chrome removal for one control, not a mark. -->
+    <Style Selector="ListBox.FireBoardList">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+    </Style>
+    <Style Selector="ListBox.FireBoardList ListBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.FireBoardList ListBoxItem /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.FireBoardList ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <Style Selector="ListBox.FireBoardList ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+    </Style>
+
+    <Style Selector="ListBox.FireList">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+    </Style>
+    <Style Selector="ListBox.FireList > ListBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="Margin" Value="{StaticResource FirePadNone}" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox.FireList > ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.FireList > ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.FireList > ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.FireList > ListBoxItem:pointerover Border.FireListRow">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <!-- Keyboard focus inside the list, which is NOT the same thing as
+         selection: arrowing through a board moves both, but Tab-ing into one
+         moves only focus, and a row you cannot see is a row you cannot use. -->
+    <Style Selector="ListBox.FireList > ListBoxItem:focus-visible Border.FireListRow">
+        <Setter Property="Background" Value="{DynamicResource FireFocusRowFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireFocusRowBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="ListBox.FireBoardList ListBoxItem:focus-visible /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireFocusRowFill}" />
+    </Style>
+    <!-- The selection idiom, reached through the container's state rather than
+         a `Classes.selected` binding: selection lives on the ListBox, not on
+         the row's view model.
+
+         SELECTION MUST NOT CHANGE THE ROW'S LAYOUT. This used to swap the
+         thickness from `0,0,0,1` to `3,0,0,0` — three pixels wider on the left,
+         one shorter at the bottom — so every click re-measured that row inside a
+         VIRTUALIZING panel, and the list visibly jumped under the pointer as the
+         estimated extent was recomputed. The owner reported it as the song
+         browser jittering and moving around on select.
+
+         So the box is fixed and only the PAINT changes: the accent fill plus the
+         accent on the hairline the row already had. A spine that costs the list
+         its stability is not worth the spine. -->
+    <Style Selector="ListBox.FireList > ListBoxItem:selected Border.FireListRow">
+        <Setter Property="Background" Value="{DynamicResource FireRowSelectedFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+    </Style>
+
+</Styles>

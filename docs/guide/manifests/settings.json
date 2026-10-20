@@ -1,0 +1,298 @@
+{
+  "page": "settings.md",
+  "shots": [
+    {
+      "id": "settings-general",
+      "scene": "settings",
+      "args": {
+        "tab": "general"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Sections",
+          "text": "The settings pages, in three groups.",
+          "name": "SettingsRail"
+        },
+        {
+          "title": "Search",
+          "text": "Finds any setting on any page (Ctrl+F).",
+          "name": "SettingsSearchBox"
+        },
+        {
+          "title": "Language & region",
+          "text": "Display language and the screen DotCharter opens at.",
+          "loc": "Settings_LanguageRegion_Title"
+        },
+        {
+          "title": "Diagnostics",
+          "text": "Local crash reports. Nothing leaves your computer.",
+          "loc": "Settings_Diagnostics"
+        },
+        {
+          "title": "Advanced",
+          "text": "Logging options.",
+          "name": "GeneralAdvanced"
+        }
+      ]
+    },
+    {
+      "id": "settings-editor",
+      "scene": "settings",
+      "args": {
+        "tab": "editor"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Chart editing",
+          "text": "Keyboard note entry, how hand shapes and positions follow edits, chord naming.",
+          "loc": "Settings_ChartEditing"
+        }
+      ]
+    },
+    {
+      "id": "settings-play",
+      "scene": "settings",
+      "args": {
+        "tab": "play"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Gameplay",
+          "text": "Count-in, metronome, note claps and the rock meter in Play Mode.",
+          "loc": "Settings_Gameplay"
+        }
+      ]
+    },
+    {
+      "id": "settings-appearance",
+      "scene": "settings",
+      "args": {
+        "tab": "appearance"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Interface",
+          "text": "String colours and the size of the whole interface.",
+          "loc": "Settings_Appearance_InterfaceTitle"
+        },
+        {
+          "title": "String colors",
+          "text": "Colour-blind-safe palettes for the strings, in the timeline and on the highway.",
+          "loc": "Settings_Appearance_StringColorsTitle"
+        },
+        {
+          "title": "Customize colors",
+          "text": "Change any colour of the theme.",
+          "name": "AppearanceColorGroups"
+        }
+      ]
+    },
+    {
+      "id": "settings-graphics",
+      "scene": "settings",
+      "args": {
+        "tab": "graphics"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Display",
+          "text": "Render scale, frame rate, VSync and anti-aliasing.",
+          "loc": "Settings_Graphics_DisplayTitle"
+        },
+        {
+          "title": "Hand-position preview",
+          "text": "Shows the next hand position before you need it.",
+          "loc": "Settings_Graphics_AnchorPreviewTitle"
+        },
+        {
+          "title": "Highway view",
+          "text": "Scroll speed, draw distance and camera.",
+          "loc": "Settings_Graphics_HighwayViewTitle"
+        }
+      ]
+    },
+    {
+      "id": "settings-audio",
+      "scene": "settings",
+      "args": {
+        "tab": "audio"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Device summary",
+          "text": "The output device, sample rate, buffer and latency in use.",
+          "name": "AudioReadout"
+        },
+        {
+          "title": "Output routing",
+          "text": "The driver and device the song plays through.",
+          "loc": "Settings_OutputRouting"
+        },
+        {
+          "title": "Instrument input",
+          "text": "Turn on live input and choose the device and channels your guitar is on.",
+          "loc": "Settings_InstrumentInput"
+        }
+      ]
+    },
+    {
+      "id": "settings-files",
+      "scene": "settings",
+      "args": {
+        "tab": "files"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Save companions",
+          "text": "Extra files written next to the project on every save.",
+          "loc": "Settings_SaveCompanions"
+        },
+        {
+          "title": "Auto backups",
+          "text": "Timed ZIP backups of the open project.",
+          "loc": "Settings_AutoBackups"
+        }
+      ]
+    },
+    {
+      "id": "settings-keybinds",
+      "scene": "settings",
+      "args": {
+        "tab": "keybinds"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Keyboard or MIDI",
+          "text": "Bind commands to keys, or to a MIDI controller.",
+          "name": "KeybindModeSwitch"
+        },
+        {
+          "title": "Bindings",
+          "text": "Every command and its key. Click a field and press the new key.",
+          "name": "KeybindGroups"
+        }
+      ]
+    },
+    {
+      "id": "settings-stem-models",
+      "scene": "settings",
+      "args": {
+        "tab": "stemModels"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Models",
+          "text": "The stem-separation models; pick the active one.",
+          "name": "StemCatalogGroup"
+        }
+      ]
+    },
+    {
+      "id": "settings-tone3000",
+      "scene": "settings",
+      "args": {
+        "tab": "tone3000"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Tone3000",
+          "text": "Sign in to browse and download community amp captures.",
+          "name": "Tone3000Group"
+        }
+      ]
+    },
+    {
+      "id": "settings-ai",
+      "scene": "settings",
+      "args": {
+        "tab": "ai"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Provider",
+          "text": "Which AI answers tone, chart and chat requests, and its model.",
+          "name": "AiProviderGroup"
+        },
+        {
+          "title": "Match model",
+          "text": "A local model that guesses a starting rig from a recording.",
+          "name": "AiMatchModelGroup"
+        }
+      ]
+    },
+    {
+      "id": "settings-updates",
+      "scene": "settings",
+      "args": {
+        "tab": "updates"
+      },
+      "height": 1150,
+      "crop": [
+        "SettingsRail",
+        "TabHost"
+      ],
+      "callouts": [
+        {
+          "title": "Application updates",
+          "text": "Your version, and checking for a newer one.",
+          "loc": "Update_GroupTitle"
+        }
+      ]
+    }
+  ]
+}

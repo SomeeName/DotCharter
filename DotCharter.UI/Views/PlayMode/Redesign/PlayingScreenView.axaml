@@ -1,0 +1,184 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.Redesign.PlayingScreenView"
+             x:DataType="contracts:IPlayingScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Play Mode > Playing (the in-game HUD), redesigned.
+
+        THE HIGHWAY IS A PLACEHOLDER HERE AND HAS TO BE. It is a native Vulkan
+        renderer, not Avalonia content, so this screen designs the chrome around
+        a token-coloured Border where the 3D surface goes. Everything else on
+        this view is the HUD.
+
+        Three bands: the score bar on top, the highway in the middle, and the
+        run's progress along the bottom. Nothing floats over the middle band —
+        the one region a player is actually looking at stays clear, and the
+        corners are where the numbers go.
+    -->
+
+    <Panel>
+        <Border Theme="{StaticResource FireGroundBorder}" Classes="FireGround Screen" />
+
+        <Grid x:Name="PlayingRedesignRoot" RowDefinitions="Auto,*,Auto">
+
+            <!-- ══ SCORE BAR ════════════════════════════════════════════════ -->
+            <Border x:Name="PlayingRedesignScoreBar" Grid.Row="0" Theme="{StaticResource FireHeaderBorder}" Classes="FireHeader">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto"
+                      ColumnSpacing="{StaticResource FireSpaceXl}">
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireTitleText}" Classes="FireTitle" TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap"
+                                   Text="{Binding SongTitle}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="{Binding ArrangementName}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Width="190"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding ScoreLabel}" />
+                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                   Text="{localization:Loc LivePlay_Score}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Width="96"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding MultiplierLabel}" />
+                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                   Text="{localization:Loc PlayMode_Hud_Multiplier}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="3" VerticalAlignment="Center" Width="150"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding AccuracyLabel}" />
+                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                   Text="{localization:Loc LivePlay_Accuracy}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="4" VerticalAlignment="Center" Width="130"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireFigureText}" Classes="FireFigure" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding StreakLabel}" />
+                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                   Text="{localization:Loc LivePlay_Streak}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="5" VerticalAlignment="Center" Width="190"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <Grid ColumnDefinitions="Auto,Auto,Auto"
+                              ColumnSpacing="{StaticResource FireSpaceSm}">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource FireFigureText}" Classes="FireFigure Inline Success"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="110"
+                                       Text="{Binding HitsLabel}" />
+                            <TextBlock Grid.Column="1" Theme="{StaticResource FireFigureText}" Classes="FireFigure Inline"
+                                       Foreground="{DynamicResource FireTextDim}" Text="/" />
+                            <TextBlock Grid.Column="2" Theme="{StaticResource FireFigureText}" Classes="FireFigure Inline Danger"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="70"
+                                       Text="{Binding MissesLabel}" />
+                        </Grid>
+                        <TextBlock Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                   Text="{localization:Loc LivePlay_HitsMisses}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ══ THE HIGHWAY (a native Vulkan surface in the real app) ════ -->
+            <Grid Grid.Row="1">
+                <Border x:Name="PlayingRedesignHighwayPlaceholder"
+                        Background="{DynamicResource FireSurfaceSunken}"
+                        BorderBrush="{DynamicResource FireBorderSeam}"
+                        BorderThickness="0,1,0,1">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Spacing="{StaticResource FireSpaceSm}">
+                        <TextBlock Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                                   Text="{localization:Loc PlayMode_Hud_Highway}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" HorizontalAlignment="Center"
+                                   Text="{localization:Loc PlayMode_Playing_Hint}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- The energy meter is what a struggling player needs most, so
+                     it spans the top of the highway at a height readable from
+                     the stool, and turns danger red, named, when it runs low. -->
+                <Border x:Name="PlayingRedesignEnergyPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                        Margin="{StaticResource FirePadPanel}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceRow}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel"
+                                   VerticalAlignment="Center"
+                                   Text="{localization:Loc PlayMode_RockMeter_HudCaption}" />
+                        <Panel Grid.Column="1" VerticalAlignment="Center">
+                            <ProgressBar Classes="FireMeter" Minimum="0" Maximum="1" Height="12"
+                                         IsVisible="{Binding !IsEnergyLow}"
+                                         Value="{Binding EnergyLevel}" />
+                            <ProgressBar Classes="FireMeter Danger" Minimum="0" Maximum="1" Height="12"
+                                         IsVisible="{Binding IsEnergyLow}"
+                                         Value="{Binding EnergyLevel}" />
+                        </Panel>
+                        <Border Grid.Column="2" Theme="{StaticResource FireTagBorder}" Classes="FireTag Danger"
+                                IsVisible="{Binding IsEnergyLow}">
+                            <TextBlock Text="{localization:Loc PlayMode_Energy_Low}" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <Button x:Name="PlayingRedesignPauseButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                        Margin="{StaticResource FirePadPanel}"
+                        Command="{Binding PauseCommand}"
+                        AutomationProperties.Name="{localization:Loc Gameplay_Pause}"
+                        Content="{localization:Loc Gameplay_Pause}" />
+            </Grid>
+
+            <!-- ══ PROGRESS + BAND ══════════════════════════════════════════ -->
+            <Border x:Name="PlayingRedesignFooter" Grid.Row="2" Theme="{StaticResource FireFooterBorder}" Classes="FireFooter">
+                <StackPanel Spacing="{StaticResource FireSpaceRow}">
+
+                    <!-- The section band keeps its height with no section, so the
+                         chrome does not jump when such a song starts. -->
+                    <Panel MinHeight="44">
+                        <StackPanel x:Name="PlayingRedesignSectionBlock"
+                                    IsVisible="{Binding HasSection}"
+                                    Spacing="{StaticResource FireSpaceXs}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Grid.Column="0" Theme="{StaticResource FireStatLabelText}" Classes="FireStatLabel" VerticalAlignment="Center"
+                                           Text="{localization:Loc PlayMode_Hud_Section}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding SectionLabel}" />
+                                <TextBlock Grid.Column="2" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Quiet"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding SectionCountLabel}" />
+                            </Grid>
+                            <ProgressBar Classes="FireMeter Thin" Minimum="0" Maximum="1"
+                                         Foreground="{DynamicResource FireTextMuted}"
+                                         Value="{Binding SectionProgress}" />
+                        </StackPanel>
+                    </Panel>
+
+                    <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell" HorizontalAlignment="Left"
+                                       TextAlignment="Left"
+                                       Text="{Binding ElapsedLabel}" />
+                            <TextBlock Grid.Column="1" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell Quiet"
+                                       Text="{Binding TotalLabel}" />
+                        </Grid>
+                        <ProgressBar x:Name="PlayingRedesignSongProgress"
+                                     Classes="FireMeter" Minimum="0" Maximum="1"
+                                     Value="{Binding SongProgress}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Panel>
+</UserControl>

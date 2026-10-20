@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:editor="using:DotCharter.UI.Views.Editor"
+             x:Class="DotCharter.UI.Views.Editor.AiChatDockView"
+             x:DataType="vm:AiChatDockViewModel"
+             x:CompileBindings="True">
+    <!-- The AI chat pane as a dock pane: the ViewLocator finds this view for the dock's
+         Context, and the pane itself binds the screen contract. -->
+    <editor:AiChatPaneView x:Name="AiChatPane" DataContext="{Binding Screen}" />
+</UserControl>

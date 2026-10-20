@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.TextDocumentDialogView"
+             x:DataType="contracts:ITextDocumentScreen"
+             x:CompileBindings="True">
+
+    <!-- A plain-text document read in the app (Help ▸ Usage statistics, the
+         licence): a sunken mono well that scrolls and wraps. Copy puts the text on
+         the clipboard; "Show the file" selects the copy on disk in the file
+         manager, which always exists — opening the .txt or .md with its default
+         app does not, on a machine with none for that extension. -->
+    <UserControl.Styles>
+        <Style Selector="Border.TextDocumentWell">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource FireRadiusField}" />
+            <Setter Property="Padding" Value="{DynamicResource FirePadCard}" />
+        </Style>
+        <Style Selector="SelectableTextBlock.TextDocumentText">
+            <Setter Property="FontFamily" Value="{DynamicResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{DynamicResource FireSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconInfo}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{Binding Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{Binding Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding !HasText}">
+                        <TextBlock Text="{Binding EmptyText}" />
+                    </Border>
+                    <Border x:Name="DocumentWell" Classes="TextDocumentWell" IsVisible="{Binding HasText}">
+                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                                      AllowAutoHide="False">
+                            <SelectableTextBlock x:Name="DocumentText" Classes="TextDocumentText"
+                                                 Text="{Binding Text}" />
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <Button Classes="DlgLink" Cursor="Hand"
+                                    Content="{localization:Loc TextDocument_ShowFile}"
+                                    Command="{Binding ShowFileCommand}"
+                                    IsVisible="{Binding CanShowFile}" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Classes="DlgAction" Content="{localization:Loc TextDocument_Copy}"
+                                    Command="{Binding CopyCommand}" IsVisible="{Binding HasText}" />
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                    Command="{Binding CloseCommand}" IsDefault="True" IsCancel="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

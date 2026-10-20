@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundFindingsView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Sound tab's FINDINGS section (#601): every issue on this selection, one row per
+         PROBLEM (InspectorFieldIssue.Fold, #117), with the export consequence stated, and the
+         way to the Issues tab under them. Its rail entry carries the count (red when a finding
+         would make the export refuse the package). Classes bind directly and carry NO
+         transition: an error must appear instantly. -->
+    <StackPanel Spacing="{StaticResource SpaceXs}">
+        <ItemsControl x:Name="SoundFindingsList" ItemsSource="{Binding SelectionFieldIssues}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="{StaticResource SpaceXs}" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="inspector:InspectorFieldIssue">
+                    <Border Classes="FieldIssue"
+                            Classes.Error="{Binding BlocksExport}"
+                            Classes.Warn="{Binding !BlocksExport}"
+                            ToolTip.Tip="{Binding Tooltip}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <PathIcon Grid.Column="0" Data="{DynamicResource IconAlert}"
+                                      Margin="{StaticResource GapRightSm}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Code}"
+                                       FontWeight="Bold"
+                                       Margin="{StaticResource GapRightSm}" />
+                            <TextBlock Grid.Column="2" TextWrapping="Wrap"><Run Text="{Binding Message}" /><Run Text=" " /><Run Text="{Binding Detail}" /></TextBlock>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{localization:Loc Inspector_Findings_None}" IsVisible="{Binding !HasSelectionIssues}"
+                   FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+        <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link" HorizontalAlignment="Left"
+                Content="{localization:Loc Inspector_Findings_OpenInIssues}"
+                AutomationProperties.Name="{localization:Loc Inspector_Findings_OpenInIssues}"
+                ToolTip.Tip="{localization:Loc Inspector_Issue_SelectionBadgeTip}"
+                Command="{Binding ShowSelectionIssuesCommand}"
+                IsVisible="{Binding HasSelectionIssues}" />
+    </StackPanel>
+</UserControl>

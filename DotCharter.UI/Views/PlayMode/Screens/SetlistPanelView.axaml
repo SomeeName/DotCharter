@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.SetlistPanelView"
+             x:DataType="contracts:ISetlistPanel"
+             x:CompileBindings="True">
+    <!-- Song Select's SETLIST panel (#646), at the foot of the detail rail and
+         visible with or without a picked song, so a setlist can be played
+         straight from the screen. Bound to the ISetlistPanel contract only, so
+         the shipped rail (PlaySetlistViewModel) and the redesigned one in the
+         gallery (FakeSetlistPanel) host this same markup. Solo only. -->
+    <!-- Three rows: the header and the two verbs stay put, and the middle
+         (picker, name, songs) scrolls when the rail caps the panel's height
+         (SongSelectDetailRailView keeps the picked song's details and its Play
+         button in view). -->
+    <Border x:Name="SongSelectSetlistPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="{StaticResource FireSpaceMd}">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_Setlist_Eyebrow}" />
+                <TextBlock Grid.Column="1" x:Name="SetlistSummary" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                           Text="{Binding SelectedListSummary}" />
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" x:Name="SetlistBodyScroll"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                    <TextBlock x:Name="SetlistNoneText" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding !HasLists}"
+                               Text="{localization:Loc PlayMode_Setlist_None}" />
+
+                    <!-- The picker, and New beside it: a setlist is made empty and
+                         filled from the list, one "Add to setlist" at a time. -->
+                    <Grid x:Name="SetlistPickerRow" ColumnDefinitions="*,Auto"
+                          ColumnSpacing="{StaticResource FireSpaceMd}">
+                        <ComboBox Grid.Column="0" x:Name="SetlistPicker" Classes="FireCombo"
+                                  HorizontalAlignment="Stretch"
+                                  IsVisible="{Binding HasLists}"
+                                  AutomationProperties.Name="{localization:Loc PlayMode_Setlist_Picker}"
+                                  ItemsSource="{Binding Lists}"
+                                  SelectedItem="{Binding SelectedList, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:ISetlistOption">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Grid.Column="1" x:Name="SetlistNewButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="{localization:Loc PlayMode_Setlist_New}"
+                                AutomationProperties.Name="{localization:Loc PlayMode_Setlist_New}"
+                                Command="{Binding NewSetlistCommand}">
+                            <PathIcon Data="{DynamicResource IconPlus}" Width="11" Height="11" />
+                        </Button>
+                    </Grid>
+
+                    <!-- Rename in place: a field with a pencil, so it does not read as
+                         a second copy of the picker's label. Committed on focus loss
+                         (one save per rename, not per keystroke), as the rig's setlists. -->
+                    <Border x:Name="SetlistNameField" Theme="{StaticResource FireFieldBorder}" Classes="FireField"
+                            IsVisible="{Binding HasSelectedList}">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <PathIcon Grid.Column="0" Data="{DynamicResource IconPencil}" Width="11" Height="11"
+                                      Margin="12,0,4,0" VerticalAlignment="Center"
+                                      Foreground="{DynamicResource FireTextMuted}" />
+                            <TextBox Grid.Column="1" x:Name="SetlistNameBox" Classes="FireFieldInput"
+                                     MaxLength="48"
+                                     AutomationProperties.Name="{localization:Loc PlayMode_Setlist_Name}"
+                                     ToolTip.Tip="{localization:Loc PlayMode_Setlist_Name}"
+                                     PlaceholderText="{localization:Loc PlayMode_Setlist_Name}"
+                                     Text="{Binding SelectedListName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock x:Name="SetlistEmptyText" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding ShowsEmptyHint}"
+                               Text="{localization:Loc PlayMode_Setlist_Empty}" />
+
+                    <!-- The picked setlist's songs, in play order. -->
+                    <ItemsControl x:Name="SetlistEntries" ItemsSource="{Binding Entries}"
+                                  IsVisible="{Binding HasEntries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:ISetlistEntryRow">
+                                <Grid ColumnDefinitions="22,*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}" Margin="0,0,0,6">
+                                    <TextBlock Grid.Column="0" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                               VerticalAlignment="Top" Text="{Binding Number}" />
+                                    <StackPanel Grid.Column="1" Spacing="{StaticResource FireSpaceXxs}">
+                                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                   TextTrimming="CharacterEllipsis" Text="{Binding Title}" />
+                                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                                   TextTrimming="CharacterEllipsis" Text="{Binding Detail}"
+                                                   IsVisible="{Binding HasDetail}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="{localization:Loc PlayMode_Setlist_RemoveEntry}"
+                                            AutomationProperties.Name="{localization:Loc PlayMode_Setlist_RemoveEntry}"
+                                            Command="{Binding $parent[ItemsControl].((contracts:ISetlistPanel)DataContext).RemoveSetlistEntryCommand}"
+                                            CommandParameter="{Binding}">
+                                        <PathIcon Data="{DynamicResource IconClose}" Width="9" Height="9"
+                                                  Foreground="{DynamicResource FireTextMuted}" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Button x:Name="SetlistDeleteButton" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                            HorizontalAlignment="Left"
+                            IsVisible="{Binding HasSelectedList}"
+                            AutomationProperties.Name="{localization:Loc PlayMode_Setlist_Delete}"
+                            Command="{Binding DeleteSetlistCommand}"
+                            Content="{localization:Loc PlayMode_Setlist_Delete}" />
+
+                    <TextBlock x:Name="SetlistNotice" Theme="{StaticResource FireStatusText}" Classes="FireStatusText Warn"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding Notice}" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Add takes Song Select's song, the rail's path and the current
+                 practice speed; Play runs the picked list from its first song. -->
+            <StackPanel Grid.Row="2" Spacing="{StaticResource FireSpaceMd}">
+                <Button x:Name="SetlistAddButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        AutomationProperties.Name="{localization:Loc PlayMode_Setlist_Add}"
+                        IsEnabled="{Binding CanAddSong}"
+                        Command="{Binding AddSongToSetlistCommand}"
+                        Content="{localization:Loc PlayMode_Setlist_Add}" />
+                <Button x:Name="SetlistPlayButton" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Accent"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        AutomationProperties.Name="{localization:Loc PlayMode_Setlist_Play}"
+                        IsEnabled="{Binding CanPlaySelected}"
+                        Command="{Binding StartSetlistCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceMd}">
+                        <PathIcon Data="{DynamicResource IconPlay}" Width="11" Height="11" VerticalAlignment="Center" />
+                        <TextBlock VerticalAlignment="Center" Text="{localization:Loc PlayMode_Setlist_Play}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

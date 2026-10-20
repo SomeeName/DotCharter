@@ -1,0 +1,166 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the inspector grammar — see `Views/Editor/InspectorStyles.axaml`,
+         which merges this file and its siblings IN ORDER. The 0.36 redesign chrome: the scope bar, the issue marks and the dense
+         form metrics that came with it. -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         0.36 inspector redesign chrome:
+
+           ScopeBar    — the one-line "what will this edit touch" sentence on
+                         every card header. Principle 2 of the redesign: no edit
+                         may be broader than the sentence above it.
+           PendingBar  — an unsaved buffer made visible (the fingering draft),
+                         replacing a disabled Save button 200 px away.
+           FieldIssue  — a validation finding rendered ON the field that causes
+                         it, .Error = blocks the export, .Warn = important.
+           Disclosure  — replaces every Expander in the tab. An Expander's
+                         collapsed ContentPresenter never realises its child
+                         (the same trap the Settings search rule names) and
+                         nesting them produced a six-level tree; a ToggleButton
+                         + an IsVisible-bound panel keeps the rows in the tree.
+         The Sound tab's work-queue strip, "needs work" tiles and short-pane
+         footer classes went with #601: its navigation row, Task section and
+         rail carry those jobs on local values and shared themes.
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <Style Selector="Border.ScopeBar">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderRow}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+    </Style>
+    <Style Selector="Border.ScopeBar TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="Border.PendingBar">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+    </Style>
+    <Style Selector="Border.PendingBar TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- A finding, on the field that caused it. The 3 px left bar is the same
+         mark the dialog and settings grammars use for a notice — a notice is a
+         notice, and these three surfaces are one product. -->
+    <Style Selector="Border.FieldIssue">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+    </Style>
+    <Style Selector="Border.FieldIssue.Warn">
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+    </Style>
+    <Style Selector="Border.FieldIssue.Warn TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="Border.FieldIssue.Warn PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
+    <Style Selector="Border.FieldIssue.Error">
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+        <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+    </Style>
+    <Style Selector="Border.FieldIssue.Error TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="Border.FieldIssue.Error PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <Style Selector="Border.FieldIssue TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.FieldIssue PathIcon">
+        <Setter Property="Width" Value="12" />
+        <Setter Property="Height" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Disclosure header (replaces Expander). Its caption is the layer's
+         SIGNATURE MARK — a mono eyebrow, 9.5 px on .24em tracking, dim at rest
+         and accent when the section is open — over the card it reveals. That
+         lockup is the single most repeated element in the mockups, and these
+         labels were already eyebrow-shaped, so no copy was invented for it.
+         The chevron points right when collapsed and rotates down when open. -->
+    <Style Selector="ToggleButton.Disclosure">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.Disclosure /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+    </Style>
+    <Style Selector="ToggleButton.Disclosure:checked /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.Disclosure:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <Style Selector="TextBlock.DisclosureLabel">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.Disclosure:checked TextBlock.DisclosureLabel">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector="PathIcon.DisclosureChevron">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="RenderTransform" Value="rotate(0deg)" />
+    </Style>
+    <Style Selector="ToggleButton.Disclosure:checked PathIcon.DisclosureChevron">
+        <Setter Property="RenderTransform" Value="rotate(90deg)" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+
+    <!-- Read-only provenance badge (▸ MORE): a field the model round-trips but
+         nothing in the app can author. Invisible is worse than read-only — a
+         charter destroys it without knowing it was there. -->
+    <Style Selector="Border.ProvenanceBadge">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="Margin" Value="{StaticResource FireGapTag}" />
+    </Style>
+    <Style Selector="Border.ProvenanceBadge TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+</Styles>

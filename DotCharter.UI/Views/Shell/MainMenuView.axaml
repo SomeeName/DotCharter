@@ -1,0 +1,54 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shell="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
+             xmlns:menus="using:DotCharter.UI.Views.Shell.Menus"
+             x:Class="DotCharter.UI.Views.Shell.MainMenuView"
+             x:DataType="viewModels:MainWindowViewModel">
+    <UserControl.Styles>
+        <!-- The chart editor's chrome grammar (menu rows, dropdown panels,
+             flyouts, ComboBox popups) on the Fire layer. -->
+        <StyleInclude Source="avares://DotCharter/Views/Shell/ShellChromeStyles.axaml" />
+    </UserControl.Styles>
+
+    <!-- The editor's TOP-LEVEL NAVIGATION lives here, beside the menu, and it is
+         the whole of it (0.50). It replaced the 54 px icon rail down the left
+         edge, which was not navigation at heart: six of its eight icons toggled
+         PANELS, which the View menu and the tool rail's right-hand icons already
+         do, and it spent the one axis this screen cannot spare — the timeline is
+         the app, everything else is a side panel. CHART / LIBRARY / SETTINGS are
+         the three genuine top-level destinations; the game shell is a File-menu
+         entry because it is not an editor surface at all. -->
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+    <!-- EditorMenu, not Menu: opening a header with the pointer used to run
+         through the FIRST one on the way (Avalonia's DefaultMenuInteractionHandler
+         answers the bar's Opened event by selecting item 0), which is the reported
+         "for some reason File flashes up". See EditorMenu.cs — it is a Menu in
+         every other respect, style key included.
+         x:Name is load-bearing: MainMenuView.TopLevelMenus() finds the bar by it
+         so MenuFlyoutPrewarmer can realize the dropdowns after the first frame.
+         Each top-level menu is its OWN file under Views/Shell/Menus (#653): a
+         MenuItem subclass (Menus/EditorTopMenu.cs keeps its style key MenuItem)
+         that carries its FireMenuTop header and every row under it. -->
+    <shell:EditorMenu x:Name="EditorMenuBar" Background="Transparent">
+        <menus:FileMenu />
+        <menus:EditMenu />
+        <menus:TempoMapMenu />
+        <menus:ArrangementsMenu />
+        <menus:VocalsMenu />
+        <menus:ToolsMenu />
+        <menus:ViewMenu />
+        <menus:HelpMenu />
+    </shell:EditorMenu>
+
+    <!-- The CHART / LIBRARY / SETTINGS switcher and the separated "back to
+         Play Mode" button both lived here from 0.50 to 0.62. They are now
+         `Views/Shell/ActivityRailView`, on the left edge of the whole shell,
+         where the Graphite workbench puts navigation — and the rail carries
+         the rig and (soon) Home besides, which a 38 px bar had no room for.
+         The switcher's two hard-won rules went with it: RadioButtons, not
+         ToggleButtons, and the tab indices read off the shell's own constants
+         by `UI/EditorChromeTests`. What is left in this bar is the MENU. -->
+    </StackPanel>
+</UserControl>

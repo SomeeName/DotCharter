@@ -1,0 +1,395 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. Sections: Section header, Data-list value column, Overlay, Empty state,
+         Activity feed, Sample surface, String identity chip, Key hint,
+         Consequence line. -->
+
+    <Styles.Resources>
+        <ControlTheme x:Key="FireOverlayCloseButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.FireOverlayClose">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Width" Value="{StaticResource FireIconButtonSize}" />
+                <Setter Property="Height" Value="{StaticResource FireIconButtonSize}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Top" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusAdorner">
+                    <FocusAdornerTemplate>
+                        <Border BorderBrush="{DynamicResource FireAccentPale}"
+                                BorderThickness="{StaticResource FireFocusRingThickness}"
+                                Margin="-3"
+                                CornerRadius="{StaticResource FireRadiusField}" />
+                    </FocusAdornerTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireOverlayClose /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="^.FireOverlayClose:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+            </Style>
+            <Style Selector="^.FireOverlayClose:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+            <Style Selector="^.FireOverlayClose:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Border families are ControlThemes (#240): a Border wears
+             Theme="{StaticResource <Family>Border}" AND its class, and every
+             rule here is gated on that class. UI/BorderControlThemeTests. -->
+        <ControlTheme x:Key="FireKickerRuleBorder" TargetType="Border">
+            <!-- Graphite drops the accent dash before a kicker: decoration that
+                 repeated on every screen and said nothing. Set IsVisible back to
+                 restore it. -->
+            <Style Selector="^.FireKickerRule">
+                <Setter Property="IsVisible" Value="False" />
+                <Setter Property="Width" Value="22" />
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireOverlayScrimBorder" TargetType="Border">
+            <!-- ══ Overlay ═════════════════════════════════════════════════════════
+                 A modal layer over the whole app: a Panel in the root Grid, gated by
+                 `IsVisible`.
+
+                 **THE SCRIM IS TRANSLUCENT, AND THAT IS THE POINT.** It painted the
+                 opaque `FireOverlayFill` until 0.53 and every dialog therefore covered
+                 the surface it opened over completely, which read as navigating to a
+                 new screen. The owner: "all modals should stay modals not own screen".
+                 `FireScrimFill` is the same base colour at ~85 % — deep enough that
+                 body text over it stays readable, which is why the opaque one was
+                 reached for in the first place. **The alpha lives in the BRUSH, never
+                 in `Opacity`**, so there is exactly one place to get it right.
+                 `FireOverlayFill` is still fully opaque and still correct — for the
+                 ground a SCREEN stands on, which has nothing behind it worth seeing.
+                 Both directions are pinned by `FireTokenValueTests`.
+
+                 **AND IT ALWAYS CARRIES AN EXPLICIT CLOSE CONTROL** —
+                 `Button.FireOverlayClose` in the card's top-right. Esc is not a
+                 substitute: this menu is controller-navigable, and a layer with no
+                 visible way out is a trap.
+
+                 Airspace: an overlay over the native Vulkan 3D panel loses to the
+                 child HWND (see DotCharter.UI/AGENTS.md). Hide the 3D surface or use
+                 the freeze-frame — an opaque scrim does not solve it. -->
+            <!-- `FireScrimFill`, not `FireOverlayFill` — see the overlay note above and
+                 the token's own comment for the full reasoning. -->
+            <Style Selector="^.FireOverlayScrim">
+                <Setter Property="Background" Value="{DynamicResource FireScrimFill}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="VerticalAlignment" Value="Stretch" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireOverlayCardBorder" TargetType="Border">
+            <!-- The centred card inside it. `ClipToBounds` is not decoration: content
+                 that outgrows the card must clip or scroll, never paint over the
+                 scrim's edge. -->
+            <Style Selector="^.FireOverlayCard">
+                <Setter Property="Background" Value="{DynamicResource FirePanelFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusScreen}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireShadowScreen}" />
+                <Setter Property="ClipToBounds" Value="True" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEmptyBannerBorder" TargetType="Border">
+            <!-- …and the other shape of empty. When the reason the panel is empty is a
+                 CONFIGURATION problem — no server set, no peers allowed — the spec is
+                 explicit that it becomes an inline BANNER above the real content, not
+                 the whole screen: the screen still has to show what it is FOR.
+                 Amber by default: this needs attention, it has not failed. -->
+            <Style Selector="^.FireEmptyBanner">
+                <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+            </Style>
+            <Style Selector="^.FireEmptyBanner.Accent">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderFaint}" />
+            </Style>
+            <Style Selector="^.FireEmptyBanner.Danger">
+                <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireStringChipBorder" TargetType="Border">
+            <!-- ══ String identity chip ════════════════════════════════════════════
+                 `Get Ready.dc.html`'s tuner: a 3 px bar in the STRING's own fixed
+                 identity colour, at the head of that string's row. It is the same mark
+                 the highway and the string gutter use, which is the whole point of the
+                 identities being fixed — the chip in the tuner has to be the lane on
+                 the board.
+
+                 Geometry ONLY. The colour is per row and arrives as a token KEY through
+                 `FireTokenBrushConverter`, so the six values still live once in
+                 `FireTokens.axaml` and nothing here can reassign one. Shorter than the
+                 3 px SELECTION bar (`FireBarHeight`) on purpose: a selection bar and an
+                 identity bar must not be the same mark. -->
+            <Style Selector="^.FireStringChip">
+                <Setter Property="Width" Value="{StaticResource FireBarWidth}" />
+                <Setter Property="Height" Value="15" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireValueCellText" TargetType="TextBlock">
+            <!-- ══ Data-list value column ══════════════════════════════════════════
+                 Machine data, right-aligned, in a FIXED-width column. The width is the
+                 whole point: auto-sizing gives every row an individually correct
+                 column and the list a staircase, which is exactly what the spec means
+                 by "do NOT auto-size, the alignment is the point". Widths come from
+                 `FireColValue*`; the class carries the font and the alignment. -->
+            <Style Selector="^.FireValueCell">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="TextAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style Selector="^.FireValueCell.Quiet">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            </Style>
+
+            <!-- A value cell that carries a VERDICT rather than a number: the tuner's
+                 per-string state column (IN TUNE / -3 CENTS / PLUCK). The column keeps
+                 its width and its alignment — only the meaning colours it, which is
+                 what lets the states be told apart down the list at a glance.
+                 `TextBlock.FireMono`'s variants cannot serve here: they are left-aligned
+                 inline figures, not a fixed right-hand column. -->
+            <Style Selector="^.FireValueCell.Success">
+                <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+            </Style>
+
+            <Style Selector="^.FireValueCell.Warn">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+
+            <Style Selector="^.FireValueCell.Danger">
+                <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireColumnHeadText" TargetType="TextBlock">
+            <!-- The caption over a value column. Same width, same alignment — a
+                 caption that is not right-aligned over a right-aligned column is the
+                 quickest way to make a board look broken. -->
+            <Style Selector="^.FireColumnHead">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackEyebrow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="TextAlignment" Value="Right" />
+            </Style>
+
+            <Style Selector="^.FireColumnHead.Lead">
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="TextAlignment" Value="Left" />
+            </Style>
+
+            <!-- The sort arrow on the sorted column: the accent, a size up. Dim and eyebrow-sized
+                 beside the funnel it read as a second arrow (Song Select review, 2026-09-24). -->
+            <Style Selector="^.FireColumnHead.Glyph">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireRowCountText" TargetType="TextBlock">
+            <!-- The optional trailing count on a nav row. -->
+            <Style Selector="^.FireRowCount">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEmptyKickerText" TargetType="TextBlock">
+            <Style Selector="^.FireEmptyKicker">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackEyebrow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEmptyBodyText" TargetType="TextBlock">
+            <Style Selector="^.FireEmptyBody">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightRow}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireFeedLineText" TargetType="TextBlock">
+            <!-- The sentence. One size (12.5), three roles: the actor is the only
+                 emphasised span, the verb is running text, the subject is the violet
+                 tint that says "a thing in the app". Separate TextBlocks rather than
+                 Runs so each span can wrap and trim on its own inside a rail. -->
+            <Style Selector="^.FireFeedLine">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style Selector="^.FireFeedLine.Actor">
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+            </Style>
+
+            <Style Selector="^.FireFeedLine.Subject">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireFeedMetaText" TargetType="TextBlock">
+            <!-- …and its meta line. Mono, because it is a score and a time: the two
+                 things rule 1 says can never render as running text. Dim rather than
+                 faint — `FireMono.Faint` is the "end of list" tone. -->
+            <Style Selector="^.FireFeedMeta">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ Key hint ════════════════════════════════════════════════════════
+             The footer's "ENTER START · T TUNER · ESC BACK" strip. Mono caps at the
+             faintest step, widely tracked — it is the quietest thing on the screen
+             and must stay that way, because a hint that competes with the primary
+             action reads as another button.
+
+             Named rather than spelled `FireMono Faint` inline so the strip cannot
+             drift between screens, and so a test can FIND the printed hints and
+             check each one against a real handler. -->
+        <ControlTheme x:Key="FireKeyHintText" TargetType="TextBlock">
+            <!-- Graphite: a key hint is a sentence ("Esc cancels"), read from the
+                 guitar stool, so the UI face at the small body size in muted ink —
+                 never the faint 11 px mono it was. -->
+            <Style Selector="^.FireKeyHint">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireConsequenceText" TargetType="TextBlock">
+            <!-- ══ Consequence line ════════════════════════════════════════════════
+                 §3.8: every configuration-changing control states what it will do, in
+                 ONE sentence, next to it. Distinct from `FireRowDesc` (which describes
+                 what a row IS) — this describes what the control WILL DO if you use it,
+                 so it sits under the action rather than under the label, and it stays
+                 legible when the control it belongs to is disabled. -->
+            <Style Selector="^.FireConsequence">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXsSnug}" />
+            </Style>
+        </ControlTheme>
+        <!-- Panel families are ControlThemes too (#428): a global `StackPanel.X` /
+             `Grid.X` rule was attached to EVERY StackPanel / Grid of the app
+             (1,649 and 2,009 on the prewarmed shell), worn or not. A panel wears
+             Theme="{StaticResource <Family>Panel|Grid}" AND its class. The old
+             CHILD rules (`Grid.FirePopoverRow > TextBlock`, …) were attached to
+             every child of every Grid / StackPanel; their one setter is now a
+             local value on the children that had it. UI/StyleIncludeScopeTests. -->
+        <ControlTheme x:Key="FireSectionHeaderPanel" TargetType="StackPanel">
+            <!-- ══ Section header ══════════════════════════════════════════════════
+                 "It appears on every screen" — the spec's words, and the reason it is
+                 a component rather than a per-screen stack of two TextBlocks. A mono
+                 kicker over a Chakra title, optionally with a 22 × 1 px violet rule
+                 running out to the LEFT of the kicker.
+
+                 Compose it as
+                     <StackPanel Theme="{StaticResource FireSectionHeaderPanel}" Classes="FireSectionHeader">
+                       <StackPanel Theme="{StaticResource FireKickerPanel}" Classes="FireKicker">
+                         <Border Classes="FireKickerRule" />
+                         <TextBlock Classes="FireEyebrow" Text="WEAK SPOTS" />
+                       </StackPanel>
+                       <TextBlock Classes="FireTitle" Text="…" />
+                     </StackPanel>
+                 The kicker row is its own panel so the rule is optional without the
+                 title moving. -->
+            <Style Selector="^.FireSectionHeader">
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceSmPlus}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireKickerPanel" TargetType="StackPanel">
+            <Style Selector="^.FireKicker">
+                <Setter Property="Orientation" Value="Horizontal" />
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceLg}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEmptyStatePanel" TargetType="StackPanel">
+            <!-- ══ Empty state ═════════════════════════════════════════════════════
+                 NEVER a lone icon in a large box. Three parts, in this order: a mono
+                 kicker naming what is missing, ONE concrete sentence, and the action
+                 that fixes it (a `Button.FireGhost` or a single `Button.FirePrimary`).
+                 "No data" with no next step is the dead panel this exists to remove.
+
+                 `MaxWidth` is on the class deliberately — an empty state stretched
+                 across a 1320 px screen reads as a layout fault. Its TextBlocks are
+                 centred LOCALLY (`TextAlignment="Center"`): a child rule here would
+                 be attached to the child of every StackPanel in the app (#428). -->
+            <Style Selector="^.FireEmptyState">
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceLg}" />
+                <Setter Property="MaxWidth" Value="420" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+
+    <Style Selector="Button.FireOverlayClose PathIcon">
+        <Setter Property="Width" Value="13" />
+        <Setter Property="Height" Value="13" />
+        <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+
+
+</Styles>

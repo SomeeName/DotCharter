@@ -1,0 +1,547 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.PlayMode"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:leaderboards="clr-namespace:DotCharter.Services.Gameplay.Leaderboards;assembly=DotCharter.Services"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.ResultsView"
+             x:DataType="vm:PlayModeViewModel">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter/Views/PlayMode/PlayModeThemes.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         Results. 0.37.1 rework: the second-most-seen screen in the game
+         was a 640 px column of bare label:value pairs and un-carded lists —
+         a screen you SCROLL, not one you read. It now uses the same
+         content-screen chrome as Stats: the header block with the grade
+         medal as the trailing element, a four-tile figure board whose ONE
+         hero tile is the score (R4: exactly one accent-tinted figure), and
+         each following block on its own lit panel with a section title.
+
+         The reveal contract is unchanged and load-bearing: ResultScoreText
+         is UNBOUND (ResultsView.axaml.cs counts it up), and GradeStamp /
+         FcStamp / NewRecordFlash are driven by transform+opacity from the
+         same controller — keep those four x:Names and GradeStamp/FcStamp's
+         RenderTransformOrigin.
+         ══════════════════════════════════════════════════════════════ -->
+    <!-- Hosted by PlayModeView, which declares this view with the
+         IsResultsScreen gate and DRIVES the reveal through it: StartReveal /
+         CancelReveal when IsResultsScreen flips, SkipReveal on any key or
+         click anywhere on Play Mode. The reveal itself lives in this view's
+         code-behind, next to the four controls it animates. Lifted out of
+         PlayModeView.axaml in #294, markup unchanged. -->
+    <ScrollViewer x:Name="ResultsScreenRoot"
+                  VerticalScrollBarVisibility="Auto">
+        <!-- P0.2 (resolution audit §4): the screen was a single column under
+             a LITERAL MaxWidth="1120" — `ratio` 0.25, the same 1120 px on a
+             1080p window and on a 4K one. Two changes, no change to WHAT is
+             shown:
+               · the cap is now `FireColumnMaxWidthLg` (1040, and 1400 above
+                 the wide breakpoint), i.e. the token lane B shipped for
+                 exactly this — a full-page reading column;
+               · above the breakpoint the body becomes TWO columns. The run
+                 itself (figures, the three verbs, listen-back) stays on the
+                 left and the per-section breakdown, timing, leaderboard and
+                 library action move BESIDE it instead of a screen-height
+                 scroll below it.
+             Both columns exist at every width: by default each spans the
+             grid and they stack in two rows, which is byte-for-byte the old
+             reading order. Only `Grid.Row`/`Grid.Column`/`Grid.ColumnSpan`
+             move, and they move from a `Window.Wide` selector — no
+             code-behind, nothing duplicated, nothing hidden. -->
+        <Grid x:Name="ResultsColumn"
+              MaxWidth="{DynamicResource FireColumnMaxWidthLg}"
+              HorizontalAlignment="Stretch"
+              Margin="{StaticResource ScreenInset}"
+              ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+              ColumnSpacing="{StaticResource SpaceXl}"
+              RowSpacing="{StaticResource SpaceXl}">
+            <StackPanel x:Name="ResultsPrimaryColumn"
+                        Spacing="{StaticResource SpaceXl}">
+
+                <Grid ColumnDefinitions="*,16,Auto">
+                    <StackPanel Grid.Column="0" Spacing="{StaticResource SpaceXxs}"
+                                VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc PlayMode_Nav_Play}" Classes="Eyebrow" />
+                        <TextBlock Theme="{StaticResource ScreenTitleText}" Text="{localization:Loc PlayMode_Results_Title}" Classes="ScreenTitle" />
+                        <Border Theme="{StaticResource HeaderRuleBorder}" Classes="HeaderRule" />
+                        <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{Binding FlowSongTitle}" Classes="ScreenSubtitle"
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="{StaticResource GapTopXs}" />
+                    </StackPanel>
+                    <!-- Grade stamp + FC badge: scale/fade in after the count-up
+                         (transform/opacity only; transitions attached by the
+                         reveal controller). The FC badge stamps in a beat after
+                         the grade and only when the run was a full combo
+                         (IsVisible is VM-owned truth, so no empty placeholder).
+                         It is the screen's crest, so it sits with the title
+                         rather than as a sixth cell of a stat strip. -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                Spacing="{StaticResource SpaceMd}" VerticalAlignment="Center">
+                        <Border x:Name="GradeStamp"
+                                Background="{DynamicResource AccentSubtle}"
+                                BorderBrush="{DynamicResource AccentFaint}" BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusMd}" Padding="22,6" VerticalAlignment="Center"
+                                RenderTransformOrigin="50%,50%">
+                            <!-- The size is a STYLE (`TextBlock.GradeStampFigure`
+                                 below), never a local FontSize: a local value
+                                 outranks every style setter, so the Wide step
+                                 would be silently ignored. -->
+                            <TextBlock Theme="{StaticResource GradeStampFigureText}" x:Name="ResultGradeFigure" Text="{Binding RunResults.ResultGrade}" Classes="GradeStampFigure"
+                                       Foreground="{DynamicResource AccentColor}" />
+                        </Border>
+                        <Border x:Name="FcStamp"
+                                CornerRadius="{StaticResource RadiusMd}" Padding="12,6" VerticalAlignment="Center"
+                                BorderThickness="2" BorderBrush="{DynamicResource SuccessColor}"
+                                RenderTransformOrigin="50%,50%"
+                                IsVisible="{Binding RunResults.ResultIsFullCombo}"
+                                ToolTip.Tip="{localization:Loc PlayMode_FullCombo_Tip}">
+                            <TextBlock Text="{localization:Loc PlayMode_FullCombo_Badge}" FontWeight="Bold"
+                                       FontSize="{StaticResource FontSizeLg}"
+                                       Foreground="{DynamicResource SuccessColor}" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <!-- The run, as four figures. Score is the hero (the one
+                     accent-tinted tile this screen gets). -->
+                <Grid x:Name="ResultsTileBoard" ColumnDefinitions="*,12,*,12,*,12,*">
+                    <Border Theme="{StaticResource PlayStatTileBorder}" Grid.Column="0" Classes="PlayStatTile Hero">
+                        <Grid>
+                            <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+                            <StackPanel Spacing="{StaticResource SpaceXs}">
+                                <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc LivePlay_Score}" Classes="Eyebrow" />
+                                <!-- Unbound on purpose: the staged reveal in
+                                     PlayModeView.axaml.cs counts this up from 0 to
+                                     ResultScoreValue whenever the screen enters
+                                     (any key / click skips to the final value). -->
+                                <TextBlock x:Name="ResultScoreText" Theme="{StaticResource StatFigureText}" Classes="StatFigure Mono" />
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceMd}">
+                                    <TextBlock Text="{Binding RunResults.ResultImprovement}" Theme="{StaticResource StatUnitText}" Classes="StatUnit Mono"
+                                               IsVisible="{Binding RunResults.ResultImprovement, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    <!-- Record flash: the reveal pulses Opacity only;
+                                         IsVisible stays VM-owned truth. -->
+                                    <TextBlock x:Name="NewRecordFlash"
+                                               Text="{localization:Loc PlayMode_Results_NewRecord}"
+                                               Foreground="{DynamicResource SuccessColor}" FontWeight="Bold"
+                                               FontSize="{StaticResource FontSizeSm}"
+                                               VerticalAlignment="Bottom"
+                                               IsVisible="{Binding RunResults.IsNewBestScore}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Theme="{StaticResource PlayStatTileBorder}" Grid.Column="2" Classes="PlayStatTile">
+                        <Grid>
+                            <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+                            <StackPanel Spacing="{StaticResource SpaceXs}">
+                                <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc LivePlay_Accuracy}" Classes="Eyebrow" />
+                                <TextBlock Text="{Binding RunResults.ResultAccuracy}" Theme="{StaticResource StatFigureText}" Classes="StatFigure Mono" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Theme="{StaticResource PlayStatTileBorder}" Grid.Column="4" Classes="PlayStatTile">
+                        <Grid>
+                            <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+                            <StackPanel Spacing="{StaticResource SpaceXs}">
+                                <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc LivePlay_Streak}" Classes="Eyebrow" />
+                                <TextBlock Text="{Binding RunResults.ResultStreak}" Theme="{StaticResource StatFigureText}" Classes="StatFigure Mono" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Theme="{StaticResource PlayStatTileBorder}" Grid.Column="6" Classes="PlayStatTile">
+                        <Grid>
+                            <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+                            <StackPanel Spacing="{StaticResource SpaceXs}">
+                                <TextBlock Theme="{StaticResource EyebrowText}" Text="{localization:Loc LivePlay_HitsMisses}" Classes="Eyebrow" />
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}">
+                                    <TextBlock Text="{Binding RunResults.ResultHits}" Theme="{StaticResource StatFigureText}" Classes="StatFigure Mono"
+                                               Foreground="{DynamicResource SuccessColor}" />
+                                    <TextBlock Theme="{StaticResource StatFigureText}" Text="/" Classes="StatFigure"
+                                               Foreground="{DynamicResource TextDim}" />
+                                    <TextBlock Text="{Binding RunResults.ResultMisses}" Theme="{StaticResource StatFigureText}" Classes="StatFigure Mono"
+                                               Foreground="{DynamicResource DangerColor}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Plain-language best comparison: makes it unmistakable that a
+                     worse run leaves the stored best standing. -->
+                <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{Binding RunResults.ResultBestSummary}" HorizontalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap" Classes="ScreenSubtitle"
+                           IsVisible="{Binding RunResults.ResultBestSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                <!-- The technique line (#645): the notes hit without their palm mute, bend,
+                     slide or vibrato. Hidden when there were none. -->
+                <TextBlock x:Name="ResultsTechniqueLine" Theme="{StaticResource ScreenSubtitleText}"
+                           Text="{Binding RunResults.ResultTechniqueLine}" HorizontalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap" Classes="ScreenSubtitle"
+                           Foreground="{DynamicResource WarningColor}"
+                           IsVisible="{Binding RunResults.ResultTechniqueLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                <!-- What to do next, immediately under the numbers — the three
+                     actions were previously below every list, a full scroll
+                     away from the result they respond to. -->
+                <!-- SETLIST (#646): where the setlist stands, or, on its last
+                     song, that it is done. Every setlist element here binds the
+                     IResultsSetlist contract. -->
+                <StackPanel x:Name="ResultsSetlistRow" Spacing="{StaticResource SpaceXs}"
+                            HorizontalAlignment="Center"
+                            DataContext="{Binding Setlists}" x:DataType="contracts:IResultsSetlist"
+                            IsVisible="{Binding IsRunning}">
+                    <TextBlock x:Name="ResultsSetlistProgress" Theme="{StaticResource ScreenSubtitleText}" Classes="ScreenSubtitle"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                               IsVisible="{Binding !IsFinished}"
+                               Text="{Binding ProgressLabel}" />
+                    <TextBlock x:Name="ResultsSetlistComplete" Theme="{StaticResource ScreenSubtitleText}" Classes="ScreenSubtitle"
+                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                               Foreground="{DynamicResource SuccessColor}"
+                               IsVisible="{Binding IsFinished}"
+                               Text="{Binding FinishedLabel}" />
+                </StackPanel>
+
+                <!-- While a setlist has a next song, "Next: <song>" is the
+                     primary action and Retry steps into the second slot, in
+                     place of Song select. The other buttons follow the Next
+                     button's own visibility, so the contract decides once. -->
+                <Grid x:Name="ResultsActions" ColumnDefinitions="*,10,*,10,*">
+                    <Button Grid.Column="0" Theme="{StaticResource PrimaryButton}" Classes="PlayMenu Primary"
+                            IsVisible="{Binding !#ResultsSetlistNext.IsVisible}"
+                            Command="{Binding RetryCommand}"
+                            Content="{localization:Loc PlayMode_Results_Retry}" />
+                    <Button Grid.Column="0" x:Name="ResultsSetlistNext" Theme="{StaticResource PrimaryButton}" Classes="PlayMenu Primary"
+                            DataContext="{Binding Setlists}" x:DataType="contracts:IResultsSetlist"
+                            IsVisible="{Binding HasNext}"
+                            AutomationProperties.Name="{Binding NextLabel}"
+                            ToolTip.Tip="{Binding NextLabel}"
+                            Command="{Binding NextSetlistSongCommand}">
+                        <TextBlock Text="{Binding NextLabel}" TextTrimming="CharacterEllipsis" />
+                    </Button>
+                    <Button Grid.Column="2" Classes="PlayMenu"
+                            IsVisible="{Binding !#ResultsSetlistNext.IsVisible}"
+                            Command="{Binding BackToSongSelectCommand}"
+                            Content="{localization:Loc PlayMode_Results_SongSelect}" />
+                    <Button Grid.Column="2" Classes="PlayMenu"
+                            IsVisible="{Binding #ResultsSetlistNext.IsVisible}"
+                            Command="{Binding RetryCommand}"
+                            Content="{localization:Loc PlayMode_Results_Retry}" />
+                    <Button Grid.Column="4" Classes="PlayMenu"
+                            Command="{Binding OpenInEditorCommand}"
+                            Content="{localization:Loc PlayMode_Results_OpenEditor}" />
+                </Grid>
+                <Button x:Name="ResultsSetlistEnd" Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                        HorizontalAlignment="Center"
+                        DataContext="{Binding Setlists}" x:DataType="contracts:IResultsSetlist"
+                        IsVisible="{Binding HasNext}"
+                        Command="{Binding EndSetlistCommand}"
+                        Content="{localization:Loc PlayMode_Setlist_End}" />
+
+                <!-- Listen back to the run just played. The take recorder writes
+                     it during the run; finalization (encode + attach) is
+                     off-thread, so the button appears a moment after the screen. -->
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceMd}"
+                            HorizontalAlignment="Center"
+                            IsVisible="{Binding ListenBack.CanListenBackToRun}">
+                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                            Content="{localization:Loc PlayMode_Take_ListenBack}"
+                            IsVisible="{Binding !ListenBack.IsTakePlaying}"
+                            Command="{Binding ListenBack.ListenBackToRunCommand}" />
+                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                            Content="{localization:Loc PlayMode_Take_Stop}"
+                            IsVisible="{Binding ListenBack.IsTakePlaying}"
+                            Command="{Binding ListenBack.StopTakeCommand}" />
+                    <TextBlock Text="{Binding ListenBack.TakePlaybackStatus}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextDim}"
+                               IsVisible="{Binding ListenBack.TakePlaybackStatus,
+                                           Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+
+            </StackPanel>
+
+            <!-- The DETAIL half: everything you read AFTER the figures. It
+                 is row 1 spanning both columns by default (the old stacked
+                 reading order) and column 1 of row 0 at `Window.Wide`. -->
+            <StackPanel x:Name="ResultsDetailColumn"
+                        Spacing="{StaticResource SpaceXl}">
+
+                <!-- Section breakdown: click a row's button to fix it in the
+                     editor. A chart with no sections keeps its slot and says
+                     why, rather than leaving a titleless gap. -->
+                <Border Theme="{StaticResource GlassPanelBorder}" x:Name="ResultsSectionPanel" Classes="GlassPanel">
+                    <Grid>
+                        <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+                        <StackPanel Spacing="{StaticResource SpaceMd}">
+                            <!-- Rebuilt to `Results.dc.html`: a per-section
+                                 accuracy BAR CHART. The old row was four
+                                 numbers in a line, which made the run's
+                                 shape something you had to reconstruct by
+                                 reading; a bar per section shows it at a
+                                 glance and puts the two bad ones in front
+                                 of you. -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Theme="{StaticResource SectionTitleText}" Text="{localization:Loc PlayMode_Results_BreakdownTitle}"
+                                               Classes="SectionTitle" />
+                                    <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{localization:Loc PlayMode_Results_BreakdownSubtitle}"
+                                               Classes="ScreenSubtitle" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <!-- Legend: the three bands the bars use. -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                            x:Name="ResultsSectionLegend"
+                                            VerticalAlignment="Top"
+                                            Spacing="{StaticResource SpaceMd}">
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXxs}">
+                                        <Border Width="7" Height="7" CornerRadius="2" VerticalAlignment="Center"
+                                                Background="{DynamicResource SuccessColor}" />
+                                        <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel"
+                                                   Text="{localization:Loc PlayMode_Results_LegendStrong}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXxs}">
+                                        <Border Width="7" Height="7" CornerRadius="2" VerticalAlignment="Center"
+                                                Background="{DynamicResource WarningColor}" />
+                                        <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel"
+                                                   Text="{localization:Loc PlayMode_Results_LegendFair}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXxs}">
+                                        <Border Width="7" Height="7" CornerRadius="2" VerticalAlignment="Center"
+                                                Background="{DynamicResource DangerColor}" />
+                                        <TextBlock Theme="{StaticResource StatLabelText}" Classes="StatLabel"
+                                                   Text="{localization:Loc PlayMode_Results_LegendWeak}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Theme="{StaticResource ScreenSubtitleText}" Text="{localization:Loc PlayMode_Results_Sections_Empty}"
+                                       Classes="ScreenSubtitle" TextWrapping="Wrap"
+                                       IsVisible="{Binding !RunResults.ResultSections.Count}" />
+                            <ItemsControl x:Name="ResultsSectionList" ItemsSource="{Binding RunResults.ResultSections}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:SectionRow">
+                                        <!-- Fixed columns, not a StackPanel: the
+                                             bar has to start at the same x on
+                                             every row or the chart is not a
+                                             chart, and German section names run
+                                             long. -->
+                                        <Grid ColumnDefinitions="44,12,96,*,12,52,12,84,Auto"
+                                              Margin="0,4">
+                                            <TextBlock Grid.Column="0" Text="{Binding TimeLabel}" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       Foreground="{DynamicResource TextDim}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Name}"
+                                                       VerticalAlignment="Center" FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip.Tip="{Binding Name}" />
+
+                                            <!-- The bar. A ProgressBar, not a Grid of
+                                                 star columns: `ColumnDefinitions` is
+                                                 not a bindable property in Avalonia,
+                                                 and binding a fill's pixel Width
+                                                 needs the track's arranged width,
+                                                 which a DataTemplate does not have at
+                                                 bind time and which changes on every
+                                                 resize. A ProgressBar is exactly this
+                                                 control and the layout system already
+                                                 owns the arithmetic.
+                                                 MinWidth 0 because Fluent ships
+                                                 MinWidth=200 on ProgressBar and would
+                                                 otherwise force every row wider than
+                                                 the panel. -->
+                                            <ProgressBar Grid.Column="3" Height="9" MinWidth="0"
+                                                         VerticalAlignment="Center"
+                                                         Minimum="0" Maximum="1"
+                                                         Value="{Binding BarFraction}"
+                                                         IsVisible="{Binding WasPlayed}"
+                                                         Background="{DynamicResource SurfaceGlass}"
+                                                         Foreground="{Binding Accuracy,
+                                                             Converter={x:Static conv:SectionAccuracyBrushConverter.Instance}}" />
+
+                                            <TextBlock Grid.Column="5" Text="{Binding AccuracyLabel}" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       TextAlignment="Right"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="7" Text="{Binding MissesLabel}" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextDim}" />
+
+                                            <!-- The mockup's "Practice" link, on the
+                                                 rows that dropped notes only —
+                                                 offering to drill a clean section is
+                                                 offering to solve a solved thing. A
+                                                 clean row keeps the column's width
+                                                 so the right edge stays straight. -->
+                                            <Button Grid.Column="8" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                                    MinWidth="96"
+                                                    IsVisible="{Binding CanPractise}"
+                                                    Content="{localization:Loc PlayMode_Results_Practice}"
+                                                    Command="{Binding $parent[ItemsControl].((vm:PlayModeViewModel)DataContext).OpenSectionInEditorCommand}"
+                                                    CommandParameter="{Binding}" />
+                                            <Border Grid.Column="8" MinWidth="96"
+                                                    IsVisible="{Binding !CanPractise}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Timing: are you rushing or dragging? Hidden when the run produced no
+                     timed hits (CQT pull-verified hits are deliberately untimed), rather
+                     than showing a flat histogram that means nothing.
+                     No animations: the results screen is a hideable surface. -->
+                <Border Theme="{StaticResource GlassPanelBorder}" x:Name="ResultsTimingPanel" Classes="GlassPanel"
+                        IsVisible="{Binding RunResults.HasTiming}">
+                    <Grid>
+                        <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+                        <StackPanel Spacing="{StaticResource SpaceMd}">
+                            <TextBlock Theme="{StaticResource SectionTitleText}" Text="{localization:Loc PlayMode_Results_Timing}"
+                                       Classes="SectionTitle" />
+                            <TextBlock Text="{Binding RunResults.TimingHeadline}"
+                                       FontSize="{StaticResource FontSizeLg}" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentColor}" />
+
+                            <!-- Histogram: one bar per 10 ms bin across ±150 ms. Early bins sit
+                                 left of centre, late bins right; the two centre bins straddle 0. -->
+                            <Border Background="{DynamicResource SurfaceGlass}"
+                                    BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="{StaticResource PaddingCard}">
+                                <StackPanel Spacing="{StaticResource SpaceSm}">
+                                    <ItemsControl ItemsSource="{Binding RunResults.TimingBars}" Height="96"
+                                                  HorizontalAlignment="Center">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="2"
+                                                            VerticalAlignment="Bottom" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:TimingBarRow">
+                                                <Border Width="10" CornerRadius="2"
+                                                        VerticalAlignment="Bottom"
+                                                        Height="{Binding Height}"
+                                                        Background="{DynamicResource AccentColor}"
+                                                        Opacity="{Binding Opacity}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <Grid ColumnDefinitions="*,*,*">
+                                        <TextBlock Theme="{StaticResource EyebrowText}" Grid.Column="0" Classes="Eyebrow"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_EarlyAxis}" />
+                                        <TextBlock Theme="{StaticResource EyebrowText}" Grid.Column="1" Classes="Eyebrow" HorizontalAlignment="Center"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_CentreAxis}" />
+                                        <TextBlock Theme="{StaticResource EyebrowText}" Grid.Column="2" Classes="Eyebrow" HorizontalAlignment="Right"
+                                                   Text="{localization:Loc PlayMode_Results_Timing_LateAxis}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="{StaticResource SpaceMd}">
+                                <StackPanel Grid.Column="0" Spacing="{StaticResource SpaceXxs}">
+                                    <TextBlock Theme="{StaticResource EyebrowText}" Classes="Eyebrow" Text="{localization:Loc PlayMode_Results_Timing_Mean}" />
+                                    <TextBlock Text="{Binding RunResults.TimingMean}" Theme="{StaticResource StatValueText}" Classes="StatValue Mono" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="{StaticResource SpaceXxs}">
+                                    <TextBlock Theme="{StaticResource EyebrowText}" Classes="Eyebrow" Text="{localization:Loc PlayMode_Results_Timing_Spread}" />
+                                    <TextBlock Text="{Binding RunResults.TimingSpread}" Theme="{StaticResource StatValueText}" Classes="StatValue Mono" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Spacing="{StaticResource SpaceXxs}">
+                                    <TextBlock Theme="{StaticResource EyebrowText}" Classes="Eyebrow" Text="{localization:Loc PlayMode_Results_Timing_Early}" />
+                                    <TextBlock Text="{Binding RunResults.TimingEarly}" Theme="{StaticResource StatValueText}" Classes="StatValue Mono" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Spacing="{StaticResource SpaceXxs}">
+                                    <TextBlock Theme="{StaticResource EyebrowText}" Classes="Eyebrow" Text="{localization:Loc PlayMode_Results_Timing_OnTimeCount}" />
+                                    <TextBlock Text="{Binding RunResults.TimingOnTime}" Theme="{StaticResource StatValueText}" Classes="StatValue Mono" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="4" Spacing="{StaticResource SpaceXxs}">
+                                    <TextBlock Theme="{StaticResource EyebrowText}" Classes="Eyebrow" Text="{localization:Loc PlayMode_Results_Timing_Late}" />
+                                    <TextBlock Text="{Binding RunResults.TimingLate}" Theme="{StaticResource StatValueText}" Classes="StatValue Mono" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Where the bias is worst — the practice target. -->
+                            <ItemsControl ItemsSource="{Binding RunResults.TimingSections}"
+                                          IsVisible="{Binding !!RunResults.TimingSections.Count}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TimingSectionRow">
+                                        <Grid ColumnDefinitions="*,90,70" Margin="0,3">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1" Text="{Binding BiasLabel}"
+                                                       TextAlignment="Right" FontWeight="SemiBold" />
+                                            <TextBlock Theme="{StaticResource StatLabelText}" Grid.Column="2" Classes="StatLabel" Text="{Binding HitsLabel}"
+                                                       TextAlignment="Right" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Local leaderboard: only a panel when there is a board.
+                     The board ranks ONE note detector's runs (#329), so the
+                     caption under the title names it (#642): a player who
+                     flipped the CQT verifier otherwise sees their old best
+                     vanish with no reason given. -->
+                <Border Theme="{StaticResource GlassPanelBorder}" x:Name="ResultsLeaderboardPanel" Classes="GlassPanel"
+                        IsVisible="{Binding !!RunResults.ResultLeaderboard.Count}">
+                    <Grid>
+                        <Border Theme="{StaticResource PlayTopLightEdgeBorder}" Classes="PlayTopLightEdge" Margin="-22,-16,-22,0" />
+                        <StackPanel Spacing="{StaticResource SpaceMd}">
+                            <StackPanel Spacing="2">
+                                <TextBlock Theme="{StaticResource SectionTitleText}" Text="{localization:Loc PlayMode_Results_Leaderboard}"
+                                           Classes="SectionTitle" />
+                                <TextBlock Theme="{StaticResource ScreenSubtitleText}" x:Name="ResultsLeaderboardCaption"
+                                           Classes="ScreenSubtitle" TextWrapping="Wrap"
+                                           Text="{Binding RunResults.ResultLeaderboardCaption}"
+                                           ToolTip.Tip="{localization:Loc PlayMode_Results_Leaderboard_Detector_Tip}" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding RunResults.ResultLeaderboard}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="leaderboards:LeaderboardEntry">
+                                        <Grid ColumnDefinitions="Auto,12,*,Auto,16,Auto,16,Auto" Margin="0,3">
+                                            <TextBlock Grid.Column="0" Text="{Binding Rank}" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       Foreground="{DynamicResource TextDim}" />
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
+                                                <TextBlock Text="{Binding ProfileName}" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextPrimary}" />
+                                                <PathIcon Data="{DynamicResource IconCheck}" Width="9" Height="9"
+                                                          IsVisible="{Binding IsActiveProfile}"
+                                                          Foreground="{DynamicResource AccentColor}"
+                                                          VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="3" Text="{Binding BestScore, StringFormat={}{0:N0}}" Theme="{StaticResource MonoText}" Classes="Mono" />
+                                            <!-- Accuracy + grade only once a run has MEASURED
+                                                 them. The store's best accuracy is
+                                                 coverage-gated, so a profile that ranks on
+                                                 score can still have none — and 0 renders as
+                                                 a confident "0.0 %" / "F". -->
+                                            <TextBlock Grid.Column="5" Text="{Binding BestAccuracy, StringFormat={}{0:P1}}" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       IsVisible="{Binding HasBestAccuracy}"
+                                                       Foreground="{DynamicResource TextMuted}" />
+                                            <TextBlock Grid.Column="5" Text="—" Theme="{StaticResource MonoText}" Classes="Mono"
+                                                       IsVisible="{Binding !HasBestAccuracy}"
+                                                       Foreground="{DynamicResource TextMuted}" />
+                                            <TextBlock Grid.Column="7" Text="{Binding GradeLabel}" FontWeight="Bold"
+                                                       Foreground="{DynamicResource AccentColor}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

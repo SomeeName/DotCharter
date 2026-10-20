@@ -1,0 +1,260 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.FilesSettingsView"
+             x:DataType="contracts:IFilesSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > Files & backups: the files a save writes next to the
+        project, the timed project backup and moving the whole setup to
+        another machine, and the decoded Rocksmith audio cache. The cache
+        readout and the backup status line are status, never settings.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <ctl:MasonryPanel Classes="SettingsFlow" Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_SaveCompanions}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_SaveCompanions_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.eof}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SaveCompanionEof_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SaveCompanionEof}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SaveCompanionEof_RowLabel}"
+                                      IsChecked="{Binding SaveCompanionEof, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.eofAudio}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding SaveCompanionEof}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SaveCompanionEofAudio}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SaveCompanionEofAudio}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SaveCompanionEofAudio}"
+                                      IsChecked="{Binding SaveCompanionEofAudio, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.psarc}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SaveCompanionPsarc_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SaveCompanionPsarc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SaveCompanionPsarc_RowLabel}"
+                                      IsChecked="{Binding SaveCompanionPsarc, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.psarcCodec}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding SaveCompanionPsarc}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SaveCompanionPsarcCodec}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SaveCompanionPsarcCodec}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SaveCompanionPsarcCodec}"
+                                  SelectedIndex="{Binding SaveCompanionPsarcCodecIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Settings_SaveCompanionPsarcCodec_Vorbis}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_SaveCompanionPsarcCodec_Pcm}" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.rs2dlc}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_SaveCompanionRs2Dlc_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_SaveCompanionRs2Dlc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SaveCompanionRs2Dlc_RowLabel}"
+                                      IsChecked="{Binding SaveCompanionRs2Dlc, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.rsXmlSixString}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_RsXmlSixString_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_RsXmlSixString}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_RsXmlSixString_RowLabel}"
+                                      IsChecked="{Binding RsXmlSixStringProjection, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.dlcBuilderFixes}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_ExportDlcBuilderFixes_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_ExportDlcBuilderFixes}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_ExportDlcBuilderFixes_RowLabel}"
+                                      IsChecked="{Binding ExportApplyDlcBuilderFixes, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.generateDd}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_ExportGenerateDd_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_ExportGenerateDd}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_ExportGenerateDd_RowLabel}"
+                                      IsChecked="{Binding ExportGenerateDynamicDifficulty, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.ddMlModel}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_ExportDdMlModel_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_ExportDdMlModel}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_ExportDdMlModel_RowLabel}"
+                                      IsChecked="{Binding ExportDdUseMlModel, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.1}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_AutoBackups}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_BackupDescription}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.autoBackup}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Backups}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_Backups}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_Backups}"
+                                      IsChecked="{Binding AutoBackupEnabled, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.backupInterval}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding AutoBackupEnabled}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Interval}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_Interval}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                            <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_Interval}"
+                                           Value="{Binding AutoBackupIntervalMinutes, Mode=TwoWay}" Minimum="1" Maximum="1440" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                       Text="{localization:Loc Settings_Minutes}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.backupKeep}"
+                          Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding AutoBackupEnabled}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_BackupKeep}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_BackupKeep}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                            <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_BackupKeep}"
+                                           Value="{Binding AutoBackupKeepCount, Mode=TwoWay}" Minimum="0" Maximum="1000" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                       Text="{localization:Loc Settings_BackupKeepUnit}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.backupMigrate}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_BackupMigrate_Title}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_BackupMigrate_Subtitle}" />
+                        </StackPanel>
+                        <WrapPanel Grid.Column="1" Orientation="Horizontal"
+                                   ItemSpacing="{StaticResource FireSpaceSm}"
+                                   LineSpacing="{StaticResource FireSpaceSm}">
+                            <Button Classes="RowAction" Content="{localization:Loc Settings_BackupMigrate_Export}"
+                                    Command="{Binding Backup.ExportCommand}" IsEnabled="{Binding !Backup.IsBusy}" />
+                            <Button Classes="RowAction" Content="{localization:Loc Settings_BackupMigrate_Import}"
+                                    Command="{Binding Backup.ImportCommand}" IsEnabled="{Binding !Backup.IsBusy}" />
+                        </WrapPanel>
+                    </Grid>
+
+                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0,0,0,12" TextWrapping="Wrap"
+                               IsVisible="{Binding Backup.HasStatus}"
+                               Text="{Binding Backup.StatusText}" />
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.2}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_PsarcAudioCache_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_PsarcAudioCache_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.psarcCache}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_PsarcAudioCache_UsageLabel}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="10">
+                            <SelectableTextBlock Classes="ValueText" Text="{Binding LibraryAudioCacheUsage}" />
+                            <WrapPanel Orientation="Horizontal"
+                                       ItemSpacing="{StaticResource FireSpaceSm}"
+                                       LineSpacing="{StaticResource FireSpaceSm}">
+                                <Button Classes="RowAction" Content="{localization:Loc Settings_PsarcAudioCache_Clear}"
+                                        ToolTip.Tip="{localization:Loc Settings_PsarcAudioCache_ClearTooltip}"
+                                        Command="{Binding ClearLibraryAudioCacheCommand}"
+                                        IsEnabled="{Binding LibraryAudioCacheHasEntries}" />
+                                <Button Classes="RowAction" Content="{localization:Loc Action_Refresh}"
+                                        Command="{Binding RefreshLibraryAudioCacheCommand}" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0,0,0,12" TextWrapping="Wrap"
+                               IsVisible="{Binding HasLibraryAudioCacheDetail}"
+                               Text="{Binding LibraryAudioCacheDetail}" />
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.3}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_PsarcOpen_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_PsarcOpen_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" x:Name="PsarcHardestOnlyRow" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.psarcHardestOnly}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_PsarcOpenHardestOnly}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_PsarcOpenHardestOnly}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_PsarcOpenHardestOnly}"
+                                      IsChecked="{Binding PsarcOpenHardestLevelOnly, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+        </ctl:MasonryPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,37 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Styles.Resources>
+        <ControlTheme x:Key="FireGoToAnythingButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- The Graphite workbench's TITLE BAR: the menu on the left and "Go to
+                 anything" on the right. It repeats nothing the editor already shows
+                 (the chart's name and the position are on the status rail, the
+                 transport on the toolbar). 38 px, which is what every step here is
+                 sized against (layout-traps.md 6.8). -->
+            <!-- "Go to anything": a search-shaped affordance rather than a button
+                 caption, because the command palette's keyboard door (Ctrl+Shift+P) is
+                 the kind nobody finds. -->
+            <Style Selector="^.FireGoToAnything">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="{StaticResource FireBorderHairline}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="Padding" Value="9,0" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.FireGoToAnything:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="^.FireGoToAnything /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+</Styles>

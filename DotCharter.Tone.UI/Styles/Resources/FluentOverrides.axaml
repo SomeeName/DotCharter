@@ -1,0 +1,223 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the app theme's resource layer — see `Styles/Resources.axaml`,
+         which merges this file and its siblings IN ORDER. Avalonia Fluent's hard-baked control resource KEYS, re-pointed at this
+         app's palette so menus, buttons, list rows, text controls, combo
+         boxes, check boxes and expanders re-skin with the theme. -->
+
+    <Styles.Resources>
+
+        <!-- Override Avalonia Fluent's hard-baked menu resource keys so all
+             submenus, separators, and menu items pick up our DynamicResource
+             palette and re-skin instantly when the user switches themes
+             instead of staying stuck on Fluent's default dark/light values. -->
+        <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundDisabled" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemBackgroundDisabled" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForeground" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPressed" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSeparatorBackground" Color="{DynamicResource BorderDefaultColor}" />
+
+        <!-- Top-level Menu bar items (Datei / Bearbeiter / …) -->
+        <SolidColorBrush x:Key="MenuBarItemBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuBarItemBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="MenuBarItemBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="MenuBarItemBackgroundSelected" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="MenuBarItemBorderBrushPointerOver" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuBarItemBorderBrushPressed" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuBarItemBorderBrushSelected" Color="Transparent" />
+        <SolidColorBrush x:Key="MenuBarBackground" Color="Transparent" />
+
+        <!-- ContextMenu / right-click menus share the same palette -->
+        <SolidColorBrush x:Key="ContextMenuBackground" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="ContextMenuBorderBrush" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="ContextMenuForeground" Color="{DynamicResource TextSecondaryColor}" />
+
+        <!-- Fluent default Button resource keys: re-target to our palette so
+             every plain <Button/> (without Classes="Primary"/"Subtle") still
+             follows the theme instead of falling back to Fluent dark gray
+             with a blueish hover that doesn't repaint on theme switch. -->
+        <SolidColorBrush x:Key="ButtonBackground" Color="{DynamicResource SurfaceElevatedColor}" />
+        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="{DynamicResource SurfaceHoverColor}" />
+        <SolidColorBrush x:Key="ButtonBorderBrush" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{DynamicResource BorderStrongColor}" />
+        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="{DynamicResource BorderSubtleColor}" />
+        <SolidColorBrush x:Key="ButtonForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ButtonForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+
+        <!-- Fluent default ToggleButton (e.g. the "GUI" button in the FX-chain row) -->
+        <SolidColorBrush x:Key="ToggleButtonBackground" Color="{DynamicResource SurfaceElevatedColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundDisabled" Color="{DynamicResource SurfaceHoverColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="{DynamicResource AccentHoverColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedDisabled" Color="{DynamicResource AccentFaintColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminate" Color="{DynamicResource SurfaceElevatedColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminatePointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminatePressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminateDisabled" Color="{DynamicResource SurfaceHoverColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrush" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushPointerOver" Color="{DynamicResource BorderStrongColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushPressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushDisabled" Color="{DynamicResource BorderSubtleColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushChecked" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushCheckedPointerOver" Color="{DynamicResource AccentHoverColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushCheckedPressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushCheckedDisabled" Color="{DynamicResource AccentFaintColor}" />
+        <SolidColorBrush x:Key="ToggleButtonBorderBrushIndeterminate" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="{DynamicResource TextOnAccentColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="{DynamicResource TextOnAccentColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="{DynamicResource TextOnAccentColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundCheckedDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundIndeterminate" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundIndeterminatePointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundIndeterminatePressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ToggleButtonForegroundIndeterminateDisabled" Color="{DynamicResource TextDimColor}" />
+
+        <!-- ListBoxItem (used by the theme picker, project list, ...).
+             Fluent picks these up directly so the "Midnight Blue" tile
+             gets a proper hover/selected state in the active palette. -->
+        <SolidColorBrush x:Key="ListBoxBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ListBoxItemBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ListBoxItemBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="ListBoxItemBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="ListBoxItemBackgroundSelected" Color="{DynamicResource AccentSelectedColor}" />
+        <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPointerOver" Color="{DynamicResource AccentSelectedHoverColor}" />
+        <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPressed" Color="{DynamicResource AccentSelectedColor}" />
+        <SolidColorBrush x:Key="ListBoxItemBackgroundDisabled" Color="Transparent" />
+        <SolidColorBrush x:Key="ListBoxItemForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ListBoxItemForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ListBoxItemForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ListBoxItemForegroundSelected" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ListBoxItemForegroundSelectedPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ListBoxItemForegroundSelectedPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ListBoxItemForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+
+        <!-- TextBox / ComboBox shared TextControl resource keys. The default
+             Fluent values clash with our dark surface palette and don't follow
+             the active theme. -->
+        <SolidColorBrush x:Key="TextControlBackground" Color="{DynamicResource SurfaceElevatedColor}" />
+        <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="{DynamicResource PanelBackgroundColor}" />
+        <SolidColorBrush x:Key="TextControlBorderBrush" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="{DynamicResource BorderStrongColor}" />
+        <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="{DynamicResource BorderSubtleColor}" />
+        <SolidColorBrush x:Key="TextControlForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="TextControlForegroundFocused" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="{DynamicResource TextMutedColor}" />
+        <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="{DynamicResource TextMutedColor}" />
+        <SolidColorBrush x:Key="TextControlPlaceholderForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="TextControlSelectionHighlightColor" Color="{DynamicResource AccentColorValue}" />
+
+        <!-- ComboBox specific keys (the "MIDI Inst" / "Add VST3…" pickers). -->
+        <SolidColorBrush x:Key="ComboBoxBackground" Color="{DynamicResource AppBackgroundColor}" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="{DynamicResource SurfaceElevatedColor}" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundFocusedPointerOver" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="{DynamicResource SurfaceHoverColor}" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="{DynamicResource BorderStrongColor}" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushFocused" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="{DynamicResource BorderSubtleColor}" />
+        <SolidColorBrush x:Key="ComboBoxForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxForegroundFocusedPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="ComboBoxPlaceHolderForeground" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundPointerOver" Color="{DynamicResource TextMutedColor}" />
+        <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocused" Color="{DynamicResource TextMutedColor}" />
+        <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="ComboBoxDropDownForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="{DynamicResource AccentSelectedColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="{DynamicResource AccentSelectedHoverColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPressed" Color="{DynamicResource AccentSelectedColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemBackgroundDisabled" Color="Transparent" />
+        <SolidColorBrush x:Key="ComboBoxItemForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelected" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundSelectedPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ComboBoxItemForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+
+        <!-- CheckBox -->
+        <SolidColorBrush x:Key="CheckBoxBackgroundUnchecked" Color="Transparent" />
+        <SolidColorBrush x:Key="CheckBoxBackgroundUncheckedPointerOver" Color="Transparent" />
+        <SolidColorBrush x:Key="CheckBoxBackgroundUncheckedPressed" Color="Transparent" />
+        <SolidColorBrush x:Key="CheckBoxForegroundUnchecked" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundUncheckedPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundChecked" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundCheckedPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundCheckedPressed" Color="{DynamicResource TextPrimaryColor}" />
+
+        <!-- Expander — Fluent's template binds these resource keys via
+             TemplateBinding, so reskinning Background on the outer Style
+             alone is not enough; the header would otherwise stay on Fluent's
+             hard-coded dark surface even after switching themes. We keep
+             only Header* / Chevron* overrides here — touching Content* keys
+             affected the inspector layout because Fluent reads those values
+             during its measure pass for inset metrics. -->
+        <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="{DynamicResource SurfaceHoverColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderBackgroundDisabled" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderForegroundDisabled" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPointerOver" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderHeaderBorderBrushPressed" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderChevronBackgroundPointerOver" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderChevronBackgroundPressed" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderChevronBorderBrush" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderChevronForeground" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="ExpanderChevronForegroundPointerOver" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="ExpanderChevronForegroundPressed" Color="{DynamicResource TextPrimaryColor}" />
+    </Styles.Resources>
+</Styles>

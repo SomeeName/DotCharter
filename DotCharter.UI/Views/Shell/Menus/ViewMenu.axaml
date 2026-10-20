@@ -1,0 +1,69 @@
+<MenuItem xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+          xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+          xmlns:converters="using:DotCharter.UI.Converters"
+          x:Class="DotCharter.UI.Views.Shell.Menus.ViewMenu"
+          x:DataType="viewModels:MainWindowViewModel"
+          Classes="FireMenuTop" Header="{localization:Loc Menu_View}">
+    <!-- Panel visibility — mirrors the sidebar toggles so panes closed
+         from the dock (tab X / float-window X) are recoverable here.
+         Six toggles of ONE kind: the clearest group in the whole bar,
+         and the reason View read as a wall of checkboxes with the zoom
+         and layout verbs lost at the bottom of it. -->
+    <MenuItem Header="{localization:Loc Menu_GroupPanels}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M3,3H21V21H3V3M5,5V19H11V5H5M13,5V11H19V5H13M13,13V19H19V13H13Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_PanelInspector}" ToggleType="CheckBox"
+                  IsChecked="{Binding IsInspectorVisible, Mode=TwoWay}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleInspector, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_Panel3DPreview}" ToggleType="CheckBox"
+                  IsChecked="{Binding IsPreviewVisible, Mode=TwoWay}"
+                  InputGesture="{Binding ProjectState.Keybinds.TogglePreview3D, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_PanelSheetMusic}" ToggleType="CheckBox"
+                  IsChecked="{Binding IsSheetMusicVisible, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc Menu_PanelAiChat}" ToggleType="CheckBox"
+                  IsChecked="{Binding IsAiChatVisible, Mode=TwoWay}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleAiChat, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_PanelStemMixer}" ToggleType="CheckBox"
+                  IsChecked="{Binding IsStemMixerVisible, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc Menu_PanelStackedTracks}" ToggleType="CheckBox"
+                  IsChecked="{Binding IsStackedTracksVisible, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc Menu_PanelPhraseCatalog}" ToggleType="CheckBox"
+                  IsChecked="{Binding IsPhraseCatalogVisible, Mode=TwoWay}"
+                  InputGesture="{Binding ProjectState.Keybinds.TogglePhraseCatalog, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    </MenuItem>
+    <Separator />
+    <!-- TIMELINE ROWS: the `ChartEditor.ActiveRibbon` flags (one visibility
+         model; the gutter's lane captions follow them). -->
+    <MenuItem Header="{localization:Loc Timeline_Rows}">
+        <MenuItem Header="{localization:Loc Ribbon_Sections}" ToggleType="CheckBox"
+                  IsChecked="{Binding ChartEditor.ActiveRibbon.ShowSections, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc Ribbon_Phrases}" ToggleType="CheckBox"
+                  IsChecked="{Binding ChartEditor.ActiveRibbon.ShowPhrases, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc Ribbon_Lyrics}" ToggleType="CheckBox"
+                  IsChecked="{Binding ChartEditor.ActiveRibbon.ShowLyrics, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc Ribbon_Tones}" ToggleType="CheckBox"
+                  IsChecked="{Binding ChartEditor.ActiveRibbon.ShowTones, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc Ribbon_MeasureInfo}" ToggleType="CheckBox"
+                  IsChecked="{Binding ChartEditor.ActiveRibbon.ShowMeasureMetadata, Mode=TwoWay}" />
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_ShowWaveform}" ToggleType="CheckBox"
+              IsChecked="{Binding ProjectState.ShowWaveform, Mode=TwoWay}"
+              InputGesture="{Binding ProjectState.Keybinds.ToggleWaveform, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_ShowMinimap}" ToggleType="CheckBox"
+              IsChecked="{Binding IsMinimapVisible, Mode=TwoWay}" />
+    <MenuItem Header="{localization:Loc Menu_ShowSuggestedHandShapes}" ToggleType="CheckBox"
+              IsChecked="{Binding ProjectState.ShowSuggestedHandShapes, Mode=TwoWay}" />
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_ZoomIn}" Command="{Binding ZoomInCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.ZoomIn, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_ZoomOut}" Command="{Binding ZoomOutCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.ZoomOut, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_FloatTimeline}" Command="{Binding PopOutTimelineCommand}" />
+    <MenuItem Header="{localization:Loc Menu_ResetLayout}" Command="{Binding ResetLayoutCommand}" />
+</MenuItem>

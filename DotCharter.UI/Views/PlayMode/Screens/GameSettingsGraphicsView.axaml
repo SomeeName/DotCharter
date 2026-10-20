@@ -1,0 +1,210 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellVm="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GameSettingsGraphicsView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- The Graphics section pane of the Play Mode settings modal. Its host,
+         Screens/GameplaySettingsView.axaml, declares it with the pane's x:Name
+         (GameSettingsGraphicsPane, which PlayModeView.GameplaySettingsPaneNames prewarms) and
+         its IsVisible gate. Lifted out of PlayModeView.axaml in #294, markup
+         unchanged. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  BringIntoViewOnFocusChange="False"
+                  Padding="{StaticResource FirePadBody}">
+        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GameSettings_Performance}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_FpsCap}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_FpsCap_Desc}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ItemsSource="{Binding Settings.GameplayFpsOptions}"
+                              AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_FpsCap}"
+                              SelectedIndex="{Binding Settings.GameplayMaxFpsIndex, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc PlayMode_GameSettings_RenderScale}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_RenderScale_Desc}" />
+                    </StackPanel>
+                    <Slider Grid.Column="2" Classes="FireSlider"
+                            Minimum="50" Maximum="200"
+                            TickFrequency="5" IsSnapToTickEnabled="True"
+                            SmallChange="5" LargeChange="25" VerticalAlignment="Center"
+                            AutomationProperties.Name="{localization:Loc PlayMode_GameSettings_RenderScale}"
+                            Value="{Binding Settings.GameplayRenderScalePercent, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                               Text="{Binding Settings.GameplayRenderScalePercent, StringFormat={}{0:0}%}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_CameraDistance}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_CameraDistance_Desc}" />
+                    </StackPanel>
+                    <Slider Grid.Column="2" Classes="FireSlider"
+                            Minimum="80" Maximum="120"
+                            TickFrequency="5" IsSnapToTickEnabled="True"
+                            SmallChange="5" LargeChange="10" VerticalAlignment="Center"
+                            AutomationProperties.Name="{localization:Loc Settings_Graphics_CameraDistance}"
+                            Value="{Binding Settings.GameplayCameraDistancePercent, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                               Text="{Binding Settings.GameplayCameraDistancePercent, StringFormat={}{0:0}%}" />
+                </Grid>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GameSettings_Effects}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_NoteHitExplosions}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_NoteHitExplosions_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_NoteHitExplosions}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableNoteHitExplosions, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_EnhancedHitFeedback}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_EnhancedHitFeedback_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_EnhancedHitFeedback}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableEnhancedHitFeedback, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_HitSparks}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_HitSparks_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_HitSparks}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableHitSparks, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_BeatPulse}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_BeatPulse_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_BeatPulse}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableBeatPulse, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_Bloom}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_Bloom_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_Bloom}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableBloom, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_Vignette}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_Vignette_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_Vignette}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableVignette, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_FilmicTonemap}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_FilmicTonemap_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_FilmicTonemap}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableFilmicTonemap, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_DepthFog}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_DepthFog_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_DepthFog}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableDepthFog, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_HighwayLighting}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_HighwayLighting_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_HighwayLighting}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableHighwayLighting, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_StringShimmer}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_StringShimmer_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_StringShimmer}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableStringShimmer, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

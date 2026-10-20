@@ -1,0 +1,69 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:md="clr-namespace:DotCharter.UI.Controls.Markdown;assembly=DotCharter">
+
+    <!-- MarkdownView (release notes etc.) — all of the control's visual
+         decisions live here; the control only assigns these classes. -->
+
+    <Style Selector="md|MarkdownView">
+        <Setter Property="Spacing" Value="8" />
+    </Style>
+
+    <Style Selector="md|MarkdownView SelectableTextBlock.MdText">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+        <Setter Property="LineHeight" Value="{StaticResource LineHeightBase}" />
+    </Style>
+
+    <Style Selector="md|MarkdownView SelectableTextBlock.MdH1">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeTitle}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="{StaticResource LineHeightHeading}" />
+        <Setter Property="Margin" Value="0,8,0,0" />
+    </Style>
+
+    <Style Selector="md|MarkdownView SelectableTextBlock.MdH2">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeXl}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="{StaticResource LineHeightXl}" />
+        <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+
+    <Style Selector="md|MarkdownView SelectableTextBlock.MdH3">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeLg}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="{StaticResource LineHeightLg}" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
+    <Style Selector="md|MarkdownView TextBlock.MdBulletGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+        <Setter Property="LineHeight" Value="{StaticResource LineHeightBase}" />
+        <Setter Property="MinWidth" Value="14" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+    </Style>
+
+    <Style Selector="md|MarkdownView Border.MdCodeBlock">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="10,8" />
+    </Style>
+
+    <Style Selector="md|MarkdownView SelectableTextBlock.MdCodeText">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="md|MarkdownView Border.MdRule">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource BorderDefault}" />
+        <Setter Property="Margin" Value="0,4" />
+    </Style>
+
+</Styles>

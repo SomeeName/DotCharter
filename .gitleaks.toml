@@ -1,0 +1,34 @@
+# gitleaks configuration for this repository (#759).
+#
+#   gitleaks dir . --config .gitleaks.toml          # the tree as it would be published
+#
+# It runs gitleaks' default rules and allow-lists ONLY values that are domain
+# data, never a credential. Credential-SHAPED test fixtures need no entry: they
+# live in DotCharter.Tests/Services/Diagnostics/FakeSecrets.cs, split at their
+# prefix so no contiguous token is ever in the source, and
+# FakeSecretFixtureTests fails the gate if one comes back. Do not add a path
+# here to silence a hit: fix the fixture, or prove the hit is domain data and
+# add the narrowest regex that matches it.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Rocksmith gear keys (\"Key\": \"Amp_...\", \"Cab_...\", \"Pedal_...\", \"Rack_...\", \"Bass_...\"): gear identifiers from the tone catalogue, not secrets"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^(?:Amp|Bass|Cab|Pedal|Rack)_[A-Za-z0-9_]+$''']
+
+[[allowlists]]
+description = "Vulkan extension names (VK_KHR_...): an API identifier the composed renderer probes for"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^VK_[A-Z]+_[a-z0-9_]+$''']
+
+[[allowlists]]
+description = "A Rocksmith DLC key (the package's song identifier) typed into the export dialog test"
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+condition = "AND"
+regexes = ['''DlcKey\s*=\s*"''']
+paths = ['''^DotCharter\.Tests/UI/ViewModels/Dialogs/RocksmithExportDialogViewModelTests\.cs$''']

@@ -1,0 +1,148 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellVm="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:theming="clr-namespace:DotCharter.UI.Theming;assembly=DotCharter"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.GameSettingsAppearanceView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- The Appearance section pane of the Play Mode settings modal. Its host,
+         Screens/GameplaySettingsView.axaml, declares it with the pane's x:Name
+         (GameSettingsAppearancePane, which PlayModeView.GameplaySettingsPaneNames prewarms) and
+         its IsVisible gate. Lifted out of PlayModeView.axaml in #294, markup
+         unchanged. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  BringIntoViewOnFocusChange="False"
+                  Padding="{StaticResource FirePadBody}">
+        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Highway}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_HighwayNearFade}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_HighwayNearFade_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_HighwayNearFade}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableHighwayNearFade, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_AnchorPreview}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_AnchorPreview_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_AnchorPreview}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableAnchorPreview, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_AnchorSweep}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_AnchorSweep_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_AnchorSweep}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableAnchorSweep, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_ShowlightBeams}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_ShowlightBeams_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_ShowlightBeams}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableShowlightBeams, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_ShowlightFog}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_ShowlightFog_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_ShowlightFog}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableShowlightFog, Mode=TwoWay}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Graphics_CrowdBackground}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_CrowdBackground_Desc}" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="2" Theme="{DynamicResource FireToggleSwitch}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Settings_Graphics_CrowdBackground}"
+                                  IsChecked="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).ProjectState.EnableCrowdBackground, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+
+            <StackPanel Spacing="{StaticResource FireSpaceRow}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                           Text="{localization:Loc PlayMode_GS_Kicker_Colours}" />
+
+                <Grid ColumnDefinitions="*,20,168">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_Appearance_StringColorsTitle}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc Settings_Appearance_StringColorsSubtitle}" />
+                    </StackPanel>
+                    <ComboBox Grid.Column="2" Classes="FireCombo"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ItemsSource="{Binding Settings.StringColorPresetOptions}"
+                              AutomationProperties.Name="{localization:Loc Settings_Appearance_StringColorsTitle}"
+                              SelectedItem="{Binding Settings.SelectedStringColorPreset, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="theming:StringColorPreset">
+                                <TextBlock Text="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+
+                <Grid ColumnDefinitions="200,18,*,18,64">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                   Text="{localization:Loc Settings_UiScale}" />
+                        <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc PlayMode_GS_UiScale_Desc}" />
+                    </StackPanel>
+                    <Slider Grid.Column="2" Classes="FireSlider"
+                            Minimum="0.75" Maximum="2.0"
+                            TickFrequency="0.05" IsSnapToTickEnabled="True"
+                            SmallChange="0.05" LargeChange="0.25" VerticalAlignment="Center"
+                            AutomationProperties.Name="{localization:Loc Settings_UiScale}"
+                            Value="{Binding Settings.GameplayUiScale, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="4" Theme="{StaticResource FireValueCellText}" Classes="FireValueCell"
+                               Text="{Binding Settings.GameplayUiScale, StringFormat={}{0:P0}}" />
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

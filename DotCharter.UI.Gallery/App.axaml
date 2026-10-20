@@ -1,0 +1,27 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="DotCharter.UI.Gallery.GalleryApp"
+             xmlns:dockThemes="clr-namespace:Dock.Avalonia.Themes.Fluent;assembly=Dock.Avalonia.Themes.Fluent"
+             RequestedThemeVariant="Default">
+
+    <!-- The gallery is NOT DotCharter.UI.App: no DI, no audio engine, no
+         composition root. What it shares is the VISUAL contract — the same
+         style includes, in the same order, and the same colour-token
+         dictionary. UI/GalleryAppIncludesTests compares the two files' include
+         URIs as a SET so they cannot drift. -->
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Styles/ColorTokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <dockThemes:DockFluentTheme DensityStyle="Compact" />
+        <StyleInclude Source="avares://DotCharter/Styles/Theme.axaml" />
+        <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+    </Application.Styles>
+</Application>

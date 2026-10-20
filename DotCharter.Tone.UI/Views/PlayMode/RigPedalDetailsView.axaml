@@ -1,0 +1,137 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigPedalDetailsView"
+             x:DataType="vm:RigDockUnit">
+    <!-- ══ THE PEDAL FAMILY'S EXTRAS ═══════════════════════════════
+         What the big face does not carry: the capture and its library,
+         every exact value, lyrics, the signal meters. The other families
+         (the cabinet and routing consoles, the fallback faces) draw their
+         own file and meter panels on the stage, so this section is theirs
+         only when the unit is a pedal-family unit. -->
+    <StackPanel x:Name="RigPedalAside" Spacing="{StaticResource FireSpaceMd}">
+
+        <!-- ══ THE CAPTURE: what the unit has loaded, the way to change
+             it, and the searchable library — ONE card, so a NAM amp's
+             list starts right under its current capture instead of
+             under a second "Capture" heading below the fold. -->
+        <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack" IsVisible="{Binding ShowFileHeader}">
+            <StackPanel x:Name="RigCaptureColumn" Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding FileColumnTitle}" />
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" VerticalAlignment="Center" Text="{Binding FileParam.CapturePlateText}"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileParam.CapturePlateText}" />
+                    <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding FileParam.PickFileCommand}" Content="{localization:Loc Rig_Choose}" />
+                    <Button Grid.Column="2" x:Name="RigDockFileClear" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" Content="×" VerticalAlignment="Center"
+                            IsVisible="{Binding FileParam.HasValue}" Command="{Binding FileParam.ClearCommand}"
+                            ToolTip.Tip="{localization:Loc Rig_ClearFile}" AutomationProperties.Name="{localization:Loc Rig_ClearFile}" />
+                </Grid>
+                <ComboBox Classes="FireCombo" HorizontalAlignment="Stretch" ItemsSource="{Binding FileParam.LibraryChoices}"
+                          SelectedItem="{Binding FileParam.SelectedLibraryChoice}" IsVisible="{Binding ShowsLibraryCombo}"
+                          PlaceholderText="{localization:Loc Rig_FromLibrary}" AutomationProperties.Name="{localization:Loc Rig_FromLibrary}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:NamCaptureChoice"><TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding Node.NamStatusText}" IsVisible="{Binding Node.NamHasWarning}" TextWrapping="Wrap" />
+                <!-- …and beside the picker, the refusal. A failed IR
+                     load returns false and the engine KEEPS the old IR,
+                     so the strip would otherwise just not change and
+                     read as "loaded, sounds the same". -->
+                <TextBlock x:Name="RigDockFileError" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong Warn" TextWrapping="Wrap"
+                           IsVisible="{Binding FileParam.HasLoadError}"
+                           Text="{Binding FileParam.LoadError}" />
+                <!-- the library, searchable, where the unit has one. NOT A
+                     SCROLL REGION (W4): a scroller inside RigEditorScroll
+                     would let the wheel land on whichever one the pointer
+                     is over. The list grows and RigEditorScroll carries it. -->
+                <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField" IsVisible="{Binding HasCaptures}" Margin="{StaticResource FireGapTopSm}">
+                    <TextBox Classes="FireFieldInput Search" Text="{Binding CaptureFilter, Mode=TwoWay}"
+                             PlaceholderText="{localization:Loc Rig_CaptureSearch}"
+                             AutomationProperties.Name="{localization:Loc Rig_CaptureSearch}" />
+                </Border>
+                <ItemsControl x:Name="RigCaptureList" ItemsSource="{Binding FilteredCaptures}" IsVisible="{Binding HasCaptures}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RigCaptureRow">
+                            <Button Theme="{StaticResource FireListRowButton}" Classes="FireListRow" Classes.Record="{Binding IsActive}" Command="{Binding LoadCommand}" HorizontalAlignment="Stretch">
+                                <TextBlock Text="{Binding Title}" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextTrimming="CharacterEllipsis" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- ══ ALL PARAMETERS: every control with its exact value (type one
+             to set it). Folded, because the gear itself is the editor; OPEN
+             for a unit whose face does not carry every param (the mic
+             position unit carries none). -->
+        <Expander x:Name="RigUnitValues" Classes="Compact" HorizontalAlignment="Stretch"
+                  IsVisible="{Binding ShowsFaceplate}" IsExpanded="{Binding FaceMissesParams, Mode=OneTime}"
+                  Header="{localization:Loc Rig_Editor_AllParameters}">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <ItemsControl x:Name="RigUnitValueRows" ItemsSource="{Binding EnclosureControls}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.DataTemplates>
+                        <!-- a continuous parameter: dial · name · value -->
+                        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+                            <Grid Classes="FireValueRow" ColumnDefinitions="Auto,*,Auto"
+                                  IsEnabled="{Binding IsControlActive}" ToolTip.Tip="{Binding InactiveHint}">
+                                <fire:FireKnob Dense="True" HardwareStyle="False" VerticalAlignment="Center"
+                                               Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}"
+                                               Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                               DefaultValue="{Binding Default}" Step="{Binding Step}"
+                                               Label="{Binding Caption}" ValueText="{Binding DisplayText}"
+                                               AutomationProperties.Name="{Binding Caption}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireValueRowNameText}" Classes="FireValueRowName" Text="{Binding Caption}" />
+                                <TextBlock Grid.Column="2" Theme="{StaticResource FireValueRowValueText}" Classes="FireValueRowValue" Text="{Binding DisplayText}" />
+                            </Grid>
+                        </DataTemplate>
+                        <!-- a labelled one: its name and the node's own picker -->
+                        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+                            <Grid Classes="FireValueRow" ColumnDefinitions="Auto,*">
+                                <TextBlock Theme="{StaticResource FireValueRowNameText}" Classes="FireValueRowName Choice" Text="{Binding DisplayName}" />
+                                <ComboBox Grid.Column="1" Classes="FireCombo" ItemsSource="{Binding Options}"
+                                          SelectedItem="{Binding SelectedOption}" HorizontalAlignment="Stretch"
+                                          AutomationProperties.Name="{Binding DisplayName}">
+                                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" /></DataTemplate></ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.DataTemplates>
+                </ItemsControl>
+                <TextBlock Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody" IsVisible="{Binding ShowsNoControlsNote}" Text="{localization:Loc Rig_Dock_NoControls}" />
+            </StackPanel>
+        </Expander>
+
+        <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack" x:Name="RigDockLyrics" IsVisible="{Binding HasLyricsParam}">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding LyricsParam.DisplayName}" />
+                <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField Tall"><TextBox x:Name="RigDockLyricsInput" Classes="FireFieldInput Multiline" MinHeight="72"
+                    AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding LyricsParam.LyricsDraft}"
+                    AutomationProperties.Name="{Binding LyricsParam.DisplayName}" /></Border>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding LyricsParam.SyllableHint}" />
+                    <Button Grid.Column="1" x:Name="RigDockLyricsSave" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" Command="{Binding LyricsParam.SaveLyricsCommand}" Content="{localization:Loc Dsp_SaveLyrics}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+
+        <!-- the real SIGNAL meters -->
+        <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack">
+            <StackPanel Spacing="{StaticResource FireSpaceSm}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_Signal}" />
+                <views:RigNodeMetersView DataContext="{Binding Meters}" />
+            </StackPanel>
+        </Border>
+        <!-- how every dial here and on the board is worked -->
+        <TextBlock Theme="{StaticResource FireEditorFootnoteText}" Classes="FireEditorFootnote" HorizontalAlignment="Left" TextWrapping="Wrap"
+                   IsVisible="{Binding IsPedalFamily}" Text="{localization:Loc Rig_Editor_Hint}" />
+    </StackPanel>
+</UserControl>

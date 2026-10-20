@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Core</RootNamespace>
+        <AssemblyName>DotCharter.Core</AssemblyName>
+    </PropertyGroup>
+
+</Project>

@@ -1,0 +1,660 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:dialogs="using:DotCharter.UI.Views.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.ToneDesignerDialogView"
+             x:DataType="contracts:IToneDesignerScreen"
+             x:CompileBindings="True">
+
+    <!-- Hosted: the dialog host owns the scrim, the stacking (above the export
+         dialog that opens it) and the visibility.
+
+         Grammar: Views/Dialogs/DialogStyles.axaml (included once, by
+         Views/Shell/DialogContainerView.axaml). The v0.38 pass converted only
+         the SHELL and left a bespoke three-pane body behind; this is the body,
+         rebuilt to the owner's mockup ("Editor Dialogs.dc.html", tone()):
+         a 1160 px card over a 560 px body of THREE columns —
+
+            196 px  the project's tones, the list actions under them
+            flex    the selected tone: key/name, volume, tags, the 14 gear slots
+            360 px  where those tones GO: the per-arrangement slots, and the
+                    imported definitions the export can embed
+
+         The arrangement slots and the import used to be two collapsed
+         Expanders under the editor, i.e. the two things the dialog exists to
+         produce were the two things it hid.
+
+         The behaviour contracts in docs/agents/ui/tone-designer.md are
+         untouched by the rebuild and must stay that way:
+           • gear/knob/volume/tag edits BUFFER and flush as ONE history action
+             on tone switch / close — nothing here commits per control;
+           • the preview toggle snapshots the user's chain once per session and
+             restores it on off AND on close.
+         The one STRUCTURAL change either contract touches is the gear picker:
+         it used to be a single shared ComboBox re-pointed at whichever slot was
+         selected, which is what made an ItemsSource swap write null through
+         SelectedGearSlot.SelectedOption (owner-reported crash 2026-07-19). Each
+         row now owns its picker and its knobs, revealed when that row is the
+         selected one, so no ItemsSource is ever re-pointed. The view model's
+         null guard stays as the belt to that braces. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Xl">
+            <DockPanel>
+                <Grid Theme="{DynamicResource DialogHeadGrid}" DockPanel.Dock="Top" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconAmp}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_Tones_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_Tones_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" DockPanel.Dock="Bottom" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <!-- The quiet tier: pressing it commits nothing to the
+                                 chart, it routes the edited tone through the live
+                                 rig. Two-state, so it is a ToggleButton — the
+                                 grammar's DlgLink names ToggleButton explicitly
+                                 for exactly this one. -->
+                            <ToggleButton AutomationProperties.Name="{localization:Loc Dialog_Tones_Preview}" x:Name="PreviewToggle" Classes="DlgLink"
+                                          IsChecked="{Binding IsPreviewOn, Mode=TwoWay}"
+                                          IsEnabled="{Binding CanPreviewNow}"
+                                          ToolTip.Tip="{localization:Loc Dialog_Tones_PreviewHint}">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="{DynamicResource FireSpaceSmPlus}">
+                                    <PathIcon Data="{DynamicResource IconPlay}" Width="11" Height="11"
+                                              VerticalAlignment="Center" />
+                                    <TextBlock Text="{localization:Loc Dialog_Tones_Preview}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                            </ToggleButton>
+                            <!-- The reason binds to the INVERSE of the predicate that
+                                 greys the toggle, so the two can never disagree — and it
+                                 covers BOTH clauses. The `HasSelectedTone` half used to be
+                                 enforced inside the setter, which flipped an enabled
+                                 toggle straight back with nothing printed anywhere. -->
+                            <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="ToneActionReason" Classes="DlgHint"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="360"
+                                       Text="{Binding ToneActionUnavailableReason}"
+                                       IsVisible="{Binding HasToneActionUnavailableReason}" />
+                            <!-- Preview target (tonelab): its own view, TonePreviewTargetPanel.axaml. -->
+                            <dialogs:TonePreviewTargetPanel DataContext="{Binding PreviewTargets}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <!-- DONE, not Close-with-IsCancel: every edit in this dialog is already
+                                 committed to the project tone the moment it is made, so the
+                                 one footer action neither saves nor reverts - it leaves. A
+                                 button cannot honestly be IsCancel AND the committing default;
+                                 Esc still closes via the global escape route. Decision
+                                 2026-08-11: no revert system - the tone history is the undo. -->
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Done}"
+                                    Command="{Binding CloseCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- The body's height is stated, not derived: the two lists in
+                     it scroll, and a body that sized to its content would grow
+                     to 14 gear slots + every arrangement and then be clamped by
+                     the card's MaxHeight, which puts the scrollbar on the wrong
+                     element.
+                     …but stated as a WISH, not a size (#210). The grammar clamps
+                     the card to the window, and a fixed Height="560" last child
+                     of this DockPanel did not shrink with it: in a 1280×720
+                     window it was arranged 560 px tall in a ~430 px slot,
+                     centred, and painted over the subtitle and the Done button.
+                     The decorator asks for 560 whatever the content (so the card
+                     keeps its height as tones come and go) and gives way to the
+                     slot it is handed; the lists keep their own scrollbars.
+                     Perf/DialogWindowFitUiPerfSmokeTests. -->
+                <controls:YieldingHeightDecorator x:Name="ToneDesignerBody" PreferredHeight="560">
+                    <Grid ColumnDefinitions="212,*,360"
+                          ColumnSpacing="{DynamicResource FireSpaceXlPlus}">
+
+                        <!-- ═══ LEFT: the project's tones ═══════════════════════ -->
+                        <DockPanel Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgSectionLabelText}" DockPanel.Dock="Top" Classes="DlgSectionLabel"
+                                       Text="{localization:Loc Dialog_Tones_ProjectTones}" />
+                            <!-- Add / Duplicate / Delete. NOT three star columns: an
+                                 equal division of the rail (then 196 px; 212 since the German
+                                 import chip needed 173 px) gave each chip a
+                                 36 px content slot and "Duplicate" wants 52.7 px, so
+                                 it was sliced in ENGLISH. The German labels
+                                 ("Hinzufügen"/"Duplizieren"/"Löschen") are half again
+                                 as long, which is the proof that no fixed division of
+                                 the rail can hold three of these words on one line.
+                                 Content-sized and wrapping instead. -->
+                            <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                                       ItemSpacing="{DynamicResource FireSpaceSm}"
+                                       LineSpacing="{DynamicResource FireSpaceSm}"
+                                       Margin="{DynamicResource FireGapTopMd}">
+                                <Button Classes="DlgChip" Margin="0"
+                                        Content="{localization:Loc Dialog_Tones_Add}"
+                                        Command="{Binding AddToneCommand}" />
+                                <Button Classes="DlgChip" Margin="0"
+                                        Content="{localization:Loc Dialog_Tones_Duplicate}"
+                                        Command="{Binding DuplicateToneCommand}"
+                                        IsEnabled="{Binding HasSelectedTone}" />
+                                <Button Theme="{DynamicResource DangerButton}" Classes="DlgChip Danger" Margin="0"
+                                        Content="{localization:Loc Dialog_Tones_Delete}"
+                                        Command="{Binding DeleteToneCommand}"
+                                        IsEnabled="{Binding HasSelectedTone}" />
+                                <!-- The empty-list hint below says "add one or import from a
+                                     PSARC", and until now the only Import button was in the
+                                     IMPORTED TONES section far down the dialog — a section
+                                     that reads as empty until you have already imported. The
+                                     owner looked for it here and asked whether they were
+                                     blind. Same command, offered where the sentence that
+                                     names it can be read. -->
+                                <!-- Absent, not greyed, in a build that cannot read game packages (#887). -->
+                                <Button Classes="DlgChip" Margin="0" x:Name="ImportFromPackageChip"
+                                        Content="{localization:Loc Dialog_Tones_ImportFromPsarc}"
+                                        IsVisible="{Binding CanImportFromPackages}"
+                                        Command="{Binding ImportTonesFromPsarcCommand}" />
+                                <!-- Builds a tone per PLACED tone change from the audio it
+                                     governs. It sits here because it is a third way to get a
+                                     tone into the list, beside Add and Import — the owner's
+                                     rule is that the placement stays theirs and only the tone
+                                     is generated. -->
+                                <Button Classes="DlgChip" Margin="0"
+                                        Content="{localization:Loc Dialog_Tones_GenerateFromAudio}"
+                                        ToolTip.Tip="{localization:Loc Dialog_Tones_GenerateFromAudio_Tip}"
+                                        Command="{Binding GenerateTonesFromAudioCommand}" />
+                                <!-- A tone file from DLC Builder / the Toolkit (.tone2014.json,
+                                     .tone2014.xml, or a project's .rs2dlc). Public in every
+                                     build: it reads a file the charter chose, not a game package. -->
+                                <Button Classes="DlgChip" Margin="0" x:Name="ImportToneFileChip"
+                                        Content="{localization:Loc Dialog_Tones_ImportFile}"
+                                        ToolTip.Tip="{localization:Loc Dialog_Tones_ImportFile_Tip}"
+                                        Command="{Binding ImportToneFileCommand}" />
+                                <!-- Its own hosted dialog over this one (ToneCreatorDialogView): nothing of it is built on open. -->
+                                <Button Classes="DlgChip" Margin="0" x:Name="CreateWithAiChip"
+                                        Content="{localization:Loc Dialog_Tones_CreateWithAi}"
+                                        ToolTip.Tip="{localization:Loc Dialog_Tones_CreateWithAi_Tip}"
+                                        Command="{Binding CreateWithAiCommand}" />
+                                <Button Classes="DlgChip" Margin="0" x:Name="ImportFromToneRigChip"
+                                        Content="{localization:Loc Dialog_Tones_ImportFromRig}"
+                                        ToolTip.Tip="{localization:Loc Dialog_Tones_ImportFromRig_Tip}"
+                                        Command="{Binding ImportFromToneRigCommand}" />
+                            </WrapPanel>
+
+                            <!-- Whatever Generate / Import / Add just did, said HERE, where
+                                 the buttons that did it are. It used to print only inside
+                                 IMPORTED TONES, 900 px away in the right column and inside a
+                                 scroller — so pressing Generate looked like it did nothing. -->
+                            <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="ToneRailStatus" DockPanel.Dock="Bottom" Classes="DlgHint"
+                                       TextWrapping="Wrap" Margin="{DynamicResource FireGapTopSm}"
+                                       Text="{Binding ImportStatus}"
+                                       IsVisible="{Binding ImportStatus,
+                                           Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            <Border Theme="{DynamicResource DlgListFrameBorder}" x:Name="ToneListFrame" Classes="DlgListFrame" Margin="0">
+                                <Panel>
+                                    <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Margin="6"
+                                               Text="{localization:Loc Dialog_Tones_NoProjectTones}"
+                                               IsVisible="{Binding !HasProjectTones}" />
+                                    <ListBox Classes="DlgList" ItemsSource="{Binding ProjectTones}"
+                                             AutomationProperties.Name="{localization:Loc Dialog_Tones_ProjectTones}"
+                                             SelectedItem="{Binding SelectedTone, Mode=TwoWay}">
+                                        <ListBox.Styles>
+                                            <!-- A row is announced by its own words, not its CLR type name (#311). -->
+                                            <Style Selector="ListBoxItem" x:DataType="contracts:IProjectTone">
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                            </Style>
+                                        </ListBox.Styles>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IProjectTone">
+                                                <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                    <StackPanel Spacing="{DynamicResource FireSpaceXxs}">
+                                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding Name}"
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <!-- Auto,Auto,* so a long key is
+                                                             TRIMMED rather than pushed out
+                                                             of a 196 px column. -->
+                                                        <Grid ColumnDefinitions="Auto,Auto,*"
+                                                              ColumnSpacing="{DynamicResource FireSpaceXs}">
+                                                            <TextBlock Theme="{DynamicResource DlgRowMetaText}" Grid.Column="0" Classes="DlgRowMeta Dim"
+                                                                       Text="{localization:Loc Dialog_Tones_Key}" />
+                                                            <TextBlock Theme="{DynamicResource DlgRowMetaText}" Grid.Column="1" Classes="DlgRowMeta Dim"
+                                                                       Text="&#183;" />
+                                                            <TextBlock Theme="{DynamicResource DlgRowMetaText}" Grid.Column="2" Classes="DlgRowMeta"
+                                                                       Text="{Binding Key}" />
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Panel>
+                            </Border>
+                        </DockPanel>
+
+                        <!-- ═══ MIDDLE: the selected tone ═══════════════════════ -->
+                        <Grid x:Name="ToneEditor" Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*"
+                              IsVisible="{Binding HasSelectedTone}">
+
+                            <!-- key + name, each under its own eyebrow -->
+                            <Grid Grid.Row="0" ColumnDefinitions="*,*"
+                                  ColumnSpacing="{DynamicResource FireSpaceLg}">
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,5"
+                                               Text="{localization:Loc Dialog_Tones_Key}" />
+                                    <TextBox dlgv:FocusOnOpen.IsTarget="True"
+                                             FontFamily="{DynamicResource FireFontMono}"
+                                             Text="{Binding Editor.EditKey, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Dialog_Tones_Key}" />
+                                    <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Margin="0,5,0,0"
+                                               Foreground="{DynamicResource FireDanger}"
+                                               Text="{Binding Editor.KeyError}"
+                                               IsVisible="{Binding Editor.HasKeyError}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,5"
+                                               Text="{localization:Loc Dialog_Tones_Name}" />
+                                    <TextBox Text="{Binding Editor.EditName, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Dialog_Tones_Name}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- volume, as DLC Builder shows it: the attenuation as a
+                                 POSITIVE number in a spinner, plus a track between a quiet
+                                 and a loud speaker. The stored value is still the negative
+                                 dB; Editor.VolumeAttenuation is the same edit seen from the
+                                 other sign. The label column
+                                 is 118, not the mockup's 64: "Lautstärke" and
+                                 "Deskriptoren" are both wider than 64 px at the row
+                                 weight, and a wrapped two-line label beside a slider
+                                 is the German-length trap in
+                                 docs/agents/ui/layout-traps.md. It was 92, which
+                                 DlgLabel's 13.5 px Bold "Deskriptoren" measures to
+                                 within a couple of pixels — and DlgLabel wraps rather
+                                 than trims, so any UI scale over 100 % made it two
+                                 lines. The descriptor row below shares the literal;
+                                 that is what gives the two rows one left edge. -->
+                            <Grid Grid.Row="1" ColumnDefinitions="118,*"
+                                  ColumnSpacing="{DynamicResource FireSpaceRow}"
+                                  Margin="{DynamicResource FireGapTopRow}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_Tones_Volume}" />
+                                <DockPanel Grid.Column="1" LastChildFill="True">
+                                    <NumericUpDown x:Name="VolumeInput" DockPanel.Dock="Left" Width="140"
+                                                   VerticalAlignment="Center" HorizontalAlignment="Left"
+                                                   AutomationProperties.Name="{localization:Loc Dialog_Tones_Volume}"
+                                                   Minimum="{Binding Editor.VolumeAttenuationMin}"
+                                                   Maximum="{Binding Editor.VolumeAttenuationMax}"
+                                                   Increment="0.1" FormatString="F1"
+                                                   Value="{Binding Editor.VolumeAttenuation, Mode=TwoWay}" />
+                                    <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center"
+                                          Margin="{DynamicResource FireGapLeftSm}">
+                                        <PathIcon Grid.Column="0" Data="{DynamicResource IconVolumeLow}"
+                                                  Width="13" Height="13" Margin="4,0" />
+                                        <Slider x:Name="VolumeSlider" Grid.Column="1" Classes="FireSlider"
+                                                Minimum="{Binding Editor.VolumeAttenuationMin}"
+                                                Maximum="{Binding Editor.VolumeAttenuationMax}"
+                                                AutomationProperties.Name="{localization:Loc Dialog_Tones_Volume}"
+                                                Value="{Binding Editor.VolumeAttenuation, Mode=TwoWay}"
+                                                SmallChange="0.1" LargeChange="3" VerticalAlignment="Center" />
+                                        <PathIcon Grid.Column="2" Data="{DynamicResource IconVolumeHigh}"
+                                                  Width="13" Height="13" Margin="4,0" />
+                                    </Grid>
+                                </DockPanel>
+                            </Grid>
+
+                            <!-- the tone's descriptors (Rocksmith's own tags) -->
+                            <Grid Grid.Row="2" ColumnDefinitions="118,*,*,*"
+                                  ColumnSpacing="{DynamicResource FireSpaceMd}"
+                                  Margin="{DynamicResource FireGapTopRow}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_Tones_Descriptors}" />
+                                <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding Editor.DescriptorOptions}"
+                                          AutomationProperties.Name="{localization:Loc Dialog_Tones_Descriptor1}"
+                                          SelectedItem="{Binding Editor.Descriptor1, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IToneChoice">
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <ComboBox Grid.Column="2" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding Editor.DescriptorOptions}"
+                                          AutomationProperties.Name="{localization:Loc Dialog_Tones_Descriptor2}"
+                                          SelectedItem="{Binding Editor.Descriptor2, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IToneChoice">
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <ComboBox Grid.Column="3" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding Editor.DescriptorOptions}"
+                                          AutomationProperties.Name="{localization:Loc Dialog_Tones_Descriptor3}"
+                                          SelectedItem="{Binding Editor.Descriptor3, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IToneChoice">
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <!-- the 14 gear slots. The row says what is loaded; the
+                                 SELECTED row opens into its picker and knobs. -->
+                            <DockPanel Grid.Row="3" Margin="{DynamicResource FireGapTopRow}">
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" DockPanel.Dock="Top" Classes="DlgSectionLabel"
+                                           Text="{localization:Loc Dialog_Tones_Gear}" />
+                                <Border Theme="{DynamicResource DlgListFrameBorder}" x:Name="GearListFrame" Classes="DlgListFrame" Margin="0">
+                                    <!-- The bar stays drawn: fourteen slots overflow the column,
+                                         and a list cut mid-card with no bar reads as the end.
+                                         NOT virtualized: the picked row is many times taller than
+                                         the rest, so a virtualizing panel's estimated extent moved
+                                         as it scrolled (the thumb shrank on the way up). Fourteen
+                                         rows cost nothing to realize. -->
+                                    <ListBox Classes="DlgList" ItemsSource="{Binding Editor.GearSlots}"
+                                             ScrollViewer.AllowAutoHide="False"
+                                             AutomationProperties.Name="{localization:Loc Dialog_Tones_Gear}"
+                                             SelectedItem="{Binding Editor.SelectedGearSlot, Mode=TwoWay}">
+                                        <ListBox.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ListBox.ItemsPanel>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IToneGearSlot">
+                                                <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                    <StackPanel Spacing="{DynamicResource FireSpaceSm}">
+                                                        <Grid ColumnDefinitions="*,Auto"
+                                                              ColumnSpacing="{DynamicResource FireSpaceRow}">
+                                                            <TextBlock Theme="{DynamicResource DlgValueText}" Grid.Column="0" Classes="DlgValue"
+                                                                       TextWrapping="NoWrap"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Text="{Binding Label}" />
+                                                            <TextBlock Theme="{DynamicResource DlgRowMetaText}" Grid.Column="1" Classes="DlgRowMeta"
+                                                                       Classes.Dim="{Binding !HasGear}"
+                                                                       Text="{Binding GearDisplayName}" />
+                                                        </Grid>
+                                                        <StackPanel Spacing="{DynamicResource FireSpaceSm}"
+                                                                    IsVisible="{Binding $parent[ListBoxItem].IsSelected}">
+                                                            <controls:DeferredChoiceBox HorizontalAlignment="Stretch"
+                                                                                        ItemsSource="{Binding Options}"
+                                                                                        AutomationProperties.Name="{Binding Label}"
+                                                                                        SelectedItem="{Binding SelectedOption, Mode=TwoWay}" />
+                                                            <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                                                       Text="{localization:Loc Dialog_Tones_NoKnobs}"
+                                                                       IsVisible="{Binding ShowNoKnobsHint}" />
+                                                            <ItemsControl ItemsSource="{Binding Knobs}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="contracts:IToneKnob">
+                                                                        <Grid ColumnDefinitions="120,*,78"
+                                                                              ColumnSpacing="{DynamicResource FireSpaceMd}"
+                                                                              Margin="0,0,0,2">
+                                                                            <TextBlock Theme="{DynamicResource DlgDescText}" Grid.Column="0" Classes="DlgDesc"
+                                                                                       Margin="0" TextWrapping="NoWrap"
+                                                                                       TextTrimming="CharacterEllipsis"
+                                                                                       VerticalAlignment="Center"
+                                                                                       Text="{Binding DisplayName}"
+                                                                                       ToolTip.Tip="{Binding DisplayName}" />
+                                                                            <Slider Grid.Column="1" Classes="FireSlider"
+                                                                                    Minimum="{Binding Minimum}"
+                                                                                    Maximum="{Binding Maximum}"
+                                                                                    AutomationProperties.Name="{Binding DisplayName}"
+                                                                                    Value="{Binding Value, Mode=TwoWay}"
+                                                                                    SmallChange="{Binding Step}"
+                                                                                    IsVisible="{Binding !IsEnum}"
+                                                                                    VerticalAlignment="Center" />
+                                                                            <ComboBox Grid.Column="1"
+                                                                                      HorizontalAlignment="Stretch"
+                                                                                      ItemsSource="{Binding EnumOptions}"
+                                                                                      AutomationProperties.Name="{Binding DisplayName}"
+                                                                                      SelectedIndex="{Binding EnumIndex, Mode=TwoWay}"
+                                                                                      IsVisible="{Binding IsEnum}" />
+                                                                            <TextBlock Theme="{DynamicResource DlgRowMetaText}" Grid.Column="2" Classes="DlgRowMeta"
+                                                                                       TextAlignment="Right"
+                                                                                       Text="{Binding ValueText}" />
+                                                                        </Grid>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Border>
+                            </DockPanel>
+                        </Grid>
+
+                        <!-- No tone selected: the middle column says so rather than
+                             leaving a 700 px hole beside a populated list. -->
+                        <!-- "No tones yet — add one or import" is the LIST's sentence, and
+                             it was printed here too: with a full rail and the selection
+                             merely cleared, the middle column asserted the project had no
+                             tones while they were listed beside it. -->
+                        <Border Theme="{DynamicResource DlgEmptyBorder}" Grid.Column="1" Classes="DlgEmpty" IsVisible="{Binding !HasSelectedTone}">
+                            <TextBlock TextWrapping="Wrap"
+                                       Text="{localization:Loc Dialog_Tones_PickAToneFirst}" />
+                        </Border>
+
+                        <!-- ═══ RIGHT: where the tones GO ═══════════════════════ -->
+                        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+                            <StackPanel>
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                           Text="{localization:Loc Dialog_Tones_SlotsSection}" />
+                                <Border Theme="{DynamicResource DlgSectionBorder}" x:Name="ArrangementSlotsCard" Classes="DlgSection">
+                                    <StackPanel>
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                                   Margin="{DynamicResource FireGapRowMd}"
+                                                   Text="{localization:Loc Dialog_Tones_SlotsHint}" />
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                                   Text="{localization:Loc Dialog_Tones_NoArrangements}"
+                                                   IsVisible="{Binding !HasArrangements}" />
+                                        <!-- The cards are rebuilt on EVERY open (the view model is new
+                                             each time), so they are kept cheap twice over: the list is
+                                             virtualized (#141), so only the cards the column shows are
+                                             built; and each slot is a DeferredAutoCompleteBox (#173), a
+                                             resting field that builds its AutoCompleteBox on first focus.
+                                             Five real boxes per card were most of an open's cost.
+                                             A slot naming a key the project has no tone for carries the
+                                             dialog grammar's notice strip under it, with the reason (#195):
+                                             the same words the Inspector's Song tab marks a key with. -->
+                                        <ItemsControl x:Name="ArrangementSlotRows" ItemsSource="{Binding Arrangements}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <VirtualizingStackPanel />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="contracts:IToneArrangementRow">
+                                                    <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame" Padding="12"
+                                                            Margin="0,0,0,9">
+                                                        <StackPanel Spacing="{DynamicResource FireSpaceMd}">
+                                                            <StackPanel Orientation="Horizontal"
+                                                                        Spacing="{DynamicResource FireSpaceSmPlus}">
+                                                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding Name}" />
+                                                                <Border Theme="{DynamicResource DlgTagBorder}" Classes="DlgTag"
+                                                                        IsVisible="{Binding TypeLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                                    <TextBlock Text="{Binding TypeLabel}" />
+                                                                </Border>
+                                                            </StackPanel>
+
+                                                            <StackPanel>
+                                                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
+                                                                           Text="{localization:Loc Dialog_Tones_ToneBase}" />
+                                                                <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                                                  AutomationProperties.Name="{localization:Loc Dialog_Tones_ToneBase}"
+                                                                                                  ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
+                                                                                                  Text="{Binding ToneBase, Mode=TwoWay}" />
+                                                                <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ToneBaseNotDefinedMark" Classes="DlgStrip Notice"
+                                                                        Margin="0,4,0,0" Padding="{DynamicResource FirePadTag}"
+                                                                        IsVisible="{Binding IsToneBaseUndefined}"
+                                                                        ToolTip.Tip="{localization:Loc Inspector_Tones_NotDefinedTip}">
+                                                                    <Grid ColumnDefinitions="Auto,*">
+                                                                        <PathIcon Grid.Column="0" Width="12" Height="12" VerticalAlignment="Top"
+                                                                                  Foreground="{DynamicResource FireWarning}" Data="{DynamicResource IconInfo}"
+                                                                                  Margin="{DynamicResource GapRightSm}" />
+                                                                        <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Tones_NotDefined}" />
+                                                                    </Grid>
+                                                                </Border>
+                                                            </StackPanel>
+
+                                                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                                                                  ColumnSpacing="9" RowSpacing="9">
+                                                                <StackPanel Grid.Row="0" Grid.Column="0">
+                                                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
+                                                                               Text="{localization:Loc Dialog_Tones_SlotA}" />
+                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                                                      AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotA}"
+                                                                                                      ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
+                                                                                                      Text="{Binding ToneA, Mode=TwoWay}" />
+                                                                    <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ToneANotDefinedMark" Classes="DlgStrip Notice"
+                                                                            Margin="0,4,0,0" Padding="{DynamicResource FirePadTag}"
+                                                                            IsVisible="{Binding IsToneAUndefined}"
+                                                                            ToolTip.Tip="{localization:Loc Inspector_Tones_NotDefinedTip}">
+                                                                        <Grid ColumnDefinitions="Auto,*">
+                                                                            <PathIcon Grid.Column="0" Width="12" Height="12" VerticalAlignment="Top"
+                                                                                      Foreground="{DynamicResource FireWarning}" Data="{DynamicResource IconInfo}"
+                                                                                      Margin="{DynamicResource GapRightSm}" />
+                                                                            <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Tones_NotDefined}" />
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Row="0" Grid.Column="1">
+                                                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
+                                                                               Text="{localization:Loc Dialog_Tones_SlotB}" />
+                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                                                      AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotB}"
+                                                                                                      ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
+                                                                                                      Text="{Binding ToneB, Mode=TwoWay}" />
+                                                                    <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ToneBNotDefinedMark" Classes="DlgStrip Notice"
+                                                                            Margin="0,4,0,0" Padding="{DynamicResource FirePadTag}"
+                                                                            IsVisible="{Binding IsToneBUndefined}"
+                                                                            ToolTip.Tip="{localization:Loc Inspector_Tones_NotDefinedTip}">
+                                                                        <Grid ColumnDefinitions="Auto,*">
+                                                                            <PathIcon Grid.Column="0" Width="12" Height="12" VerticalAlignment="Top"
+                                                                                      Foreground="{DynamicResource FireWarning}" Data="{DynamicResource IconInfo}"
+                                                                                      Margin="{DynamicResource GapRightSm}" />
+                                                                            <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Tones_NotDefined}" />
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Row="1" Grid.Column="0">
+                                                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
+                                                                               Text="{localization:Loc Dialog_Tones_SlotC}" />
+                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                                                      AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotC}"
+                                                                                                      ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
+                                                                                                      Text="{Binding ToneC, Mode=TwoWay}" />
+                                                                    <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ToneCNotDefinedMark" Classes="DlgStrip Notice"
+                                                                            Margin="0,4,0,0" Padding="{DynamicResource FirePadTag}"
+                                                                            IsVisible="{Binding IsToneCUndefined}"
+                                                                            ToolTip.Tip="{localization:Loc Inspector_Tones_NotDefinedTip}">
+                                                                        <Grid ColumnDefinitions="Auto,*">
+                                                                            <PathIcon Grid.Column="0" Width="12" Height="12" VerticalAlignment="Top"
+                                                                                      Foreground="{DynamicResource FireWarning}" Data="{DynamicResource IconInfo}"
+                                                                                      Margin="{DynamicResource GapRightSm}" />
+                                                                            <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Tones_NotDefined}" />
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Row="1" Grid.Column="1">
+                                                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,0,0,4"
+                                                                               Text="{localization:Loc Dialog_Tones_SlotD}" />
+                                                                    <controls:DeferredAutoCompleteBox FontFamily="{DynamicResource FireFontMono}"
+                                                                                                      AutomationProperties.Name="{localization:Loc Dialog_Tones_SlotD}"
+                                                                                                      ItemsSource="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AuthoredToneKeys}"
+                                                                                                      Text="{Binding ToneD, Mode=TwoWay}" />
+                                                                    <Border Theme="{DynamicResource DlgStripBorder}" x:Name="ToneDNotDefinedMark" Classes="DlgStrip Notice"
+                                                                            Margin="0,4,0,0" Padding="{DynamicResource FirePadTag}"
+                                                                            IsVisible="{Binding IsToneDUndefined}"
+                                                                            ToolTip.Tip="{localization:Loc Inspector_Tones_NotDefinedTip}">
+                                                                        <Grid ColumnDefinitions="Auto,*">
+                                                                            <PathIcon Grid.Column="0" Width="12" Height="12" VerticalAlignment="Top"
+                                                                                      Foreground="{DynamicResource FireWarning}" Data="{DynamicResource IconInfo}"
+                                                                                      Margin="{DynamicResource GapRightSm}" />
+                                                                            <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Tones_NotDefined}" />
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Imported tones only ever come from a game package: the section is
+                                     absent in a build that cannot read one (#887). -->
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,8,0,10"
+                                           IsVisible="{Binding CanImportFromPackages}"
+                                           Text="{localization:Loc Dialog_Tones_ImportedTones}" />
+                                <Border Theme="{DynamicResource DlgSectionBorder}" x:Name="ImportedTonesCard" Classes="DlgSection" Margin="0"
+                                        IsVisible="{Binding CanImportFromPackages}">
+                                    <StackPanel>
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint"
+                                                   Margin="{DynamicResource FireGapRowMd}"
+                                                   Text="{localization:Loc Dialog_Tones_ImportedHint}" />
+                                        <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame" Padding="12" Margin="0">
+                                            <StackPanel Spacing="{DynamicResource FireSpaceSmPlus}">
+                                                <ItemsControl ItemsSource="{Binding ImportedTones}"
+                                                              IsVisible="{Binding HasImportedTones}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IImportedTone">
+                                                            <Grid ColumnDefinitions="*,Auto"
+                                                                  ColumnSpacing="{DynamicResource FireSpaceMd}"
+                                                                  Margin="0,0,0,4">
+                                                                <StackPanel Grid.Column="0">
+                                                                    <TextBlock Theme="{DynamicResource DlgValueText}" Classes="DlgValue" Text="{Binding Name}"
+                                                                               TextWrapping="NoWrap"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock Theme="{DynamicResource DlgRowMetaText}" Classes="DlgRowMeta" Text="{Binding Key}" />
+                                                                </StackPanel>
+                                                                <Button Grid.Column="1" Classes="DlgChip" Margin="0"
+                                                                        Content="{localization:Loc Dialog_Tones_AddImportedToProject}"
+                                                                        Command="{Binding $parent[ItemsControl].((contracts:IToneDesignerScreen)DataContext).AddImportedToProjectCommand}"
+                                                                        CommandParameter="{Binding}" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <Grid ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="{DynamicResource FireSpaceMd}">
+                                                    <TextBlock Theme="{DynamicResource DlgHintText}" Grid.Column="0" Classes="DlgHint"
+                                                               VerticalAlignment="Center"
+                                                               Text="{localization:Loc Dialog_Tones_NoImported}"
+                                                               IsVisible="{Binding !HasImportedTones}" />
+                                                    <Button Grid.Column="1" Classes="DlgLink"
+                                                            Content="{localization:Loc Dialog_Tones_ImportFromPsarc}"
+                                                            Command="{Binding ImportTonesFromPsarcCommand}" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Margin="{DynamicResource FireGapTopSm}"
+                                                   Text="{Binding ImportStatus}"
+                                                   IsVisible="{Binding ImportStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </controls:YieldingHeightDecorator>
+            </DockPanel>
+        </Border>
+        <!-- "From tone rig" review over the card: RigToneImportReviewPanel.axaml. -->
+        <ContentControl Content="{Binding RigImport}">
+            <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="contracts:IRigToneImportReview">
+                    <dialogs:RigToneImportReviewPanel />
+                </DataTemplate>
+            </ContentControl.ContentTemplate>
+        </ContentControl>
+    </Grid>
+</UserControl>

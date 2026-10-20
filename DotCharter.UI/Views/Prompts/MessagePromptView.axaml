@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Prompts.MessagePromptView"
+             x:DataType="contracts:IMessagePromptScreen"
+             x:CompileBindings="True">
+
+    <!--
+        The one message dialog behind IDialogs.MessageAsync, hosted by
+        Views/Shell/DialogHost over its shared scrim. The card only: the host
+        owns the scrim, the stacking and Esc.
+
+        Cancel appears only when the prompt asks a question; a plain message
+        has one way out. The actions WRAP (docs/agents/ui/dialogs.md): a German
+        or Japanese label never draws past the card's edge.
+    -->
+
+    <Border x:Name="MessagePromptCard" Theme="{StaticResource FireOverlayCardBorder}" Classes="FireOverlayCard"
+            Width="{StaticResource FireDialogWidthSm}"
+            Padding="{StaticResource FirePadPanelLg}">
+        <StackPanel Spacing="{StaticResource FireSpaceSection}">
+            <TextBlock x:Name="MessagePromptTitle" Theme="{StaticResource FireScreenTitleText}" Classes="FireScreenTitle" TextWrapping="Wrap"
+                       Text="{Binding Title}" />
+            <TextBlock x:Name="MessagePromptBody" Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle" TextWrapping="Wrap"
+                       IsVisible="{Binding HasMessage}"
+                       Text="{Binding Message}" />
+
+            <WrapPanel HorizontalAlignment="Right"
+                       ItemSpacing="{StaticResource FireSpaceRow}"
+                       LineSpacing="{StaticResource FireSpaceRow}">
+                <Button x:Name="MessagePromptCancel" Theme="{StaticResource FireGhostButton}" Classes="FireGhost" IsCancel="True"
+                        IsVisible="{Binding IsConfirmation}"
+                        Command="{Binding CancelCommand}"
+                        Content="{localization:Loc Action_Cancel}" />
+                <Button x:Name="MessagePromptOk" Theme="{StaticResource FireCtaButton}" Classes="FireCta Compact" IsDefault="True"
+                        Command="{Binding OkCommand}">
+                    <TextBlock Classes="FireCtaLabel" HorizontalAlignment="Center"
+                               Text="{localization:Loc Action_OK}" />
+                </Button>
+            </WrapPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -1,0 +1,368 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization">
+
+    <!-- Slider — custom track + thumb for a modern DAW feel -->
+    <Style Selector="Slider">
+        <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+    </Style>
+
+    <!-- ═══ A THUMB IS CLIPPED BY THREE NESTED BOXES, NOT ONE ═══════════════
+         The owner reported the thumb circle "sliced flat", on the Mix popover
+         and "on other parts as well". A first fix un-clipped the `Thumb` and
+         changed nothing visible, because the Thumb is only the INNERMOST of
+         three clips that are all exactly the slider's own height. Measured
+         (`Slider.FirePopoverSlider` inside a real prewarmed flyout, thumb
+         painting 38 px — 14 + 2 × (3 px offset + 9 px blur) — through a 20 px
+         slider):
+
+           [ 0] Border                  14x14
+           [ 1] Thumb    thumb          14x14   <<< clipped (fixed first)
+           ...
+           [ 8] DataValidationErrors   146x20   <<< CLIP
+           [ 9] Slider                 146x20   <<< CLIP
+
+         Avalonia's own themes set `ClipToBounds="True"` on the Slider AND on
+         the `DataValidationErrors` its template wraps the content in, so
+         removing one simply reveals the next. All three are listed together
+         here so that can never happen again.
+
+         ONE RULE FOR EVERY SLIDER, deliberately, rather than a setter per
+         thumb template. There are four thumb templates in this app
+         (`Slider`, `Slider.MixerSlider` — VIEW-scoped in
+         `Views/Editor/InspectorStyles.axaml` — `Slider.FireSlider` and
+         `Slider.FirePopoverSlider`) and every one of them is a `Slider`, so
+         this selector reaches all four and any fifth on the day it compiles.
+         Four copies of the setter would drift apart; that is the failure mode
+         this shape exists to remove.
+
+         Un-clipping is the correct fix and NOT extra row height: a drop shadow
+         is meant to fall outside its box (that is what the mockups' CSS does,
+         where nothing clips it) and a 14 px thumb is meant to overhang a 4 px
+         rail. The popover CARD still clips its own 14 px radius, which is what
+         keeps the head tint and footer fill inside the corners.
+
+         Guarded by `Perf/SliderThumbHeadroomUiPerfSmokeTests`, which walks
+         every ancestor up to the hosting SURFACE — the earlier version stopped
+         at the Slider and so could never have seen either of these two. -->
+    <Style Selector="Slider">
+        <Setter Property="ClipToBounds" Value="False" />
+    </Style>
+    <Style Selector="Slider /template/ DataValidationErrors">
+        <Setter Property="ClipToBounds" Value="False" />
+    </Style>
+
+    <Style Selector="Slider:horizontal /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Foreground}" Height="4" CornerRadius="{StaticResource RadiusTrack}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider:horizontal /template/ Track RepeatButton#PART_IncreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{DynamicResource SurfaceHover}" Height="4" CornerRadius="{StaticResource RadiusTrack}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <!-- Vertical sliders (mixer faders): the same rail rotated. Without
+         these, the horizontal Height=4 templates render the vertical rail
+         as a 4px stub — which made the stem faders nearly invisible.
+         Decrease is the filled portion below the thumb. -->
+    <Style Selector="Slider:vertical /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Foreground}" Width="4" CornerRadius="{StaticResource RadiusTrack}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider:vertical /template/ Track RepeatButton#PART_IncreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{DynamicResource SurfaceHover}" Width="4" CornerRadius="{StaticResource RadiusTrack}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <!-- THE THUMB MUST NOT CLIP ITSELF. Avalonia's Thumb theme sets
+         `ClipToBounds="True"`, and the Thumb's box is exactly the 14 x 14 the
+         setters below give it — so everything this template paints OUTSIDE that
+         box was being cut away at the box edge:
+
+           · the drop shadow, entirely (it starts 1 px below the circle);
+           · the `:pointerover` scale(1.15) and the `:pressed` scale(1.25),
+             sliced flat on all four sides — 17.5 px of circle drawn through a
+             14 px hole.
+
+         The owner reported it as "the bottom of the thumb sliced flat", on the
+         Mix sliders and "on other parts as well", and "other parts" is every
+         slider in the app: this is the SHARED theme and the stem mixer's
+         vertical faders wear it too. It is the usual shape — nothing measures
+         wrong, the control is exactly the size it asked for, and the SLOT the
+         painter was given is the problem.
+
+         Un-clipping is the whole fix, and it is the right one: a drop shadow is
+         SUPPOSED to fall outside its box (that is what the mockup's CSS does,
+         where nothing clips it), and the hover growth is supposed to overhang a
+         4 px rail. No size changes, and above all no shrinking the thumb — its
+         14 px is what `Play Menus.dc.html` draws. Guarded by
+         `Perf/SliderThumbHeadroomUiPerfSmokeTests`, which walks the ancestors
+         for a clip tight enough to cut the painted extent. -->
+    <Style Selector="Slider /template/ Thumb">
+        <Setter Property="ClipToBounds" Value="False" />
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Width="14" Height="14" CornerRadius="{StaticResource RadiusThumb}"
+                        Background="{DynamicResource TextPrimary}"
+                        BorderBrush="{DynamicResource AccentColor}" BorderThickness="{StaticResource BorderFocusRing}"
+                        BoxShadow="0 1 4 0 #40000000">
+                    <Border.Transitions>
+                        <Transitions>
+                            <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" />
+                        </Transitions>
+                    </Border.Transitions>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider:pointerover /template/ Thumb Border">
+        <Setter Property="RenderTransform" Value="scale(1.15)" />
+    </Style>
+    <Style Selector="Slider:pressed /template/ Thumb Border">
+        <Setter Property="RenderTransform" Value="scale(1.25)" />
+        <Setter Property="BoxShadow" Value="0 2 8 0 #66000000" />
+    </Style>
+    <Style Selector="Slider:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+
+    <!-- CheckBox — accent-colored tick with hover ring. The box's resting
+         colours and radius are TEMPLATE values in Fluent's CheckBox, which an
+         untriggered selector cannot beat: the colours go on the triggered
+         :unchecked state, and the radius on the CheckBox, whose CornerRadius the
+         box TemplateBinds. -->
+    <Style Selector="CheckBox">
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}" />
+    </Style>
+    <Style Selector="CheckBox:unchecked /template/ Border#NormalRectangle">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+        <Setter Property="Background" Value="{DynamicResource AppBackground}" />
+    </Style>
+    <Style Selector="CheckBox /template/ Border#NormalRectangle">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="CheckBox:pointerover /template/ Border#NormalRectangle">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+    </Style>
+    <Style Selector="CheckBox:checked /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{DynamicResource AccentColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+    </Style>
+    <Style Selector="CheckBox:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <Style Selector="CheckBox /template/ Path#CheckGlyph">
+        <Setter Property="RenderTransform" Value="scale(1.0)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15" Easing="BackEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Shared TextBox / ComboBox / NumericUpDown chrome -->
+    <Style Selector="TextBox, ComboBox, NumericUpDown">
+        <Setter Property="Background" Value="{DynamicResource AppBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <!-- MinHeight, NOT Height (2026-08-11): a fixed Height pinned every
+             multi-line TextBox at 32 px regardless of its own Min/MaxHeight -
+             the lyrics textarea's MaxHeight=320 was dead. Single-line inputs
+             still sit at 32 because nothing makes them taller. -->
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="TextBox:pointerover, ComboBox:pointerover, NumericUpDown:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+    </Style>
+
+    <Style Selector="TextBox:focus, ComboBox:focus, NumericUpDown:focus-within, ComboBox:dropdownopen">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+    </Style>
+
+    <Style Selector="TextBox:disabled, ComboBox:disabled, NumericUpDown:disabled">
+        <Setter Property="Opacity" Value="0.5" />
+    </Style>
+
+    <Style Selector="TextBox">
+        <Setter Property="TextAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Padding" Value="12,0" />
+    </Style>
+
+    <Style Selector="ComboBox">
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Padding" Value="12,0" />
+        <!-- Bound popup height + virtualization: device/plugin lists can be
+             long, and realizing every ComboBoxItem on first open is the main
+             cost of the dropdown-open lag. -->
+        <Setter Property="MaxDropDownHeight" Value="420" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <VirtualizingStackPanel />
+            </ItemsPanelTemplate>
+        </Setter>
+    </Style>
+
+    <!-- What a screen reader announces (#311). The part of a NumericUpDown or an editable
+         ComboBox that takes FOCUS is the TextBox in its template, so it carries the control's own
+         AutomationProperties.Name; the spinner arrows say what they do. Without these every
+         named NumericUpDown read as an unnamed edit field between two unnamed buttons
+         (Perf/AccessibilityAuditUiPerfSmokeTests). -->
+    <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
+        <Setter Property="AutomationProperties.Name" Value="{Binding $parent[NumericUpDown].(AutomationProperties.Name)}" />
+    </Style>
+    <Style Selector="ComboBox /template/ TextBox#PART_EditableTextBox">
+        <Setter Property="AutomationProperties.Name" Value="{Binding $parent[ComboBox].(AutomationProperties.Name)}" />
+    </Style>
+    <!-- A Slider's track halves are RepeatButtons for the POINTER (page left / right); the
+         keyboard moves the Slider itself, which carries the name. Out of the control view. -->
+    <Style Selector="Slider /template/ RepeatButton#PART_DecreaseButton, Slider /template/ RepeatButton#PART_IncreaseButton">
+        <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    </Style>
+    <Style Selector="ButtonSpinner /template/ RepeatButton#PART_IncreaseButton">
+        <Setter Property="AutomationProperties.Name" Value="{localization:Loc Accessibility_SpinnerIncrease}" />
+    </Style>
+    <Style Selector="ButtonSpinner /template/ RepeatButton#PART_DecreaseButton">
+        <Setter Property="AutomationProperties.Name" Value="{localization:Loc Accessibility_SpinnerDecrease}" />
+    </Style>
+
+    <Style Selector="NumericUpDown">
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="NumericUpDown /template/ TextBox">
+        <Setter Property="TextAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Padding" Value="12,0" />
+    </Style>
+
+    <!-- ComboBox dropdown popup + items.
+         The same trap as `Styles/Chrome.axaml`'s menu rule: the ComboBox
+         template sets this Border's Background, BorderBrush, BorderThickness,
+         CornerRadius and Padding from `{DynamicResource …}` inside the template,
+         which is a LOCAL value and beats a style setter — so those five did
+         nothing here for as long as they existed and every dropdown kept
+         Fluent's own fill. Only the shadow and the margin (which the template
+         does not set) ever applied. Change a dropdown's colour through the
+         resource KEY: `Styles/FireMenuChrome.axaml`. -->
+    <!-- The gap under the field. No shadow: the popup window is the frame's size plus this
+         margin, so a shadow was cut off square at the sides (see Chrome.axaml's menu note). -->
+    <Style Selector="ComboBox /template/ Popup > Border">
+        <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
+    <Style Selector="ComboBoxItem">
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ComboBoxItem /template/ ContentPresenter">
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    </Style>
+    <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSelected}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSelectedHover}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="ComboBoxItem:selected:focus /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSelected}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+
+    <!-- ProgressBar — slim accent bar matching the DAW theme (the Fluent
+         default renders a bright blue pill that clashes with the palette) -->
+    <Style Selector="ProgressBar">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="MinHeight" Value="6" />
+    </Style>
+    <Style Selector="ProgressBar:horizontal">
+        <Setter Property="Height" Value="6" />
+    </Style>
+
+    <!-- ToggleSwitch — accent knob/track, consistent with CheckBox -->
+    <Style Selector="ToggleSwitch">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    </Style>
+    <!-- Triggered on :unchecked: Fluent sets the off track's colours as template
+         values, which an untriggered selector cannot beat. -->
+    <Style Selector="ToggleSwitch:unchecked /template/ Border#OuterBorder">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+    </Style>
+    <Style Selector="ToggleSwitch:pointerover /template/ Border#OuterBorder">
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+    </Style>
+    <Style Selector="ToggleSwitch:checked /template/ Border#SwitchKnobBounds">
+        <Setter Property="Background" Value="{DynamicResource AccentColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+    </Style>
+
+    <!-- ListBox — flat panel + rounded rows with the shared hover/selected
+         palette so list-driven views (song browser, issues, stem models)
+         match the ComboBox popup look -->
+    <Style Selector="ListBox">
+        <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem">
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSelected}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentSelectedHover}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+
+
+
+</Styles>

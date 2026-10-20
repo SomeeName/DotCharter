@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.TempoMapOperationDialogView"
+             x:DataType="contracts:ITempoMapOperationScreen"
+             x:CompileBindings="True">
+
+    <!-- One shared card for every single-number tempo-map operation; the title,
+         subtitle, label, range and format all come from the view model.
+         Grammar: Views/Dialogs/DialogStyles.axaml. Hosted by Views/Shell/DialogHost,
+         which focuses `ValueInput` on open (FocusOnOpen) — keep the x:Name. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconClock}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{Binding Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{Binding Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="1" Classes="DlgRow Last" ColumnDefinitions="*,180">
+                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{Binding Label}" />
+                    <!-- The label is DATA (the dialog serves several tempo-map
+                         verbs), so the accessible name is the same binding —
+                         the row's TextBlock is what a sighted reader gets. -->
+                    <NumericUpDown VerticalAlignment="Center" x:Name="ValueInput" dlgv:FocusOnOpen.IsTarget="True" Grid.Column="1" Value="{Binding Value}"
+                                   AutomationProperties.Name="{Binding Label}"
+                                   Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                   FormatString="{Binding FormatString}" Increment="1" />
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Apply}"
+                                Command="{Binding ApplyCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

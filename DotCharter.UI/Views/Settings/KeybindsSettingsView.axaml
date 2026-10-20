@@ -1,0 +1,260 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:appControls="using:DotCharter.UI.Controls"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             x:Class="DotCharter.UI.Views.Settings.KeybindsSettingsView"
+             x:DataType="contracts:IKeybindsSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > Keybinds. The rows are DATA: one template draws every
+        group, and every chord row inside it is a Grid.FormRow on the shared
+        `*,184` grammar in a two-up UniformGrid. The search filters by flipping
+        each row's IsVisible — the container's, so a hidden row gives its
+        UniformGrid cell back.
+
+        Density is the whole problem on this tab — 140 rows over six groups.
+        The labels do NOT wrap: a wrapped label makes its row two lines tall and
+        knocks the two columns out of step. They ellipsize and carry the full
+        text as a tooltip.
+    -->
+
+    <UserControl.Resources>
+        <converters:ResourceKeyConverter x:Key="ResourceKey" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+        <!-- The two-up chord grid keeps its own tight rhythm, restated HERE so it is
+             the last word over the page-wide row spacing: 140 rows cannot take a
+             section's breathing room, and each cell needs a gutter before the next
+             column's label. Anchored on the ItemsControl: a descendant selector
+             walks the LOGICAL tree, where an item's parent is the ItemsControl and
+             never the UniformGrid panel, so `UniformGrid.KeybindGrid Grid.FormRow`
+             matched nothing. The ONE rule over these rows: SettingsStyles.axaml carried
+             a second one that this overrode, attached to every row for nothing (#639). -->
+        <Style Selector="ItemsControl.KeybindRows Grid.FormRow">
+            <Setter Property="Margin" Value="0,0,64,8" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="ColumnSpacing" Value="16" />
+            <!-- Hit-testable so the row (not just the capture pill) reports
+                 :pointerover — the label rule below lifts its contrast on hover,
+                 which is what gives the rows a sense of where the cursor is.
+                 Transparent, so nothing is drawn. -->
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <!-- An action is what a charter scans for, so the LABEL leads and the
+             chord follows: labels at reading size in primary text, pills quiet
+             (outline, regular weight, secondary text, left-aligned so modifiers
+             line up down the column). The pill brightens under the pointer. -->
+        <Style Selector="ItemsControl.KeybindRows appControls|KeybindCaptureBox /template/ Border#Root">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        </Style>
+        <Style Selector="ItemsControl.KeybindRows appControls|KeybindCaptureBox /template/ TextBlock#DisplayLabel">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="ItemsControl.KeybindRows appControls|KeybindCaptureBox:pointerover /template/ TextBlock#DisplayLabel">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        </Style>
+        <!-- The tab's own header leads its groups. -->
+        <Style Selector="Border.Intro TextBlock.GroupTitle">
+            <Setter Property="FontSize" Value="{StaticResource FireSizePanelTitle}" />
+        </Style>
+        <!-- Resetting 140 bindings is destructive, but the page's loudest thing
+             it should not be: a quiet outline with danger-coloured text. -->
+        <Style Selector="Button.KeybindReset">
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+        </Style>
+        <Style Selector="Button.KeybindReset /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+        </Style>
+        <Style Selector="Button.KeybindReset:pointerover /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireDanger}" />
+        </Style>
+        <Style Selector="ItemsControl.KeybindRows Grid.FormRow > TextBlock.Label">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        </Style>
+        <Style Selector="ItemsControl.KeybindRows Grid.FormRow:pointerover > TextBlock.Label">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        </Style>
+        <!-- The MIDI pill: the chord pill's place and shape, a RowAction outline,
+             mono text read from the left like the chords. Learning lights it in
+             the accent until the next press lands. -->
+        <Style Selector="Button.RowAction.MidiPill">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+        <Style Selector="Button.RowAction.MidiPill TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        </Style>
+        <Style Selector="Button.RowAction.MidiPill.Learning /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+        </Style>
+        <Style Selector="Button.RowAction.MidiClear">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="9,0" />
+        </Style>
+        <!-- The item CONTAINER follows the row's visibility: a UniformGrid
+             counts its visible children, so a hidden row gives its cell back
+             only when the presenter around it is hidden too. -->
+        <Style Selector="UniformGrid.KeybindGrid > ContentPresenter" x:DataType="contracts:IKeybindRow">
+            <Setter Property="IsVisible" Value="{Binding IsVisible}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,0,72">
+
+            <!-- Intro card. Rowless on purpose — the search reaches it by its
+                 title — and where "Reset to defaults" lives: at the bottom of
+                 a 140-row scroll it was a destructive action nobody could find.
+                 The button is BOUNDED and its label wraps, so the German
+                 caption cannot starve the title column. -->
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First Intro">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*,Auto">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconKeyboard}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Shortcuts}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_KeybindsTab}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle"
+                                       Text="{localization:Loc Settings_ClickKeybindField}" />
+                        </StackPanel>
+                        <!-- The reset follows the mode: chords back to their defaults,
+                             or every MIDI trigger cleared. Two buttons, one each, so
+                             neither verb changes meaning under the user's hand. -->
+                        <Button Grid.Column="2" Classes="KeybindReset" VerticalAlignment="Center"
+                                MaxWidth="200" IsVisible="{Binding IsKeyboardMode}"
+                                AutomationProperties.Name="{localization:Loc Settings_ResetDefaultKeybinds}"
+                                Command="{Binding ResetToDefaultsCommand}">
+                            <TextBlock Text="{localization:Loc Settings_ResetDefaultKeybinds}"
+                                       TextWrapping="Wrap" TextAlignment="Center" />
+                        </Button>
+                        <Button Grid.Column="2" x:Name="ClearMidiBindings" Classes="KeybindReset" VerticalAlignment="Center"
+                                MaxWidth="200" IsVisible="{Binding IsMidiMode}"
+                                AutomationProperties.Name="{localization:Loc Settings_ClearMidiBindings}"
+                                Command="{Binding ClearMidiBindingsCommand}">
+                            <TextBlock Text="{localization:Loc Settings_ClearMidiBindings}"
+                                       TextWrapping="Wrap" TextAlignment="Center" />
+                        </Button>
+                    </Grid>
+
+                    <!-- Keyboard or MIDI controller: the SAME rows, one pill each. -->
+                    <Border x:Name="KeybindModeSwitch" Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment"
+                            HorizontalAlignment="Left" Margin="0,12,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXxs}">
+                            <RadioButton x:Name="KeybindModeKeyboard" Classes="FireSegmentItem"
+                                         GroupName="KeybindMode"
+                                         IsChecked="{Binding IsKeyboardMode}"
+                                         Content="{localization:Loc Keybind_Mode_Keyboard}"
+                                         AutomationProperties.Name="{localization:Loc Keybind_Mode_Keyboard}" />
+                            <RadioButton x:Name="KeybindModeMidi" Classes="FireSegmentItem"
+                                         GroupName="KeybindMode"
+                                         IsChecked="{Binding IsMidiMode}"
+                                         Content="{localization:Loc Keybind_Mode_Midi}"
+                                         AutomationProperties.Name="{localization:Loc Keybind_Mode_Midi}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Where the presses come from. A device that is not listening is
+                         a WARNING — a binding then fires nothing — but the rows stay
+                         editable under it. -->
+                    <StackPanel x:Name="MidiInputState" IsVisible="{Binding IsMidiMode}" Margin="0,12,0,0">
+                        <Border Theme="{StaticResource NoticeStripBorder}" Classes="NoticeStrip" IsVisible="{Binding !IsMidiInputLive}">
+                            <TextBlock Theme="{StaticResource NoticeStripText}" Classes="NoticeText" x:Name="MidiInputWarning" Text="{Binding MidiInputStatus}" />
+                        </Border>
+                        <TextBlock Theme="{StaticResource SettingDescText}" x:Name="MidiInputLive" Classes="SettingDesc" TextWrapping="Wrap"
+                                   IsVisible="{Binding IsMidiInputLive}" Text="{Binding MidiInputStatus}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <ItemsControl x:Name="KeybindGroups" ItemsSource="{Binding Groups}">
+                <!-- A plain stack, laid out a group per prewarm turn while the tab
+                     is hidden (#253): the whole tab was one ~600 ms turn. -->
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <controls:ChunkedStackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="contracts:IKeybindGroup">
+                        <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding IsVisible}">
+                            <StackPanel>
+                                <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                                    <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                        <PathIcon Classes="GroupIcon"
+                                                  Data="{Binding IconKey, Converter={StaticResource ResourceKey}}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Shortcuts}" />
+                                        <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{Binding Title}" />
+                                        <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{Binding Subtitle}" />
+                                    </StackPanel>
+                                </Grid>
+                                <ItemsControl Classes="KeybindRows" ItemsSource="{Binding Rows}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Classes="KeybindGrid" Columns="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IKeybindRow">
+                                            <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,184" IsVisible="{Binding IsVisible}">
+                                                <TextBlock Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                                                           Text="{Binding Label}"
+                                                           ToolTip.Tip="{Binding Tooltip}" />
+                                                <appControls:KeybindCaptureBox Grid.Column="1" IsVisible="{Binding !ShowsMidi}"
+                                                                            Chord="{Binding Chord, Mode=TwoWay}" />
+                                                <Grid VerticalAlignment="Top" Grid.Column="1" Classes="MidiCell" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceXs}"
+                                                      IsVisible="{Binding ShowsMidi}">
+                                                    <Button Grid.Column="0" Classes="RowAction MidiPill"
+                                                            Classes.Learning="{Binding IsMidiLearning}"
+                                                            IsEnabled="{Binding IsMidiBindable}"
+                                                            Command="{Binding LearnMidiCommand}"
+                                                            AutomationProperties.Name="{Binding Label}"
+                                                            ToolTip.Tip="{Binding Tooltip}">
+                                                        <TextBlock Text="{Binding MidiText}" TextTrimming="CharacterEllipsis" />
+                                                    </Button>
+                                                    <Button Grid.Column="1" Classes="RowAction MidiClear"
+                                                            IsVisible="{Binding IsMidiBound}"
+                                                            Command="{Binding ClearMidiCommand}"
+                                                            AutomationProperties.Name="{localization:Loc Keybind_Midi_Clear}"
+                                                            ToolTip.Tip="{localization:Loc Keybind_Midi_Clear}">
+                                                        <PathIcon Data="{DynamicResource IconClose}" Width="10" Height="10" />
+                                                    </Button>
+                                                </Grid>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

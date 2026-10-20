@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dialogs="clr-namespace:DotCharter.UI.ViewModels.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.MessageDialogView"
+             x:DataType="dialogs:MessageDialogViewModel">
+
+    <!-- The generic prompt. It is the ONE dialog that is eager (early startup
+         errors must be showable before anything else exists) and the one that
+         stays topmost — hence ZIndex 300, ABOVE the nine dialogs that sit at 200.
+         It said "topmost, hence ZIndex 120" for several releases and 120 is not
+         topmost: a confirm raised FROM one of those nine (batch lint's bulk
+         overwrite is the first to need one) rendered behind its own caller's
+         scrim, so the awaited answer could never arrive. Pinned by
+         UI/DialogZOrderTests. Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Theme="{DynamicResource DialogScrimGrid}" Classes="DialogScrim" IsVisible="{Binding IsOpen}" ZIndex="300">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <!-- The severity lives in the badge, not in the title colour:
+                     one saturated element per surface. Exactly one of the four
+                     is visible at a time. -->
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox Warning" IsVisible="{Binding IsWarning}">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconAlert}" />
+                    </Border>
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox Danger" IsVisible="{Binding IsError}">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconCloseCircle}" />
+                    </Border>
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox Info" IsVisible="{Binding IsInfo}">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconInfo}" />
+                    </Border>
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox" IsVisible="{Binding IsQuestion}">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconHelpCircle}" />
+                    </Border>
+                    <TextBlock Theme="{DynamicResource DialogTitleText}" Grid.Column="1" Classes="DialogTitle" Text="{Binding Title}" />
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody">
+                    <StackPanel Spacing="{DynamicResource SpaceLg}">
+                        <SelectableTextBlock Classes="DlgBody" Text="{Binding Message}" />
+
+                        <Expander Header="{localization:Loc Dialog_Message_Details}"
+                                  IsVisible="{Binding HasDetails}">
+                            <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                                <SelectableTextBlock Classes="Mono" Text="{Binding Details}" />
+                            </ScrollViewer>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}"
+                                IsVisible="{Binding IsConfirmation}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_OK}"
+                                Command="{Binding OkCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

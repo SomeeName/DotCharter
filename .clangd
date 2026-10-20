@@ -1,0 +1,15 @@
+# clangd config for the native JUCE engine (JuceSharp/src/JuceSharp.Native).
+# The real build uses a Visual Studio generator, which writes no compilation
+# database; tools/agent/New-CompileCommands.ps1 configures a Ninja tree
+# (configure only, never built) into artifacts/clangd/juce-native. Re-run it
+# after adding a native source file or changing a CMake option.
+CompileFlags:
+  CompilationDatabase: artifacts/clangd/juce-native
+---
+# Generated IR float tables and fetched third-party code: index, never lint.
+If:
+  PathMatch: [.*/dcdsp_(cab|acoustic)_irs\.h, .*/_deps/.*, .*/third_party/.*]
+Diagnostics:
+  Suppress: "*"
+  ClangTidy:
+    Remove: "*"

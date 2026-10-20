@@ -1,0 +1,493 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The `RibbonRowChip` ControlTheme that used to live here is GONE (0.51).
+         It dressed the timeline track rail's five row toggles, and that rail is
+         on the Fire layer now: the rows are the shared `FireNavRowToggle`,
+         reached through `ToggleButton.RibbonRow` in
+         `Views/Editor/EditorWorkspaceStyles.axaml`. Keeping a second, app-ladder
+         template for the same five controls is exactly how a surface ends up
+         half-converted. -->
+
+    <Styles.Resources>
+        <!-- ══ The plain button families, each a ControlTheme (#240) ═══════════
+             Wear one as `Theme="{StaticResource SubtleButton}" Classes="Subtle"`
+             (`DynamicResource` in a dialog view). The CLASS stays: every rule
+             below is gated on it, exactly as the global `Button.Subtle` style
+             was, so its priority over Fluent's template and state setters is
+             unchanged — and a local override (`Button.Subtle` in a view's own
+             styles) still applies. What the theme changes is WHO pays: a
+             global `Button.X` style is attached to every Button in the app; a
+             theme's rules only to the buttons that wear it. Modifiers (`Compact`,
+             `Danger`) live in each theme whose buttons wear them.
+             UI/ButtonControlThemeTests guards all three halves. -->
+
+        <!-- Also carries the `Compact` rules: its buttons wear that class too, and a
+             Button has ONE theme. The copies stay identical in every theme
+             (UI/ButtonControlThemeTests). -->
+        <ControlTheme x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.Primary">
+                <Setter Property="Background" Value="{DynamicResource PrimaryGradient}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextOnAccent}" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+                <Setter Property="Padding" Value="20,10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="RenderTransform" Value="scale(1.0)" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BrushTransition Property="Background" Duration="0:0:0.15" />
+                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08" />
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <!-- Graphite: flat. No drop shadow, no lift, no press squash. -->
+            <Style Selector="^.Primary /template/ ContentPresenter">
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <!-- Fluent paints a button's hover / press / disabled colours on the
+                 template's presenter with TRIGGERED setters, which beat the presenter's
+                 TemplateBinding to Button.Foreground/Background. So each state restates
+                 the label and the fill on the presenter, or Fluent's white label and
+                 grey pressed fill show through. Perf/ControlStateColourUiPerfSmokeTests. -->
+            <Style Selector="^.Primary:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource PrimaryGradientHover}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextOnAccent}" />
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+            </Style>
+            <Style Selector="^.Primary:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource PrimaryGradientHover}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextOnAccent}" />
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+            </Style>
+            <Style Selector="^.Primary:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^.Primary:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextDim}" />
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+            </Style>
+            <!-- Compact modifier — dense in-row button (list rows, filter bars,
+                 overlay headers). Combine with a variant class: Classes="Subtle
+                 Compact" / "Primary Compact". Declared last so its setters win over
+                 the variant's Padding/MinHeight (0.15.5 A1: replaces the per-view
+                 Padding="10,4"/"10,5"/"8,4"… literals with one shared metric). -->
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.Secondary">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+                <Setter Property="Padding" Value="20,10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="RenderTransform" Value="scale(1.0)" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BrushTransition Property="Background" Duration="0:0:0.15" />
+                        <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08" />
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.Secondary:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+            <Style Selector="^.Secondary:pressed">
+                <Setter Property="RenderTransform" Value="scale(0.97)" />
+            </Style>
+            <Style Selector="^.Secondary:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+            </Style>
+            <Style Selector="^.Secondary:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^.Secondary:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextSecondary}" />
+            </Style>
+            <!-- The shared Compact copy (see PrimaryButton): the Chord shapes rows'
+                 verbs are outlined Secondary Compact buttons (#567). -->
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Also carries the `Compact`, `Danger` rules: its buttons wear those
+             classes too, and a Button has ONE theme. The copies stay identical in
+             every theme (UI/ButtonControlThemeTests). -->
+        <ControlTheme x:Key="SubtleButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.Subtle">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+                <Setter Property="Padding" Value="14,8" />
+                <Setter Property="FontWeight" Value="Medium" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.Subtle:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^.Subtle /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+            </Style>
+            <Style Selector="^.Subtle:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+            <Style Selector="^.Subtle:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+            <Style Selector="^.Subtle:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextMuted}" />
+            </Style>
+            <Style Selector="^.Danger">
+                <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+                <Setter Property="Padding" Value="18,10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="RenderTransform" Value="scale(1.0)" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BrushTransition Property="Background" Duration="0:0:0.15" />
+                        <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08" />
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.Danger:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerHoverBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <Style Selector="^.Danger:pressed">
+                <Setter Property="RenderTransform" Value="scale(0.97)" />
+            </Style>
+            <Style Selector="^.Danger:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerHoverBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <Style Selector="^.Danger:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^.Danger:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <!-- "Subtle Danger" rests with no fill, so disabled keeps no fill either. -->
+            <Style Selector="^.Subtle.Danger:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+            </Style>
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.Danger">
+                <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+                <Setter Property="Padding" Value="18,10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="RenderTransform" Value="scale(1.0)" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BrushTransition Property="Background" Duration="0:0:0.15" />
+                        <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08" />
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.Danger:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerHoverBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <Style Selector="^.Danger:pressed">
+                <Setter Property="RenderTransform" Value="scale(0.97)" />
+            </Style>
+            <Style Selector="^.Danger:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerHoverBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <Style Selector="^.Danger:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^.Danger:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="PillButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- Pill: small flat suggestion button used inline (e.g. Suggest-Name). -->
+            <Style Selector="^.Pill">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+                <Setter Property="Padding" Value="9,2" />
+                <Setter Property="Margin" Value="0,0,4,4" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.Pill:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextOnAccent}" />
+            </Style>
+            <Style Selector="^.Pill:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentHover}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextOnAccent}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ChipToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- Chip: small ToggleButton used as a binary-flag chip in the
+                 Note/Chord inspectors. Off = subtle outlined surface; On = filled
+                 accent. Indeterminate (multi-select with mixed values) shows a
+                 dashed outline + em-dash glyph so the user knows clicking will
+                 stomp data, instead of silently treating "unchecked" as "off".  -->
+            <Style Selector="^.Chip">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="10,3" />
+                <Setter Property="Margin" Value="0,0,6,6" />
+                <Setter Property="MinHeight" Value="26" />
+                <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BrushTransition Property="Background" Duration="0:0:0.12" />
+                        <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                        <BrushTransition Property="Foreground" Duration="0:0:0.12" />
+                    </Transitions>
+                </Setter>
+            </Style>
+
+            <!-- States on the PRESENTER: Fluent's ToggleButton paints :pointerover,
+                 :pressed, :checked and :indeterminate there with triggered setters, so a
+                 state set on the ToggleButton itself never shows. Graphite: ON is a tint
+                 with an accent label, never a solid accent block. -->
+            <Style Selector="^.Chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+
+            <Style Selector="^.Chip:pressed /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+            </Style>
+
+            <Style Selector="^.Chip:checked /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentColor}" />
+            </Style>
+
+            <Style Selector="^.Chip:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentSelected}" />
+            </Style>
+
+            <Style Selector="^.Chip:indeterminate /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource WarningColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource WarningColor}" />
+            </Style>
+
+            <Style Selector="^.Chip:disabled">
+                <Setter Property="Opacity" Value="0.4" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+
+            <!-- Mini chip — half the chrome of a normal Chip, used in the compact
+                 inspector to fit techniques + flags + segmented enums into the same
+                 vertical space the old layout used for a single dropdown row. -->
+            <Style Selector="^.Chip.Mini">
+                <Setter Property="Padding" Value="7,1" />
+                <Setter Property="Margin" Value="0,0,3,3" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMicro}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SegToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- Segmented enum chip — square-ish corners so a row of these reads
+                 as a single segmented control instead of N pills. Bound through
+                 IntEqualsConverter to a single int property. -->
+            <Style Selector="^.Seg">
+                <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}" />
+                <Setter Property="Padding" Value="8,2" />
+                <Setter Property="Margin" Value="0,0,2,0" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="MinWidth" Value="28" />
+                <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+
+            <Style Selector="^.Seg:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+
+            <Style Selector="^.Seg:pressed /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+            </Style>
+
+            <Style Selector="^.Seg:checked /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentColor}" />
+            </Style>
+
+            <Style Selector="^.Seg:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentSelected}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="RibbonChipToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- RibbonChip: compact micro-toggle used by per-row T/S/P ribbon visibility
+                 flags on the timeline (MainWindow) and the stacked track list. Defined
+                 here so both consumers resolve the style at runtime. -->
+            <Style Selector="^.RibbonChip">
+                <Setter Property="MinWidth" Value="24" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMicro}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}" />
+                <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            </Style>
+
+            <Style Selector="^.RibbonChip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+            </Style>
+
+            <Style Selector="^.RibbonChip:pressed /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+            </Style>
+
+            <Style Selector="^.RibbonChip:checked /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentColor}" />
+            </Style>
+
+            <Style Selector="^.RibbonChip:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource AccentSelected}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="CompactToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- Compact modifier for a ToggleButton. The Button half is a `^.Compact`
+                 rule inside each button theme that a Compact button can wear (#240). -->
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- A Seg may carry a PathIcon instead of a text glyph (icon-based enum
+         technique picker in the Note inspector). PathIcon does not inherit
+         Foreground, so drive it per state to match the segment's text. -->
+    <Style Selector="ToggleButton.Seg PathIcon">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="ToggleButton.Seg:checked PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+    </Style>
+
+</Styles>

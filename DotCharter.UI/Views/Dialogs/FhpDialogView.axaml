@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.FhpDialogView"
+             x:DataType="contracts:IFhpScreen"
+             x:CompileBindings="True">
+
+    <!-- Fret-hand position (anchor). Grammar: Views/Dialogs/DialogStyles.axaml.
+         Hosted by Views/Shell/DialogHost, which focuses `FretInput` on open
+         (FocusOnOpen); both fields carry the digits-only KeyDown filter — keep
+         the x:Name and both handlers. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconMapMarker}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_Fhp_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_Fhp_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,160">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_AnchorFret}" />
+                        <NumericUpDown VerticalAlignment="Center" x:Name="FretInput" dlgv:FocusOnOpen.IsTarget="True" Grid.Column="1" Value="{Binding Fret}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_AnchorFret}"
+                                       Minimum="1" Maximum="24" FormatString="0"
+                                       ParsingNumberStyle="Integer" KeyDown="NumericUpDown_OnKeyDown" />
+                    </Grid>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,160">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_AnchorWidth}" />
+                        <NumericUpDown VerticalAlignment="Center" Grid.Column="1" Value="{Binding Width}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_AnchorWidth}"
+                                       Minimum="1" Maximum="24" FormatString="0"
+                                       ParsingNumberStyle="Integer" KeyDown="NumericUpDown_OnKeyDown" />
+                    </Grid>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Save}"
+                                Command="{Binding SaveCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

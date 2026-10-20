@@ -1,0 +1,11 @@
+# Checkpoints, caches, logs and the fp16 PCM memmaps. Training output, not
+# source -- a single cache file is several GB.
+#
+# `runs/*` and not `runs/`: git never descends into an ignored DIRECTORY, so a
+# negation under `runs/` can never be reached. That one character is the
+# difference between the launcher below being tracked and being invisible.
+runs/*
+# ...except the launcher that drives a run. It lives in runs/ because every
+# path it names is under runs/.
+!runs/pipeline-full.ps1
+!runs/pipeline-v2.ps1

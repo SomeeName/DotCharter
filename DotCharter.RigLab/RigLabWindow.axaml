@@ -1,0 +1,83 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DotCharter.RigLab;assembly=DotCharter.RigLab"
+        xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+        xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+        xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+        x:Class="DotCharter.RigLab.RigLabWindow"
+        x:DataType="local:RigLabShellViewModel"
+        Title="{localization:Loc RigLab_Title}"
+        Icon="avares://DotCharter.RigLab/Assets/app-icon.png"
+        MinWidth="1100" MinHeight="700"
+        Background="{DynamicResource FireGround}"
+        Foreground="{DynamicResource FireTextPrimary}">
+
+    <Window.DataTemplates>
+        <!-- "Design a tone" in the rig's Tones mode: the shared core panel, with
+             none of DotCharter's matcher blocks. On the WINDOW rather than the
+             app so the headless smoke test (which runs under DotCharter's app)
+             exercises the same mapping the product uses. -->
+        <DataTemplate DataType="vm:ToneDesignCoreViewModel">
+            <views:ToneDesignCorePanel />
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- The one bar: the name, the four tabs, and whether the engine is up.
+             The rig is the app; Plugins, Audio and AI are setup. -->
+        <Border Grid.Row="0" x:Name="RigLabBar"
+                Background="{DynamicResource FireSurfaceChrome}"
+                BorderBrush="{DynamicResource FireBorderSeam}"
+                BorderThickness="0,0,0,1"
+                Padding="{StaticResource FirePadBar}">
+            <Grid ColumnDefinitions="Auto,*,Auto,*" ColumnSpacing="{StaticResource FireSpaceLg}">
+                <TextBlock Grid.Column="0" Theme="{StaticResource FireTitleText}" Classes="FireTitle" VerticalAlignment="Center"
+                           Text="{localization:Loc RigLab_Title}" />
+
+                <Border Grid.Column="2" x:Name="RigLabTabs" Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXxs}">
+                        <RadioButton x:Name="RigLabTabRig" Classes="FireSegmentItem" GroupName="RigLabTab"
+                                     Content="{localization:Loc Nav_Rig}"
+                                     AutomationProperties.Name="{localization:Loc Nav_Rig}"
+                                     IsChecked="{Binding IsRigTab, Mode=TwoWay}" />
+                        <RadioButton x:Name="RigLabTabPlugins" Classes="FireSegmentItem" GroupName="RigLabTab"
+                                     Content="{localization:Loc RigLab_Tab_Plugins}"
+                                     AutomationProperties.Name="{localization:Loc RigLab_Tab_Plugins}"
+                                     IsChecked="{Binding IsPluginsTab, Mode=TwoWay}" />
+                        <RadioButton x:Name="RigLabTabAudio" Classes="FireSegmentItem" GroupName="RigLabTab"
+                                     Content="{localization:Loc Settings_AudioTab}"
+                                     AutomationProperties.Name="{localization:Loc Settings_AudioTab}"
+                                     IsChecked="{Binding IsAudioTab, Mode=TwoWay}" />
+                        <RadioButton x:Name="RigLabTabAi" Classes="FireSegmentItem" GroupName="RigLabTab"
+                                     Content="{localization:Loc RigLab_Tab_Ai}"
+                                     AutomationProperties.Name="{localization:Loc RigLab_Tab_Ai}"
+                                     IsChecked="{Binding IsAiTab, Mode=TwoWay}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Grid.Column="3" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           Text="{Binding Audio.StatusText}" />
+            </Grid>
+        </Border>
+
+        <!-- Each tab is its own panel: the visibility belongs to the shell, the
+             content to the tab's view model. -->
+        <Panel Grid.Row="1">
+            <Panel x:Name="RigLabRigPanel" IsVisible="{Binding IsRigTab}">
+                <views:AmpFxRigView x:Name="RigLabRig" DataContext="{Binding Rig}" />
+            </Panel>
+            <Panel x:Name="RigLabPluginsPanel" IsVisible="{Binding IsPluginsTab}">
+                <local:PluginsView x:Name="RigLabPlugins" DataContext="{Binding Plugins}" />
+            </Panel>
+            <Panel x:Name="RigLabAudioPanel" IsVisible="{Binding IsAudioTab}">
+                <local:AudioSettingsView x:Name="RigLabAudio" DataContext="{Binding Audio}" />
+            </Panel>
+            <Panel x:Name="RigLabAiPanel" IsVisible="{Binding IsAiTab}">
+                <local:AiSettingsView x:Name="RigLabAi" DataContext="{Binding Ai}" />
+            </Panel>
+        </Panel>
+    </Grid>
+</Window>

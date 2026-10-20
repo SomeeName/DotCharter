@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Presentation.Fakes</RootNamespace>
+        <AssemblyName>DotCharter.Presentation.Fakes</AssemblyName>
+        <DotCharterBannedApis>true</DotCharterBannedApis>
+        <DotCharterBannedPresentationApis>true</DotCharterBannedPresentationApis>
+    </PropertyGroup>
+
+    <!-- Services-free fakes of the Presentation contracts, for the gallery and
+         the tests. DotCharter.UI must never reference this project
+         (AssemblyLayeringTests). -->
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Presentation\DotCharter.Presentation.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+    </ItemGroup>
+
+</Project>

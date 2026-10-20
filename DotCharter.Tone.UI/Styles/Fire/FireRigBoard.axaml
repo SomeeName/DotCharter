@@ -1,0 +1,338 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. The rig's own marks (§6.8)
+         are four parts, merged one after another: FireRigBoard,
+         FireRigUnitsAndGear, FireRigRolesAndTones, FireRigStage.
+         Sections: the board — units, value rows, footswitches, mic cards,
+         the signal path, the board's scrollbars and the split region. -->
+
+    <Styles.Resources>
+        <ControlTheme x:Key="FireLaneDropZoneButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- An EMPTY lane's drop zone: a full-size dashed-CTA surface that says
+                 what to do. Click arms the lane's gap; the drag controller targets it
+                 as the lane. A bare micro-dot was the owner's "you cant even drag and
+                 drop stuff in it" — an empty lane must LOOK like a place a card can
+                 land. Sized to read as a card-shaped socket beside real cards. -->
+            <Style Selector="^.FireLaneDropZone">
+                <Setter Property="MinWidth" Value="140" />
+                <Setter Property="MinHeight" Value="128" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentPale}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireLaneDropZone /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+            </Style>
+            <Style Selector="^.FireLaneDropZone:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ The rig (§6.8, Amp and FX Rig.dc.html) ══════════════════════════
+             The board's own marks. Everything here is COLOURLESS: a unit's hue is
+             its category identity and arrives through `FireUnitState` on the card,
+             so a style that painted an accent would be a second, silently wrong
+             source for the one thing the spec marks "FIXED, DO NOT REASSIGN". -->
+
+        <ControlTheme x:Key="FireBoardWellBorder" TargetType="Border">
+            <!-- The stage the units stand on: a sunken well, seamed top and bottom, so
+                 the board reads as a recess in the screen rather than a panel floating
+                 on it. It scrolls horizontally and must not round its corners — a
+                 rounded well with content running out of both ends reads as a card. -->
+            <Style Selector="^.FireBoardWell">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="0,1,0,1" />
+                <Setter Property="ClipToBounds" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireUnitCardBorder" TargetType="Border">
+            <!-- One unit on the board. The head strip carries the identity colour (bound
+                 per card), so the shell itself is neutral; `.selected` is the violet
+                 edge every other Fire surface uses for "this is the one you are
+                 editing". -->
+
+            <!-- A unit on the chain is its GEAR, not a card (the AmpliTube / BIAS FX
+                 chain): no plate behind it, the picture over its name. The selected
+                 unit's picture gets the amber frame and glow; hover lifts the frame. -->
+            <Style Selector="^.FireUnitCard">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="4" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <!-- The marker FireDragSession ghosts INSTEAD of the item container (see
+                 FireDragSession.GhostPartOf). Class-only; the setter is the default. -->
+            <Style Selector="^.FireDragGhost">
+                <Setter Property="UseLayoutRounding" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireUnitArtFrameBorder" TargetType="Border">
+            <Style Selector="^.FireUnitArtFrame">
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="{StaticResource FireFocusRingThickness}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Padding" Value="3" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireValueRowNameText" TargetType="TextBlock">
+            <Style Selector="^.FireValueRowName">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style Selector="^.FireValueRowName.Choice"><Setter Property="Width" Value="96" /></Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireValueRowValueText" TargetType="TextBlock">
+            <Style Selector="^.FireValueRowValue">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireFaceFootswitchToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- A face's printed footswitch made live (RigFaceplateView): the art IS the
+                 switch, so the control draws nothing at rest — a ring on hover and on
+                 keyboard focus says it can be stomped. Bypassed, the face itself fades. -->
+            <Style Selector="^.FireFaceFootswitch">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="FootRing" Background="Transparent" BorderThickness="{StaticResource FireFocusRingThickness}"
+                                BorderBrush="Transparent" CornerRadius="{StaticResource FireRadiusPill}" />
+                    </ControlTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireFaceFootswitch:pointerover /template/ Border#FootRing">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentPale}" />
+            </Style>
+            <Style Selector="^.FireFaceFootswitch:focus-visible /template/ Border#FootRing">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentPale}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMicWellBorder" TargetType="Border">
+            <!-- The mic placement (RigMicPlacementView): the speaker sits in a dark well,
+                 the four microphones are cards — the lit one has the amber edge every
+                 other Fire selection uses. -->
+            <Style Selector="^.FireMicWell">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPanel}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMicCardToggle" TargetType="ToggleButton" BasedOn="{StaticResource ChipToggle}">
+            <Style Selector="^.FireMicCard">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Padding" Value="8,6" />
+                <Setter Property="Margin" Value="3" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="Card" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireMicCard:pointerover /template/ Border#Card">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareHighlight}" />
+            </Style>
+            <Style Selector="^.FireMicCard:checked /template/ Border#Card">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarning}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccentSoft}" />
+            </Style>
+            <Style Selector="^.FireMicCard:focus-visible /template/ Border#Card">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentPale}" />
+            </Style>
+            <Style Selector="^.FireMicCard.Chip"><Setter Property="Padding" Value="4" /></Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireHardwareFootswitchToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- A real bypass control: the tone-rig design's chromed footswitch
+                 (redesign.css .pedal-footswitch) — a dark collar, a pale ring and a
+                 domed cap lit from the top-left, which sinks when pressed and goes
+                 dark while the unit is bypassed. All state still comes from
+                 ToggleButton; no decorative fake footswitch. -->
+            <Style Selector="^.FireHardwareFootswitch">
+                <Setter Property="Width" Value="38" />
+                <Setter Property="Height" Value="38" />
+                <Setter Property="MinWidth" Value="38" />
+                <Setter Property="MinHeight" Value="38" />
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border Name="SwitchCollar" CornerRadius="{StaticResource FireRadiusPill}"
+                                BorderThickness="1" BorderBrush="{DynamicResource FireHardwareSwitchCollar}"
+                                Background="{DynamicResource FireHardwareSwitchCollar}"
+                                BoxShadow="{DynamicResource FireShadowSwitch}">
+                            <Border Name="SwitchCap" Margin="3"
+                                    CornerRadius="{StaticResource FireRadiusPill}"
+                                    Background="{DynamicResource FireHardwareSwitchCap}"
+                                    BorderBrush="{DynamicResource FireHardwareSwitchRing}" BorderThickness="3" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+            </Style>
+            <Style Selector="^.FireHardwareFootswitch:pointerover /template/ Border#SwitchCollar">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwarePointer}" />
+            </Style>
+            <Style Selector="^.FireHardwareFootswitch:focus-visible /template/ Border#SwitchCollar">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentPale}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^.FireHardwareFootswitch:checked /template/ Border#SwitchCap">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareBezel}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareHighlight}" />
+            </Style>
+            <Style Selector="^.FireHardwareFootswitch:pressed /template/ Border#SwitchCap">
+                <Setter Property="Margin" Value="5" />
+            </Style>
+            <Style Selector="^.FireHardwareFootswitch.Large">
+                <Setter Property="Width" Value="46" />
+                <Setter Property="Height" Value="46" />
+                <Setter Property="MinWidth" Value="46" />
+                <Setter Property="MinHeight" Value="46" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireDockBarBorder" TargetType="Border">
+            <!-- The module editor dock's own title bar, a step darker than the screen so
+                 the dock reads as a drawer under the board rather than another panel. -->
+            <Style Selector="^.FireDockBar">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+            </Style>
+            <!-- The gear bar: the dock bar's material, a little taller, so the unit's
+                 name reads as the stage's caption. -->
+            <Style Selector="^.FireGearBar">
+                <Setter Property="MinHeight" Value="48" />
+                <Setter Property="BorderThickness" Value="0,1,0,1" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireJackBorder" TargetType="Border">
+            <Style Selector="^.FireJack">
+                <Setter Property="Width" Value="30" />
+                <Setter Property="Height" Value="30" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireJackPinBorder" TargetType="Border">
+            <!-- The jack's PIN: the lit centre conductor inside the ring, which is what
+                 makes the end of the chain read as a socket the wire plugs into rather
+                 than a bare circle (the owner's screenshot complaint). Glow via the
+                 shared accent BoxShadow token — a Border, so it is legal. -->
+            <Style Selector="^.FireJackPin">
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Height" Value="8" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <!-- No halo: the ring and pin are bound to the board's lane token
+                     (lane A on a series board), and a fixed accent glow under an
+                     amber pin was a second colour on the one wire. -->
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireJackLabelText" TargetType="TextBlock">
+            <Style Selector="^.FireJackLabel">
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackEyebrow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentPale}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ THE SPLIT REGION — parallel lanes (tone-rig design, 2026-09-07) ═══
+             The chain forks into the design's fan: the Split node, one row per
+             lane (its "Lane A" chip in the lane colour `FireLaneA/B/C`, the same
+             graph nodes as the serial run, the lane's mixer node), the Merge
+             node. No frame and no header — Series in the routing header
+             dissolves it. The splitter/merger NODES are the region's fan columns,
+             never cards, which keeps the one-junction-pair invariant visible.
+             The 2026-09-05 rejection was of TINY chips nobody could drag; the
+             graph node is the owner's own design and stays a full drag target. -->
+
+        <ControlTheme x:Key="FireSplitRegionBorder" TargetType="Border">
+            <Style Selector="^.FireSplitRegion">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="{StaticResource FirePadChip}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireLaneRowBorder" TargetType="Border">
+            <!-- One lane's band: a whisper of a raise over the recessed region, so the
+                 lanes read as rows without competing with the cards on them. -->
+            <Style Selector="^.FireLaneRow">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireLaneBadgeBorder" TargetType="Border">
+            <!-- The lane letter (A/B/C). Its Background is bound to the lane's own
+                 identity token — this only fixes the geometry. -->
+            <Style Selector="^.FireLaneBadge">
+                <Setter Property="Width" Value="20" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireLaneStubBorder" TargetType="Border">
+            <Style Selector="^.FireLaneStub">
+                <Setter Property="Width" Value="6" />
+                <Setter Property="Height" Value="3" />
+                <Setter Property="Opacity" Value="0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+</Styles>

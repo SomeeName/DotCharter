@@ -1,0 +1,152 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigVocalView"
+             x:DataType="vm:RigDockUnit">
+    <!-- THE VOCAL PROCESSORS (RigEditorFamily.Vocal) — the teal Miku device on
+         the left, its voice design on the right.
+
+         The lyric fields are an ItemsControl over RigDockUnit.LyricParams, not a
+         single field: the stomp carries THREE phrase strings, and an editor with
+         one box silently drops two of them. Each row is the same multiline
+         draft + syllable hint + Save the generic editor uses. -->
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+            <fire:FireKnob HardwareStyle="True" HorizontalAlignment="Center"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}"
+                           Maximum="{Binding Maximum}" DefaultValue="{Binding Default}"
+                           Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel MinWidth="160" Margin="{StaticResource FireGapTag}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding DisplayName}" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <!-- The editor's own scroller RESTS VISIBLE (AllowAutoHide=False), the same
+         treatment ScrollViewer.FireBoardScroll gets: the dock row is routinely
+         shorter than a family face, and an auto-hidden bar made the cut edge
+         read as the editor being drawn UNDER the footer strip (owner,
+         2026-09-12). Named so RigFooterStabilityUiPerfSmokeTests can find it. -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <!-- SCALE TO FIT THE DOCK ROW (lane E, 2026-09-13). The face is laid
+             out at its NATURAL size and the whole thing is scaled once, the way
+             RigPedalEditorView's enclosure already was — so at 1920x1080 it is
+             shrunk into the row instead of being cut by it, and at 3840x2160 it
+             GROWS to use a row that has ~5x the area. `TargetHeight` has to be
+             the scroller's viewport because a ScrollViewer offers its content
+             infinite height and the vertical fit would otherwise never engage;
+             the WIDTH binds on its own now that the horizontal bar is Disabled.
+             Stretch, not Left: the scale comes from the face's NATURAL size, but
+             a face with a star column has to be ARRANGED at the slot the
+             transform leaves it or its sliders collapse to their content.
+             `MaxScale` is the breakpointed `FireRigFaceMaxScale` token. -->
+        <fire:RigScaleToFit x:Name="RigFaceFit"
+                            TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                            MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+            <Grid ColumnDefinitions="Auto,*">
+
+                <Border Theme="{StaticResource FireVocalDeviceBorder}" Classes="FireVocalDevice" x:Name="RigVocalDevice" Width="290" VerticalAlignment="Top">
+                    <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                        <StackPanel>
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_Vocal_Processor}" />
+                            <TextBlock Theme="{StaticResource FireVocalWordmarkText}" Classes="FireVocalWordmark" Text="{Binding VocalWordmark}"
+                                       Foreground="{DynamicResource FireRigAccentVocal}" />
+                            <TextBlock Theme="{StaticResource FireVocalVariantText}" Classes="FireVocalVariant" Text="{Binding VocalVariant}" />
+                        </StackPanel>
+
+                        <ItemsControl x:Name="RigVocalMain" ItemsSource="{Binding VocalMainKnobs}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        </ItemsControl>
+
+                        <ContentControl Content="{Binding VocalPattern}" IsVisible="{Binding HasVocalPattern}" />
+
+                        <Border Theme="{StaticResource FireVocalFootBorder}" Classes="FireVocalFoot">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <ToggleButton Theme="{StaticResource FireHardwareFootswitchToggle}" Classes="FireHardwareFootswitch" IsChecked="{Binding Node.Bypassed, Mode=TwoWay}"
+                                              AutomationProperties.Name="{localization:Loc Rig_BypassUnit}"
+                                              ToolTip.Tip="{localization:Loc Rig_BypassUnit}" />
+                                <Panel VerticalAlignment="Center">
+                                    <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding !Node.Bypassed}"
+                                               Text="{localization:Loc Rig_Editor_Engaged}" />
+                                    <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding Node.Bypassed}"
+                                               Text="{localization:Loc Rig_Editor_Bypass}" />
+                                </Panel>
+                                <TextBlock Theme="{StaticResource FireVocalVariantText}" Classes="FireVocalVariant" VerticalAlignment="Center"
+                                           Text="{localization:Loc Rig_Editor_Vocal_Footer}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Column="1" x:Name="RigVocalSettings" Margin="{StaticResource FireGapLeftLg}"
+                            Spacing="{StaticResource FireSpaceMd}">
+                    <StackPanel>
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_Vocal_Design}" />
+                        <TextBlock Theme="{StaticResource FireRackTitleText}" Classes="FireRackTitle" Text="{Binding DisplayName}" />
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="Auto,*">
+                        <ContentControl Content="{Binding VocalOctave}" IsVisible="{Binding HasVocalOctave}"
+                                        VerticalAlignment="Top" />
+                        <ItemsControl Grid.Column="1" x:Name="RigVocalLyrics" ItemsSource="{Binding LyricParams}"
+                                      IsVisible="{Binding HasLyricParams}" Margin="{StaticResource FireGapLeftMd}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PedalStringParamViewModel">
+                                    <!-- the whole block is 480–720 wide and left-aligned, so the Save
+                                         under the box stays under the box in a wide dock -->
+                                    <StackPanel Spacing="{StaticResource FireSpaceXs}" Margin="{StaticResource FireGapRowMd}"
+                                                MinWidth="480" MaxWidth="720" HorizontalAlignment="Left">
+                                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding DisplayName}" />
+                                        <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField Tall">
+                                            <TextBox Classes="FireFieldInput Multiline" MinHeight="64" AcceptsReturn="True"
+                                                     TextWrapping="Wrap" Text="{Binding LyricsDraft}"
+                                                     AutomationProperties.Name="{Binding DisplayName}" />
+                                        </Border>
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" Text="{Binding SyllableHint}" />
+                                            <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                                    Command="{Binding SaveLyricsCommand}"
+                                                    Content="{localization:Loc Dsp_SaveLyrics}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+
+                    <StackPanel x:Name="RigVocalArticulation" IsVisible="{Binding HasVocalArticulation}"
+                                Spacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Theme="{StaticResource FireSectionHeadText}" Classes="FireSectionHead" Text="{localization:Loc Rig_Editor_Vocal_Articulation}" />
+                        <ItemsControl ItemsSource="{Binding VocalArticulation}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PedalParamViewModel">
+                                    <Border Theme="{StaticResource FireKnobCellBorder}" Classes="FireKnobCell"><ContentControl Content="{Binding}" /></Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel IsVisible="{Binding HasMoreKnobs}" Spacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Theme="{StaticResource FireSectionHeadText}" Classes="FireSectionHead" Text="{localization:Loc Rig_Editor_More}" />
+                        <ItemsControl ItemsSource="{Binding MoreKnobs}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding MoreChoices}" IsVisible="{Binding HasMoreChoices}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </Grid>
+        </fire:RigScaleToFit>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,156 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.BatchLintDialogView"
+             x:DataType="contracts:IBatchLintScreen"
+             x:CompileBindings="True">
+
+    <!-- Lint a folder of projects. Grammar: Views/Dialogs/DialogStyles.axaml;
+         the result row keeps its own severity classes — a failed file (unreadable
+         / unwritable) must never read as "clean". -->
+    <UserControl.Styles>
+        <Style Selector="Border.LintRow">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="{DynamicResource PaddingRow}" />
+        </Style>
+        <Style Selector="Border.LintRow.failed">
+            <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+        </Style>
+        <Style Selector="Border.LintRow.failed TextBlock.Detail">
+            <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+        </Style>
+        <Style Selector="Border.LintRow.saved TextBlock.Detail">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+        </Style>
+        <Style Selector="TextBlock.Detail">
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeSm}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconPulse}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_BatchLint_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_BatchLint_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Section_Source}" />
+                        <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox Grid.Column="0" Text="{Binding FolderPath, Mode=OneWay}" IsReadOnly="True"
+                                     AutomationProperties.Name="{localization:Loc Dialog_Section_Source}"
+                                     PlaceholderText="{localization:Loc Dialog_BatchLint_FolderWatermark}" />
+                            <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle Compact"
+                                    Content="{localization:Loc Action_Browse}"
+                                    Command="{Binding BrowseFolderCommand}" />
+                        </Grid>
+                    </Grid>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,320">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_BatchLint_ApplyFixes}" />
+                        <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding ApplyAutoFixes}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_BatchLint_ApplyFixes}" />
+                    </Grid>
+                    <!-- The row that REWRITES .rscp files the user never opened,
+                         and it greys out until the auto-fix toggle above is on.
+                         A tooltip cannot carry that reason — a disabled control
+                         takes no pointer input, so it never fires — so the
+                         dependency is printed, on the inverse of the same flag
+                         that disables the box. -->
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Sub Last" ColumnDefinitions="*,320">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_BatchLint_SaveFixed}"
+                                       ToolTip.Tip="{localization:Loc Dialog_BatchLint_SaveFixed_Tip}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                       IsVisible="{Binding !CanSaveFixedProjects}"
+                                       Text="{localization:Loc Dialog_BatchLint_SaveFixed_NeedsAutoFix}" />
+                        </StackPanel>
+                        <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding SaveFixedProjects}"
+                                  IsEnabled="{Binding CanSaveFixedProjects}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_BatchLint_SaveFixed}"
+                                  ToolTip.Tip="{localization:Loc Dialog_BatchLint_SaveFixed_Tip}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- #725: the result list takes the STAR row and gives up height when the
+                     card is clamped (a 1280x720 window), so the progress, the status line
+                     and the footer stay where they are; as a StackPanel it laid out at full
+                     height and painted its last rows and the status under the footer. -->
+                <Grid Grid.Row="2" Margin="{DynamicResource GapTopLg}" RowDefinitions="*,Auto,Auto">
+                    <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="0" Classes="DlgListFrame" IsVisible="{Binding HasResults}">
+                        <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" AllowAutoHide="False"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Results}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:ILintResultRow">
+                                        <Border Classes="LintRow"
+                                                Classes.failed="{Binding Failed}"
+                                                Classes.saved="{Binding Saved}">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding FileName}"
+                                                               Foreground="{DynamicResource TextPrimary}"
+                                                               FontSize="{DynamicResource FontSizeMd}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Folder}"
+                                                               Foreground="{DynamicResource TextMuted}"
+                                                               FontSize="{DynamicResource FontSizeXs}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Classes="Detail"
+                                                           Text="{Binding Detail}"
+                                                           VerticalAlignment="Center"
+                                                           TextWrapping="Wrap" MaxWidth="240" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Real per-file progress + the file being worked on. This
+                         was an indeterminate bar with no cancel for the whole of
+                         a minutes-long sweep that also rewrites .rscp files. -->
+                    <StackPanel Theme="{DynamicResource DlgBusyPanel}" Grid.Row="1" Classes="DlgBusy" IsVisible="{Binding IsBusy}">
+                        <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <TextBlock Grid.Column="0" Classes="Detail"
+                                       Text="{Binding CurrentFile}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle Compact"
+                                    Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" />
+                        </Grid>
+                    </StackPanel>
+                    <TextBlock Theme="{DynamicResource DlgHintText}" Grid.Row="2" Classes="DlgHint" Text="{Binding Status}"
+                               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="3" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Close}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Run}"
+                                Command="{Binding RunCommand}" IsDefault="True"
+                                IsEnabled="{Binding !IsBusy}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

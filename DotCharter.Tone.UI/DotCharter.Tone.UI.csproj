@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        The tone rig's UI and the design system it is drawn in: the rig view
+        (AmpFxRigView), its view models, the Dsp and Fire controls, and the
+        theme (tokens, Fire styles, fonts, rig artwork). DotCharter.UI and the
+        standalone rig (DotCharter.RigLab) both host it. Types keep their
+        DotCharter.UI.* namespaces; XAML outside this assembly reaches them
+        with `using:` (a bare clr-namespace resolves in its own assembly only).
+    -->
+    <PropertyGroup>
+        <!-- Same banned-API policy as DotCharter.UI: no file, process, network
+             or SQLite calls from view code. -->
+        <DotCharterBannedApis>true</DotCharterBannedApis>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Tone.UI</RootNamespace>
+        <AssemblyName>DotCharter.Tone.UI</AssemblyName>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj" />
+        <ProjectReference Include="..\DotCharter.Tone\DotCharter.Tone.csproj" />
+        <ProjectReference Include="..\DotCharter.Localization\DotCharter.Localization.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp\JuceSharp.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Rig artwork (Assets/Rig) and the three bundled faces (Assets/Fonts):
+             avares://DotCharter.Tone.UI/Assets/... -->
+        <AvaloniaResource Include="Assets\**" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="SkiaSharp" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="DotCharter" />
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+        <InternalsVisibleTo Include="DotCharter.Gallery" />
+        <InternalsVisibleTo Include="DotCharter.RigLab" />
+    </ItemGroup>
+</Project>

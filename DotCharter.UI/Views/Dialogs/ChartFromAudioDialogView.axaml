@@ -1,0 +1,178 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.ChartFromAudioDialogView"
+             x:DataType="contracts:IChartFromAudioScreen"
+             x:CompileBindings="True">
+
+    <!-- Audio → draft chart (Pillar A). Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconSineWave}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc ChartFromAudio_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc ChartFromAudio_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- The body scrolls in a short window: a running separation adds its
+                     progress and the keeps-running note (#710), and at 1280x720 the
+                     stack ran under the footer. The bar sits in the card's gutter,
+                     as in the arrangement dialog, so it covers no row. -->
+                <ScrollViewer x:Name="ChartFromAudioBody" Grid.Row="1" Classes="DialogBody" Padding="0,0,16,0" Margin="0,0,-16,0">
+                <StackPanel>
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_Section_Source}" />
+                        <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBox Grid.Column="0" dlgv:FocusOnOpen.IsTarget="True"
+                                     Text="{Binding AudioPath, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Dialog_Section_Source}"
+                                     PlaceholderText="{localization:Loc ChartFromAudio_PickWav}"
+                                     IsEnabled="{Binding !IsBusy}" />
+                            <Button Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle" Content="{localization:Loc Action_Browse}"
+                                    Command="{Binding BrowseAudioCommand}" IsEnabled="{Binding !IsBusy}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,300">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc ChartFromAudio_Sensitivity}" />
+                        <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <Slider Grid.Column="0" Minimum="0" Maximum="100"
+                                    AutomationProperties.Name="{localization:Loc ChartFromAudio_Sensitivity}"
+                                    Value="{Binding Sensitivity, Mode=TwoWay}" IsEnabled="{Binding !IsBusy}" />
+                            <TextBlock Grid.Column="1" Theme="{DynamicResource DlgValueText}" Classes="Mono DlgValue" MinWidth="30"
+                                       TextAlignment="Right"
+                                       Text="{Binding Sensitivity, StringFormat={}{0:0}}" />
+                        </Grid>
+                    </Grid>
+
+                    <!-- Where the draft goes (#647): a new arrangement beside this one, or a
+                         merge into this one that the merge card over the timeline decides
+                         phrase by phrase. The draft gets about one note in eight right, so
+                         the merge fills EMPTY phrases unless Replace existing notes is ticked.
+                         Captions are DlgLabel TextBlocks, as in GP import's mode picker: the
+                         dialog grammar has no RadioButton rule. -->
+                    <StackPanel x:Name="TargetPanel" Margin="{DynamicResource GapTopLg}" IsEnabled="{Binding !IsBusy}">
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                   Text="{localization:Loc ChartFromAudio_Target}" />
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource SpaceMd}">
+                                <RadioButton x:Name="TargetNewArrangement" GroupName="ChartFromAudioTarget"
+                                             IsChecked="{Binding AddAsNewArrangement, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc ChartFromAudio_TargetNew}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc ChartFromAudio_TargetNew}" />
+                                </RadioButton>
+                                <RadioButton x:Name="TargetMerge" GroupName="ChartFromAudioTarget"
+                                             IsChecked="{Binding MergeIntoCurrent, Mode=TwoWay}"
+                                             IsEnabled="{Binding CanMerge}"
+                                             AutomationProperties.Name="{Binding MergeTargetText}">
+                                    <StackPanel>
+                                        <TextBlock x:Name="TargetMergeText" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                   Text="{Binding MergeTargetText}" />
+                                        <TextBlock x:Name="TargetMergeHint" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                   TextWrapping="Wrap"
+                                                   Text="{localization:Loc ChartFromAudio_TargetMergeHint}" />
+                                    </StackPanel>
+                                </RadioButton>
+                                <CheckBox x:Name="ReplaceExistingBox" Margin="{DynamicResource GapLeftLg}"
+                                          IsChecked="{Binding ReplaceExisting, Mode=TwoWay}"
+                                          IsEnabled="{Binding MergeIntoCurrent}"
+                                          AutomationProperties.Name="{localization:Loc ChartFromAudio_ReplaceExisting}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" TextWrapping="Wrap"
+                                               Text="{localization:Loc ChartFromAudio_ReplaceExisting}" />
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- The analysis would hear the full mix: no separated stem of the
+                         arrangement's instrument exists for this file (#641). The user
+                         starts the app's own separation here; nothing separates on its
+                         own. The strip is drawn BEHIND the row rather than around it:
+                         `Border.DlgStrip TextBlock` would restyle the button's own label
+                         (the 3 px inset is the strip's left bar). A greyed button prints
+                         its reason in the strip, under the line. While a separation runs,
+                         the strip says closing the dialog leaves it running (#710). -->
+                    <StackPanel x:Name="StemPanel" Margin="{DynamicResource GapTopLg}" IsVisible="{Binding HasStemHint}">
+                        <Grid x:Name="StemHintStrip" ColumnDefinitions="*,Auto">
+                            <Border Grid.ColumnSpan="2" Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip" Margin="0" />
+                            <Panel Grid.Column="0" Margin="3,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Margin="{DynamicResource FirePadCard}" Spacing="{DynamicResource FireSpaceSm}">
+                                    <TextBlock x:Name="StemHintText" Text="{Binding StemHint}" TextWrapping="Wrap"
+                                               FontFamily="{DynamicResource FireFontUi}" FontSize="{DynamicResource FireSizeSm}"
+                                               Foreground="{DynamicResource FireTextBody}" />
+                                    <TextBlock x:Name="SeparateStemsReason" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                               Text="{Binding SeparateStemsBlockedReason}"
+                                               IsVisible="{Binding SeparateStemsBlockedReason, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    <ProgressBar x:Name="SeparationProgressBar" Minimum="0" Maximum="1"
+                                                 Value="{Binding SeparationProgress, Mode=OneWay}" IsVisible="{Binding IsSeparating}" />
+                                    <TextBlock x:Name="SeparationKeepsRunningNote" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                               Text="{Binding SeparationKeepsRunningNote}" IsVisible="{Binding IsSeparating}" />
+                                </StackPanel>
+                            </Panel>
+                            <Panel Grid.Column="1" Margin="{DynamicResource GapRightLg}" VerticalAlignment="Center">
+                                <Button x:Name="SeparateStemsButton" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                        Content="{localization:Loc ChartFromAudio_SeparateStems}"
+                                        AutomationProperties.Name="{localization:Loc ChartFromAudio_SeparateStems}"
+                                        Command="{Binding SeparateStemsCommand}" IsEnabled="{Binding CanSeparateStems}"
+                                        IsVisible="{Binding !IsSeparating}" />
+                                <Button x:Name="CancelSeparationButton" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                        Content="{localization:Loc ChartFromAudio_CancelSeparation}"
+                                        AutomationProperties.Name="{localization:Loc ChartFromAudio_CancelSeparation}"
+                                        Command="{Binding CancelSeparationCommand}" IsVisible="{Binding IsSeparating}" />
+                            </Panel>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" Margin="{DynamicResource GapTopLg}" IsVisible="{Binding IsBusy}">
+                        <ProgressBar />
+                        <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" Classes="DlgBusyText" Text="{localization:Loc ChartFromAudio_Analyzing}" />
+                    </StackPanel>
+
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" Margin="{DynamicResource GapTopLg}"
+                            IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding Status}" />
+                    </Border>
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Ok" Margin="{DynamicResource GapTopLg}"
+                            IsVisible="{Binding HasDraft}">
+                        <TextBlock Text="{Binding DraftSummary}" />
+                    </Border>
+                    <!-- The primary's OWN reason. Apply is gated on HasDraft, which
+                         is false in the state this dialog OPENS in, so it greyed
+                         over an empty body with nothing connecting the two. The
+                         predicate stands down while the busy panel or the status
+                         strip above is already speaking, so exactly one of the
+                         three shows. -->
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" Margin="{DynamicResource GapTopLg}"
+                            IsVisible="{Binding NothingToApply}">
+                        <TextBlock Text="{localization:Loc ChartFromAudio_RunAnalyzeFirst}" />
+                    </Border>
+                </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc ChartFromAudio_Analyze}"
+                                Command="{Binding AnalyzeCommand}" IsEnabled="{Binding !IsBusy}" />
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button x:Name="ChartFromAudioApply" Classes="DlgAction Primary" Content="{Binding ApplyText}"
+                                AutomationProperties.Name="{Binding ApplyText}"
+                                Command="{Binding ApplyCommand}" IsDefault="True"
+                                IsEnabled="{Binding HasDraft}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

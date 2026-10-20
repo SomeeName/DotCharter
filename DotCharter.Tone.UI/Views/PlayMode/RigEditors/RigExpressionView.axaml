@@ -1,0 +1,132 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:conv="using:DotCharter.Tone.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigExpressionView"
+             x:DataType="vm:RigDockUnit">
+    <!-- THE EXPRESSION TREADLE (RigEditorFamily.Expression) — wah, whammy and
+         swell. The rocker plate on the left is DECORATION; the control is the
+         vertical fader beside it, and both name the SAME `position` param
+         (RigDockUnit.ExpressionPosition) — one value, never two. The labelled
+         params become pickers and everything else a knob, so a module that
+         gains a switch tomorrow still reaches the screen. -->
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+            <fire:FireKnob HardwareStyle="True" HorizontalAlignment="Center"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}"
+                           Maximum="{Binding Maximum}" DefaultValue="{Binding Default}"
+                           Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel MinWidth="160" Margin="{StaticResource FireGapTag}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding DisplayName}" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <!-- The editor's own scroller RESTS VISIBLE (AllowAutoHide=False), the same
+         treatment ScrollViewer.FireBoardScroll gets: the dock row is routinely
+         shorter than a family face, and an auto-hidden bar made the cut edge
+         read as the editor being drawn UNDER the footer strip (owner,
+         2026-09-12). Named so RigFooterStabilityUiPerfSmokeTests can find it. -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <!-- SCALE TO FIT THE DOCK ROW (lane E, 2026-09-13). The face is laid
+             out at its NATURAL size and the whole thing is scaled once, the way
+             RigPedalEditorView's enclosure already was — so at 1920x1080 it is
+             shrunk into the row instead of being cut by it, and at 3840x2160 it
+             GROWS to use a row that has ~5x the area. `TargetHeight` has to be
+             the scroller's viewport because a ScrollViewer offers its content
+             infinite height and the vertical fit would otherwise never engage;
+             the WIDTH binds on its own now that the horizontal bar is Disabled.
+             Stretch, not Left: the scale comes from the face's NATURAL size, but
+             a face with a star column has to be ARRANGED at the slot the
+             transform leaves it or its sliders collapse to their content.
+             `MaxScale` is the breakpointed `FireRigFaceMaxScale` token. -->
+        <fire:RigScaleToFit x:Name="RigFaceFit"
+                            TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                            MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+            <Grid ColumnDefinitions="Auto,*">
+
+                <Border Theme="{StaticResource FireTreadleBodyBorder}" Classes="FireTreadleBody" x:Name="RigTreadleDevice" Width="300" VerticalAlignment="Top">
+                    <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Border Theme="{StaticResource FireTreadlePlateBorder}" Classes="FireTreadlePlate">
+                                <Panel>
+                                    <fire:RigArtworkImage ModuleTypeId="{Binding Node.ModuleTypeId}" Height="170" />
+                                    <TextBlock Theme="{StaticResource FireTreadleWordText}" Classes="FireTreadleWord" VerticalAlignment="Bottom"
+                                               Text="{Binding ExpressionPlate}"
+                                               Foreground="{Binding ExpressionAccentKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                </Panel>
+                            </Border>
+                            <StackPanel Grid.Column="1" x:Name="RigTreadleFader" Margin="{StaticResource FireGapLeftMd}"
+                                        Spacing="{StaticResource FireSpaceXs}" IsVisible="{Binding HasExpressionPosition}">
+                                <TextBlock Theme="{StaticResource FireTreadleEndText}" Classes="FireTreadleEnd" Text="{localization:Loc Rig_Editor_Expr_Toe}" />
+                                <Slider Classes="FireEqFader" Height="150"
+                                        Value="{Binding ExpressionPosition.Value, Mode=TwoWay}"
+                                        Minimum="{Binding ExpressionPosition.Minimum}"
+                                        Maximum="{Binding ExpressionPosition.Maximum}"
+                                        Foreground="{Binding ExpressionAccentKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}"
+                                        fire:FireReset.Default="{Binding ExpressionPosition.Default}"
+                                        AutomationProperties.Name="{Binding ExpressionPosition.DisplayName}" />
+                                <Border Theme="{StaticResource FireEqValuePlateBorder}" Classes="FireEqValuePlate">
+                                    <TextBlock Theme="{StaticResource FireEqValueText}" Classes="FireEqValue" Text="{Binding ExpressionPosition.DisplayText}" />
+                                </Border>
+                                <TextBlock Theme="{StaticResource FireTreadleEndText}" Classes="FireTreadleEnd" Text="{localization:Loc Rig_Editor_Expr_Heel}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceSm}">
+                            <ToggleButton Theme="{StaticResource FireHardwareFootswitchToggle}" Classes="FireHardwareFootswitch" IsChecked="{Binding Node.Bypassed, Mode=TwoWay}"
+                                          AutomationProperties.Name="{localization:Loc Rig_BypassUnit}"
+                                          ToolTip.Tip="{localization:Loc Rig_BypassUnit}" />
+                            <Panel VerticalAlignment="Center">
+                                <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding !Node.Bypassed}"
+                                           Text="{localization:Loc Rig_Editor_Engaged}" />
+                                <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding Node.Bypassed}"
+                                           Text="{localization:Loc Rig_Editor_Bypass}" />
+                            </Panel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Column="1" x:Name="RigTreadleSettings" Margin="{StaticResource FireGapLeftLg}"
+                            Spacing="{StaticResource FireSpaceMd}">
+                    <StackPanel>
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding ExpressionEyebrow}" />
+                        <TextBlock Theme="{StaticResource FireRackTitleText}" Classes="FireRackTitle" Text="{Binding DisplayName}" />
+                        <TextBlock Theme="{StaticResource FireDeviceHintText}" Classes="FireDeviceHint" Text="{localization:Loc Rig_Editor_Expr_Hint}" />
+                    </StackPanel>
+
+                    <ItemsControl x:Name="RigTreadleChoices" ItemsSource="{Binding ExpressionChoices}"
+                                  IsVisible="{Binding HasExpressionChoices}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <ItemsControl x:Name="RigTreadleKnobs" ItemsSource="{Binding ExpressionKnobs}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PedalParamViewModel">
+                                <Border Theme="{StaticResource FireKnobCellBorder}" Classes="FireKnobCell"><ContentControl Content="{Binding}" /></Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel IsVisible="{Binding HasMoreKnobs}" Spacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Theme="{StaticResource FireSectionHeadText}" Classes="FireSectionHead" Text="{localization:Loc Rig_Editor_More}" />
+                        <ItemsControl ItemsSource="{Binding MoreKnobs}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </fire:RigScaleToFit>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,121 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.LibraryDoctorDialogView"
+             x:DataType="contracts:ILibraryDoctorScreen"
+             x:CompileBindings="True">
+
+    <UserControl.Styles>
+        <!-- Opened on the dialog host (IDialogs), inside DialogContainerView,
+             which carries the shared grammar — do NOT include it here. -->
+
+        <!-- Count badge on each group header; colour follows severity. -->
+        <Style Selector="Border.CountBadge">
+            <Setter Property="Background" Value="{DynamicResource InfoColor}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource RadiusXs}" />
+            <Setter Property="Padding" Value="{DynamicResource PaddingChip}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.CountBadge.warning">
+            <Setter Property="Background" Value="{DynamicResource WarningColor}" />
+        </Style>
+        <Style Selector="Border.CountBadge.error">
+            <Setter Property="Background" Value="{DynamicResource DangerColor}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconPulse}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc LibraryDoctor_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc LibraryDoctor_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Panel Grid.Row="1">
+                    <!-- Healthy: the clean bill of health IS the content, so it
+                         gets the shared empty shape rather than a bare line. -->
+                    <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding !HasIssues}" IsHitTestVisible="False">
+                        <TextBlock Text="{localization:Loc LibraryDoctor_NoIssues}" MaxWidth="360" />
+                    </Border>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  MaxHeight="420" IsVisible="{Binding HasIssues}">
+                        <ItemsControl ItemsSource="{Binding Groups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:ILibraryDoctorGroup">
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <StackPanel Spacing="{DynamicResource SpaceMd}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                           Text="{Binding Title}" />
+                                                <Border Grid.Column="1" Classes="CountBadge"
+                                                        Classes.warning="{Binding IsWarning}"
+                                                        Classes.error="{Binding IsError}">
+                                                    <TextBlock Text="{Binding Count}"
+                                                               FontSize="{DynamicResource FontSizeXs}"
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource TextOnAccent}" />
+                                                </Border>
+                                            </Grid>
+
+                                            <ItemsControl ItemsSource="{Binding Issues}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="contracts:ILibraryDoctorIssue">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10"
+                                                              Margin="0,3">
+                                                            <StackPanel Grid.Column="0">
+                                                                <TextBlock Text="{Binding SongDisplay}"
+                                                                           Foreground="{DynamicResource TextSecondary}"
+                                                                           FontSize="{DynamicResource FontSizeSm}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{Binding Detail}"
+                                                                           FontSize="{DynamicResource FontSizeXs}" />
+                                                            </StackPanel>
+                                                            <TextBlock Theme="{DynamicResource DlgHintText}" Grid.Column="1" Classes="DlgHint"
+                                                                       Text="{Binding FileName}"
+                                                                       FontSize="{DynamicResource FontSizeXs}"
+                                                                       VerticalAlignment="Center"
+                                                                       TextWrapping="NoWrap"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Panel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <ProgressBar Width="120" Height="6" VerticalAlignment="Center"
+                                         Minimum="0" Maximum="1" Value="{Binding Progress}"
+                                         IsVisible="{Binding IsRunning}" />
+                        </StackPanel>
+                        <TextBlock Theme="{DynamicResource DlgHintText}" Grid.Column="1" Classes="DlgHint" Text="{Binding Summary}"
+                                   VerticalAlignment="Center" />
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                    Content="{localization:Loc LibraryDoctor_Rescan}"
+                                    Command="{Binding RunCommand}" IsEnabled="{Binding !IsRunning}" />
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                    Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

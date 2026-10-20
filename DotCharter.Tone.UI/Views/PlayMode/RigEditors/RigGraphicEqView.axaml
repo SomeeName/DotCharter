@@ -1,0 +1,160 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:dsp="clr-namespace:DotCharter.Tone.UI.Controls.Dsp;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigGraphicEqView"
+             x:DataType="vm:RigDockUnit">
+    <!-- THE GRAPHIC EQUALISER (RigEditorFamily.GraphicEq) — a rack panel on
+         brushed aluminium: the gain contour over the ten band faders, with the
+         level knob and the bypass switch in the master column.
+
+         Every control here binds a LIVE param off the unit (RigDockUnit.Families
+         looks each one up by id); the contour is drawn from the same instances
+         the faders write, so the curve follows the hardware rather than a copy
+         of it. -->
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+            <fire:FireKnob HardwareStyle="True"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}"
+                           Maximum="{Binding Maximum}" DefaultValue="{Binding Default}"
+                           Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel MinWidth="160" Margin="{StaticResource FireGapTag}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding DisplayName}" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <!-- The panel sizes to its ten 58 px bands and sits at the left of the
+         dock; a wide window gets room beside it, not bands 150 px apart. -->
+    <!-- The editor's own scroller RESTS VISIBLE (AllowAutoHide=False), the same
+         treatment ScrollViewer.FireBoardScroll gets: the dock row is routinely
+         shorter than a family face, and an auto-hidden bar made the cut edge
+         read as the editor being drawn UNDER the footer strip (owner,
+         2026-09-12). Named so RigFooterStabilityUiPerfSmokeTests can find it. -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <!-- SCALE TO FIT THE DOCK ROW (lane E, 2026-09-13). The face is laid
+             out at its NATURAL size and the whole thing is scaled once, the way
+             RigPedalEditorView's enclosure already was — so at 1920x1080 it is
+             shrunk into the row instead of being cut by it, and at 3840x2160 it
+             GROWS to use a row that has ~5x the area. `TargetHeight` has to be
+             the scroller's viewport because a ScrollViewer offers its content
+             infinite height and the vertical fit would otherwise never engage;
+             the WIDTH binds on its own now that the horizontal bar is Disabled.
+             Stretch, not Left: the scale comes from the face's NATURAL size, but
+             a face with a star column has to be ARRANGED at the slot the
+             transform leaves it or its sliders collapse to their content.
+             `MaxScale` is the breakpointed `FireRigFaceMaxScale` token. -->
+        <fire:RigScaleToFit x:Name="RigFaceFit"
+                            TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                            MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+            <Border Theme="{StaticResource FireRackPanelBorder}" Classes="FireRackPanel" x:Name="RigGraphicEqPanel" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <Panel>
+                    <fire:RigArtworkImage File="{x:Static dsp:RigArtwork.BrushedAluminium}" Fill="True" CornerRadius="12" />
+                    <Border Theme="{StaticResource FireRackTintBorder}" Classes="FireRackTint" />
+                    <Border Theme="{StaticResource FireRackBodyBorder}" Classes="FireRackBody">
+                        <StackPanel Spacing="{StaticResource FireSpaceMd}">
+
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel>
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_GraphicEq_Eyebrow}" />
+                                    <TextBlock Theme="{StaticResource FireRackTitleText}" Classes="FireRackTitle" Text="{Binding DisplayName}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireRackBrandText}" Classes="FireRackBrand" Text="{Binding Node.BrandWordmark}" />
+                            </Grid>
+
+                            <Border Theme="{StaticResource FireEqContourWellBorder}" Classes="FireEqContourWell">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <TextBlock Theme="{StaticResource FireEqScaleText}" Classes="FireEqScale" Text="{localization:Loc Rig_Editor_GraphicEq_BandGain}"
+                                               VerticalAlignment="Center" Margin="{StaticResource FireGapRightLg}" />
+                                    <fire:FireEqContour Grid.Column="1" x:Name="RigEqContour" Height="74"
+                                                        Bands="{Binding GraphicEqBands}"
+                                                        Stroke="{DynamicResource FireRigAccentEq}"
+                                                        GridBrush="{DynamicResource FireHardwareEdge}"
+                                                        AutomationProperties.Name="{localization:Loc Rig_Editor_GraphicEq_Contour}" />
+                                </Grid>
+                            </Border>
+
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <!-- The panel's own dB scale, beside the bank. -->
+                                <Grid Height="196" RowDefinitions="Auto,*,Auto" Margin="{StaticResource FireGapRightLg}">
+                                    <TextBlock Theme="{StaticResource FireEqScaleText}" Classes="FireEqScale" Text="{localization:Loc Rig_Editor_GraphicEq_ScaleTop}" />
+                                    <TextBlock Grid.Row="1" Theme="{StaticResource FireEqScaleText}" Classes="FireEqScale" VerticalAlignment="Center"
+                                               Text="{localization:Loc Rig_Editor_GraphicEq_ScaleZero}" />
+                                    <TextBlock Grid.Row="2" Theme="{StaticResource FireEqScaleText}" Classes="FireEqScale"
+                                               Text="{localization:Loc Rig_Editor_GraphicEq_ScaleBottom}" />
+                                </Grid>
+
+                                <ItemsControl Grid.Column="1" x:Name="RigEqBank" ItemsSource="{Binding GraphicEqBands}" HorizontalAlignment="Left">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:PedalParamViewModel">
+                                            <Border Theme="{StaticResource FireEqFaderCellBorder}" Classes="FireEqFaderCell">
+                                                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                                    <TextBlock Theme="{StaticResource FireEqFreqText}" Classes="FireEqFreq" Text="{Binding Caption}" />
+                                                    <!-- .Eq puts the EQ green on the cap stripe (a local
+                                                         DynamicResource on Foreground lost to the class style) -->
+                                                    <Slider Classes="FireEqFader Eq" Value="{Binding Value, Mode=TwoWay}"
+                                                            Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                                            fire:FireReset.Default="{Binding Default}"
+                                                            AutomationProperties.Name="{Binding DisplayName}" />
+                                                    <Border Theme="{StaticResource FireEqValuePlateBorder}" Classes="FireEqValuePlate">
+                                                        <TextBlock Theme="{StaticResource FireEqValueText}" Classes="FireEqValue" Text="{Binding DisplayText}" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <StackPanel Grid.Column="2" x:Name="RigEqMaster" VerticalAlignment="Center"
+                                            Spacing="{StaticResource FireSpaceMd}" Margin="{StaticResource FireGapLeftLg}">
+                                    <ContentControl Content="{Binding GraphicEqLevel}" IsVisible="{Binding HasGraphicEqLevel}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                        <ToggleButton Theme="{StaticResource FireHardwareFootswitchToggle}" Classes="FireHardwareFootswitch" IsChecked="{Binding Node.Bypassed, Mode=TwoWay}"
+                                                      AutomationProperties.Name="{localization:Loc Rig_BypassUnit}"
+                                                      ToolTip.Tip="{localization:Loc Rig_BypassUnit}" />
+                                        <Panel VerticalAlignment="Center">
+                                            <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding !Node.Bypassed}"
+                                                       Text="{localization:Loc Rig_Editor_Engaged}" />
+                                            <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding Node.Bypassed}"
+                                                       Text="{localization:Loc Rig_Editor_Bypass}" />
+                                        </Panel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Theme="{StaticResource FireEqScaleText}" Classes="FireEqScale" HorizontalAlignment="Left"
+                                           Text="{localization:Loc Rig_Editor_GraphicEq_Range}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireEqScaleText}" Classes="FireEqScale"
+                                           Text="{localization:Loc Rig_Editor_GraphicEq_PerBand}" />
+                            </Grid>
+
+                            <!-- Anything the layout above does not name — a module that
+                                 gains a param stays fully editable with nothing here to
+                                 update. -->
+                            <StackPanel IsVisible="{Binding HasMoreKnobs}" Spacing="{StaticResource FireSpaceXs}">
+                                <TextBlock Theme="{StaticResource FireSectionHeadText}" Classes="FireSectionHead" Text="{localization:Loc Rig_Editor_More}" />
+                                <ItemsControl ItemsSource="{Binding MoreKnobs}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding MoreChoices}" IsVisible="{Binding HasMoreChoices}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </Panel>
+            </Border>
+        </fire:RigScaleToFit>
+    </ScrollViewer>
+</UserControl>

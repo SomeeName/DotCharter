@@ -1,0 +1,91 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             x:Class="DotCharter.UI.Views.Shell.EditorLaunchCardView"
+             x:DataType="viewModels:MainWindowViewModel"
+             HorizontalAlignment="Center" VerticalAlignment="Center">
+    <!-- The chart editor's LAUNCH CARD (P1-6), lifted out of MainWindow.axaml
+         2026-09-12 so it can be laid out on its own in a test.
+
+         The old empty-state was a hit-test-invisible hint bound to AUDIO, so
+         after a GP import (chart, no audio) it sat over a full chart telling
+         the user to open something. Now: content-aware
+         (IsEditorLaunchCardVisible — no chart content AND no audio), and a real
+         door: the three verbs that leave the empty state, plus the Open Recent
+         list. A chart without audio shows the chart, covered by nothing.
+
+         THE VERB ROW IS A WrapPanel AND MUST STAY ONE. It was a horizontal
+         StackPanel inside a card capped at 440 px, and a horizontal StackPanel
+         arranges each child at its own DesiredSize from x=0 and clips nothing —
+         it reports a correct rectangle and DRAWS outside it
+         (docs/agents/ui/layout-traps.md). In de-DE the three captions measure
+         wider than the card's content box, so "Audio hinzufügen…" hung off the
+         right edge — the owner's "the far right button was half out of the
+         dialog", reported from a 1920x1080 screen. The card is MaxWidth-capped
+         and centred, so that overflow is WIDTH-INDEPENDENT: only the LANGUAGE
+         decides whether it shows, which is why it never appeared in English.
+         A WrapPanel sizes to its content and re-flows to a second line instead.
+         Pinned by Perf/EditorLaunchCardContainmentUiPerfSmokeTests. -->
+    <!-- lane F (2026-09-13): the cap is the shared `FireCardMaxWidth` token
+         (560, and 760 on the wide ladder) rather than a literal, so the card
+         stops being the same 560 px box on a 3840 px window. It stays a CAP —
+         the WrapPanel below re-flows inside whatever it is given, and that
+         containment is what `Perf/EditorLaunchCardContainmentUiPerfSmokeTests`
+         measures. A token and not a `Window.Wide` selector: a `MaxWidth`
+         written on the element is a LOCAL value and outranks every setter. -->
+    <Border x:Name="LaunchCardSurface"
+            Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource BorderDefault}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource RadiusMd}"
+            Padding="{StaticResource PaddingCardLg}"
+            MaxWidth="{DynamicResource FireCardMaxWidth}">
+        <StackPanel Spacing="{StaticResource SpaceLg}">
+            <PathIcon Data="{DynamicResource IconMusicNote}" Width="28" Height="28"
+                      HorizontalAlignment="Center" Opacity="0.6"
+                      Foreground="{DynamicResource TextMuted}" />
+            <TextBlock Text="{localization:Loc Empty_Editor_Hint}"
+                       HorizontalAlignment="Center"
+                       TextWrapping="Wrap" TextAlignment="Center"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="{StaticResource FontSizeMd}" />
+            <WrapPanel x:Name="LaunchVerbs"
+                       Orientation="Horizontal"
+                       HorizontalAlignment="Center"
+                       ItemSpacing="{StaticResource SpaceMd}"
+                       LineSpacing="{StaticResource SpaceMd}">
+                <Button Theme="{StaticResource PrimaryButton}" Classes="Primary"
+                        Content="{localization:Loc Menu_NewProject}"
+                        Command="{Binding Imports.OpenNewProjectCommand}" />
+                <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary"
+                        Content="{localization:Loc Menu_OpenProject}"
+                        Command="{Binding Project.OpenProjectCommand}" />
+                <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary"
+                        Content="{localization:Loc Menu_AttachAudio}"
+                        Command="{Binding Project.AttachAudioCommand}" />
+            </WrapPanel>
+            <!-- The MRU, one click from a cold start. Rows are
+                 plain subtle buttons over the same item VMs the
+                 File ▸ Open Recent submenu binds. -->
+            <StackPanel Spacing="{StaticResource SpaceXs}"
+                        IsVisible="{Binding Project.HasRecentProjects}">
+                <TextBlock Text="{localization:Loc Menu_OpenRecent}"
+                           Foreground="{DynamicResource TextMuted}"
+                           FontSize="{StaticResource FontSizeSm}" />
+                <ItemsControl ItemsSource="{Binding Project.RecentProjects}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="viewModels:RecentProjectItem">
+                            <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Content="{Binding DisplayName}"
+                                    Command="{Binding OpenCommand}"
+                                    ToolTip.Tip="{Binding Path}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

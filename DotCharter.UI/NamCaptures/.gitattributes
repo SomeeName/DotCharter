@@ -1,0 +1,3 @@
+# NAM/AIDA-X neural-amp captures are model files — store verbatim (no EOL conversion).
+*.nam binary
+*.aidax binary

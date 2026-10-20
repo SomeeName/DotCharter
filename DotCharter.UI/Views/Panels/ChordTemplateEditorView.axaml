@@ -1,0 +1,290 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:views="using:DotCharter.UI.Views.Panels"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Panels.ChordTemplateEditorView"
+             x:DataType="panels:ChordTemplateEditorViewModel"
+             Name="TemplateEditorRoot">
+
+    <!-- Two blocks, so a host can put the fingering FIRST (FingeringFirst, #572): the
+         Sound tab's Shape segment opens on the chord box and the per-string rows, and the
+         template / name pickers follow. Everywhere else the order is unchanged. -->
+    <Grid x:Name="EditorBlocks" RowDefinitions="Auto,Auto" RowSpacing="{StaticResource SpaceLg}">
+    <StackPanel x:Name="NamingBlock" Grid.Row="0" Spacing="{StaticResource SpaceLg}">
+
+        <!-- Template picker + New. These are BROWSING verbs and the redesign
+             moves them into the Library block of the empty state; they stay
+             here until that block exists, because they are the only route to
+             "switch this chord to another template" and no capability may go
+             unreachable between two commits. -->
+        <!-- One grid, so the two labels share a column. The chord-name picker had no visible
+             label (only its tooltip said what it was): a blank box under Template (inspector
+             review, 2026-09-24). -->
+        <Grid x:Name="ChordTemplatePickers" ColumnDefinitions="Auto, *, Auto" RowDefinitions="Auto, Auto, Auto, Auto"
+              RowSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{localization:Loc ChordTemplate_Template}" VerticalAlignment="Center"
+                       Margin="{StaticResource GapRightMd}" Theme="{StaticResource LabelText}" Classes="Label" />
+            <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" Margin="{StaticResource GapRightMd}"
+                      ItemsSource="{Binding AvailableTemplates}"
+                      AutomationProperties.Name="{localization:Loc ChordTemplate_Template}"
+                      SelectedItem="{Binding SelectedDropdownTemplate}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="panels:TemplateListItem">
+                        <TextBlock Text="{Binding DisplayName}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Grid.Row="0" Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc ChordTemplate_New}"
+                    Command="{Binding CreateNewTemplateCommand}" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{localization:Loc ChordTemplate_Name}" VerticalAlignment="Center"
+                       Margin="{StaticResource GapRightMd}" Theme="{StaticResource LabelText}" Classes="Label" />
+            <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Margin="{StaticResource GapRightMd}"
+                      ItemsSource="{Binding Names.KnownChordNames}"
+                      SelectedItem="{Binding ChordName}"
+                      IsTextSearchEnabled="True"
+                      ToolTip.Tip="{localization:Loc ChordTemplate_NameTip}"
+                      AutomationProperties.Name="{localization:Loc ChordTemplate_Name}" />
+            <CheckBox Grid.Row="1" Grid.Column="2" Content="{localization:Loc ChordTemplate_Arpeggio}"
+                      IsChecked="{Binding IsArpeggio}"
+                      ToolTip.Tip="{localization:Loc ChordTemplate_ArpeggioTip}" />
+            <!-- Rocksmith's Nop chord flag (#489): it used to be reachable only by typing
+                 "-nop" into the name. A template field now; exporters spell the suffix. -->
+            <CheckBox x:Name="NopToggle" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                      Content="{localization:Loc ChordTemplate_Nop}"
+                      IsChecked="{Binding IsNop}"
+                      AutomationProperties.Name="{localization:Loc ChordTemplate_Nop}"
+                      ToolTip.Tip="{localization:Loc ChordTemplate_NopTip}" />
+            <!-- The grip's pin (#795): authored, so no automatic flow replaces or re-fingers it.
+                 A manual fret/finger edit sets it; this is where a chord's own grip is unpinned.
+                 Locked while the grip holds ghost gems (always pinned) or is a display-only seed. -->
+            <CheckBox x:Name="PinnedToggle" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                      Content="{localization:Loc Inspector_GripPinned}"
+                      IsChecked="{Binding IsPinned}"
+                      IsEnabled="{Binding CanTogglePin}"
+                      AutomationProperties.Name="{localization:Loc Inspector_GripPinned}"
+                      ToolTip.Tip="{localization:Loc Inspector_GripPinned_Tip}" />
+        </Grid>
+
+        <!-- The "Apply to" ladder (#484), compact since #572 — its own view so the Sound tab
+             can PIN it above the segments and hide this copy (ShowsApplyScope). -->
+        <views:ChordApplyScopeBar x:Name="ApplyScopeBar"
+                                  IsVisible="{Binding #TemplateEditorRoot.ShowsApplyScope}" />
+
+        <Border IsVisible="{Binding Names.HasSuggestedChordNames}">
+            <StackPanel Orientation="Vertical" Spacing="{StaticResource SpaceXs}">
+                <TextBlock Text="{localization:Loc ChordTemplate_SuggestName}"
+                           Classes="TechniqueGroupLabel" />
+                <ItemsControl ItemsSource="{Binding Names.SuggestedChordNames}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Button Theme="{StaticResource PillButton}" Classes="Pill" Content="{Binding .}"
+                                    Command="{Binding $parent[ItemsControl].((panels:ChordTemplateEditorViewModel)DataContext).ApplySuggestedChordNameCommand}"
+                                    CommandParameter="{Binding .}"
+                                    ToolTip.Tip="{localization:Loc ChordTemplate_ApplySuggestedTip}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+
+    <StackPanel x:Name="FingeringBlock" Grid.Row="1" Spacing="{StaticResource SpaceLg}">
+        <!-- Containing shapes. Generating a bar over one note builds a one-string
+             shape, and the grip gets rebuilt at every occurrence because the next
+             seed no longer matches the finished shape. These pills are the way out
+             — an OFFER, not automatic, because binding here makes the bar declare
+             a string the note does not sound. -->
+        <Border IsVisible="{Binding Names.HasContainingShapes}">
+            <StackPanel Orientation="Vertical" Spacing="{StaticResource SpaceXs}">
+                <TextBlock Text="{localization:Loc ChordTemplate_ContainingShapes}"
+                           Classes="TechniqueGroupLabel" />
+                <ItemsControl ItemsSource="{Binding Names.ContainingShapes}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="panels:ShapeSuggestion">
+                            <Button Theme="{StaticResource PillButton}" Classes="Pill" Content="{Binding Label}"
+                                    Command="{Binding $parent[ItemsControl].((panels:ChordTemplateEditorViewModel)DataContext).ApplyContainingShapeCommand}"
+                                    CommandParameter="{Binding .}"
+                                    ToolTip.Tip="{localization:Loc ChordTemplate_ContainingShapesTip}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <Border Classes="FretboardWell">
+            <controls:ChordBoxControl Height="184"
+                                      Role="{Binding #TemplateEditorRoot.ShapeRole}"
+                                      Chord="{Binding PreviewChord}"
+                                      Template="{Binding DraftTemplate}"
+                                      StringCount="{Binding StringInputs.Count}"
+                                      FlipStrings="{Binding FlipStrings}"
+                                      Capo="{Binding Capo}"
+                                      TuningNames="{Binding TuningNames}"
+                                      Mask="{Binding #TemplateEditorRoot.Mask}"
+                                      ToggleMaskCommand="{Binding #TemplateEditorRoot.ToggleMaskCommand}"
+                                      IssueStrings="{Binding #TemplateEditorRoot.IssueStrings}"
+                                      MutedStrings="{Binding MutedStrings}"
+                                      SetFretCommand="{Binding SetHoveredFretCommand}"
+                                      SetFingerCommand="{Binding SetHoveredFingerCommand}"
+                                      ClearStringCommand="{Binding ClearStringCommand}"
+                                      ToggleNoteCommand="{Binding ToggleNoteCommand}"
+                                      ToolTip.Tip="{localization:Loc ChordTemplate_ChordBoxHint}" />
+        </Border>
+        <TextBlock Text="{localization:Loc ChordTemplate_ChordBoxHint}"
+                   Foreground="{DynamicResource TextMuted}"
+                   FontSize="{StaticResource FontSizeMicro}" TextWrapping="Wrap" />
+
+        <!-- Fingerings group. The Save action is the primary step in the
+             "dial a shape → save → next missing" loop, so it reads Primary;
+             Generate-all and Next-missing stay subtle. -->
+        <StackPanel Spacing="{StaticResource SpaceSm}">
+            <!-- Fingerless (#622) sits at the header's end, icon-only like the finger strips it
+                 switches off: EOF's "no fingering on purpose", a template flag on the ladder's rung. -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+                <TextBlock Grid.Column="0" Text="{localization:Loc ChordTemplate_FingeringsGroup}" Classes="TechniqueGroupLabel"
+                           VerticalAlignment="Center" />
+                <ToggleButton x:Name="FingerlessToggle" Grid.Column="1" Theme="{StaticResource SegToggle}" Classes="Seg"
+                              IsChecked="{Binding IsFingerless}"
+                              AutomationProperties.Name="{localization:Loc ChordTemplate_Fingerless}"
+                              ToolTip.Tip="{localization:Loc ChordTemplate_FingerlessTip}">
+                    <PathIcon Data="{DynamicResource IconFingerless}" Width="14" Height="14" />
+                </ToggleButton>
+            </Grid>
+            <!-- A WrapPanel, so the three verbs wrap rather than clip where the Sound tab's rail
+                 leaves the pane narrow (#601). -->
+            <WrapPanel x:Name="FingeringVerbs" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceSm}"
+                       LineSpacing="{StaticResource SpaceXs}">
+                <!-- The caption carries the live target count (SaveFingeringLabel)
+                     because one press re-fingers EVERY selected sound that plays
+                     the displayed shape, not just the chord under the caret. -->
+                <Button Theme="{StaticResource PrimaryButton}" Classes="Primary Compact" Content="{Binding SaveFingeringLabel}"
+                        Command="{Binding SaveFingerEditsCommand}"
+                        IsEnabled="{Binding CanSaveFingering}"
+                        ToolTip.Tip="{localization:Loc ChordTemplate_Apply_SaveFingeringTip}" />
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc ChordTemplate_NextMissingFingering}"
+                        Command="{Binding SelectNextMissingFingeringCommand}"
+                        ToolTip.Tip="{localization:Loc ChordTemplate_NextMissingFingeringTip}" />
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc ChordTemplate_GenerateAllFingerings}"
+                        Command="{Binding GenerateAllFingeringsCommand}"
+                        ToolTip.Tip="{localization:Loc ChordTemplate_GenerateAllFingeringsTip}" />
+            </WrapPanel>
+        </StackPanel>
+
+        <!-- Column headers keyed to the rows below — the two input columns
+             were unlabeled (which one is fret? which is finger?). -->
+        <Grid ColumnDefinitions="32, 36, *, Auto">
+            <TextBlock Grid.Column="2" Text="{localization:Loc Inspector_Fret}"
+                       Classes="TechniqueGroupLabel" Margin="{StaticResource GapRightXs}" />
+            <!-- Trims rather than clips where the Sound tab's rail leaves the dock's 320 px floor
+                 too narrow for the strip's caption (#601). -->
+            <TextBlock Grid.Column="3" Text="{localization:Loc ChordTemplate_Finger}"
+                       Classes="TechniqueGroupLabel" TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <ItemsControl x:Name="StringRows" ItemsSource="{Binding DisplayStringInputs}">
+            <!-- A finger strip a Fingerless shape switches off reads as off (#622), as the
+                 ladder's unavailable rungs do (ChordApplyScopeBar). -->
+            <ItemsControl.Styles>
+                <Style Selector="ToggleButton.Seg:disabled">
+                    <Setter Property="Opacity" Value="0.45" />
+                </Style>
+            </ItemsControl.Styles>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="panels:StringFingeringInput">
+                    <!-- UX5: per-string row. Fret accepts 0..24 or "x"/"X"
+                         for muted string; tooltip explains. Finger is a
+                         SEGMENTED STRIP of named values (—, T, 1..4) — all six
+                         visible, one click each, and nothing that swallows the
+                         wheel. The tuning-letter column makes it
+                         unambiguous which note each row belongs to (so the
+                         row layout no longer "looks different" from the
+                         mini-fretboard preview above).
+
+                         The tuning letter names the OPEN string; the PITCH
+                         column names what the fret on it actually sounds, which
+                         is the question a voicing is reasoned about in and the
+                         one nobody can answer in their head under a capo or a
+                         dropped tuning. An unplayed or muted string keeps it
+                         blank — see SoundingPitchReadout. -->
+                    <Grid Classes="FieldRow" ColumnDefinitions="32, 36, *, Auto, Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding StringIndex}" VerticalAlignment="Center"
+                                   Theme="{StaticResource LabelText}" Classes="Label" Foreground="{DynamicResource TextDim}" />
+                        <TextBlock Grid.Column="1" Text="{Binding StringName}" VerticalAlignment="Center"
+                                   FontWeight="Bold" Margin="{StaticResource GapRightMd}"
+                                   ToolTip.Tip="{localization:Loc ChordTemplate_StringNameTip}" />
+                        <!-- Commits on Enter / LostFocus, NEVER per keystroke.
+                             Per-keystroke it typed "12" over "5" as a reshape to
+                             fret 1 and then one to 12 — two history nodes and a
+                             transient state in which every bound chord played
+                             fret 1 (§7.2). -->
+                        <TextBox Grid.Column="2" Text="{Binding FretText, UpdateSourceTrigger=LostFocus}"
+                                 AutomationProperties.Name="{localization:Loc Inspector_Fret}"
+                                 PlaceholderText="{localization:Loc Inspector_Fret}"
+                                 Margin="{StaticResource GapRightXs}"
+                                 ToolTip.Tip="{localization:Loc ChordTemplate_FretTip}" />
+                        <TextBlock Grid.Column="3" Text="{Binding PitchName}" VerticalAlignment="Center"
+                                   MinWidth="34" TextAlignment="Center"
+                                   FontFamily="{StaticResource FireFontMono}"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="{StaticResource GapRightMd}"
+                                   ToolTip.Tip="{localization:Loc Inspector_SoundingPitchTip}" />
+                        <!-- A segmented strip, not a dropdown. Six options that
+                             are each one character do not earn a popup: the
+                             dropdown hid five of them behind a click, and its
+                             open list ATE THE WHEEL, so a notch meant for the
+                             chart re-fingered the string under the pointer.
+                             Same idiom as the Mute / HOPO strips in the sound
+                             inspector. -->
+                        <!-- Disabled while the shape is Fingerless (#622); the tooltip says why. -->
+                        <StackPanel x:Name="FingerStrip" Grid.Column="4" Orientation="Horizontal"
+                                    AutomationProperties.Name="{localization:Loc ChordTemplate_Finger}"
+                                    IsEnabled="{Binding !$parent[ItemsControl].((panels:ChordTemplateEditorViewModel)DataContext).IsFingerless}"
+                                    ToolTip.ShowOnDisabled="True"
+                                    ToolTip.Tip="{Binding $parent[ItemsControl].((panels:ChordTemplateEditorViewModel)DataContext).FingerStripTip}">
+                            <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                                          AutomationProperties.Name="{localization:Loc ChordTemplate_Finger_None}"
+                                          ToolTip.Tip="{localization:Loc ChordTemplate_Finger_None}"
+                                          IsChecked="{Binding FingerText, Converter={x:Static conv:StringEqualsConverter.Instance}, ConverterParameter=''}" />
+                            <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="T"
+                                          AutomationProperties.Name="{localization:Loc ChordTemplate_Finger_Thumb}"
+                                          ToolTip.Tip="{localization:Loc ChordTemplate_Finger_Thumb}"
+                                          IsChecked="{Binding FingerText, Converter={x:Static conv:StringEqualsConverter.Instance}, ConverterParameter=T}" />
+                            <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="1"
+                                          AutomationProperties.Name="{localization:Loc ChordTemplate_Finger_Index}"
+                                          ToolTip.Tip="{localization:Loc ChordTemplate_Finger_Index}"
+                                          IsChecked="{Binding FingerText, Converter={x:Static conv:StringEqualsConverter.Instance}, ConverterParameter=1}" />
+                            <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="2"
+                                          AutomationProperties.Name="{localization:Loc ChordTemplate_Finger_Middle}"
+                                          ToolTip.Tip="{localization:Loc ChordTemplate_Finger_Middle}"
+                                          IsChecked="{Binding FingerText, Converter={x:Static conv:StringEqualsConverter.Instance}, ConverterParameter=2}" />
+                            <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="3"
+                                          AutomationProperties.Name="{localization:Loc ChordTemplate_Finger_Ring}"
+                                          ToolTip.Tip="{localization:Loc ChordTemplate_Finger_Ring}"
+                                          IsChecked="{Binding FingerText, Converter={x:Static conv:StringEqualsConverter.Instance}, ConverterParameter=3}" />
+                            <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="4"
+                                          AutomationProperties.Name="{localization:Loc ChordTemplate_Finger_Little}"
+                                          ToolTip.Tip="{localization:Loc ChordTemplate_Finger_Little}"
+                                          IsChecked="{Binding FingerText, Converter={x:Static conv:StringEqualsConverter.Instance}, ConverterParameter=4}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+    </Grid>
+</UserControl>

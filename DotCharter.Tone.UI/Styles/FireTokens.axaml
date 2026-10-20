@@ -1,0 +1,128 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         THE "FIRE" DESIGN LAYER — token half.
+
+         Extracted from the eleven HTML mockups the owner commissioned
+         (`…/Downloads/fire/New Menu/*.dc.html`). It is a SECOND, self-contained
+         visual vocabulary that lives ALONGSIDE the app's existing theme — it
+         redefines nothing. Every key here is prefixed `Fire`, so the editor,
+         the pedalboard, the dialogs and the eight settings tabs keep the look
+         they have until a surface explicitly opts in.
+
+         Two deliberate departures from how the rest of the theme works:
+
+         1. THESE COLOURS ARE THEMEABLE AS OF 2026-09-20, and this note said the
+            opposite until then. Every literal `SolidColorBrush` in
+            `FireTokens/Palette.axaml` now names a `Color` token of its own
+            (`FireGround` → `FireGroundColor`), the shape `ColorTokens.axaml` +
+            `Resources/ThemeSurfaces.axaml` already used, so a write through
+            `ThemeService` (which sets `*Color` keys) reaches the Fire layer —
+            i.e. every Play Mode screen — instead of stopping at it. The UI
+            rewrite needs that: a design proposal cannot be a theme while the
+            surfaces it must recolour are literals
+            (`docs/agents/ui/target-architecture.md`). The art direction is
+            still the DEFAULT; what changed is that a theme can now replace it.
+            The amp-rig identities (`AmpOrange*`/`Rig*`), the six string colours
+            and the podium metals stay fixed on purpose — they are materials and
+            identities, not palette.
+         2. THE SIZE/RADIUS/SPACING LADDERS ARE COMPLETE AND SELF-CONTAINED.
+            Several mockup steps (9.5, 10.5, 11.5, 12.5, 13.5, 22, 26, 58 px;
+            radius 9/11/12/16/18/20) do not exist on the app's scales. Rather
+            than mix two ladders — which is how a screen ends up half-converted
+            — a Fire surface uses ONLY `FireSize*` / `FireRadius*` /
+            `FirePad*` / `FireGap*`.
+
+         TYPE RULES (do not paraphrase them per screen):
+           • Chakra Petch  → display: screen titles, big figures, the wordmark,
+                             primary-button captions. Bold (700) except the
+                             occasional SemiBold segment caption.
+           • Space Grotesk → every piece of running UI text: row titles (600),
+                             descriptions (400), button labels (600).
+           • IBM Plex Mono → eyebrows, figures, metadata, tags, status text.
+                             ALWAYS uppercase, always letter-spaced.
+
+         THE `Padding`/`Margin`/`BorderThickness` TRAP APPLIES HERE TOO:
+         `FireGap*` and `FirePad*` are `Thickness`, `FireSpace*` and `FireSize*`
+         are `x:Double`. Handing a double token to a Thickness property throws
+         `InvalidCastException` when the control attaches, from a clean build.
+         Pinned in both directions by `DotCharter.Tests/UI/ResourceTokenTypeTests`.
+
+         THE SPEC'S TOKEN NAMES → THE KEYS HERE. `Implementation Spec.dc.html`
+         (§01 Colour) names twenty tokens. Most already had a home under a
+         different, JOB-shaped name and were NOT duplicated under the spec's
+         name — reading the table below is how you find them:
+
+           Surface / base         → FireGroundScreen        #111317
+           Surface / chrome       → FireSurfaceChrome       #15181D
+           Surface / chrome alt   → FireSurfaceChromeAlt    #171A20
+           Surface / panel        → FireSurfaceCard         white .025
+           Surface / glass        → FireRailFill  (+ FireGlassInset for the
+                                     spec's `inset 1px white .03`)
+           Surface / raised       → FireSurfaceField        white .04
+           Border  / hairline     → FireBorder              white .08
+           Border  / strong       → FireBorderStrong        white .12
+           Text    / primary      → FireTextPrimary         #E8EBEF
+           Text    / secondary    → FireTextSecondary       #AEB6C1
+           Text    / tertiary     → FireTextMuted           #929BA8
+           Text    / quaternary   → FireTextDim             #7A8390
+           Text    / disabled     → FireTextFaint           #687080
+           Accent  / violet       → FireAccent              #7AB6FF
+           Accent  / violet mid   → FireAccentStrong        #5E9FF2
+           Accent  / violet deep  → FireAccentDeep          #3C7BD1
+           Accent  / violet tint  → FireAccentBright        #A8CEFF
+           …/ violet text on fill → FireAccentPale          #CFE2FF
+           Signal  / amber        → FireWarning             #F0A54A
+           Signal  / green        → FireSuccess             #4ADE80
+           Signal  / red          → FireDanger              #EF6F6F
+
+         Note `FireSurfaceRaised` (white .03) is NOT the spec's "Surface /
+         raised" — it predates the spec and names the mockups' list-row wash.
+         The spec's raised is `FireSurfaceField`.
+
+         FIXED IDENTITIES. The six string colours and the eight gear-category
+         colours are IDENTITIES, not palette entries: a string is that colour on
+         the highway, in the gutter, in the tuner and on a chord chart, and a
+         gear category is that colour on the board, in the gear list and on a
+         tone chip. They may never be reassigned, re-ordered or "harmonised"
+         with the accent hue. Pinned exactly by
+         `DotCharter.Tests/UI/FireTokenValueTests`.
+
+         The component styles that consume these live in `Styles/Fire.axaml`;
+         the written-down system is `docs/agents/ui/fire-design-system.md`.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         THE LADDERS THEMSELVES, BY SECTION. Every `x:Key` this file used to
+         declare inline now lives in `Styles/FireTokens/`, sliced along the
+         section banners it already carried and moved byte for byte. Each part
+         is a `<Styles>` carrying nothing but its own `<Styles.Resources>` —
+         the shape this file itself has always had.
+
+         ORDER IS THE CONTRACT. A dictionary merged later wins, so these
+         includes stand in the exact order the sections stood in the one file.
+         Every key is UNIQUE (a duplicate `x:Key` crashes the app at
+         `App.Initialize()`), so nothing depends on the tie-break today —
+         which is precisely why a shuffle would be silent.
+
+         The rule the split does NOT relax: `Space*` are `x:Double` and
+         `Pad*`/`Gap*` are `Thickness`, and `DynamicResource` does not
+         convert. They are in the same part on purpose, so the two ladders
+         are still read side by side.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Styles/FireHardwareTokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/FireTokens/Palette.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/FireTokens/Ladders.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/FireTokens/PopoverTokens.axaml" />
+
+</Styles>

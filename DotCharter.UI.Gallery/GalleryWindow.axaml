@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:gallery="clr-namespace:DotCharter.UI.Gallery;assembly=DotCharter.Gallery"
+        mc:Ignorable="d"
+        x:Class="DotCharter.UI.Gallery.GalleryWindow"
+        x:DataType="gallery:GalleryViewModel"
+        Width="1600" Height="900"
+        Title="{Binding WindowTitle}"
+        Background="{DynamicResource AppBackground}">
+
+    <!-- A TOOL, not a product screen: plain grid, product tokens only. -->
+    <Grid ColumnDefinitions="260,Auto,*">
+
+        <!-- Navigation: sections, each with its pages -->
+        <Border Grid.Column="0" Background="{DynamicResource PanelBackground}">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="{StaticResource PaddingCard}" Spacing="{StaticResource SpaceMd}">
+                    <TextBlock Text="Gallery"
+                               FontSize="{StaticResource FontSizeLg}"
+                               Foreground="{DynamicResource TextPrimary}" />
+                    <ItemsControl ItemsSource="{Binding Sections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="gallery:GallerySection">
+                                <StackPanel Margin="{StaticResource GapBottomMd}"
+                                            Spacing="{StaticResource SpaceXs}">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="{StaticResource FontSizeXs}"
+                                               Foreground="{DynamicResource TextDim}" />
+                                    <ItemsControl ItemsSource="{Binding Pages}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="gallery:GalleryPageItem">
+                                                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip"
+                                                              HorizontalAlignment="Stretch"
+                                                              HorizontalContentAlignment="Left"
+                                                              Margin="{StaticResource GapBottomSm}"
+                                                              Content="{Binding Name}"
+                                                              AutomationProperties.Name="{Binding Name}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Border Grid.Column="1" Width="1" Background="{DynamicResource BorderDefault}" />
+
+        <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
+
+            <!-- Variant strip -->
+            <Border Grid.Row="0" Background="{DynamicResource PanelBackground}"
+                    Padding="{StaticResource PaddingRow}">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
+                    <TextBlock Text="Variant" VerticalAlignment="Center"
+                               FontSize="{StaticResource FontSizeXs}"
+                               Foreground="{DynamicResource TextDim}"
+                               Margin="{StaticResource GapRightSm}" />
+                    <ItemsControl x:Name="VariantStrip" ItemsSource="{Binding Variants}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXs}" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="gallery:GalleryVariantItem">
+                                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini"
+                                              Content="{Binding Name}"
+                                              AutomationProperties.Name="{Binding Name}"
+                                              IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" Height="1" Background="{DynamicResource BorderDefault}" />
+
+            <!-- The page itself -->
+            <ContentControl Grid.Row="2" x:Name="PageHost" Content="{Binding CurrentControl}" />
+        </Grid>
+    </Grid>
+</Window>

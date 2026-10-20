@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Onboarding"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Onboarding.SystemCheckView"
+             x:DataType="contracts:ISystemCheckScreen"
+             x:CompileBindings="True">
+
+    <!--
+        The first-run wizard's check of this computer (#288): can the native
+        audio engine load, and can the GPU run the Vulkan renderer. Hosted on
+        the wizard's first page and in the gallery on the fake.
+
+        All fine is two quiet rows with a green "Ready" tag, under a hairline
+        panel that says nothing alarming. A capability that cannot run is drawn
+        DISABLED: its name dims, its tag turns red and says "Off", and the
+        reason under it says what is switched off, why, and what to do. The
+        panel itself then takes the warning tint, so the first page cannot be
+        read past without seeing it.
+    -->
+    <UserControl.Styles>
+        <Style Selector="Border.SystemCheckPanel">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+        </Style>
+        <Style Selector="Border.SystemCheckPanel.Problem">
+            <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        </Style>
+        <Style Selector="Border.SystemCheckPanel.Busy TextBlock.SystemCheckSummary">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        </Style>
+        <Style Selector="TextBlock.SystemCheckName.Off">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="TextDecorations" Value="Strikethrough" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border x:Name="SystemCheckPanel" Classes="SystemCheckPanel"
+            Classes.Problem="{Binding HasProblem}" Classes.Busy="{Binding IsBusy}">
+        <StackPanel Spacing="{StaticResource FireSpaceSm}">
+            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                       Text="{localization:Loc SystemCheck_Title}" />
+            <TextBlock x:Name="SystemCheckSummary" Theme="{StaticResource FireRowDescText}"
+                       Classes="FireRowDesc SystemCheckSummary" Text="{Binding Summary}" />
+            <ItemsControl x:Name="SystemCheckRows" ItemsSource="{Binding Capabilities}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="{StaticResource FireSpaceSm}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="contracts:ISystemCapability">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+                            <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceXxs}">
+                                <TextBlock Theme="{StaticResource FireRowTitleText}"
+                                           Classes="FireRowTitle SystemCheckName"
+                                           Classes.Off="{Binding IsUnavailable}"
+                                           Text="{Binding Name}" />
+                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                           IsVisible="{Binding HasReason}" Text="{Binding Reason}" />
+                            </StackPanel>
+                            <Border Grid.Column="1" VerticalAlignment="Top"
+                                    Theme="{StaticResource FireTagBorder}" Classes="FireTag"
+                                    Classes.Success="{Binding IsAvailable}"
+                                    Classes.Danger="{Binding IsUnavailable}">
+                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Value"
+                                           Text="{Binding StatusText}" />
+                            </Border>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
+</UserControl>

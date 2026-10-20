@@ -1,0 +1,75 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.AlignBeatGridDialogView"
+             x:DataType="contracts:IAlignBeatGridScreen"
+             x:CompileBindings="True">
+
+    <!-- Tempo map ▸ Align beat grid to notes (#403). Grammar: Views/Dialogs/DialogStyles.axaml.
+         Hosted by Views/Shell/DialogHost, which focuses `OffsetInput` on open
+         (FocusOnOpen) — keep the x:Name. The two readouts are formatted by the
+         view model; "after" follows the input as it changes. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconTarget}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_AlignBeatGrid_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" TextWrapping="Wrap"
+                                   Text="{localization:Loc Dialog_AlignBeatGrid_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,180">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_AlignBeatGrid_Offset_Label}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_AlignBeatGrid_Offset_Desc}" />
+                        </StackPanel>
+                        <NumericUpDown VerticalAlignment="Center" x:Name="OffsetInput" dlgv:FocusOnOpen.IsTarget="True" Grid.Column="1"
+                                       Value="{Binding OffsetMs}"
+                                       AutomationProperties.Name="{localization:Loc Dialog_AlignBeatGrid_Offset_Label}"
+                                       Minimum="-1000" Maximum="1000" FormatString="+0.0;-0.0;0.0" Increment="1" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,180">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_AlignBeatGrid_Now_Label}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_AlignBeatGrid_Median_Desc}" />
+                        </StackPanel>
+                        <TextBlock Theme="{DynamicResource DlgValueText}" x:Name="OffNowValue" Grid.Column="1" Classes="DlgValue" TextAlignment="Right"
+                                   VerticalAlignment="Center" Text="{Binding OffNowText}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,180">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Dialog_AlignBeatGrid_After_Label}" />
+                        <TextBlock Theme="{DynamicResource DlgValueText}" x:Name="OffAfterValue" Grid.Column="1" Classes="DlgValue" TextAlignment="Right"
+                                   VerticalAlignment="Center" Text="{Binding OffAfterText}" />
+                    </Grid>
+
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Ok" Margin="{DynamicResource GapTopLg}" IsVisible="{Binding HasEstimate}">
+                        <TextBlock x:Name="EstimateNote" Text="{Binding EstimateText}" />
+                    </Border>
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" Margin="{DynamicResource GapTopLg}" IsVisible="{Binding !HasEstimate}">
+                        <TextBlock Text="{Binding EstimateText}" />
+                    </Border>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Apply}"
+                                Command="{Binding ApplyCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

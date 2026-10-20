@@ -1,0 +1,36 @@
+# Dependency updates (#841). Package versions live in Directory.Packages.props.
+# Minor and patch updates arrive as ONE pull request per ecosystem per week;
+# a major update gets its own pull request. CI is manual (see
+# CONTRIBUTING.md), so run the local gate on a Dependabot branch before merging
+# it. JuceSharp/ is a separate repository and keeps its own versions.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    assignees:
+      - SomeeName
+    labels:
+      - chore
+    groups:
+      nuget-minor-patch:
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    assignees:
+      - SomeeName
+    labels:
+      - chore
+      - "area: ci"
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch

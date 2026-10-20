@@ -1,0 +1,53 @@
+<MenuItem xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+          xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+          xmlns:converters="using:DotCharter.UI.Converters"
+          x:Class="DotCharter.UI.Views.Shell.Menus.TempoMapMenu"
+          x:DataType="viewModels:MainWindowViewModel"
+          Classes="FireMenuTop" Header="{localization:Loc Menu_TempoMap}">
+    <!-- The four verbs that change the song's EDGES — silence and beats
+         before bar one, silence after the last. They are set once per
+         chart and were sitting on top of the two playhead verbs, which
+         are used constantly; those stay one click away. -->
+    <MenuItem Header="{localization:Loc Menu_GroupStartEnd}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M6,4H8V20H6V4M10.5,4H12.5V20H10.5V4M15,4H17V20H15V4Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_SetDefaultStartSilence}"
+                  Command="{Binding ShellDialogs.OpenSetDefaultStartSilenceDialogCommand}" />
+        <MenuItem Header="{localization:Loc Menu_AddSilenceAtStart}"
+                  Command="{Binding ShellDialogs.OpenAddSilenceAtStartDialogCommand}" />
+        <MenuItem Header="{localization:Loc Menu_AddMeasuresAtStart}"
+                  Command="{Binding ShellDialogs.OpenAddMeasuresAtStartDialogCommand}" />
+        <Separator />
+        <MenuItem Header="{localization:Loc Menu_AddSilenceAtEnd}"
+                  Command="{Binding ShellDialogs.OpenAddSilenceAtEndDialogCommand}" />
+        <MenuItem Header="{localization:Loc Menu_AddMeasuresAtEnd}"
+                  Command="{Binding ShellDialogs.OpenAddMeasuresAtEndDialogCommand}" />
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_InsertBeatAtPlayhead}"
+              Command="{Binding InsertBeatAtPlayheadCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.InsertBeatAtPlayhead, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <MenuItem Header="{localization:Loc Menu_RemoveBeatAtPlayhead}"
+              Command="{Binding RemoveBeatAtPlayheadCommand}"
+              InputGesture="{Binding ProjectState.Keybinds.RemoveBeatAtPlayhead, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_SetAllBpm}" Command="{Binding ShellDialogs.OpenSetBpmDialogCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12.5,7H11V13L15.75,15.85L16.5,14.62L12.5,12.25V7Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_AlignBeatGrid}"
+              Command="{Binding ShellDialogs.OpenAlignBeatGridDialogCommand}" />
+    <MenuItem Header="{localization:Loc Menu_AlignToRecording}"
+              Command="{Binding ShellDialogs.OpenAlignToRecordingDialogCommand}" />
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_LockBeatMap}" ToggleType="CheckBox"
+              IsChecked="{Binding IsBeatMapLocked}"
+              Command="{Binding ToggleBeatMapLockCommand}" />
+</MenuItem>

@@ -1,0 +1,299 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:panels="clr-namespace:DotCharter.UI.Views.Panels;assembly=DotCharter"
+             xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
+             xmlns:local="using:DotCharter.UI.Views.Editor.Inspector"
+             xmlns:shell="using:DotCharter.UI.Views.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundInspectorView"
+             x:DataType="viewModels:InspectorViewModel">
+
+    <!--
+        THE SOUND TAB (#601, "Rail (dense)", the owner's pick from the design study).
+
+        What is on screen is a function of the SELECTION (InspectorViewModel.SelectionKind), shown
+        ONE SECTION AT A TIME beside an icon-only rail (SoundSectionsViewModel, which owns the
+        matrix and remembers the open section per selection type):
+
+          Empty          → Task · Library
+          Note           → Placement · Technique · Bends · Findings
+          Chord          → Shape · Technique · Bends · Findings
+          HandShape      → Shape (+ Span) · Findings
+          Multi*         → Selection · Technique · Findings
+          ShapeAndSounds → Shape (+ Span) · Technique · Findings
+
+        * The rail is ICON ONLY (38 px). A section's name is its tooltip (after the app-wide hover
+          dwell, Platform/ToolTipHoverPolicy) and its accessible name, off the same key. The open
+          section carries an accent bar; Findings carries a count badge, Bends a dot when the
+          sound bends.
+        * Above every section, ONE slim pinned row navigates sounds: the selection, its place in
+          the queue (it follows the selection, #611), ‹ › (the queue's own step, Ctrl+PgUp/PgDn)
+          and the queue filter behind a funnel.
+        * Under it, ONE pinned "Apply to" row, only over the sections it governs (a chord's Shape,
+          Technique and Bends; SoundSectionsViewModel.ShowApplyBar).
+        * Playback is not a section: the whole-chord flags are a group inside Technique. No
+          section repeats its name as a heading.
+
+        Not a TabControl: every section body is IsVisible-gated, stays in the logical tree, and is
+        prewarmed through IPrewarmableSurfaces (the x:Names below are looked up by string).
+    -->
+    <Grid x:Name="SoundTabGrid" ColumnDefinitions="38,*">
+        <!-- ── the rail: icons only ── -->
+        <Border x:Name="SoundRail" Grid.Column="0"
+                Background="{DynamicResource FireSurfaceSunken}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,1,0">
+            <StackPanel x:Name="SoundRailEntries" Spacing="{StaticResource SpaceXxs}" Margin="{StaticResource GapTopXs}"
+                        HorizontalAlignment="Center">
+                <Panel x:Name="SoundRailTask" IsVisible="{Binding Sections.OffersTask}">
+                    <ToggleButton x:Name="SoundRailTaskEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsTask, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Task}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Section_Task}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Section_Task}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconTarget}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsTask}" />
+                </Panel>
+                <Panel x:Name="SoundRailLibrary" IsVisible="{Binding Sections.OffersLibrary}">
+                    <ToggleButton x:Name="SoundRailLibraryEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsLibrary, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Library}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Empty_Library}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Empty_Library}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconLibraryMusic}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsLibrary}" />
+                </Panel>
+                <Panel x:Name="SoundRailPlacement" IsVisible="{Binding Sections.OffersPlacement}">
+                    <ToggleButton x:Name="SoundRailPlacementEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsPlacement, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Placement}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Placement}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Placement}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconGuitar}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsPlacement}" />
+                </Panel>
+                <Panel x:Name="SoundRailShape" IsVisible="{Binding Sections.OffersShape}">
+                    <ToggleButton x:Name="SoundRailShapeEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsShape, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Shape}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Shape}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Shape}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconSheetMusic}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsShape}" />
+                </Panel>
+                <Panel x:Name="SoundRailSelection" IsVisible="{Binding Sections.OffersSelection}">
+                    <ToggleButton x:Name="SoundRailSelectionEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsSelection, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Selection}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Selection}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Selection}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconPencil}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsSelection}" />
+                </Panel>
+                <Panel x:Name="SoundRailTechnique" IsVisible="{Binding Sections.OffersTechnique}">
+                    <ToggleButton x:Name="SoundRailTechniqueEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsTechnique, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Technique}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Technique}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Technique}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconSparkles}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsTechnique}" />
+                </Panel>
+                <Panel x:Name="SoundRailBends" IsVisible="{Binding Sections.OffersBends}">
+                    <ToggleButton x:Name="SoundRailBendsEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsBends, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Bends}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Bends}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Bends}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconSineWave}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsBends}" />
+                    <!-- The selected sound bends: a dot, since the rail must not switch sections by itself. -->
+                    <Ellipse x:Name="SoundRailBendsDot" Width="6" Height="6" HorizontalAlignment="Right" VerticalAlignment="Top"
+                             Margin="{StaticResource GapChip}" Fill="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                             IsVisible="{Binding SelectionHasBends}" />
+                </Panel>
+                <Panel x:Name="SoundRailFindings" IsVisible="{Binding Sections.OffersFindings}">
+                    <ToggleButton x:Name="SoundRailFindingsEntry" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  IsChecked="{Binding Sections.IsFindings, Mode=OneWay}"
+                                  Command="{Binding Sections.ChooseCommand}"
+                                  CommandParameter="{x:Static inspector:SoundSection.Findings}"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Section_Findings}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Section_Findings}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconAlert}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False" IsVisible="{Binding Sections.IsFindings}" />
+                    <!-- How many findings this selection has: red when one would make the export
+                         refuse the package, amber otherwise. Spoken and tipped as "2 findings". -->
+                    <Panel x:Name="SoundRailFindingsBadge" HorizontalAlignment="Right" VerticalAlignment="Top"
+                           RenderTransform="translate(3px, -3px)" IsHitTestVisible="False"
+                           IsVisible="{Binding HasSelectionIssues}">
+                        <Border MinWidth="13" Height="13" CornerRadius="{StaticResource FireRadiusPill}" Padding="{StaticResource PaddingChipSm}"
+                                Background="{DynamicResource FireWarning}" IsVisible="{Binding !SelectionBlocksExport}" />
+                        <Border MinWidth="13" Height="13" CornerRadius="{StaticResource FireRadiusPill}" Padding="{StaticResource PaddingChipSm}"
+                                Background="{DynamicResource FireDanger}" IsVisible="{Binding SelectionBlocksExport}" />
+                        <TextBlock Text="{Binding SelectionIssueCount}" FontSize="{StaticResource FireSizeNano}" FontWeight="Bold"
+                                   Foreground="{DynamicResource FireTextBright}" Margin="{StaticResource PaddingChipSm}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Panel>
+                </Panel>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+            <!-- ── ONE slim row: the selection, its place in the queue, ‹ ›, the filter ── -->
+            <Border x:Name="SoundNavRow" Grid.Row="0" MinHeight="28" Padding="{StaticResource FirePadTag}"
+                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
+                <!-- The filter takes the star column, so at the dock's 320 px floor its label trims
+                     instead of pushing the row past the pane. -->
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto" ColumnSpacing="{StaticResource SpaceXs}">
+                    <TextBlock x:Name="SoundNavSummary" Grid.Column="0" Text="{Binding SelectionSummary}" ToolTip.Tip="{Binding SelectionSummary}"
+                               FontSize="{StaticResource FireSizeXs}" FontWeight="Bold"
+                               Foreground="{DynamicResource FireTextBright}" TextTrimming="CharacterEllipsis" MaxWidth="140"
+                               VerticalAlignment="Center" />
+                    <TextBlock x:Name="SoundNavPosition" Grid.Column="1" Text="{Binding Queue.PositionLabel}" VerticalAlignment="Center"
+                               FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FireSizeNano}"
+                               Foreground="{DynamicResource FireTextSecondary}" Margin="{StaticResource GapLeftXs}" />
+                    <Button x:Name="SoundNavPrevious" Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                            Command="{Binding Queue.PreviousMatchCommand}" IsEnabled="{Binding Queue.HasMatches}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Queue_PrevMatchTip}"
+                            ToolTip.Tip="{localization:Loc Inspector_Queue_PrevMatchTip}">
+                        <PathIcon Data="{DynamicResource IconChevronLeft}" Width="9" Height="9" />
+                    </Button>
+                    <Button x:Name="SoundNavNext" Grid.Column="3" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                            Command="{Binding Queue.NextMatchCommand}" IsEnabled="{Binding Queue.HasMatches}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Queue_NextMatchTip}"
+                            ToolTip.Tip="{localization:Loc Inspector_Queue_NextMatchTip}">
+                        <PathIcon Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                    </Button>
+                    <!-- The queue filter: a funnel with the active filter beside it; its list is
+                         the queue's own filters with their counts. -->
+                    <Button x:Name="SoundNavFilter" Grid.Column="4" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                            MinWidth="0" HorizontalAlignment="Right"
+                            AutomationProperties.Name="{localization:Loc Inspector_Queue_FilterTip}"
+                            ToolTip.Tip="{localization:Loc Inspector_Queue_FilterTip}">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceXs}">
+                            <PathIcon Grid.Column="0" Data="{DynamicResource IconFilter}" Width="10" Height="10" />
+                            <TextBlock Grid.Column="1" Text="{Binding Queue.SelectedFilter.Label, FallbackValue=''}" FontSize="{StaticResource FireSizeNano}"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="120" VerticalAlignment="Center" />
+                        </Grid>
+                        <Button.Flyout>
+                            <shell:PrewarmableFlyout Placement="BottomEdgeAlignedRight">
+                                <ListBox x:Name="SoundNavFilterList" ItemsSource="{Binding Queue.Filters}"
+                                         SelectedItem="{Binding Queue.SelectedFilter}"
+                                         SelectionChanged="OnFilterPicked" MinWidth="200"
+                                         AutomationProperties.Name="{localization:Loc Inspector_Queue_FilterTip}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:SoundQueueFilterOption">
+                                            <TextBlock Text="{Binding Display}" FontSize="{StaticResource FireSizeXs}" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </shell:PrewarmableFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <PathIcon Grid.Column="5" Data="{DynamicResource IconInfo}"
+                              Width="11" Height="11" VerticalAlignment="Center"
+                              Foreground="{DynamicResource TextMuted}"
+                              ToolTip.Tip="{localization:Loc Inspector_Sound_Help}"
+                              ToolTip.ShowDelay="150" />
+                </Grid>
+            </Border>
+
+            <!-- ── ONE pinned "Apply to" row, over a chord's Shape, Technique and Bends only ── -->
+            <Border x:Name="SoundApplyBar" Grid.Row="1" Padding="{StaticResource FirePadTag}"
+                    IsVisible="{Binding Sections.ShowApplyBar}"
+                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
+                <local:SoundApplyBarView x:Name="SoundApplyScope" DataContext="{Binding ChordTemplateEditor}" />
+            </Border>
+
+            <!-- ── the content: ONE section ── -->
+            <ScrollViewer x:Name="SoundSectionScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Padding="{StaticResource PaddingRow}">
+                <Panel>
+                    <local:SoundTaskView x:Name="SoundTaskBody" IsVisible="{Binding Sections.IsTask}" />
+
+                    <!-- CHORD LIBRARY — the old browse mode, NAMED. Name, fingering and arpeggio
+                         stay editable; the SHAPE is read-only with its reason on the box, so browse
+                         mode can never reshape anything. -->
+                    <StackPanel x:Name="SoundLibraryBody" Spacing="{StaticResource SpaceSm}" IsVisible="{Binding Sections.IsLibrary}">
+                        <Border Classes="ScopeBar">
+                            <TextBlock Text="{localization:Loc Inspector_Library_ReadOnlyShape}" TextWrapping="Wrap" />
+                        </Border>
+                        <panels:ChordTemplateEditorView DataContext="{Binding ChordTemplateEditor}" ShapeRole="ReadOnly" />
+                    </StackPanel>
+
+                    <local:SoundPlacementView x:Name="SoundPlacementCard" IsVisible="{Binding Sections.IsPlacement}" />
+
+                    <local:SoundShapeView x:Name="SoundShapeCard" IsVisible="{Binding Sections.IsShape}" />
+
+                    <local:SoundBulkCardView x:Name="SoundBulkCard" IsVisible="{Binding Sections.IsSelection}" />
+
+                    <local:SoundNoteTechniqueView x:Name="SoundNoteTechniqueCard" IsVisible="{Binding Sections.ShowNoteTechnique}" />
+
+                    <local:SoundChordTechniqueView x:Name="SoundChordTechniqueCard" IsVisible="{Binding Sections.ShowChordTechnique}" />
+
+                    <!-- BENDS — exactly one sound, never a multi-selection: the string picker for a
+                         chord, then the graph at the pane's full width (the presets are one glyph
+                         row over it, Clear bend at that row's end). -->
+                    <Panel x:Name="SoundBendsBody" IsVisible="{Binding Sections.IsBends}">
+                        <Panel x:Name="NoteBendsBody" IsVisible="{Binding ShowNoteBends}">
+                            <panels:BendEditorControl DataContext="{Binding NoteBendEditor}" />
+                        </Panel>
+                        <StackPanel x:Name="ChordBendsBody" Spacing="{StaticResource SpaceXs}" IsVisible="{Binding ShowChordBends}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+                                <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_StringColon}" Theme="{StaticResource LabelText}" Classes="Label"
+                                           VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding ChordBendStringLabels}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_StringColon}"
+                                          SelectedIndex="{Binding ChordBendStringPosition}"
+                                          HorizontalAlignment="Left" MinWidth="120"
+                                          ToolTip.Tip="{localization:Loc Inspector_BendStringTip}" />
+                            </Grid>
+                            <panels:BendEditorControl DataContext="{Binding ChordBendEditor}" />
+                        </StackPanel>
+                    </Panel>
+
+                    <local:SoundFindingsView x:Name="SoundFindingsBody" IsVisible="{Binding Sections.IsFindings}" />
+                </Panel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

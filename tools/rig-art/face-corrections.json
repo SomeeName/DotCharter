@@ -1,0 +1,527 @@
+{
+ "_about": "Placement corrections in FACE coordinates (fractions of the cropped face image: x, y, and optionally d = nut diameter / width), applied after detection. From a full-resolution review of every face drawn as the app draws it (preview-faces.py), 2026-09-27: caps that sat left of their printed nut, toggles on the lever instead of the bushing, footswitch hit-areas off the printed switch. 'footswitch' corrects the printed footswitch; any other key is a param.",
+ "acpre": {
+  "notchHz": [
+   0.292,
+   0.738
+  ],
+  "notchDepthDb": [
+   0.363,
+   0.738
+  ],
+  "notchQ": [
+   0.433,
+   0.738
+  ],
+  "bass": [
+   0.503,
+   0.738
+  ],
+  "presence": [
+   0.718,
+   0.738
+  ],
+  "piezoFix": [
+   0.791,
+   0.738
+  ],
+  "level": [
+   0.862,
+   0.738
+  ],
+  "treble": [
+   0.646,
+   0.738
+  ]
+ },
+ "amp": {
+  "voicing": [
+   0.204,
+   0.741
+  ],
+  "gain": [
+   0.337,
+   0.739
+  ],
+  "bass": [
+   0.437,
+   0.739
+  ],
+  "mid": [
+   0.535,
+   0.739
+  ],
+  "treble": [
+   0.634,
+   0.739
+  ],
+  "presence": [
+   0.734,
+   0.739
+  ],
+  "master": [
+   0.834,
+   0.739
+  ]
+ },
+ "autopan": {
+  "law": [
+   0.5005,
+   0.5256
+  ]
+ },
+ "autowah": {
+  "direction": [
+   0.4973,
+   0.5175
+  ]
+ },
+ "barberpole": {
+  "direction": [
+   0.4941,
+   0.5305
+  ]
+ },
+ "bassamp": {
+  "model": [
+   0.33,
+   0.762
+  ],
+  "gain": [
+   0.409,
+   0.762
+  ],
+  "bass": [
+   0.472,
+   0.762
+  ],
+  "lowMid": [
+   0.535,
+   0.762
+  ],
+  "hiMid": [
+   0.598,
+   0.762
+  ],
+  "treble": [
+   0.662,
+   0.762
+  ],
+  "drive": [
+   0.725,
+   0.762
+  ],
+  "compress": [
+   0.788,
+   0.762
+  ],
+  "master": [
+   0.851,
+   0.762
+  ]
+ },
+ "bassod": {
+  "treble": [
+   0.3477,
+   0.3635
+  ]
+ },
+ "basssynth": {
+  "footswitch": [
+   0.4989,
+   0.8477,
+   0.1506
+  ]
+ },
+ "bigmuff": {
+  "footswitch": [
+   0.4988,
+   0.832,
+   0.1749
+  ]
+ },
+ "comb": {
+  "polarity": [
+   0.5006,
+   0.5804
+  ]
+ },
+ "compressor": {
+  "footswitch": [
+   0.4962,
+   0.8562,
+   0.1884
+  ]
+ },
+ "delay": {
+  "toneHz": [
+   0.3178,
+   0.3435
+  ],
+  "bpm": [
+   0.6721,
+   0.3462
+  ]
+ },
+ "detune": {
+  "lowLatency": [
+   0.4989,
+   0.555
+  ],
+  "footswitch": [
+   0.4978,
+   0.8497,
+   0.1063
+  ]
+ },
+ "duckdelay": {
+  "footswitch": [
+   0.5006,
+   0.875,
+   0.1114
+  ]
+ },
+ "envfilter": {
+  "resonance": [
+   0.2302,
+   0.3547
+  ],
+  "direction": [
+   0.5069,
+   0.3575
+  ]
+ },
+ "formant": {
+  "amount": [
+   0.713,
+   0.1867
+  ]
+ },
+ "freeze": {
+  "capture": [
+   0.4963,
+   0.5409
+  ],
+  "lengthMs": [
+   0.3056,
+   0.181
+  ]
+ },
+ "freqshift": {
+  "footswitch": [
+   0.5016,
+   0.8604,
+   0.1159
+  ]
+ },
+ "fuzz": {
+  "footswitch": [
+   0.4988,
+   0.8193,
+   0.1307
+  ]
+ },
+ "gain": {
+  "gainDb": [
+   0.4983,
+   0.2333
+  ]
+ },
+ "glitch": {
+  "mode": [
+   0.2794,
+   0.5175
+  ],
+  "trigger": [
+   0.5021,
+   0.5209
+  ],
+  "reverse": [
+   0.7227,
+   0.5209
+  ]
+ },
+ "granular": {
+  "freeze": [
+   0.4983,
+   0.5423
+  ],
+  "footswitch": [
+   0.4994,
+   0.8275,
+   0.1456
+  ]
+ },
+ "limiter": {
+  "ceilingDb": [
+   0.3301,
+   0.2084,
+   0.07
+  ],
+  "releaseMs": [
+   0.6658,
+   0.2084,
+   0.07
+  ],
+  "lookaheadMs": [
+   0.3332,
+   0.4151,
+   0.07
+  ],
+  "gainDb": [
+   0.6637,
+   0.4144,
+   0.07
+  ]
+ },
+ "looper": {
+  "overdubDecay": [
+   0.321,
+   0.363
+  ],
+  "mix": [
+   0.6935,
+   0.3644
+  ]
+ },
+ "mikustomp": {
+  "footswitch": [
+   0.5005,
+   0.8636,
+   0.1354
+  ],
+  "pattern": [
+   0.493,
+   0.612
+  ]
+ },
+ "optocomp": {
+  "footswitch": [
+   0.4989,
+   0.8547,
+   0.1592
+  ]
+ },
+ "pitchcorrect": {
+  "formant": [
+   0.6745,
+   0.5691
+  ],
+  "footswitch": [
+   0.4973,
+   0.863,
+   0.1685
+  ],
+  "key": [
+   0.34,
+   0.569,
+   0.104
+  ]
+ },
+ "poweramp": {
+  "tubes": [
+   0.308,
+   0.742
+  ],
+  "drive": [
+   0.4,
+   0.742
+  ],
+  "sag": [
+   0.487,
+   0.742
+  ],
+  "presence": [
+   0.571,
+   0.742
+  ],
+  "resonance": [
+   0.658,
+   0.742
+  ],
+  "damping": [
+   0.747,
+   0.742
+  ],
+  "level": [
+   0.834,
+   0.742
+  ]
+ },
+ "resonator": {
+  "key": [
+   0.499,
+   0.542,
+   0.118
+  ]
+ },
+ "reversedelay": {
+  "footswitch": [
+   0.4979,
+   0.8258,
+   0.1461
+  ]
+ },
+ "reversereverb": {
+  "footswitch": [
+   0.5027,
+   0.8626,
+   0.1147
+  ]
+ },
+ "slapback": {
+  "wobble": [
+   0.7754,
+   0.412
+  ],
+  "drive": [
+   0.4963,
+   0.4127
+  ]
+ },
+ "subharmonic": {
+  "footswitch": [
+   0.499,
+   0.8456,
+   0.134
+  ],
+  "envAmount": [
+   0.7799,
+   0.3449
+  ]
+ },
+ "sustainer": {
+  "footswitch": [
+   0.4989,
+   0.8207,
+   0.1549
+  ]
+ },
+ "svf": {
+  "lfoDepth": [
+   0.6637,
+   0.4993
+  ]
+ },
+ "talkbox": {
+  "footswitch": [
+   0.4989,
+   0.8606,
+   0.1414
+  ],
+  "drive": [
+   0.7664,
+   0.3226
+  ]
+ },
+ "tapesat": {
+  "footswitch": [
+   0.4989,
+   0.8511,
+   0.1365
+  ],
+  "drive": [
+   0.2306,
+   0.1714
+  ]
+ },
+ "tapestop": {
+  "trigger": [
+   0.4984,
+   0.5467
+  ]
+ },
+ "tubepre": {
+  "gain": [
+   0.2959,
+   0.1616
+  ],
+  "sag": [
+   0.7017,
+   0.1663
+  ],
+  "tone": [
+   0.2901,
+   0.3688
+  ],
+  "level": [
+   0.6983,
+   0.3755
+  ],
+  "bright": [
+   0.3099,
+   0.557
+  ],
+  "cabSim": [
+   0.6773,
+   0.5577
+  ],
+  "footswitch": [
+   0.4994,
+   0.8478,
+   0.117
+  ]
+ },
+ "twelvestring": {
+  "footswitch": [
+   0.4967,
+   0.8497,
+   0.1388
+  ]
+ },
+ "tzflanger": {
+  "footswitch": [
+   0.4943,
+   0.8533,
+   0.1134
+  ]
+ },
+ "vibrato": {
+  "waveform": [
+   0.496,
+   0.4605
+  ]
+ },
+ "volume": {
+  "smoothMs": [
+   0.4995,
+   0.2646
+  ]
+ },
+ "wah": {
+  "position": [
+   0.198,
+   0.0869
+  ],
+  "sensitivity": [
+   0.4197,
+   0.0869
+  ],
+  "rangeLoHz": [
+   0.6369,
+   0.0869
+  ],
+  "rangeHiHz": [
+   0.8631,
+   0.0862
+  ],
+  "resonance": [
+   0.3005,
+   0.1796
+  ],
+  "mix": [
+   0.7561,
+   0.1803
+  ],
+  "mode": [
+   0.5313,
+   0.1988
+  ]
+ },
+ "whammy": {
+  "glideMs": [
+   0.501,
+   0.243
+  ]
+ }
+}

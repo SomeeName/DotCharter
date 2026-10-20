@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.ArrangementSyncDialogView"
+             x:DataType="contracts:IArrangementSyncScreen"
+             x:CompileBindings="True">
+
+    <!-- Grammar: Views/Dialogs/DialogStyles.axaml (included once by
+         DialogContainerView — do NOT add it here).
+
+         The PREVIEW row is the reason this is a dialog and not a menu item:
+         the operation overwrites, so what "Lead -> Rhythm" actually means has
+         to be readable before the button is pressed. Apply stays disabled
+         while the pair would change nothing. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconContentCopy}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc ArrangementSync_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc ArrangementSync_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,220">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc ArrangementSync_Source}" />
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Arrangements}"
+                                  SelectedIndex="{Binding SourceIndex}"
+                                  AutomationProperties.Name="{localization:Loc ArrangementSync_Source}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,220">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc ArrangementSync_Target}" />
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding Arrangements}"
+                                  SelectedIndex="{Binding TargetIndex}"
+                                  AutomationProperties.Name="{localization:Loc ArrangementSync_Target}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,220">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgHintText}" Grid.Column="0" Classes="DlgHint" TextWrapping="Wrap"
+                                   Text="{Binding Preview}" />
+                        <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle Compact"
+                                HorizontalAlignment="Stretch"
+                                Content="{localization:Loc ArrangementSync_Swap}"
+                                Command="{Binding SwapCommand}" />
+                    </Grid>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Apply}"
+                                Command="{Binding ApplyCommand}" IsEnabled="{Binding CanApply}"
+                                IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

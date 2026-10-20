@@ -1,0 +1,45 @@
+<MenuItem xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+          xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+          x:Class="DotCharter.UI.Views.Shell.Menus.HelpMenu"
+          x:DataType="viewModels:MainWindowViewModel"
+          Classes="FireMenuTop" Header="{localization:Loc Menu_Help}">
+    <!-- GENERATED from the live keybind state via the palette catalog
+         (live audit #13: Help had no help). Read-only; rebinding stays
+         in Settings ▸ Keybinds. -->
+    <MenuItem Header="{localization:Loc Menu_KeyboardShortcuts}"
+              Command="{Binding ShellDialogs.OpenKeyboardShortcutsCommand}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconKeyboard}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <Separator />
+    <MenuItem Header="{localization:Loc Menu_About}" Command="{Binding Help.ShowAboutCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_License}" Command="{Binding Help.OpenLicenseFileCommand}" />
+    <Separator />
+    <!-- The ONLY route to an update check outside Settings ▸ Updates,
+         which is four navigations deep. The startup check primes the
+         dialog and announces it through the single shared status slot,
+         so its notice is routinely erased before anyone reads it. -->
+    <MenuItem Header="{localization:Loc Menu_CheckForUpdates}"
+              Command="{Binding Help.CheckOrShowUpdateCommand}"
+              ToolTip.Tip="{localization:Loc Menu_CheckForUpdates_Tip}" />
+    <MenuItem Header="{localization:Loc Menu_UsageStatistics}"
+              Command="{Binding Help.ShowUsageStatisticsCommand}"
+              ToolTip.Tip="{localization:Loc Menu_UsageStatistics_Tip}" />
+    <MenuItem Header="{localization:Loc Menu_SessionHealth}" Command="{Binding Help.ShowDiagnosticsCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M11,15H13V17H11V15M11,7H13V13H11V7M12,2C6.47,2 2,6.5 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+</MenuItem>

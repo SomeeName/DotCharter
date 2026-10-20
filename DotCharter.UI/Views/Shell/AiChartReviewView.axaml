@@ -1,0 +1,318 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             x:Class="DotCharter.UI.Views.Shell.AiChartReviewView"
+             x:DataType="viewModels:AiChartReviewViewModel"
+             x:CompileBindings="True">
+    <!-- The AI chart pass review (#506): the pass HOLDS its proposals and this card
+         lists one row per section. NON-modal and over the timeline's top-right corner,
+         so the pink marks it publishes on the timeline and the song map stay in view
+         while the charter scrubs, plays and decides. Nothing is written until Apply,
+         which writes the accepted sections as one undo step.
+
+         #613 rebuilt it in the Inspector's "Rail (dense)" language (#601): a slim header
+         bar with the counts, ONE 26 px row per section, a slim footer bar. The card is as
+         tall as its rows and never taller than the timeline panel it hangs over (its host;
+         hanging lower would cover the Inspector and the 3D preview in the bottom dock), so
+         at 1280x720 (a 270 px timeline) it still shows six rows and at 1920x1080 (360 px)
+         ten. Dragging the editor splitter to grow the timeline grows the card with it. The list's scrollbar never auto-hides: a half-cut
+         last row must read as "scroll", not as a clipping bug.
+
+         The card is hidden until a review is held; MainWindowPrewarm reaches it through
+         IPrewarmableSurfaces (AiChartReviewView.HiddenSurfaces). Keyboard (code-behind):
+         Up/Down move the current row and go to it, A accepts, R rejects, Enter applies.
+         Pinned by Perf/AiChartReviewConstructionUiPerfSmokeTests and
+         Perf/AiChartReviewSizesUiPerfSmokeTests. -->
+    <UserControl.Styles>
+        <!-- The header and footer bars: the Inspector's slim pinned rows
+             (Border.InspectorHeader / InspectorFooter) — bar surface, one seam. -->
+        <Style Selector="Border.ReviewBar">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+            <Setter Property="Padding" Value="11,5,12,5" />
+        </Style>
+        <Style Selector="TextBlock.ReviewTitle">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.ReviewMeta">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.ReviewMeta.ReviewWarn">
+            <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+        </Style>
+
+        <!-- One section: a hairline divider at rest, the hover tint, and THE selection
+             idiom of the Issues list — an accent wash plus a lit 3 px spine — on the
+             keyboard's current row. -->
+        <Style Selector="Border.ReviewRow">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderRow}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="MinHeight" Value="26" />
+        </Style>
+        <Style Selector="Border.ReviewRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+        </Style>
+        <Style Selector="Border.ReviewRow.ReviewCurrent">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        </Style>
+        <Style Selector="Border.ReviewSpine">
+            <Setter Property="Width" Value="3" />
+            <Setter Property="Margin" Value="0,4" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.ReviewRow.ReviewCurrent Border.ReviewSpine">
+            <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+        </Style>
+
+        <!-- The row IS the Go to: a flat, full-width button whose chrome is the row's. -->
+        <Style Selector="Button.ReviewRowGo">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ReviewRowGo /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="TextBlock.ReviewName">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <!-- A rejected section stays in the list, dimmed: it is still a decision to read. -->
+        <Style Selector="Border.ReviewRow.ReviewRejected TextBlock.ReviewName">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        </Style>
+        <Style Selector="TextBlock.ReviewSpan">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.ReviewDetail">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="MaxWidth" Value="128" />
+        </Style>
+
+        <!-- ✓ / ✕: compact icon toggles. Lit = the decision, in its state colour;
+             unlit = a quiet outline. -->
+        <Style Selector="Button.ReviewToggle">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ReviewToggle /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextDim}" />
+        </Style>
+        <Style Selector="Button.ReviewToggle:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderHover}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+        </Style>
+        <Style Selector="Button.ReviewToggle PathIcon">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Height" Value="9" />
+        </Style>
+        <Style Selector="Button.ReviewToggle.ReviewAccept.ReviewLit /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireSuccessTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireSuccessBorder}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireSuccess}" />
+        </Style>
+        <Style Selector="Button.ReviewToggle.ReviewReject.ReviewLit /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireDangerTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireDangerBorder}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+        </Style>
+
+        <!-- Footer: three small text verbs and the ONE filled primary, at the bar's height. -->
+        <Style Selector="Button.ReviewVerb">
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.ReviewApply">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- The card's own fill is a translucent wash made for a card ON a panel; over the
+         timeline it would let the notes show through, so the ground is the opaque
+         chrome surface the dock panes stand on. The bars own their insets, so the card
+         has none; ClipToBounds keeps the bars inside its rounded corners. -->
+    <Border x:Name="AiChartReviewCard" Theme="{StaticResource FireCardBorder}" Classes="FireCard"
+            Background="{DynamicResource FireSurfaceChrome}"
+            Padding="{StaticResource FirePadNone}" ClipToBounds="True"
+            Width="460" VerticalAlignment="Top"
+            IsVisible="{Binding IsOpen, FallbackValue=False}">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <!-- Review AI proposals · 2 accepted · 1 rejected · 3 to decide  ⓘ
+                 FHP and fingering · Lead -->
+            <Border Grid.Row="0" x:Name="AiChartReviewHeader" Classes="ReviewBar" BorderThickness="0,0,0,1">
+                <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                        <TextBlock Grid.Column="0" x:Name="AiChartReviewTitle" Classes="ReviewTitle" MaxWidth="190"
+                                   Text="{localization:Loc AiChartReview_Title}" />
+                        <TextBlock Grid.Column="1" x:Name="AiChartReviewCounts" Classes="ReviewMeta"
+                                   TextAlignment="Right" Text="{Binding CountsText}"
+                                   ToolTip.Tip="{Binding CountsText}" />
+                        <Border Grid.Column="2" x:Name="AiChartReviewInfo" Background="Transparent"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{localization:Loc AiChartReview_Info}"
+                                ToolTip.Tip="{Binding HintText}" ToolTip.ShowDelay="150">
+                            <PathIcon Data="{DynamicResource IconInfo}" Width="11" Height="11"
+                                      Foreground="{DynamicResource FireTextMuted}" />
+                        </Border>
+                    </Grid>
+                    <TextBlock x:Name="AiChartReviewSubtitle" Classes="ReviewMeta" Text="{Binding Subtitle}" />
+                    <TextBlock x:Name="AiChartReviewFailed" Classes="ReviewMeta ReviewWarn"
+                               IsVisible="{Binding HasFailed}" Text="{Binding FailedText}"
+                               ToolTip.Tip="{Binding FailedText}" />
+                </StackPanel>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" x:Name="AiChartReviewScroll"
+                          HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                          AllowAutoHide="False">
+                <!-- One size scope: the time and the change columns line up down the list. -->
+                <ItemsControl x:Name="AiChartReviewRows" ItemsSource="{Binding Rows}"
+                              Grid.IsSharedSizeScope="True"
+                              KeyboardNavigation.TabNavigation="Once">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="viewModels:AiChartReviewRowViewModel">
+                            <Border x:Name="AiChartReviewRow" Classes="ReviewRow"
+                                    Classes.ReviewCurrent="{Binding IsCurrent}"
+                                    Classes.ReviewRejected="{Binding IsRejected}">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXs}"
+                                      Margin="0,0,6,0">
+                                    <Button Grid.Column="0" x:Name="AiChartReviewRowGo" Classes="ReviewRowGo"
+                                            Command="{Binding ShowCommand}"
+                                            AutomationProperties.Name="{Binding AccessibleName}"
+                                            ToolTip.Tip="{Binding Tip}">
+                                        <Grid ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="ReviewSpan" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="ReviewDetail" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Classes="ReviewSpine" />
+                                            <TextBlock Grid.Column="1" x:Name="AiChartReviewRowName" Classes="ReviewName"
+                                                       Text="{Binding Name}" />
+                                            <TextBlock Grid.Column="2" x:Name="AiChartReviewRowSpan" Classes="ReviewSpan"
+                                                       Text="{Binding Where}" />
+                                            <TextBlock Grid.Column="3" x:Name="AiChartReviewRowDetail" Classes="ReviewDetail"
+                                                       Text="{Binding Detail}" />
+                                        </Grid>
+                                    </Button>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                                        <!-- The Tones task (#614): Audition, before the toggles. Content is null on
+                                             every other row, so nothing of it is built there. -->
+                                        <ContentControl x:Name="AiChartReviewRowTone" Content="{Binding Tone}"
+                                                        IsVisible="{Binding Tone, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <ContentControl.ContentTemplate>
+                                                <DataTemplate x:DataType="viewModels:AiToneRowViewModel">
+                                                    <Button x:Name="AiChartReviewAudition" Classes="ReviewToggle" IsTabStop="False"
+                                                            AutomationProperties.Name="{localization:Loc AiChartReview_Audition}"
+                                                            ToolTip.Tip="{Binding AuditionTip}" ToolTip.ShowOnDisabled="True"
+                                                            Command="{Binding AuditionCommand}">
+                                                        <PathIcon Data="{DynamicResource IconPlay}" />
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ContentControl.ContentTemplate>
+                                        </ContentControl>
+                                        <Button x:Name="AiChartReviewRowAccept" Classes="ReviewToggle ReviewAccept"
+                                                Classes.ReviewLit="{Binding IsAccepted}" IsTabStop="False"
+                                                AutomationProperties.Name="{localization:Loc AiChartReview_Accept}"
+                                                ToolTip.Tip="{localization:Loc AiChartReview_Accept_Tip}"
+                                                Command="{Binding AcceptCommand}">
+                                            <PathIcon Data="{DynamicResource IconCheck}" />
+                                        </Button>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" x:Name="AiChartReviewRowReject" Classes="ReviewToggle ReviewReject"
+                                            Classes.ReviewLit="{Binding IsRejected}" IsTabStop="False"
+                                            AutomationProperties.Name="{localization:Loc AiChartReview_Reject}"
+                                            ToolTip.Tip="{localization:Loc AiChartReview_Reject_Tip}"
+                                            Command="{Binding RejectCommand}">
+                                        <PathIcon Data="{DynamicResource IconClose}" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Accept all · Reject all · Discard               [Apply accepted (N)] -->
+            <Border Grid.Row="2" x:Name="AiChartReviewFooter" Classes="ReviewBar" BorderThickness="0,1,0,0">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                    <WrapPanel Grid.Column="0" x:Name="AiChartReviewVerbs" VerticalAlignment="Center"
+                               ItemSpacing="{StaticResource FireSpaceMd}" LineSpacing="{StaticResource FireSpaceXxs}">
+                        <Button x:Name="AiChartReviewAcceptAll" Theme="{StaticResource FireQuietButton}"
+                                Classes="FireQuiet Link ReviewVerb"
+                                Content="{localization:Loc AiChartReview_AcceptAll}"
+                                AutomationProperties.Name="{localization:Loc AiChartReview_AcceptAll}"
+                                ToolTip.Tip="{localization:Loc AiChartReview_AcceptAll_Tip}"
+                                Command="{Binding AcceptAllCommand}" />
+                        <Button x:Name="AiChartReviewRejectAll" Theme="{StaticResource FireQuietButton}"
+                                Classes="FireQuiet Link ReviewVerb"
+                                Content="{localization:Loc AiChartReview_RejectAll}"
+                                AutomationProperties.Name="{localization:Loc AiChartReview_RejectAll}"
+                                ToolTip.Tip="{localization:Loc AiChartReview_RejectAll_Tip}"
+                                Command="{Binding RejectAllCommand}" />
+                        <Button x:Name="AiChartReviewDiscard" Theme="{StaticResource FireQuietButton}"
+                                Classes="FireQuiet ReviewVerb"
+                                Content="{localization:Loc AiChartReview_Discard}"
+                                AutomationProperties.Name="{localization:Loc AiChartReview_Discard}"
+                                ToolTip.Tip="{localization:Loc AiChartReview_Discard_Tip}"
+                                Command="{Binding DiscardCommand}" />
+                    </WrapPanel>
+                    <Button Grid.Column="1" x:Name="AiChartReviewApply"
+                            Theme="{StaticResource FirePopoverPrimaryButton}" Classes="FirePopoverPrimary ReviewApply"
+                            VerticalAlignment="Center"
+                            Content="{Binding ApplyText}"
+                            AutomationProperties.Name="{Binding ApplyText}"
+                            ToolTip.Tip="{localization:Loc AiChartReview_Apply_Tip}"
+                            Command="{Binding ApplyCommand}" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

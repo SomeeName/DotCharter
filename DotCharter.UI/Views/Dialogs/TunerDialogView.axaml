@@ -1,0 +1,180 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.TunerDialogView"
+             x:DataType="contracts:ITunerScreen"
+             x:CompileBindings="True">
+
+    <!-- The tuner is an INSTRUMENT READOUT inside a dialog, not a form: the
+         shell (head / states / footer) comes from Views/Dialogs/DialogStyles.axaml,
+         the needle and string chips stay bespoke and centred. -->
+    <UserControl.Styles>
+        <!-- A ROW now, not a 46x52 chip: each string carries its own meter and
+             a meter needs width. The fixed size is gone for the same reason. -->
+        <Style Selector="Border.TunerString">
+            <Setter Property="Background" Value="{DynamicResource SurfaceElevated}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}" />
+            <Setter Property="Padding" Value="{DynamicResource PaddingRow}" />
+        </Style>
+        <Style Selector="Border.TunerString.nearest">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+            <Setter Property="Background" Value="{DynamicResource AccentFaint}" />
+        </Style>
+        <Style Selector="Border.TunerString.tuned">
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessColor}" />
+        </Style>
+        <Style Selector="Border.TunerString.nearest.tuned">
+            <Setter Property="Background" Value="{DynamicResource FireSuccessTint}" />
+        </Style>
+        <Style Selector="TextBlock.TunerNote">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        </Style>
+        <Style Selector="TextBlock.TunerNote.intune">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconTuneVertical}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Tuner_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Tuner_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- #725: the body is a Grid whose STAR row holds the string rows, so a
+                     7-string tuning with the drop-pedal strip and the all-tuned verdict
+                     scrolls its rows in a 1280x720 window instead of painting them, and the
+                     verdict, under Close and out of the card. The note, the needle and the
+                     verdict stay put. -->
+                <Grid Grid.Row="1" RowDefinitions="Auto,Auto,*">
+                    <!-- Drop pedal: the capture is already pitch-shifted, so the
+                         user must know why e.g. their E string reads as D. -->
+                    <Border Theme="{DynamicResource DlgStripBorder}" Grid.Row="0" Classes="DlgStrip" IsVisible="{Binding IsPitchShiftActive}">
+                        <TextBlock Text="{Binding PitchShiftInfo}" />
+                    </Border>
+
+                    <!-- Input not available: say so instead of showing a dead needle. -->
+                    <Border Theme="{DynamicResource DlgStripBorder}" Grid.Row="1" Classes="DlgStrip Notice"
+                            IsVisible="{Binding StatusHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding StatusHint}" />
+                    </Border>
+
+                    <Grid Grid.Row="2" RowDefinitions="Auto,*,Auto" RowSpacing="10" IsVisible="{Binding HasInput}">
+                        <StackPanel Grid.Row="0" Spacing="10">
+                            <TextBlock Classes="TunerNote" Classes.intune="{Binding IsInTune}"
+                                       Text="{Binding NoteText}" FontSize="{DynamicResource FontSizeStamp}"
+                                       FontWeight="Bold" HorizontalAlignment="Center" />
+                            <Grid Height="18">
+                                <TextBlock Theme="{DynamicResource MonoText}" Classes="Mono" Text="{Binding CentsText}" IsVisible="{Binding HasReading}"
+                                           Foreground="{DynamicResource TextMuted}"
+                                           FontSize="{DynamicResource FontSizeMd}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{localization:Loc Tuner_Listening}" IsVisible="{Binding !HasReading}"
+                                           Foreground="{DynamicResource TextDim}" FontStyle="Italic"
+                                           FontSize="{DynamicResource FontSizeMd}" HorizontalAlignment="Center" />
+                            </Grid>
+
+                            <!-- The heard string on the SAME meter and scale as the
+                                 rows below (FireTunerScale), so one reading sits in one
+                                 place on both. -->
+                            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                                <TextBlock Text="♭" Foreground="{DynamicResource TextDim}"
+                                           FontSize="{DynamicResource FontSizeTitle}" VerticalAlignment="Center" />
+                                <fire:FireTunerMeter x:Name="TunerMainMeter" Width="260" Height="28"
+                                                     TrackHeight="28"
+                                                     Cents="{Binding CentsOff}"
+                                                     HasReading="{Binding HasReading}" />
+                                <TextBlock Text="♯" Foreground="{DynamicResource TextDim}"
+                                           FontSize="{DynamicResource FontSizeTitle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Per-string ROWS with their own meters, per
+                             `Play Overlays.dc.html`. The mockup draws six meters
+                             at once; a monophonic detector hears one string at a
+                             time, so each row shows what IT last heard (see
+                             ITunerString.CentsOff) and a string never plucked
+                             this session says PLUCK instead of showing a centred
+                             needle, which would read as "in tune".
+
+                             Rows, not the old horizontal strip of six pills: a
+                             meter needs width, and six of them side by side get
+                             ~90 px each. -->
+                        <ScrollViewer x:Name="TunerStringScroll" Grid.Row="1" Classes="DialogBody" Padding="0,0,16,0" Margin="0,0,-16,0">
+                            <ItemsControl x:Name="TunerStringRows" ItemsSource="{Binding Strings}"
+                                          Margin="{DynamicResource GapTopSm}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:ITunerString">
+                                        <!-- The Border is load-bearing: the
+                                             `TunerString` styles below are Border
+                                             selectors, so wearing the class on a
+                                             Grid would match nothing, silently. -->
+                                        <Border Classes="TunerString" Margin="0,3"
+                                                Classes.nearest="{Binding IsNearest}"
+                                                Classes.tuned="{Binding IsTuned}">
+                                        <Grid ColumnDefinitions="60,*,60">
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimary}"
+                                                       FontSize="{DynamicResource FontSizeMd}"
+                                                       VerticalAlignment="Center" />
+
+                                            <fire:FireTunerMeter Grid.Column="1" Height="22"
+                                                                 VerticalAlignment="Center"
+                                                                 Cents="{Binding CentsOff}"
+                                                                 HasReading="{Binding HasReading}" />
+
+                                            <TextBlock Grid.Column="2"
+                                                       TextAlignment="Right" VerticalAlignment="Center"
+                                                       IsVisible="{Binding !HasReading}"
+                                                       Foreground="{DynamicResource TextDim}"
+                                                       Text="{localization:Loc Tuner_Pluck}" />
+                                            <PathIcon Grid.Column="2" Width="12" Height="12"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      IsVisible="{Binding IsTuned}"
+                                                      Foreground="{DynamicResource SuccessColor}"
+                                                      Data="{DynamicResource IconCheck}" />
+                                        </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="2" Spacing="10">
+                            <TextBlock Text="{Binding TunedCountLabel}" x:Name="TunerTunedCount"
+                                       HorizontalAlignment="Center"
+                                       Margin="{DynamicResource GapTopSm}"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       IsVisible="{Binding TunedCountLabel,
+                                                   Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Ok" Margin="{DynamicResource GapTopMd}"
+                                    IsVisible="{Binding AllTuned}">
+                                <TextBlock Text="{localization:Loc Tuner_AllTuned}"
+                                           HorizontalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Tuner_Close}"
+                                Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

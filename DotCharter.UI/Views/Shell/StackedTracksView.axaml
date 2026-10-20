@@ -1,0 +1,199 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:editor="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shell="using:DotCharter.UI.ViewModels.Shell"
+             x:Class="DotCharter.UI.Views.Shell.StackedTracksView"
+             x:DataType="shell:MainWindowViewModel">
+    <!-- The stacked-timeline rail: one 160 px header per extra arrangement,
+         beside that arrangement's own ChartRenderer. 0.38 shell pass — the
+         header column now says which track is ACTIVE before you read a word
+         (accent spine + accent chip, both driven by IsActive), and the two
+         actions sit under the name instead of competing with it.
+
+         NOTE: this whole view is IsVisible-gated by the shell
+         (MainWindow's StackedTracksHost), so it carries NO transitions and NO
+         animations — a hidden control's style clocks keep ticking. The active
+         stripe used to be an Opacity=0/1 DoubleTransition; it is now a plain
+         IsVisible swap, which is both the house rule and cheaper. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Shell/ShellStyles.axaml" />
+
+        <!-- Compact micro-toggle for the per-row T/S/P/L ribbon visibility flags. -->
+        <Style Selector="ToggleButton.RibbonChip">
+            <Setter Property="MinWidth" Value="22" />
+            <Setter Property="MinHeight" Value="20" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMicro}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}" />
+            <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+        </Style>
+        <Style Selector="ToggleButton.RibbonChip:checked">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+        </Style>
+        <Style Selector="ToggleButton.RibbonChip:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+        </Style>
+        <!-- Fluent paints :checked on the template's presenter with a SOLID
+             accent, which turned four small flags into four bright blocks; on
+             is a tint and an accent edge, like every other toggle. -->
+        <Style Selector="ToggleButton.RibbonChip:checked /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.RibbonChip:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtle}" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+        </Style>
+
+        <!-- The row header card. Lit from above like every other panel in the
+             app, with a right-hand seam against the renderer. -->
+        <Style Selector="Border.TrackRowCard">
+            <Setter Property="Background" Value="{DynamicResource PlayPanelFill}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="0,0,1,0" />
+            <Setter Property="Padding" Value="{StaticResource PaddingCardSm}" />
+        </Style>
+
+        <!-- Small stretch button under the track name.
+
+             The captions WRAP, and that is not cosmetic. These buttons live in
+             the header column, which is pinned to 118 px because it has to line
+             up with the main timeline's header so the renderer beside it starts
+             at the same x — it cannot grow to fit a word. After the card's
+             padding and the stack's left gap that leaves a 77 px slot, and
+             "Send selection here" needs 96 px in ENGLISH; German is longer
+             again ("Auswahl hierher senden"). A fixed column must be derived
+             from the longest thing that can land in it, and when the column
+             cannot move, the text has to. A Button's string Content does not
+             wrap on its own — it needs a ContentTemplate that says so. -->
+        <Style Selector="Button.TrackAction, ToggleButton.TrackAction">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMicro}" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="MinHeight" Value="22" />
+            <Setter Property="ContentTemplate">
+                <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center" />
+                </DataTemplate>
+            </Setter>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="{DynamicResource AppBackground}"
+            BorderBrush="{DynamicResource BorderDefault}"
+            BorderThickness="0,1,0,0">
+        <ItemsControl x:Name="StackedItemsHost">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <!-- UniformGrid with one row per stacked entry distributes
+                         the panel's height evenly across the rows. Combined
+                         with the parent Grid's "*, N*" row definitions (set
+                         in MainWindow code-behind), every timeline (main +
+                         each stacked row) ends up with the same height. -->
+                    <UniformGrid Columns="1" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="editor:MultiTrackEntry">
+                    <Border BorderBrush="{DynamicResource BorderSubtle}"
+                            BorderThickness="0,1,0,0">
+                        <Grid ColumnDefinitions="118,*" ClipToBounds="True">
+                            <!-- Per-row header. Same width as the main timeline's
+                                 header column so the renderer (column 1) aligns
+                                 perfectly with the main ChartRenderer. -->
+                            <Border Grid.Column="0" Classes="TrackRowCard">
+                                <Grid>
+                                    <Border Classes="TopLight" />
+                                    <!-- Active spine: which arrangement the
+                                         editor is actually writing to. -->
+                                    <Border Width="3" HorizontalAlignment="Left"
+                                            VerticalAlignment="Stretch"
+                                            Margin="-12,-10"
+                                            Background="{DynamicResource AccentColor}"
+                                            CornerRadius="0,2,2,0"
+                                            IsHitTestVisible="False"
+                                            IsVisible="{Binding IsActive}" />
+                                    <StackPanel Spacing="{StaticResource SpaceSm}"
+                                                VerticalAlignment="Top" Margin="{StaticResource GapLeftSm}">
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="{StaticResource FontSizeSm}"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <Border Classes="ShellChip Accent"
+                                                HorizontalAlignment="Left"
+                                                IsVisible="{Binding IsActive}">
+                                            <TextBlock Text="{localization:Loc StackedTracks_Active}" />
+                                        </Border>
+                                        <Button Classes="TrackAction"
+                                                Command="{Binding MakeActiveCommand}"
+                                                IsVisible="{Binding IsNotActive}"
+                                                Content="{localization:Loc StackedTracks_MakeActive}" />
+                                        <ToggleButton Classes="TrackAction"
+                                                      IsChecked="{Binding IsGhostVisible}"
+                                                      Content="{localization:Loc Toolbar_MultiTrack_ShowGhost}" />
+                                        <Button Classes="TrackAction"
+                                                Command="{Binding SendSelectionHereCommand}"
+                                                Content="{localization:Loc StackedTracks_SendSelectionHere}" />
+                                        <!-- Per-row visibility toggles. Each row can be hidden
+                                             independently; the renderer reflows the ribbon height
+                                             around the visible rows so hiding reclaims space. -->
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="{StaticResource SpaceXs}"
+                                                    Margin="{StaticResource GapTopXs}">
+                                            <ToggleButton Theme="{StaticResource RibbonChipToggle}" Classes="RibbonChip"
+                                                          IsChecked="{Binding Ribbon.ShowTones}"
+                                                          Content="T"
+                                                          AutomationProperties.Name="{localization:Loc Ribbon_Tones}"
+                                                          ToolTip.Tip="{localization:Loc Ribbon_Tones}" />
+                                            <ToggleButton Theme="{StaticResource RibbonChipToggle}" Classes="RibbonChip"
+                                                          IsChecked="{Binding Ribbon.ShowSections}"
+                                                          Content="S"
+                                                          AutomationProperties.Name="{localization:Loc Ribbon_Sections}"
+                                                          ToolTip.Tip="{localization:Loc Ribbon_Sections}" />
+                                            <ToggleButton Theme="{StaticResource RibbonChipToggle}" Classes="RibbonChip"
+                                                          IsChecked="{Binding Ribbon.ShowPhrases}"
+                                                          Content="P"
+                                                          AutomationProperties.Name="{localization:Loc Ribbon_Phrases}"
+                                                          ToolTip.Tip="{localization:Loc Ribbon_Phrases}" />
+                                            <ToggleButton Theme="{StaticResource RibbonChipToggle}" Classes="RibbonChip"
+                                                          IsChecked="{Binding Ribbon.ShowLyrics}"
+                                                          Content="L"
+                                                          AutomationProperties.Name="{localization:Loc Ribbon_Lyrics}"
+                                                          ToolTip.Tip="{localization:Loc Ribbon_Lyrics}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <controls:ChartRenderer Grid.Column="1"
+                                                    x:Name="StackedRowRenderer"
+                                                    Editor="{Binding $parent[UserControl].((shell:MainWindowViewModel)DataContext).ChartEditor}"
+                                                    Transport="{Binding $parent[UserControl].((shell:MainWindowViewModel)DataContext).Transport}"
+                                                    PixelsPerMs="{Binding $parent[UserControl].((shell:MainWindowViewModel)DataContext).ProjectState.PixelsPerMs}"
+                                                    WaveformData="{Binding $parent[UserControl].((shell:MainWindowViewModel)DataContext).ProjectState.WaveformData}"
+                                                    ShowWaveform="{Binding $parent[UserControl].((shell:MainWindowViewModel)DataContext).ProjectState.ShowWaveform}"
+                                                    OverrideArrangement="{Binding Arrangement}"
+                                                    DrawLabels="True"
+                                                    AttachedToVisualTree="StackedRenderer_AttachedToVisualTree"
+                                                    DetachedFromVisualTree="StackedRenderer_DetachedFromVisualTree"
+                                                    ClipToBounds="True" />
+                            <!-- Marquee rubber band for this row (stacked rows
+                                 are fully interactive; same overlay pattern as
+                                 the main timeline). -->
+                            <controls:MarqueeSelectionOverlay Grid.Column="1"
+                                                              Renderer="{Binding ElementName=StackedRowRenderer}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Border>
+</UserControl>

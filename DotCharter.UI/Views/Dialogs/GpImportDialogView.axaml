@@ -1,0 +1,143 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.GpImportDialogView"
+             x:DataType="contracts:IGpImportScreen"
+             x:CompileBindings="True">
+
+    <!-- Guitar Pro import. Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconGuitar}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_GpImport_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_GpImport_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" RowDefinitions="Auto,Auto,*,Auto">
+
+                    <!-- Mode. Stacked rather than three-across: the labels are
+                         full sentences and a 3-column UniformGrid wrapped every
+                         one of them onto two lines. -->
+                    <StackPanel Grid.Row="0" IsEnabled="{Binding !IsBusy}">
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{localization:Loc Dialog_Section_Mode}" />
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <!-- The caption is a TextBlock.DlgLabel, not the
+                                 RadioButton's own Content: the dialog grammar
+                                 styles CheckBox but has no RadioButton rule, so
+                                 bare content falls back to Fluent's foreground
+                                 and these three read a step dimmer than the
+                                 track CheckBox in the section below them. Paste
+                                 Special's identical mode picker already does
+                                 this — same shape, same mark. -->
+                            <StackPanel Spacing="{DynamicResource SpaceMd}">
+                                <RadioButton GroupName="GpImportMode"
+                                             IsChecked="{Binding IsAddNewMode, Mode=TwoWay}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_GpImport_Mode_AddNew}" />
+                                </RadioButton>
+                                <RadioButton GroupName="GpImportMode"
+                                             IsChecked="{Binding IsTechniqueOnlyMode, Mode=TwoWay}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_GpImport_Mode_TechniqueOnly}" />
+                                </RadioButton>
+                                <RadioButton GroupName="GpImportMode"
+                                             IsChecked="{Binding IsDiffCompareMode, Mode=TwoWay}">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                               Text="{localization:Loc Dialog_GpImport_Mode_DiffCompare}" />
+                                </RadioButton>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Only the diff mode needs a second file; the row states
+                         what is chosen instead of leaving the button unexplained. -->
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Grid.Row="1" Classes="DlgRow Sub" ColumnDefinitions="*,240"
+                          IsEnabled="{Binding !IsBusy}"
+                          IsVisible="{Binding RequiresOldFile}">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Dialog_Section_Source}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding OldFilePath}"
+                                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                       IsVisible="{Binding OldFilePath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Dialog_GpImport_OldFileNone}"
+                                       IsVisible="{Binding OldFilePath, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+                        </StackPanel>
+                        <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SubtleButton}" Classes="Subtle" HorizontalContentAlignment="Center"
+                                Content="{localization:Loc Dialog_GpImport_PickOldFile}"
+                                Command="{Binding PickOldFileCommand}" />
+                    </Grid>
+
+                    <!-- #725: a Grid, not a StackPanel, so the track list shrinks into the
+                         star row when the card is clamped (a full band score at 1280x720
+                         painted its last tracks under Cancel and Import). -->
+                    <Grid Grid.Row="2" RowDefinitions="Auto,*" IsEnabled="{Binding !IsBusy}">
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Grid.Row="0" Classes="DlgSectionLabel" Text="{localization:Loc Dialog_Section_Tracks}" />
+                        <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="1" Classes="DlgListFrame">
+                            <Panel>
+                                <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty"
+                                        IsVisible="{Binding !HasTracks}">
+                                    <TextBlock Text="{localization:Loc Dialog_Tracks_None}" />
+                                </Border>
+                                <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" AllowAutoHide="False"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Tracks}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IGpTrackRow">
+                                                <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                                        <CheckBox Grid.Column="0" Content="{Binding Name}"
+                                                                  AutomationProperties.Name="{Binding Name}"
+                                                                  IsChecked="{Binding IsSelected}"
+                                                                  VerticalAlignment="Center" />
+                                                        <ComboBox Grid.Column="1"
+                                                                  ItemsSource="{Binding Targets}"
+                                                                  AutomationProperties.Name="{localization:Loc Dialog_GpImport_TargetArrangement}"
+                                                                  SelectedIndex="{Binding TargetIndex}"
+                                                                  IsVisible="{Binding $parent[ItemsControl].((contracts:IGpImportScreen)DataContext).RequiresTargetSelection, FallbackValue=False}"
+                                                                  MinWidth="200" VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Panel>
+                        </Border>
+                    </Grid>
+
+                    <!-- The parse runs off the UI thread; these two are the only
+                         things that say so. An import failure used to reach the
+                         status bar ONLY — behind this still-open modal. -->
+                    <StackPanel Grid.Row="3">
+                        <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" Margin="{DynamicResource GapTopLg}"
+                                    IsVisible="{Binding IsBusy}">
+                            <ProgressBar />
+                            <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" Classes="DlgBusyText" Text="{localization:Loc Dialog_GpImport_Busy}" />
+                        </StackPanel>
+                        <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Error" Margin="{DynamicResource GapTopLg}"
+                                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Import}"
+                                Command="{Binding ImportCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,501 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.GraphicsSettingsView"
+             x:DataType="contracts:IGraphicsSettingsScreen"
+             x:CompileBindings="True">
+    <!-- Rows follow the shared grammar (SettingsStyles.axaml): title +
+         description left, one control in the 300 px column right. The
+         description styling that used to be repeated inline on ~40 TextBlocks
+         (Foreground + TextWrapping + FontSize, three attributes each) is now
+         the single `SettingDesc` class, and the per-row Margin sprinkle
+         (0,4 / 0,8 / 0,12) is gone — the rhythm belongs to the style. -->
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <ctl:MasonryPanel Classes="SettingsFlow" Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconMonitor}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Display}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_DisplayTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_DisplaySubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.renderScale}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_RenderScale}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_RenderScale_Desc}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="12">
+                            <Slider AutomationProperties.Name="{localization:Loc Settings_Graphics_RenderScale}" Grid.Column="0" Minimum="50" Maximum="200"
+                                    TickFrequency="5" IsSnapToTickEnabled="True"
+                                    SmallChange="5" LargeChange="25"
+                                    Value="{Binding RenderScalePercent, Mode=TwoWay}" />
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout"
+                                       Text="{Binding RenderScalePercent, StringFormat={}{0:0}%}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.maxFps}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_MaxFps}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_MaxFps_Desc}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_MaxFps}" Grid.Column="1"
+                                  ItemsSource="{Binding MaxFpsOptions}"
+                                  SelectedItem="{Binding SelectedMaxFps, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IGraphicsChoice">
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.idleFps}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_IdleFps}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_IdleFps_Desc}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="12">
+                            <Slider AutomationProperties.Name="{localization:Loc Settings_Graphics_IdleFps}" Grid.Column="0" Minimum="1" Maximum="10"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    SmallChange="1" LargeChange="3"
+                                    Value="{Binding IdleFps, Mode=TwoWay}" />
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout"
+                                       Text="{Binding IdleFps, StringFormat={}{0:0} Hz}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.presentMode}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_PresentMode}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_PresentMode_Desc}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_PresentMode}" Grid.Column="1"
+                                  ItemsSource="{Binding PresentModeOptions}"
+                                  SelectedItem="{Binding SelectedPresentMode, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IGraphicsChoice">
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.msaa}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_Msaa}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_Msaa_Desc}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_Msaa}" Grid.Column="1"
+                                  ItemsSource="{Binding MsaaOptions}"
+                                  SelectedItem="{Binding SelectedMsaa, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IGraphicsChoice">
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.animatedHomeHero}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_AnimatedHomeHero}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_AnimatedHomeHero_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_AnimatedHomeHero}" Grid.Column="1" IsChecked="{Binding AnimatedHomeHero, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.1}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_AnchorPreviewTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_AnchorPreviewSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.anchorPreview}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_AnchorPreview}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_AnchorPreview_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_AnchorPreview}" Grid.Column="1" IsChecked="{Binding EnableAnchorPreview, Mode=TwoWay}" />
+                    </Grid>
+
+                    <!-- Indented as facets of the anchor preview above, but NOT
+                         IsEnabled-gated on it: nothing in the render path says
+                         they are inert with the preview off, and disabling a
+                         control on a guess is worse than a stray toggle. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.anchorSweep}" Classes="FormRow Sub" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_AnchorSweep}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_AnchorSweep_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_AnchorSweep}" Grid.Column="1" IsChecked="{Binding EnableAnchorSweep, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.anchorLead}" Classes="FormRow Sub" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_AnchorLead}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_AnchorLead_Desc}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="12">
+                            <Slider AutomationProperties.Name="{localization:Loc Settings_Graphics_AnchorLead}" Grid.Column="0" Minimum="200" Maximum="3000"
+                                    TickFrequency="100" IsSnapToTickEnabled="True"
+                                    SmallChange="100" LargeChange="500"
+                                    Value="{Binding AnchorPreviewLeadMs, Mode=TwoWay}" />
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout"
+                                       Text="{Binding AnchorPreviewLeadMs, StringFormat={}{0:0} ms}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.2}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_HighwayViewTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_HighwayViewSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Highway pace. Scroll speed is in Rocksmith units, where LOWER
+                         IS FASTER; the live "N s of chart on screen" readout is what
+                         makes that legible without the user having to trust a label. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.scrollSpeedOverride}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_ScrollSpeedOverride}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_ScrollSpeedOverride_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_ScrollSpeedOverride}" Grid.Column="1" IsChecked="{Binding HighwayScrollSpeedOverrideEnabled, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.scrollSpeed}" Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsEnabled="{Binding HighwayScrollSpeedOverrideEnabled}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_ScrollSpeed}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_ScrollSpeed_Desc}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="12">
+                            <Slider AutomationProperties.Name="{localization:Loc Settings_Graphics_ScrollSpeed}" Grid.Column="0" Minimum="0.5" Maximum="3.0"
+                                    TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                    SmallChange="0.1" LargeChange="0.5"
+                                    Value="{Binding HighwayScrollSpeed, Mode=TwoWay}" />
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout"
+                                       Text="{Binding HighwayScrollSpeed, StringFormat={}{0:0.0}×}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.drawDistance}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_DrawDistance}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_DrawDistance_Desc}" />
+                            <!-- What draw distance and scroll speed buy you, in seconds of chart. -->
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Margin="0" Text="{localization:Loc Settings_Graphics_NotesVisible}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc Mono" Margin="0" Foreground="{DynamicResource FireTextSecondary}"
+                                           Text="{Binding HighwayVisibleSecondsLabel}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="12">
+                            <Slider AutomationProperties.Name="{localization:Loc Settings_Graphics_DrawDistance}" Grid.Column="0" Minimum="20" Maximum="80"
+                                    TickFrequency="5" IsSnapToTickEnabled="True"
+                                    SmallChange="5" LargeChange="10"
+                                    Value="{Binding HighwayDrawDistanceZ, Mode=TwoWay}" />
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout"
+                                       Text="{Binding HighwayDrawDistanceZ, StringFormat={}{0:0}}" />
+                        </Grid>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.cameraDistance}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_CameraDistance}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_CameraDistance_Desc}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="12">
+                            <Slider AutomationProperties.Name="{localization:Loc Settings_Graphics_CameraDistance}" Grid.Column="0" Minimum="80" Maximum="120"
+                                    TickFrequency="5" IsSnapToTickEnabled="True"
+                                    SmallChange="5" LargeChange="10"
+                                    Value="{Binding CameraDistancePercent, Mode=TwoWay}" />
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout"
+                                       Text="{Binding CameraDistancePercent, StringFormat={}{0:0}%}" />
+                        </Grid>
+                    </Grid>
+
+                    <!-- 3D fingering overlay — re-homed from General (it is a 3D
+                         preview aid, so it lives with the other preview settings). -->
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.show3DFingering}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Show3DFingering}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_Show3DFingering}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Show3DFingering}" Grid.Column="1" IsChecked="{Binding Show3DFingering}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.invertStrings}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_InvertStrings}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_InvertStrings_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_InvertStrings}" Grid.Column="1" IsChecked="{Binding InvertStrings, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.3}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_TimingTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_TimingSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Display-latency compensation. The picture is drawn AHEAD of the
+                         playhead so it lands on glass in sync with the sound. Live-applied
+                         so it can be trimmed by eye during playback, which is the only way
+                         to set it: the native render path cannot measure its own latency. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.visualLead}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_VisualLead}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_VisualLead_Desc}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,64" ColumnSpacing="12">
+                            <Slider AutomationProperties.Name="{localization:Loc Settings_Graphics_VisualLead}" Grid.Column="0" Minimum="0" Maximum="{Binding MaxVisualLeadMs}"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    SmallChange="1" LargeChange="5"
+                                    Value="{Binding VisualLeadMs, Mode=TwoWay}" />
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout"
+                                       Text="{Binding VisualLeadMs, StringFormat={}{0:0} ms}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.4}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSineWave}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Rendering}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_Timeline2DTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_Timeline2DSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.timeline2DPolish}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_Timeline2DPolish}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_Timeline2DPolish_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_Timeline2DPolish}" Grid.Column="1" IsChecked="{Binding Timeline2DPolish, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.timeline2DLaneTint}" Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_Timeline2DLaneTint}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_Timeline2DLaneTint_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_Timeline2DLaneTint}" Grid.Column="1" IsChecked="{Binding Timeline2DLaneTint, Mode=TwoWay}" />
+                    </Grid>
+
+                </StackPanel>
+            </Border>
+
+            <!-- ── Advanced (cosmetic FX) ────────────────────────────────────
+                 Collapsed by default so the common path is short. A bare toggle
+                 header + the effect cards nested in an IsVisible-bound panel, so
+                 the settings search still finds every toggle (they stay inline in
+                 the LOGICAL tree, never an Expander); the search box force-opens
+                 this while a query is active. -->
+            <ToggleButton AutomationProperties.Name="{localization:Loc Settings_Advanced}" Classes="AdvancedHeader" x:Name="GraphicsAdvanced" Cursor="Hand"
+                          IsChecked="{Binding IsAdvancedOpen, Mode=TwoWay}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Classes="AdvancedLabel" Text="{localization:Loc Settings_Advanced}" />
+                        <TextBlock Classes="AdvancedSubtitle" Text="{localization:Loc Settings_Graphics_AdvancedSubtitle}" />
+                    </StackPanel>
+                    <PathIcon Grid.Column="1" Classes="AdvancedChevron" Data="M 3,2 L 9,7 L 3,12 Z" VerticalAlignment="Center" />
+                </Grid>
+            </ToggleButton>
+            <StackPanel x:Name="GraphicsAdvancedBody" IsVisible="{Binding IsAdvancedOpen}">
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.5}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSparkles}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Rendering}" />
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_HighwayTitle}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_HighwaySubtitle}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.highwayNearFade}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_HighwayNearFade}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_HighwayNearFade_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_HighwayNearFade}" Grid.Column="1" IsChecked="{Binding EnableHighwayNearFade, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.noteHitExplosions}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_NoteHitExplosions}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_NoteHitExplosions_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_NoteHitExplosions}" Grid.Column="1" IsChecked="{Binding EnableNoteHitExplosions, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.enhancedHitFeedback}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_EnhancedHitFeedback}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_EnhancedHitFeedback_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_EnhancedHitFeedback}" Grid.Column="1" IsChecked="{Binding EnableEnhancedHitFeedback, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.hitSparks}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_HitSparks}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_HitSparks_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_HitSparks}" Grid.Column="1" IsChecked="{Binding EnableHitSparks, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.beatPulse}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_BeatPulse}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_BeatPulse_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_BeatPulse}" Grid.Column="1" IsChecked="{Binding EnableBeatPulse, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.depthFog}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_DepthFog}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_DepthFog_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_DepthFog}" Grid.Column="1" IsChecked="{Binding EnableDepthFog, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.vignette}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_Vignette}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_Vignette_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_Vignette}" Grid.Column="1" IsChecked="{Binding EnableVignette, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.highwayLighting}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_HighwayLighting}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_HighwayLighting_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_HighwayLighting}" Grid.Column="1" IsChecked="{Binding EnableHighwayLighting, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.bloom}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_Bloom}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_Bloom_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_Bloom}" Grid.Column="1" IsChecked="{Binding EnableBloom, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.stringShimmer}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_StringShimmer}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_StringShimmer_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_StringShimmer}" Grid.Column="1" IsChecked="{Binding EnableStringShimmer, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.filmicTonemap}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_FilmicTonemap}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_FilmicTonemap_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_FilmicTonemap}" Grid.Column="1" IsChecked="{Binding EnableFilmicTonemap, Mode=TwoWay}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.6}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                <PathIcon Classes="GroupIcon" Data="{DynamicResource IconLightbulb}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Rendering}" />
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_ShowlightsTitle}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_ShowlightsSubtitle}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.showlightBeams}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_ShowlightBeams}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_ShowlightBeams_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_ShowlightBeams}" Grid.Column="1" IsChecked="{Binding EnableShowlightBeams, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.showlightFog}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_ShowlightFog}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_ShowlightFog_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_ShowlightFog}" Grid.Column="1" IsChecked="{Binding EnableShowlightFog, Mode=TwoWay}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.7}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                <PathIcon Classes="GroupIcon" Data="{DynamicResource IconCube}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Rendering}" />
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_BackgroundTitle}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_BackgroundSubtitle}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.crowdBackground}" Classes="FormRow" ColumnDefinitions="*,300">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_CrowdBackground}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_CrowdBackground_Desc}" />
+                            </StackPanel>
+                            <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_CrowdBackground}" Grid.Column="1" IsChecked="{Binding EnableCrowdBackground, Mode=TwoWay}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ctl:MasonryPanel>
+    </ScrollViewer>
+</UserControl>

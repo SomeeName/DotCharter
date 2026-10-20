@@ -1,0 +1,204 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="using:DotCharter.Tone.UI.Controls.Fire"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigReampPanel"
+             x:DataType="vm:RigReampViewModel">
+    <!-- DI · RE-AMP (ABI v37). Record the dry guitar; play a take back INTO the
+         rig in place of the guitar and dial the tone without playing.
+
+         Hangs off the rig header's DI button so the footer stays one line
+         (RigFooterStabilityUiPerfSmokeTests). EVERY readout sits in a fixed
+         column — the record button (Record/Stop), the time, the transport
+         readout: 104 px holds "20:00 / 20:00", the longest take a re-amp
+         loads (DiTakeLibrary.MaxLoadSeconds) — so nothing moves as the state changes. The whole panel is
+         disabled with its reason printed when there is no engine. -->
+    <controls:FirePopover x:Name="RigReampPopover" Width="380"
+                          Title="{localization:Loc Rig_Reamp_Title}"
+                          Icon="{DynamicResource IconGuitar}">
+        <controls:FirePopover.Footer>
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Theme="{StaticResource FirePopoverLinkButton}" Classes="FirePopoverLink" x:Name="RigReampImport"
+                        Command="{Binding ImportCommand}"
+                        IsVisible="{Binding CanImport}"
+                        Content="{localization:Loc Rig_Reamp_Import}" />
+                <Button Grid.Column="2" Theme="{StaticResource FirePopoverLinkButton}" Classes="FirePopoverLink" x:Name="RigReampOpenFolder"
+                        Command="{Binding OpenFolderCommand}"
+                        Content="{localization:Loc Rig_Reamp_OpenFolder}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <StackPanel>
+            <!-- no engine: the reason, where the controls are -->
+            <Panel IsVisible="{Binding !IsAvailable}" Margin="{StaticResource FirePadPopoverSection}">
+                <Rectangle Classes="FirePopoverDash" />
+                <Border Theme="{StaticResource FirePopoverEmptyBorder}" Classes="FirePopoverEmpty">
+                    <TextBlock Theme="{StaticResource FirePopoverEmptyTitleText}" Classes="FirePopoverEmptyTitle" x:Name="RigReampUnavailable"
+                               Text="{Binding UnavailableReason}" />
+                </Border>
+            </Panel>
+
+            <!-- ── RECORD DI ───────────────────────────────────────────── -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection" x:Name="RigReampRecordSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <Grid Theme="{StaticResource FirePopoverKickerGrid}" Classes="FirePopoverKicker" ColumnDefinitions="*,Auto">
+                        <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick" Text="{localization:Loc Rig_Reamp_RecordKicker}" />
+                    </Grid>
+                    <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="96,*,44">
+                        <!-- Record / Stop share one fixed cell: the label swaps,
+                             the button does not move or resize. -->
+                        <Button Grid.Column="0" Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip" x:Name="RigReampRecord"
+                                HorizontalAlignment="Stretch"
+                                Command="{Binding ToggleRecordCommand}"
+                                ToolTip.Tip="{localization:Loc Rig_Reamp_RecordTip}"
+                                AutomationProperties.Name="{localization:Loc Rig_Reamp_Record}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                         Fill="{DynamicResource FireDanger}" />
+                                <Panel VerticalAlignment="Center">
+                                    <TextBlock Text="{localization:Loc Rig_Reamp_Record}"
+                                               IsVisible="{Binding !IsRecording}" />
+                                    <TextBlock Text="{localization:Loc Rig_Reamp_StopRecording}"
+                                               IsVisible="{Binding IsRecording}" />
+                                </Panel>
+                            </StackPanel>
+                        </Button>
+                        <fire:FireLevelMeter Grid.Column="1" x:Name="RigReampRecordMeter"
+                                             SegmentCount="16" VerticalAlignment="Center"
+                                             AutomationProperties.Name="{localization:Loc Rig_Reamp_RecordLevel}"
+                                             LevelDb="{Binding RecordLevelDb}" />
+                        <TextBlock VerticalAlignment="Center" Grid.Column="2" Theme="{StaticResource FirePopoverValueText}" Classes="FirePopoverValue" x:Name="RigReampRecordTime"
+                                   Text="{Binding RecordTimeText}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ── RE-AMP ──────────────────────────────────────────────── -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection" x:Name="RigReampTransportSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <Grid Theme="{StaticResource FirePopoverKickerGrid}" Classes="FirePopoverKicker" ColumnDefinitions="Auto,*">
+                        <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick" Text="{localization:Loc Rig_Reamp_ReampKicker}" />
+                        <!-- WHAT the rig is hearing: the take, or the guitar -->
+                        <Panel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource FirePopoverStateText}" Classes="FirePopoverState" x:Name="RigReampTakeName"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding IsReamping}"
+                                       Text="{Binding ReampTakeName}" />
+                            <TextBlock Theme="{StaticResource FirePopoverStateText}" Classes="FirePopoverState"
+                                       IsVisible="{Binding !IsReamping}"
+                                       Text="{localization:Loc Rig_Reamp_LiveInput}" />
+                        </Panel>
+                    </Grid>
+                    <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="Auto,Auto,*,104,Auto"
+                          IsEnabled="{Binding IsReamping}">
+                        <Button Grid.Column="0" Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon" x:Name="RigReampPlayPause"
+                                Command="{Binding PlayPauseCommand}"
+                                ToolTip.Tip="{localization:Loc Rig_Reamp_PlayPause}"
+                                AutomationProperties.Name="{localization:Loc Rig_Reamp_PlayPause}">
+                            <Panel>
+                                <PathIcon Data="{DynamicResource IconPlay}" IsVisible="{Binding !IsPlaying}" />
+                                <PathIcon Data="{DynamicResource IconPause}" IsVisible="{Binding IsPlaying}" />
+                            </Panel>
+                        </Button>
+                        <Button Grid.Column="1" Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon" x:Name="RigReampStop"
+                                Command="{Binding StopCommand}"
+                                ToolTip.Tip="{localization:Loc Rig_Reamp_StopTip}"
+                                AutomationProperties.Name="{localization:Loc Rig_Reamp_Stop}">
+                            <PathIcon Data="{DynamicResource IconStop}" />
+                        </Button>
+                        <Slider VerticalAlignment="Center" Grid.Column="2" Classes="FirePopoverSlider" x:Name="RigReampPosition"
+                                Minimum="0" Maximum="{Binding Duration}"
+                                Value="{Binding Position, Mode=TwoWay}"
+                                AutomationProperties.Name="{localization:Loc Rig_Reamp_Position}" />
+                        <TextBlock VerticalAlignment="Center" Grid.Column="3" Theme="{StaticResource FirePopoverValueText}" Classes="FirePopoverValue" x:Name="RigReampTime"
+                                   Text="{Binding PositionText}" />
+                        <ToggleButton Grid.Column="4" Theme="{StaticResource FirePopoverIconToggle}" Classes="FirePopoverIcon" x:Name="RigReampLoop"
+                                      IsChecked="{Binding Loop, Mode=TwoWay}"
+                                      ToolTip.Tip="{localization:Loc Rig_Reamp_Loop}"
+                                      AutomationProperties.Name="{localization:Loc Rig_Reamp_Loop}">
+                            <PathIcon Data="{DynamicResource IconRepeat}" />
+                        </ToggleButton>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ── TAKES ───────────────────────────────────────────────── -->
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection" x:Name="RigReampTakesSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <Grid Theme="{StaticResource FirePopoverKickerGrid}" Classes="FirePopoverKicker" ColumnDefinitions="*,Auto">
+                        <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick" Text="{localization:Loc Rig_Reamp_TakesKicker}" />
+                        <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverStateText}" Classes="FirePopoverState" Text="{Binding Takes.Count}" />
+                    </Grid>
+                    <Panel IsVisible="{Binding !HasTakes}">
+                        <Rectangle Classes="FirePopoverDash" />
+                        <Border Theme="{StaticResource FirePopoverEmptyBorder}" Classes="FirePopoverEmpty">
+                            <TextBlock Theme="{StaticResource FirePopoverEmptyTitleText}" Classes="FirePopoverEmptyTitle" x:Name="RigReampNoTakes"
+                                       Text="{localization:Loc Rig_Reamp_NoTakes}" />
+                        </Border>
+                    </Panel>
+                    <ScrollViewer MaxHeight="210" VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding HasTakes}">
+                        <ItemsControl x:Name="RigReampTakes" ItemsSource="{Binding Takes}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RigDiTakeRow">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceXs}">
+                                        <!-- the row itself: click = re-amp this take -->
+                                        <Button Grid.Column="0" Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                                                Classes.Picked="{Binding IsLive}"
+                                                AutomationProperties.Name="{Binding Name}"
+                                                IsVisible="{Binding !IsRenaming}"
+                                                Command="{Binding $parent[UserControl].((vm:RigReampViewModel)DataContext).ReampTakeCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="{localization:Loc Rig_Reamp_ReampTip}">
+                                            <Grid ColumnDefinitions="*,44">
+                                                <TextBlock Classes="FirePopoverOptionName" TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding Name}" />
+                                                <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                                           HorizontalAlignment="Right"
+                                                           Text="{Binding DurationText}" />
+                                            </Grid>
+                                        </Button>
+                                        <Border Grid.Column="0" Theme="{StaticResource FireFieldBorder}" Classes="FireField"
+                                                IsVisible="{Binding IsRenaming}">
+                                        <TextBox Classes="FireFieldInput"
+                                                 Text="{Binding EditName, Mode=TwoWay}"
+                                                 AutomationProperties.Name="{localization:Loc Rig_Reamp_Rename}">
+                                            <TextBox.KeyBindings>
+                                                <KeyBinding Gesture="Enter"
+                                                            Command="{Binding $parent[UserControl].((vm:RigReampViewModel)DataContext).CommitRenameCommand}"
+                                                            CommandParameter="{Binding}" />
+                                                <KeyBinding Gesture="Escape"
+                                                            Command="{Binding $parent[UserControl].((vm:RigReampViewModel)DataContext).CancelRenameCommand}"
+                                                            CommandParameter="{Binding}" />
+                                            </TextBox.KeyBindings>
+                                        </TextBox>
+                                        </Border>
+                                        <Button Grid.Column="1" Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon"
+                                                Command="{Binding $parent[UserControl].((vm:RigReampViewModel)DataContext).BeginRenameCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="{localization:Loc Rig_Reamp_Rename}"
+                                                AutomationProperties.Name="{localization:Loc Rig_Reamp_Rename}">
+                                            <PathIcon Data="{DynamicResource IconPencil}" />
+                                        </Button>
+                                        <Button Grid.Column="2" Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon"
+                                                Command="{Binding $parent[UserControl].((vm:RigReampViewModel)DataContext).DeleteTakeCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="{localization:Loc Rig_Reamp_Delete}"
+                                                AutomationProperties.Name="{localization:Loc Rig_Reamp_Delete}">
+                                            <PathIcon Data="{DynamicResource IconClose}" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote" x:Name="RigReampStatus"
+                               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding Status}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

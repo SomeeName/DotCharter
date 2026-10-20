@@ -1,0 +1,310 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Home"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:hero="clr-namespace:DotCharter.UI.Controls.Hero;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Home.HomeView"
+             x:DataType="contracts:IHomeScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Home. The hero is the song you last played, because resuming it is the
+        commonest intent by a wide margin; the three cards are the only
+        whole-app destinations; the facts strip surfaces the quietly-wrong
+        things without a nag. Every string arrives formatted — "yesterday" is
+        not a date format and "88 %" is not a number format.
+    -->
+
+    <UserControl.Resources>
+        <converters:ResourceKeyConverter x:Key="ResourceKey" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.HomeEyebrow">
+            <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackEyebrow}" />
+        </Style>
+        <Style Selector="Border.HomeCard">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="{StaticResource FireBorderHairline}" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        </Style>
+        <!-- A whole card that is a button: the Button is invisible and the card
+             it holds carries the look, so the tile has ONE frame. Without this
+             class matching anything the Fluent button drew a second padded
+             frame around every card. -->
+        <Style Selector="Button.Bare">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        </Style>
+        <Style Selector="Button.Bare /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.Bare:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         Button.Bare:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.Bare:pointerover Border.HomeCard">
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        </Style>
+        <Style Selector="Button.Bare.JumpRow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        </Style>
+        <Style Selector="Border.HomeCard.primary">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        </Style>
+        <Style Selector="Border.HomeChipRow.warn">
+            <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        </Style>
+        <Style Selector="Border.HomeChipRow.warn > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+        </Style>
+        <Style Selector="Border.HomeChip.best">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        </Style>
+        <Style Selector="Border.HomeChip.best > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource FireAccentPaper}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="34,20,34,28" VerticalScrollBarVisibility="Auto"
+                  Background="{DynamicResource FireGroundScreen}">
+        <Grid RowDefinitions="Auto,*" RowSpacing="18">
+
+            <!-- ── header ───────────────────────────────────────────── -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock x:Name="HomeTitle" Text="DotCharter"
+                               FontFamily="{StaticResource FireFontDisplay}"
+                               FontSize="{StaticResource FireSizeScreenTitle}"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource FireTextBright}" />
+                    <TextBlock x:Name="HomeLibrarySummary" Text="{Binding LibrarySummary}"
+                               FontSize="{StaticResource FireSizeCaption}"
+                               Foreground="{DynamicResource FireTextMuted}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                            VerticalAlignment="Center">
+                    <Border Classes="HomeCard HomeChipRow" Padding="10,5"
+                            CornerRadius="{StaticResource RadiusSm}">
+                        <TextBlock x:Name="HomeProfileChip" VerticalAlignment="Center" Text="{Binding ProfileSummary}"
+                                   FontSize="{StaticResource FireSizeXs}"
+                                   Foreground="{DynamicResource FireTextSecondary}" />
+                    </Border>
+                    <!-- The device chip is the one thing here that can be WRONG
+                         rather than informative, and Home has no facts strip to
+                         put that in, so it carries its own warning ink. -->
+                    <Border Classes="HomeCard HomeChipRow" Padding="10,5"
+                            Classes.warn="{Binding DeviceNeedsAttention}"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            IsVisible="{Binding HasDevice}">
+                        <TextBlock x:Name="HomeDeviceChip" VerticalAlignment="Center" Text="{Binding DeviceSummary}"
+                                   FontSize="{StaticResource FireSizeXs}"
+                                   Foreground="{DynamicResource FireTextSecondary}" />
+                    </Border>
+                    <!-- Home is FULL-BLEED: no rail, no title bar. Settings and
+                         the palette have to be reachable from the screen
+                         itself or they are not reachable at all. -->
+                    <Button x:Name="HomeSettings" Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                            Content="{localization:Loc Nav_Settings}"
+                            AutomationProperties.Name="{localization:Loc Nav_Settings}"
+                            Command="{Binding OpenSettingsCommand}" />
+                    <Button x:Name="HomeCommandPalette" Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                            Content="{localization:Loc Shell_GoToAnything}"
+                            AutomationProperties.Name="{localization:Loc Shell_GoToAnything}"
+                            Command="{Binding OpenCommandPaletteCommand}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ── hero + destinations ──────────────────────────────── -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,404" ColumnSpacing="18">
+
+                <!-- THE HERO IS ONE PANEL, not art above a caption block: the
+                     art fills it and the song sits ON the art, bottom-left,
+                     under a scrim. That is the whole difference between a
+                     landing screen and a list with a picture at the top. -->
+                <Border Grid.Column="0" Classes="HomeCard" x:Name="HomeHero"
+                        ClipToBounds="True" MinHeight="380"
+                        IsVisible="{Binding HasRecentSong}">
+                    <!-- Transparent so the stage hears the pointer over the whole
+                         hero, text and buttons included (its spotlight and the
+                         card's tilt follow it). -->
+                    <Panel Background="Transparent">
+                        <!-- The owner's "DotCharter — Start screen" mockup, its
+                             hero image 1:1: aurora, LED wall, beams, shade, the
+                             record and the tilting cover (HeroStage). -->
+                        <hero:HeroStage x:Name="HomeHeroStage" CoverPath="{Binding RecentArtPath}"
+                                        IsAnimated="{Binding AnimateHero}" />
+                        <!-- No cover: a guitar neck, strummed now and then. -->
+                        <controls:HeroStringsBackdrop x:Name="HomeHeroStrings"
+                                                      IsAnimated="{Binding AnimateHero}"
+                                                      IsVisible="{Binding !HasRecentArt}" />
+
+                        <StackPanel VerticalAlignment="Bottom" Margin="34,0,34,30">
+                            <TextBlock Classes="HomeEyebrow" x:Name="HomeRecentWhen"
+                                       Text="{Binding RecentWhen}" />
+                            <TextBlock x:Name="HomeRecentTitle" Text="{Binding RecentTitle}"
+                                       Margin="0,6,0,0"
+                                       FontFamily="{StaticResource FireFontDisplay}"
+                                       FontSize="{StaticResource FireSizeScreenTitle}"
+                                       FontWeight="ExtraBold" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource FireTextBright}" />
+                            <hero:StringRule HorizontalAlignment="Left" Margin="0,12,0,10" />
+                            <TextBlock x:Name="HomeRecentMeta" Text="{Binding RecentMeta}"
+                                       Margin="0,0,0,12"
+                                       FontSize="{StaticResource FireSizeRow}"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource FireTextMuted}" />
+
+                            <ItemsControl ItemsSource="{Binding RecentArrangements}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel ItemSpacing="6" LineSpacing="6" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IArrangementChip">
+                                        <Border Classes="HomeChip" Padding="9,4"
+                                                Classes.best="{Binding IsBest}"
+                                                CornerRadius="{StaticResource RadiusXs}"
+                                                Background="{DynamicResource FireSurfaceChip}"
+                                                BorderThickness="{StaticResource FireBorderHairline}"
+                                                BorderBrush="{DynamicResource FireBorder}">
+                                            <TextBlock Text="{Binding Label}"
+                                                       FontSize="{StaticResource FireSizeXs}"
+                                                       Foreground="{DynamicResource FireTextSecondary}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <WrapPanel ItemSpacing="8" LineSpacing="8" Margin="0,18,0,0">
+                                <Button Theme="{StaticResource PrimaryButton}" Classes="Primary" x:Name="HomePlayRecent"
+                                        Content="{Binding PlayRecentCaption}"
+                                        Command="{Binding PlayRecentCommand}" />
+                                <!-- Goes to the editor when it has THIS song open;
+                                     absent otherwise, rather than opening another. -->
+                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle" x:Name="HomeOpenChart"
+                                        Content="{localization:Loc Home_OpenChart}"
+                                        AutomationProperties.Name="{localization:Loc Home_OpenChart}"
+                                        Command="{Binding OpenRecentChartCommand}"
+                                        IsVisible="{Binding CanOpenRecentChart}" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Panel>
+                </Border>
+
+                <!-- With nothing played yet the hero says what to do instead of
+                     leaving the left two thirds of the screen blank; the cards
+                     beside it are the ways to do it. -->
+                <Border Grid.Column="0" Classes="HomeCard" x:Name="HomeEmptyHero"
+                        MinHeight="380" ClipToBounds="True" IsVisible="{Binding !HasRecentSong}">
+                    <Panel>
+                        <controls:HeroStringsBackdrop x:Name="HomeEmptyStrings"
+                                                      IsAnimated="{Binding AnimateHero}" />
+                        <Border Background="{DynamicResource FireHeroScrim}" />
+                        <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                                    Margin="26,0,26,24" MaxWidth="460" Spacing="10">
+                            <TextBlock Text="{localization:Loc Home_Empty_Title}"
+                                       FontFamily="{StaticResource FireFontDisplay}"
+                                       FontSize="{StaticResource FireSizeScreenTitle}"
+                                       FontWeight="Bold" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource FireTextBright}" />
+                            <TextBlock Text="{localization:Loc Home_Empty_Body}"
+                                       FontSize="{StaticResource FireSizeRow}"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource FireTextSecondary}" />
+                        </StackPanel>
+                    </Panel>
+                </Border>
+
+                <StackPanel Grid.Column="1" Spacing="10">
+                    <ItemsControl ItemsSource="{Binding Destinations}" x:Name="HomeDestinations">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IDestinationCard">
+                                <Button Classes="Bare" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        Margin="0,0,0,10"
+                                        Command="{Binding OpenCommand}"
+                                        AutomationProperties.Name="{Binding Title}">
+                                    <Border Classes="HomeCard"
+                                            Classes.primary="{Binding IsPrimary}"
+                                            Padding="16,14">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                            <PathIcon Grid.Column="0" Width="22" Height="22"
+                                                      VerticalAlignment="Center"
+                                                      Data="{Binding IconKey, Converter={StaticResource ResourceKey}}"
+                                                      Foreground="{DynamicResource FireAccent}" />
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <TextBlock Text="{Binding Title}"
+                                                           FontSize="{StaticResource FireSizeMd}"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource FireTextBright}" />
+                                                <TextBlock Text="{Binding Subtitle}"
+                                                           FontSize="{StaticResource FireSizeXs}"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource FireTextMuted}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Classes="HomeCard" Padding="14,12" x:Name="HomeJumpBackIn"
+                            IsVisible="{Binding HasJumpBackIn}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Classes="HomeEyebrow" Text="{localization:Loc Home_JumpBackIn}" />
+                            <ItemsControl ItemsSource="{Binding JumpBackIn}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IProgressRow">
+                                        <Button Classes="Bare JumpRow" HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch"
+                                                Command="{Binding OpenCommand}"
+                                                AutomationProperties.Name="{Binding Title}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9" Margin="0,5">
+                                                <Border Grid.Column="0" Width="22" Height="22"
+                                                        ClipToBounds="True"
+                                                        CornerRadius="{StaticResource RadiusXs}"
+                                                        Background="{DynamicResource FireSurfaceChip}">
+                                                    <Panel>
+                                                        <Image AutomationProperties.AccessibilityView="Raw" Stretch="UniformToFill" IsVisible="{Binding HasArt}"
+                                                               Source="{Binding ArtPath, Converter={x:Static converters:ArtworkPathToBitmapConverter.Instance}}" />
+                                                        <PathIcon Width="12" Height="12" IsVisible="{Binding !HasArt}"
+                                                                  Data="{DynamicResource IconMusicNote}"
+                                                                  Foreground="{DynamicResource FireTextDim}" />
+                                                    </Panel>
+                                                </Border>
+                                                <TextBlock Grid.Column="1" Text="{Binding Title}"
+                                                           FontSize="{StaticResource FireSizeSm}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource FireTextBody}" />
+                                                <TextBlock Grid.Column="2" Text="{Binding ProgressLabel}"
+                                                           FontFamily="{StaticResource FireFontMono}"
+                                                           FontSize="{StaticResource FireSizeXs}"
+                                                           Foreground="{DynamicResource FireTextMuted}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+        </Grid>
+    </ScrollViewer>
+</UserControl>

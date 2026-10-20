@@ -1,0 +1,255 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the app theme's resource layer — see `Styles/Resources.axaml`,
+         which merges this file and its siblings IN ORDER. The semantic surface / text / border brushes over `App.axaml`'s colour
+         tokens, the Play Mode glass + screen chrome, the amp-rig accents and
+         the pedalboard's programmatic texture brushes. -->
+
+    <Styles.Resources>
+
+        <!-- Color tokens live in App.axaml's Application.Resources so
+             ThemeService can mutate them at runtime. This file exposes
+             the brush layer that references those colors via DynamicResource. -->
+        <SolidColorBrush x:Key="AppBackground" Color="{DynamicResource AppBackgroundColor}" />
+        <SolidColorBrush x:Key="PanelBackground" Color="{DynamicResource PanelBackgroundColor}" />
+        <SolidColorBrush x:Key="CardBackground" Color="{DynamicResource CardBackgroundColor}" />
+        <SolidColorBrush x:Key="SurfaceElevated" Color="{DynamicResource SurfaceElevatedColor}" />
+        <SolidColorBrush x:Key="SurfaceHover" Color="{DynamicResource SurfaceHoverColor}" />
+        <SolidColorBrush x:Key="SurfaceHoverStrong" Color="{DynamicResource SurfaceHoverStrongColor}" />
+        <SolidColorBrush x:Key="SurfaceActive" Color="{DynamicResource SurfaceActiveColor}" />
+        <SolidColorBrush x:Key="SurfaceStrong" Color="{DynamicResource SurfaceStrongColor}" />
+        <!-- Transition start for controls that fade a Background in on hover.
+             Avalonia's `Transparent` keyword is #00FFFFFF — transparent WHITE.
+             A BrushTransition interpolates all four ARGB channels linearly, so
+             fading Background from Transparent to an opaque dark hover brush
+             raises alpha while RGB is still near-white → a bright-white wash for
+             the first frames before RGB settles dark ("flashes white then normal
+             hover", owner report). Starting from transparent BLACK keeps RGB dark
+             the whole fade, so only alpha animates in. Visually identical at rest
+             (alpha 0); hit-testable like any non-null brush. Use this instead of
+             `Transparent` as the idle Background of any control with a
+             `BrushTransition Property="Background"`. -->
+        <SolidColorBrush x:Key="HoverFadeStart" Color="#00000000" />
+        <!-- Low-elevation wash for list rows / status blocks inside cards.
+             The Issues + Lyrics inspectors referenced this key without a
+             definition, so those rows silently rendered transparent; the
+             subtle hover-wash colour is the intended quiet tint. -->
+        <SolidColorBrush x:Key="SurfaceLow" Color="{DynamicResource SurfaceHoverColor}" />
+
+        <!-- Play Mode "glass" surfaces (0.16 visual pass): translucent
+             panel/card brushes so the animated backdrop's glow reads through
+             the game screens' chrome. Brush-level alpha over the EXISTING
+             colour tokens — no new Color tokens, so every theme preset /
+             community pack keeps working unchanged and the theme-switch
+             completeness gate (ThemeTokens.All) is untouched. -->
+        <SolidColorBrush x:Key="PanelGlass" Color="{DynamicResource PanelBackgroundColor}" Opacity="0.82" />
+        <SolidColorBrush x:Key="CardGlass" Color="{DynamicResource CardBackgroundColor}" Opacity="0.72" />
+        <SolidColorBrush x:Key="SurfaceGlass" Color="{DynamicResource SurfaceElevatedColor}" Opacity="0.80" />
+
+        <!-- Play Mode screen chrome (0.35 menu redesign). The pedalboard's R1
+             "one key light, upper-left" rule applied to menu surfaces: a panel
+             is LIT along its top edge and settles into shadow at the bottom, so
+             a card reads as a raised slab rather than a flat rectangle. Built
+             from the SAME colour tokens as the *Glass brushes above (gradient
+             stops + brush-level alpha, no new Color token), so every theme
+             preset and community pack keeps working and the theme-switch
+             completeness gate is untouched.
+             pedalboard-visual-language.md (retired v0.43; see docs/agents/ui/pedalboard.md) §R1/§R3. -->
+        <LinearGradientBrush x:Key="PlayPanelFill" StartPoint="0%,0%" EndPoint="0%,100%" Opacity="0.88">
+            <GradientStop Offset="0" Color="{DynamicResource CardBackgroundColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource PanelBackgroundColor}" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PlayTileFill" StartPoint="0%,0%" EndPoint="0%,100%" Opacity="0.90">
+            <GradientStop Offset="0" Color="{DynamicResource SurfaceElevatedColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource CardBackgroundColor}" />
+        </LinearGradientBrush>
+        <!-- Hero tile: the same light, tinted by the live accent. Used for the
+             ONE figure a screen is about (the practice streak), never for a row
+             of equals — saturation is information (R4). -->
+        <LinearGradientBrush x:Key="PlayHeroFill" StartPoint="12%,0%" EndPoint="88%,100%" Opacity="0.92">
+            <GradientStop Offset="0" Color="{DynamicResource AccentSelectedColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource CardBackgroundColor}" />
+        </LinearGradientBrush>
+        <!-- 1 px lit edge along a panel's TOP, fading out at both ends. Depth is
+             edges, not blur (R3). -->
+        <LinearGradientBrush x:Key="PlayTopLight" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="Transparent" />
+            <GradientStop Offset="0.5" Color="{DynamicResource BorderStrongColor}" />
+            <GradientStop Offset="1" Color="Transparent" />
+        </LinearGradientBrush>
+
+        <SolidColorBrush x:Key="BorderDefault" Color="{DynamicResource BorderDefaultColor}" />
+        <SolidColorBrush x:Key="BorderSubtle" Color="{DynamicResource BorderSubtleColor}" />
+        <SolidColorBrush x:Key="BorderStrong" Color="{DynamicResource BorderStrongColor}" />
+        <SolidColorBrush x:Key="BorderDeep" Color="{DynamicResource BorderDeepColor}" />
+
+        <SolidColorBrush x:Key="TextPrimary" Color="{DynamicResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="TextSecondary" Color="{DynamicResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="TextMuted" Color="{DynamicResource TextMutedColor}" />
+        <SolidColorBrush x:Key="TextDim" Color="{DynamicResource TextDimColor}" />
+        <SolidColorBrush x:Key="TextOnAccent" Color="{DynamicResource TextOnAccentColor}" />
+
+        <SolidColorBrush x:Key="AccentColor" Color="{DynamicResource AccentColorValue}" />
+        <SolidColorBrush x:Key="AccentHover" Color="{DynamicResource AccentHoverColor}" />
+        <SolidColorBrush x:Key="AccentSubtle" Color="{DynamicResource AccentSubtleColor}" />
+        <SolidColorBrush x:Key="AccentSelected" Color="{DynamicResource AccentSelectedColor}" />
+        <SolidColorBrush x:Key="AccentSelectedHover" Color="{DynamicResource AccentSelectedHoverColor}" />
+        <SolidColorBrush x:Key="AccentGradientEnd" Color="{DynamicResource AccentGradientEndColor}" />
+        <SolidColorBrush x:Key="AccentFaint" Color="{DynamicResource AccentFaintColor}" />
+
+        <SolidColorBrush x:Key="SuccessColor" Color="{DynamicResource SuccessColorValue}" />
+        <SolidColorBrush x:Key="WarningColor" Color="{DynamicResource WarningColorValue}" />
+        <SolidColorBrush x:Key="WarningFaint" Color="{DynamicResource WarningFaintColor}" />
+        <SolidColorBrush x:Key="WarningCheckedBg" Color="{DynamicResource WarningCheckedBgColor}" />
+        <SolidColorBrush x:Key="DangerColor" Color="{DynamicResource DangerColorValue}" />
+        <SolidColorBrush x:Key="DangerCheckedBg" Color="{DynamicResource DangerCheckedBgColor}" />
+        <SolidColorBrush x:Key="DangerBg" Color="{DynamicResource DangerBgColor}" />
+        <SolidColorBrush x:Key="DangerBorder" Color="{DynamicResource DangerBorderColor}" />
+        <SolidColorBrush x:Key="DangerHoverBg" Color="{DynamicResource DangerHoverBgColor}" />
+        <SolidColorBrush x:Key="InfoColor" Color="{DynamicResource InfoColorValue}" />
+        <SolidColorBrush x:Key="WaveformAccent" Color="{DynamicResource WaveformAccentColor}" />
+
+        <!-- Amp-sim rig accents (pedalboard + tone browser). -->
+        <SolidColorBrush x:Key="AmpOrange" Color="{DynamicResource AmpOrangeColor}" />
+        <SolidColorBrush x:Key="AmpOrangeBright" Color="{DynamicResource AmpOrangeBrightColor}" />
+        <SolidColorBrush x:Key="AmpOrangeFaint" Color="{DynamicResource AmpOrangeFaintColor}" />
+        <SolidColorBrush x:Key="AmpTeal" Color="{DynamicResource AmpTealColor}" />
+        <SolidColorBrush x:Key="RigPanel" Color="{DynamicResource RigPanelColor}" />
+        <SolidColorBrush x:Key="RigStroke" Color="{DynamicResource RigStrokeColor}" />
+        <LinearGradientBrush x:Key="RigBackdrop" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="{DynamicResource RigBackdropTopColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource RigBackdropBottomColor}" />
+        </LinearGradientBrush>
+        <!-- Pedal/amp chassis chrome (screws, recesses, amp faceplate, bevel). -->
+        <SolidColorBrush x:Key="RigScrewShadow" Color="{DynamicResource RigScrewShadowColor}" />
+        <SolidColorBrush x:Key="RigRecess" Color="{DynamicResource RigRecessColor}" />
+        <SolidColorBrush x:Key="RigBevelHighlight" Color="{DynamicResource RigBevelHighlightColor}" />
+        <SolidColorBrush x:Key="AmpPowerLamp" Color="{DynamicResource AmpPowerLampColor}" />
+        <LinearGradientBrush x:Key="AmpFacePlate" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="{DynamicResource AmpFaceTopColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource AmpFaceBottomColor}" />
+        </LinearGradientBrush>
+        <!-- Brushed-metal anisotropic sheen: fine HORIZONTAL grain lines that
+             overlay the amp faceplate so it reads as machined aluminium (no
+             bitmaps — a tiled 1px light/dark line pair). -->
+        <DrawingBrush x:Key="AmpBrushedSheen" TileMode="Tile"
+                      DestinationRect="0,0,4,3" Stretch="None">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#12FFFFFF" Thickness="1" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <LineGeometry StartPoint="0,0.5" EndPoint="4,0.5" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#14000000" Thickness="1" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <LineGeometry StartPoint="0,2" EndPoint="4,2" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <!-- Pedalboard floor: a programmatic dark tolex/rubber-mat tile (no
+             external assets) — a near-black base with a staggered grain of soft
+             highlight + shadow pocks. Fixed brand colours like the other Rig*
+             chrome (deliberately NOT theme tokens). -->
+        <DrawingBrush x:Key="RigBoardTexture" TileMode="Tile"
+                      DestinationRect="0,0,26,26" Stretch="None">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#17181D">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,26,26" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- raised grain (staggered highlights) -->
+                    <GeometryDrawing Brush="#212330">
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="6.5,6.5" RadiusX="1.7" RadiusY="1.4" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#1F212B">
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="19.5,19.5" RadiusX="1.6" RadiusY="1.3" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- sunken grain (shadow pocks, offset half a cell) -->
+                    <GeometryDrawing Brush="#0D0E12">
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="19.5,6.5" RadiusX="1.4" RadiusY="1.2" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#0E0F14">
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="6.5,19.5" RadiusX="1.3" RadiusY="1.1" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <!-- The two mounting rails the pedals sit on (brushed metal bar). -->
+        <LinearGradientBrush x:Key="RigRail" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#4C505B" />
+            <GradientStop Offset="0.4" Color="#31343D" />
+            <GradientStop Offset="1" Color="#191B21" />
+        </LinearGradientBrush>
+        <!-- Speaker-cabinet grille cloth: a programmatic DENSE cross-weave tile
+             (companion of RigBoardTexture; no external assets). A tight 5px cell
+             with warp + weft threads in both diagonals so the cloth reads as a
+             real woven grille rather than a sparse hatch. -->
+        <DrawingBrush x:Key="RigGrilleCloth" TileMode="Tile"
+                      DestinationRect="0,0,5,5" Stretch="None">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#0E0F12">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,5,5" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- warp (highlight diagonal) -->
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#2A2D36" Thickness="0.9" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <LineGeometry StartPoint="0,5" EndPoint="5,0" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- weft (shadow diagonal) — the cross thread -->
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#191B21" Thickness="0.9" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <LineGeometry StartPoint="0,0" EndPoint="5,5" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- half-offset threads tighten the weave -->
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#23262E" Thickness="0.7" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <LineGeometry StartPoint="0,2.5" EndPoint="2.5,0" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#23262E" Thickness="0.7" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <LineGeometry StartPoint="2.5,5" EndPoint="5,2.5" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+    </Styles.Resources>
+</Styles>

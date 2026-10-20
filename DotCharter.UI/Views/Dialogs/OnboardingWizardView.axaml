@@ -1,0 +1,404 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:onboarding="clr-namespace:DotCharter.UI.ViewModels.Onboarding;assembly=DotCharter"
+             xmlns:profiles="clr-namespace:DotCharter.Services.Gameplay.Profiles;assembly=DotCharter.Services"
+             xmlns:servicesLoc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:onboardingViews="clr-namespace:DotCharter.UI.Views.Onboarding;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.OnboardingWizardView"
+             x:DataType="onboarding:OnboardingWizardViewModel">
+
+    <!-- The first-run wizard: ONE card, ONE footer, eight pages of which exactly
+         one is visible. Unlike the latency wizard the footer is shared — the
+         pages scroll inside Grid row 1 and the footer has to stay put — so the
+         primary is a single button whose caption and command follow the page
+         (Next everywhere, Finish on the last one). Everything else is the
+         shared dialog grammar (Views/Dialogs/DialogStyles.axaml, included once
+         by DialogContainerView). The one local style is the page title, the
+         same shape LatencyCalibrationWizardView keeps for its steps. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.OnboardingStepTitle">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeLg}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="RadioButton.OnboardingRole">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="{DynamicResource FirePadCard}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- ZIndex 90: BELOW the latency wizard (100), which this one opens on top
+         of itself, and below the message prompt (300). -->
+    <Grid Theme="{DynamicResource DialogScrimGrid}" Classes="DialogScrim" IsVisible="{Binding IsOpen}" ZIndex="90">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconSparkles}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Onboarding_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Onboarding_Subtitle}" />
+                        <TextBlock Theme="{DynamicResource DialogContextText}" Classes="DialogContext" Text="{Binding StepCaption}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody" MaxHeight="560">
+                    <StackPanel Spacing="{DynamicResource FireSpaceMd}">
+
+                        <!-- ============ 1. Welcome: role, language, updates ============ -->
+                        <StackPanel IsVisible="{Binding IsWelcome}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Welcome_Title}" />
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Welcome_Body}" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="{DynamicResource FireSpaceSm}">
+                                <RadioButton Grid.Column="0" Classes="OnboardingRole" GroupName="OnboardingRole"
+                                             IsChecked="{Binding IsCharter, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Onboarding_Role_Charter}"
+                                             dlgv:FocusOnOpen.IsTarget="True">
+                                    <StackPanel Spacing="{DynamicResource FireSpaceXxs}">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Role_Charter}" />
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                                   Text="{localization:Loc Onboarding_Role_CharterDesc}" />
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton Grid.Column="1" Classes="OnboardingRole" GroupName="OnboardingRole"
+                                             IsChecked="{Binding IsPlayer, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Onboarding_Role_Player}">
+                                    <StackPanel Spacing="{DynamicResource FireSpaceXxs}">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Role_Player}" />
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                                   Text="{localization:Loc Onboarding_Role_PlayerDesc}" />
+                                    </StackPanel>
+                                </RadioButton>
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_Language}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Settings_Tip_Language}" />
+                                </StackPanel>
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_Language}"
+                                          ItemsSource="{Binding LanguageOptions}"
+                                          SelectedIndex="{Binding SelectedLanguageIndex, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="servicesLoc:LanguageOption">
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,260">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_UpdateCheck}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc Onboarding_UpdateCheckDesc}" />
+                                </StackPanel>
+                                <ToggleSwitch VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Onboarding_UpdateCheck}"
+                                              Theme="{DynamicResource FireToggleSwitch}"
+                                              IsChecked="{Binding UpdateCheckOnStartup, Mode=TwoWay}" />
+                            </Grid>
+                            <!-- This computer (#288): the native audio engine and the GPU, probed
+                                 off the UI thread when the wizard opens. A capability that cannot
+                                 run is drawn disabled with its reason; all fine is two quiet rows. -->
+                            <onboardingViews:SystemCheckView x:Name="OnboardingSystemCheck" DataContext="{Binding SystemCheck}" />
+                            <TextBlock x:Name="OnboardingDisclaimer" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                       Text="{localization:Loc Legal_RocksmithDisclaimer}" />
+                        </StackPanel>
+
+                        <!-- ============ 2. Library folder ============ -->
+                        <StackPanel IsVisible="{Binding IsLibrary}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Library_Title}" />
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Library_Body}" />
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Library_Folder}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding HasLibraryPath}" Text="{Binding LibraryPath}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" IsVisible="{Binding !HasLibraryPath}"
+                                               Text="{localization:Loc Onboarding_Library_NoFolder}" />
+                                </StackPanel>
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc Action_Browse}"
+                                        Command="{Binding BrowseLibraryCommand}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,260" IsVisible="{Binding HasLibraryPath}">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding LibraryStatus}" />
+                                </StackPanel>
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        IsEnabled="{Binding !IsScanningLibrary}"
+                                        Content="{localization:Loc Onboarding_Library_Rescan}"
+                                        Command="{Binding RescanLibraryCommand}" />
+                            </Grid>
+                            <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" IsVisible="{Binding IsScanningLibrary}">
+                                <ProgressBar IsIndeterminate="True" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- ============ 3. Audio output ============ -->
+                        <StackPanel IsVisible="{Binding IsAudio}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Audio_Title}" />
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Audio_Body}" />
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Settings_AudioDriver}" />
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_AudioDriver}"
+                                          ItemsSource="{Binding Audio.DriverOptions}"
+                                          SelectedItem="{Binding Audio.SelectedDriver, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Onboarding_Audio_OutputDevice}" />
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Onboarding_Audio_OutputDevice}"
+                                          IsVisible="{Binding Audio.IsWasapiOutput}"
+                                          ItemsSource="{Binding Audio.WasapiDevices}"
+                                          SelectedIndex="{Binding Audio.SelectedWasapiOutputIndex, Mode=TwoWay}" />
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Onboarding_Audio_OutputDevice}"
+                                          IsVisible="{Binding Audio.IsAsioOutput}"
+                                          ItemsSource="{Binding Audio.AsioDevices}"
+                                          SelectedIndex="{Binding Audio.SelectedAsioOutputIndex, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Settings_SampleRate}" />
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_SampleRate}"
+                                          ItemsSource="{Binding Audio.SampleRateOptions}"
+                                          SelectedItem="{Binding Audio.SampleRate, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_BufferSize}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Audio.BufferLatencyDescription}" />
+                                </StackPanel>
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_BufferSize}"
+                                          ItemsSource="{Binding Audio.BufferSizeOptions}"
+                                          SelectedItem="{Binding Audio.BufferSizeFrames, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,260">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgDescText}" Grid.Column="0" Classes="DlgDesc" TextWrapping="Wrap"
+                                           Text="{localization:Loc Onboarding_Audio_TestDesc}" />
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc Onboarding_Audio_Test}"
+                                        Command="{Binding TestAudioCommand}" />
+                            </Grid>
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip" Classes.Ok="{Binding !AudioTestFailed}"
+                                    Classes.Error="{Binding AudioTestFailed}"
+                                    IsVisible="{Binding HasAudioTestStatus}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding AudioTestStatus}" />
+                            </Border>
+                        </StackPanel>
+
+                        <!-- ============ 4. Guitar input ============ -->
+                        <StackPanel IsVisible="{Binding IsInput}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Input_Title}" />
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Input_Body}" />
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Onboarding_Input_Enable}" />
+                                <ToggleSwitch VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Onboarding_Input_Enable}"
+                                              Theme="{DynamicResource FireToggleSwitch}"
+                                              IsChecked="{Binding Audio.EnableInput, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260" IsEnabled="{Binding Audio.EnableInput}">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Settings_InputDriver}" />
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_InputDriver}"
+                                          ItemsSource="{Binding Audio.DriverOptions}"
+                                          SelectedItem="{Binding Audio.SelectedInputDriver, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260" IsEnabled="{Binding Audio.EnableInput}">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Settings_InputDevice}" />
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_InputDevice}"
+                                          IsVisible="{Binding Audio.IsWasapiInput}"
+                                          ItemsSource="{Binding Audio.WasapiInputDevicesList}"
+                                          SelectedIndex="{Binding Audio.SelectedWasapiInputIndex, Mode=TwoWay}" />
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_InputDevice}"
+                                          IsVisible="{Binding Audio.IsAsioInput}"
+                                          ItemsSource="{Binding Audio.AsioInputDevicesList}"
+                                          SelectedIndex="{Binding Audio.SelectedAsioInputIndex, Mode=TwoWay}" />
+                            </Grid>
+                            <!-- WHICH JACK. The page opened the device and lit a
+                                 meter without ever asking which input the guitar
+                                 is on; a guitar on the second jack read as silence
+                                 on the meter below. ASIO only - the engine builds
+                                 an input mask for ASIO alone, and the visibility
+                                 keys on the ENGINE driver like Settings does. -->
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260"
+                                  IsEnabled="{Binding Audio.EnableInput}"
+                                  IsVisible="{Binding Audio.AreInputChannelIndexesUsed}">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_InputJack}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{localization:Loc Onboarding_Input_JackDesc}" />
+                                </StackPanel>
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" x:Name="OnboardingInputJack"
+                                          AutomationProperties.Name="{localization:Loc Settings_InputJack}"
+                                          ItemsSource="{Binding Audio.InputJackOptions}"
+                                          SelectedIndex="{Binding Audio.SelectedInputJackIndex, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260" IsEnabled="{Binding Audio.EnableInput}">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Input_Mono}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{localization:Loc Onboarding_Input_MonoDesc}" />
+                                </StackPanel>
+                                <ToggleSwitch VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Onboarding_Input_Mono}"
+                                              Theme="{DynamicResource FireToggleSwitch}"
+                                              IsChecked="{Binding Audio.AsioInputMono, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Sub" ColumnDefinitions="*,260"
+                                  IsEnabled="{Binding Audio.EnableInput}" IsVisible="{Binding !Audio.AsioInputMono}">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Input_TwoGuitars}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{localization:Loc Onboarding_Input_TwoGuitarsDesc}" />
+                                </StackPanel>
+                                <ToggleSwitch VerticalAlignment="Center" Grid.Column="1" AutomationProperties.Name="{localization:Loc Onboarding_Input_TwoGuitars}"
+                                              Theme="{DynamicResource FireToggleSwitch}"
+                                              IsChecked="{Binding Audio.InputChannelsAreSeparateGuitars, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgDescText}" Grid.Column="0" Classes="DlgDesc" TextWrapping="Wrap"
+                                           Text="{localization:Loc Onboarding_Input_ApplyDesc}" />
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc Onboarding_Input_Apply}"
+                                        Command="{Binding ApplyInputCommand}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,260">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Input_Level}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding InputLevelText}" />
+                                </StackPanel>
+                                <ProgressBar Grid.Column="1" VerticalAlignment="Center" Minimum="0" Maximum="1"
+                                             AutomationProperties.Name="{localization:Loc Onboarding_Input_Level}"
+                                             Value="{Binding InputLevelFraction}" />
+                            </Grid>
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" IsVisible="{Binding HasInputStatus}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding InputStatus}" />
+                            </Border>
+                        </StackPanel>
+
+                        <!-- ============ 5. Starter tone ============ -->
+                        <StackPanel IsVisible="{Binding IsTone}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Tone_Title}" />
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Tone_Body}" />
+                            <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame">
+                                <ListBox Classes="DlgList" MaxHeight="260"
+                                         AutomationProperties.Name="{localization:Loc Onboarding_Tone_Title}"
+                                         ItemsSource="{Binding Tones}"
+                                         SelectedItem="{Binding SelectedTone, Mode=TwoWay}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="onboarding:OnboardingToneChoice">
+                                            <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{DynamicResource FireSpaceSm}">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis" Text="{Binding Name}" />
+                                                    <TextBlock Theme="{DynamicResource DlgRowMetaText}" Grid.Column="1" Classes="DlgRowMeta Dim" Text="{Binding Category}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Ok" IsVisible="{Binding HasToneStatus}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding ToneStatus}" />
+                            </Border>
+                        </StackPanel>
+
+                        <!-- ============ 6. Latency ============ -->
+                        <StackPanel IsVisible="{Binding IsLatency}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Latency_Title}" />
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Latency_Body}" />
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,260">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Latency_Now}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding LatencySummary}" />
+                                </StackPanel>
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc Onboarding_Latency_Calibrate}"
+                                        Command="{Binding CalibrateLatencyCommand}" />
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- ============ 7. Profile ============ -->
+                        <StackPanel IsVisible="{Binding IsProfile}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Profile_Title}" />
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Profile_Body}" />
+                            <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame">
+                                <ListBox Classes="DlgList" MaxHeight="180"
+                                         AutomationProperties.Name="{localization:Loc Onboarding_Profile_Title}"
+                                         ItemsSource="{Binding Profiles}"
+                                         SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="profiles:PlayerProfile">
+                                            <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" TextWrapping="NoWrap"
+                                                           TextTrimming="CharacterEllipsis" Text="{Binding Name}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <TextBox VerticalAlignment="Center" Grid.Column="0" Margin="0,0,12,0"
+                                         PlaceholderText="{localization:Loc Profile_Rename_Placeholder}"
+                                         AutomationProperties.Name="{localization:Loc Profile_Rename_Placeholder}"
+                                         ToolTip.Tip="{localization:Loc Profile_Rename_Tip}"
+                                         Text="{Binding ProfileName, Mode=TwoWay}" />
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc Profile_Rename}"
+                                        Command="{Binding RenameProfileCommand}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,260">
+                                <TextBox VerticalAlignment="Center" Grid.Column="0" Margin="0,0,12,0"
+                                         PlaceholderText="{localization:Loc Onboarding_Profile_NewName}"
+                                         AutomationProperties.Name="{localization:Loc Onboarding_Profile_NewName}"
+                                         Text="{Binding NewProfileName, Mode=TwoWay}" />
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc Onboarding_Profile_AddAnother}"
+                                        Command="{Binding CreateProfileCommand}" />
+                            </Grid>
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip" Classes.Ok="{Binding !ProfileStatusIsRefusal}"
+                                    Classes.Error="{Binding ProfileStatusIsRefusal}"
+                                    IsVisible="{Binding HasProfileStatus}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding ProfileStatus}" />
+                            </Border>
+                        </StackPanel>
+
+                        <!-- ============ 8. Done ============ -->
+                        <StackPanel IsVisible="{Binding IsDone}" Spacing="{DynamicResource FireSpaceMd}">
+                            <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Done_Title}" />
+                            <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                <SelectableTextBlock Classes="Mono" TextWrapping="Wrap" Text="{Binding Summary}" />
+                            </Border>
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Done_Body}" />
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <Button Classes="DlgLink" Content="{localization:Loc Onboarding_SkipSetup}"
+                                    Command="{Binding CancelCommand}" IsCancel="True" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Back}"
+                                    IsVisible="{Binding CanGoBack}" Command="{Binding BackCommand}" />
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Onboarding_SkipStep}"
+                                    IsVisible="{Binding CanSkipStep}" Command="{Binding SkipCommand}" />
+                            <!-- One primary: Next on every page, Finish on the last. Two
+                                 buttons toggled by IsVisible would both show in the
+                                 DataContext-less grammar layout and read as two primaries. -->
+                            <Button Classes="DlgAction Primary" MinWidth="110"
+                                    Content="{Binding PrimaryCaption}"
+                                    Command="{Binding PrimaryCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

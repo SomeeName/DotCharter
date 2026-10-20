@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.PlayMode.SongToneEditBar"
+             x:DataType="vm:SongToneEditViewModel">
+
+    <!--
+        The bar over the rig while one of the SONG's tones is on it (the Get Ready
+        screen's tone chips open it). The rig below is the ordinary rig and knows
+        nothing about songs; this bar is the one place that does: it names the
+        tone, saves what the rig now holds for this song (DotCharter's data, never
+        the song's package), resets the tone to its conversion, or discards the
+        edit. Closing the rig any other way is a discard too.
+    -->
+    <!-- An accent CARD with the rig card's own 18 px inset, so the two line up
+         edge to edge; the rig's top margin is the gap between them. -->
+    <Border x:Name="SongToneEditBarRoot" Theme="{StaticResource FireCardBorder}" Classes="FireCard Accent"
+            Margin="18,18,18,0"
+            IsVisible="{Binding IsActive, FallbackValue=False}">
+        <Grid ColumnDefinitions="Auto,24,*,16,Auto,8,Auto,8,Auto" VerticalAlignment="Center">
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="{StaticResource FireSpaceXs}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow Accent" Text="{localization:Loc PlayMode_SongToneEdit_Title}" />
+                <TextBlock x:Name="SongToneEditName" Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" Text="{Binding ToneName}" />
+            </StackPanel>
+
+            <TextBlock Grid.Column="2" x:Name="SongToneEditStatus" VerticalAlignment="Center"
+                       Theme="{StaticResource FireStatusText}" Classes="FireStatusText" TextWrapping="Wrap"
+                       Classes.Success="{Binding !IsStatusError}"
+                       Classes.Danger="{Binding IsStatusError}"
+                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       Text="{Binding StatusText}" />
+            <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                       Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc Wide" TextWrapping="Wrap"
+                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                       Text="{localization:Loc PlayMode_SongToneEdit_Hint}" />
+
+            <Button Grid.Column="4" x:Name="SongToneEditReset" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                    IsVisible="{Binding HasEdit}"
+                    Command="{Binding ResetCommand}"
+                    Content="{localization:Loc PlayMode_SongToneEdit_Reset}" />
+            <Button Grid.Column="6" x:Name="SongToneEditDiscard" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                    Command="{Binding DiscardCommand}"
+                    Content="{localization:Loc PlayMode_SongToneEdit_Discard}" />
+            <Button Grid.Column="8" x:Name="SongToneEditSave" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton Bold"
+                    Command="{Binding SaveCommand}"
+                    Content="{localization:Loc PlayMode_SongToneEdit_Save}" />
+        </Grid>
+    </Border>
+</UserControl>

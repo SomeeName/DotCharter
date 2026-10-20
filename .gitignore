@@ -1,0 +1,111 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+
+# Ignore Python files
+*.py
+
+# Except bundled JuceSharp.StemSeparation scripts, which ship with the NuGet
+!JuceSharp/src/JuceSharp.StemSeparation/PythonScripts/*.py
+
+# ...and the rig-dataset DI fetcher. It is the only record of WHICH licence each
+# DI set carries, which zip members are taken, and which sets are deliberately
+# NOT used and why; losing it to the blanket *.py above would leave both
+# tools/rig-dataset/README.md and docs/agents/testing/rig-dataset.md pointing at
+# a file no checkout has.
+!tools/rig-dataset/*.py
+# ...and the rig-estimator trainer, which is source, not scratch. It is the
+# only definition of how a knob becomes a training target, so it is reviewed
+# and versioned like the C# half it has to stay in step with.
+!tools/rig-model/*.py
+# ...and its tests, which are a DIRECTORY deeper. `tools/rig-model/*.py` is one
+# level only, so without this line the v2 head's whole test suite is invisible
+# to git -- it reads fine locally and arrives in no other checkout.
+!tools/rig-model/tests/*.py
+# ...and the Rocksmith amp-chain transcriber (#88), the only record of how the
+# game's soundbanks become JuceSharp's dcdsp_rsamp_chains.h and RsAmpChains.g.cs.
+!tools/rs-game-chains/*.py
+# ...and the agents' edit tool (docs/agents/workflow.md); the rest of tools/agent/*.py
+# is per-session scratch and stays ignored.
+!tools/agent/Replace-InFile.py
+
+# AI Combiner tools and configs
+ai_combine.py
+ai_combiner_config.json
+ai_move.py
+combiner_presets.json
+
+# Exported AI context directories
+ai_context_exports/
+
+# Agent worktrees. Embedded repos — sweeping them into a commit via `git add -A`
+# is the long-standing footgun. They also dominate agent file search: Glob does
+# not honour .gitignore by default, so pair this with the CLAUDE_CODE_GLOB_NO_IGNORE
+# setting in .claude/settings.json.
+.claude/worktrees/
+.codex/
+.agents/
+# Personal Claude Code settings/permissions and plugin state (Ralph Loop's
+# .claude/ralph-loop.local.md) — shared config is .claude/settings.json,
+# .claude/rules/ and .mcp.json.
+.claude/settings.local.json
+.claude/*.local.md
+
+# Local-only reference checkouts and scratch projects (never part of the build)
+Rocksmith2014.NET/
+RsCharter/
+DotCharter.Audio/
+DotCharter.FhpDiff/
+
+# Test data / sample projects (not source)
+TestData/
+Testmodes/
+EOF_SRC/
+Soundshed/
+
+# Release artifacts (build output, never tracked)
+artifacts/
+
+# Downloaded release redistributables (ffmpeg/ffprobe/yt-dlp) — large + regenerable
+tools/redist/
+
+# Runtime / diagnostics output
+logs/
+build.log
+build_final.log
+*.nettrace
+*.nettrace.etlx
+alloc-report.txt
+trace-alloc.ps1
+__pycache__/
+*.pyc
+
+# Verification binaries
+verify-bin/
+
+# Ignore user-specific IDE settings
+*.DotSettings.user
+*.user
+# IDE state (Rider/IntelliJ): per-machine, never committed
+.idea/
+JuceSharp/src/JuceSharp.Native/build/
+JuceSharp/src/JuceSharp.Native/build_demucs/
+
+smoke.log
+
+# Publish output
+publish/
+
+# Local-only investigation harnesses in the test project. Excluded from the
+# build by DotCharter.Tests.csproj (IncludeLocalOnlyHarnesses); ignored here so
+# a machine-specific scratch file can never be committed into the gate.
+DotCharter.Tests/LocalOnly_*.cs
+.design/
+perf-reports/
+
+# Optional plugins: each its own repository, cloned into plugins/<name>/, never part
+# of this one. DotCharter.UI references the project at the top of each folder unless
+# DotCharterPlugins is false (Directory.Build.props).
+/plugins/

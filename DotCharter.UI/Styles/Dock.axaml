@@ -1,0 +1,157 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="clr-namespace:Dock.Avalonia.Controls;assembly=Dock.Avalonia"
+        xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI">
+
+    <!-- ══ THE DOCK CHROME, RESTATED IN FIRE VALUES (0.51) ═════════════════════
+
+         This is the Inspector / Riff Library / Stem Mixer / Sheet Music pane
+         chrome: the header that says `Inspektor`, its float / pin / close
+         buttons, the tab strip, the pane borders and the splitter.
+
+         ── WHY IT IS A DICTIONARY OF LITERALS AND NOT A SET OF STYLE RULES ────
+         The SAME finding as `Styles/FireMenuChrome.axaml`, on a different
+         library: `DockFluentTheme`'s templates read their fills, borders and
+         foregrounds from `{DynamicResource Dock*Brush}` written INSIDE the
+         template — a local value, which beats any style setter. A
+         `dock|ToolChromeControl /template/ Border { Background … }` rule is a
+         silent no-op. Overriding the KEY is the only thing that works, and this
+         file is included after `DockFluentTheme` (App.Styles → Theme.axaml) so
+         these win.
+
+         And the values have to be LITERAL hex: a `SolidColorBrush` cannot defer
+         to another brush, and the Fire tokens live in a `<Styles>` that a
+         resource dictionary cannot merge. Every literal below therefore names
+         the Fire token it restates, and
+         `UI/EditorChromeTests.EveryDockChromeKey_RestatesItsFireToken` parses
+         both files and compares them colour by colour — that guard is the only
+         thing that notices when a token moves.
+
+         ── WHY THE LITERALS LIVE HERE AND NOT IN A VIEW ───────────────────────
+         `Styles/` is where colour is DECLARED (`UI/ViewHardCodedColourTests`
+         scans `Views/**` only), and a floated pane renders in a `HostWindow`
+         that sees nothing but application scope.
+
+         Before this, the file bridged the same keys onto the APP palette. That
+         was right in 0.38 and wrong the moment the three rails around the dock
+         moved to Fire: the panes kept `#24272B` seams and `#25313F` selected
+         tabs beside a menu bar drawn in white-alpha washes, which is exactly the
+         "still in the old design" the owner reported. -->
+
+    <Styles.Resources>
+        <!-- Accents: drag targets, splitter drag, active indicators. -->
+        <SolidColorBrush x:Key="DockApplicationAccentBrushLow" Color="#7AB6FF" />       <!-- FireAccent -->
+        <SolidColorBrush x:Key="DockApplicationAccentBrushMed" Color="#A8CEFF" />       <!-- FireAccentBright -->
+        <SolidColorBrush x:Key="DockApplicationAccentBrushHigh" Color="#CFE2FF" />      <!-- FireAccentPale -->
+        <SolidColorBrush x:Key="DockApplicationAccentForegroundBrush" Color="#0A1522" /><!-- FireTextOnAccent -->
+        <SolidColorBrush x:Key="DockApplicationAccentBrushIndicator" Color="#7AB6FF" /> <!-- FireAccent -->
+        <SolidColorBrush x:Key="DockTargetIndicatorBrush" Color="#7AB6FF" />            <!-- FireAccent -->
+
+        <!-- Core theme surfaces the templates reference directly. -->
+        <SolidColorBrush x:Key="DockThemeBorderLowBrush" Color="#12FFFFFF" />           <!-- FireBorderSeam -->
+        <SolidColorBrush x:Key="DockThemeBackgroundBrush" Color="#15181D" />            <!-- FireSurfaceChrome -->
+        <SolidColorBrush x:Key="DockThemeAccentBrush" Color="#7AB6FF" />                <!-- FireAccent -->
+        <SolidColorBrush x:Key="DockThemeForegroundBrush" Color="#929BA8" />            <!-- FireTextMuted -->
+        <SolidColorBrush x:Key="DockThemeControlBackgroundBrush" Color="#171A20" />     <!-- FireSurfaceChromeAlt -->
+
+        <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#111317" />           <!-- FireGroundScreen -->
+        <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#15181D" />             <!-- FireSurfaceChrome -->
+        <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#171A20" />              <!-- FireSurfaceChromeAlt -->
+        <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#15181D" />               <!-- FireSurfaceChrome -->
+        <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#171A20" />              <!-- FireSurfaceChromeAlt -->
+        <!-- The FOCUSED pane's header. A tint, never a fill: the layer says a
+             selection is an outline plus a wash, and a solid violet bar across
+             the top of whichever pane happens to hold focus is the loudest thing
+             in the editor. -->
+        <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#215E9FF2" />      <!-- FireAccentTintSoft -->
+
+        <!-- Borders / separators / splitters: hairlines at rest, accent while
+             dragging. Weight is carried by COLOUR, never by width — the spec's
+             one rule about borders. -->
+        <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#12FFFFFF" />             <!-- FireBorderSeam -->
+        <SolidColorBrush x:Key="DockBorderStrongBrush" Color="#1FFFFFFF" />             <!-- FireBorderStrong -->
+        <SolidColorBrush x:Key="DockSeparatorBrush" Color="#0DFFFFFF" />                <!-- FireBorderRow -->
+        <SolidColorBrush x:Key="DockSplitterIdleBrush" Color="#0FFFFFFF" />             <!-- FireBorderHair -->
+        <SolidColorBrush x:Key="DockSplitterHoverBrush" Color="#215E9FF2" />            <!-- FireAccentTintSoft -->
+        <SolidColorBrush x:Key="DockSplitterDragBrush" Color="#7AB6FF" />               <!-- FireAccent -->
+        <SolidColorBrush x:Key="DockDocumentContentBorderBrush" Color="#12FFFFFF" />    <!-- FireBorderSeam -->
+
+        <!-- Tab strip: neutral hover, an accent TINT for the selected tab plus
+             the accent underline the theme draws for it. -->
+        <SolidColorBrush x:Key="DockTabHoverBackgroundBrush" Color="#0DFFFFFF" />       <!-- FireSurfaceHover -->
+        <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#385E9FF2" />      <!-- FireAccentTint -->
+        <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#7AB6FF" />         <!-- FireAccent -->
+        <SolidColorBrush x:Key="DockTabForegroundBrush" Color="#7A8390" />              <!-- FireTextDim -->
+        <SolidColorBrush x:Key="DockTabSelectedForegroundBrush" Color="#E8EBEF" />      <!-- FireTextPrimary -->
+        <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#FFFFFF" />        <!-- FireTextBright -->
+        <SolidColorBrush x:Key="DockTabCloseHoverBackgroundBrush" Color="#475E9FF2" />  <!-- FireAccentTintStrong -->
+        <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#15181D" /> <!-- FireSurfaceChrome -->
+
+        <!-- Pane chrome buttons (pin / float / close). Close goes RED on hover
+             and nothing else does — it is the one irreversible action in the
+             cluster. -->
+        <SolidColorBrush x:Key="DockChromeButtonHoverBackgroundBrush" Color="#0DFFFFFF" />  <!-- FireSurfaceHover -->
+        <SolidColorBrush x:Key="DockChromeButtonPressedBackgroundBrush" Color="#215E9FF2" /><!-- FireAccentTintSoft -->
+        <SolidColorBrush x:Key="DockChromeButtonDangerHoverBrush" Color="#F07A7A" />        <!-- FireDanger -->
+        <SolidColorBrush x:Key="DockToolChromeIconBrush" Color="#7A8390" />                 <!-- FireTextDim -->
+        <SolidColorBrush x:Key="DockChromeButtonForegroundBrush" Color="#7A8390" />         <!-- FireTextDim -->
+
+        <!-- Radius 6 is the layer's inner step — the same one a dropdown row and
+             a segment item round to, which is what makes a tab read as part of
+             the same set of controls. -->
+        <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6,6,0,0</CornerRadius>
+    </Styles.Resources>
+
+    <Style Selector="dock|DockControl">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChrome}" />
+    </Style>
+
+    <!-- Floated pane windows: same ground as the main window so a floating tool
+         reads as part of the app, not an unstyled OS window. -->
+    <Style Selector="dock|HostWindow">
+        <Setter Property="Background" Value="{DynamicResource FireGroundScreen}" />
+        <Setter Property="TransparencyLevelHint" Value="None" />
+    </Style>
+
+    <!-- ══ THE PANE HEADER READS LIKE THE 3D PREVIEW'S (2026-09-24) ════════════
+         The owner: the bar over a docked pane "reminds of the title bar of like imgui".
+         Three things made it one: the whole strip filled with an accent tint whenever
+         the pane held focus, the title turned bright white and bold with it, and so did
+         every icon. It now wears the same quiet header as the 3D preview beside it
+         (`Border.PaneHeader`): the bar surface, a small dim title that only brightens a
+         step with focus, icons that stay muted. These properties are set by the
+         theme's STYLES, not inside the template, so a later style reaches them. -->
+    <Style Selector="dock|ToolChromeControl /template/ Border#PART_Border">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+    </Style>
+    <Style Selector="dock|ToolChromeControl /template/ TextBlock#PART_Title">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="dock|ToolChromeControl:active /template/ TextBlock#PART_Title">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="dock|ToolChromeControl:active /template/ Grid#PART_Grip">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="dock|ToolChromeControl:active /template/ Button Path">
+        <Setter Property="Fill" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+
+    <!-- The pane header's three icon buttons have no name in Dock's template, so a screen
+         reader and UI Automation met them as "Avalonia.Controls.Viewbox" (2026-09-23). The
+         template sets no AutomationProperties.Name, so a style setter reaches them. -->
+    <Style Selector="dock|ToolChromeControl /template/ Button#PART_PinButton">
+        <Setter Property="AutomationProperties.Name" Value="{localization:Loc Dock_Pane_Pin}" />
+    </Style>
+    <Style Selector="dock|ToolChromeControl /template/ Button#PART_MenuButton">
+        <Setter Property="AutomationProperties.Name" Value="{localization:Loc Dock_Pane_Menu}" />
+    </Style>
+    <Style Selector="dock|ToolChromeControl /template/ Button#PART_CloseButton">
+        <Setter Property="AutomationProperties.Name" Value="{localization:Loc Dock_Pane_Close}" />
+    </Style>
+
+</Styles>

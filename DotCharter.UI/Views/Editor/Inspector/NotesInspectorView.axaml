@@ -1,0 +1,145 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:events="clr-namespace:DotCharter.Core.Domain.Events;assembly=DotCharter.Core"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.NotesInspectorView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- 0.42.2: this tab used NONE of the shared inspector chrome. No header —
+         the only tab without one, so switching to it lost the title bar the
+         other six keep — a bare composer row, and an empty state whose setters
+         were a hand-copy of StackPanel.InspectorEmpty.
+         No StyleInclude here on purpose: InspectorView includes InspectorStyles
+         once and these tabs are its descendants, which is how Sound, Song,
+         Lyrics, Issues and Phrases already get the vocabulary. Same rule the
+         dialog grammar follows — one instantiation by the container, not thirty
+         by the leaves. -->
+    <!-- #233: the list is what this tab is FOR, and the bottom dock leaves the
+         whole tab ~220 px at 1280x720 (~490 at 1920x1080). It used to spend
+         ~100 of them on the composer (a two-line scope sentence in German over a
+         row whose kind picker and worded "Add at playhead" button squeezed the
+         note box to 60-105 px) and ~50 on every one-line row, so the list showed
+         ONE annotation at 1280x720 (half of one in German). Now: the scope
+         sentence shows only while the list is empty (it is also the tab's and
+         the header's tooltip), the add verb is a named icon button (Enter in the
+         box does the same), and a row is one line, ellipsised, that wraps in
+         full when selected. The row's check box lays out as its 20 px glyph
+         (Margin 0,-6 around Fluent's fixed 32 px template; the hit box still
+         overhangs into the row's inset), so a row is ~30 px. Pinned by
+         `Perf/EditorShortWindowUiPerfSmokeTests` (rows and box width in en-US,
+         de-DE and ja-JP). -->
+    <UserControl.Styles>
+        <Style Selector="ListBox#NotesList ListBoxItem">
+            <Setter Property="Padding" Value="6,2" />
+        </Style>
+        <Style Selector="TextBlock.AnnotationText">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="ListBoxItem:selected TextBlock.AnnotationText">
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.AnnotationText.Resolved">
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+            <Setter Property="TextDecorations" Value="Strikethrough" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- #601: no header repeating the tab's name (the tab strip says it); the composer is the
+         ONE pinned row, on the same hairline as every other tab's. -->
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Composer: text + kind + add-at-playhead, ONE row at every width. The
+             note box takes every pixel the picker and the icon button leave
+             (~195 px at the ~400 px a 1280 px window gives the pane). The scope
+             sentence — annotations are charting memos, they never reach the
+             exported song — introduces an EMPTY tab; once there are rows it
+             would cost one of them. -->
+        <Border Grid.Row="0" x:Name="NotesComposer" Padding="{StaticResource FirePadTag}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1"
+                ToolTip.Tip="{localization:Loc Inspector_Tab_Notes_Tip}">
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <Border Classes="ScopeBar"
+                        IsVisible="{Binding !ProjectState.ActiveProject.Annotations.Count, FallbackValue=True}">
+                    <TextBlock Text="{localization:Loc Inspector_Tab_Notes_Tip}" TextWrapping="Wrap" />
+                </Border>
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                    <TextBox Grid.Column="0" x:Name="NotesComposerText"
+                             AutomationProperties.Name="{localization:Loc Notes_Placeholder}"
+                             Text="{Binding Annotations.NewAnnotationText, Mode=TwoWay}"
+                             PlaceholderText="{localization:Loc Notes_Placeholder}">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding Annotations.AddAnnotationAtPlayheadCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                    <ComboBox Grid.Column="1"
+                              AutomationProperties.Name="{localization:Loc Notes_KindPicker}"
+                              ToolTip.Tip="{localization:Loc Notes_KindPicker}"
+                              SelectedIndex="{Binding Annotations.NewAnnotationKindIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="{localization:Loc Notes_Kind_Note}" />
+                        <ComboBoxItem Content="{localization:Loc Notes_Kind_Reminder}" />
+                        <ComboBoxItem Content="{localization:Loc Notes_Kind_Mark}" />
+                    </ComboBox>
+                    <Button Grid.Column="2" Theme="{StaticResource PrimaryButton}" Classes="Primary" x:Name="NotesAddButton"
+                            VerticalAlignment="Stretch"
+                            AutomationProperties.Name="{localization:Loc Notes_AddAtPlayhead}"
+                            ToolTip.Tip="{localization:Loc Notes_AddAtPlayhead}"
+                            Command="{Binding Annotations.AddAnnotationAtPlayheadCommand}">
+                        <PathIcon Data="{DynamicResource IconPlus}" Width="14" Height="14" />
+                    </Button>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Time-ordered annotation list; double-click seeks the playhead. -->
+        <ListBox Grid.Row="1" Name="NotesList" Margin="{StaticResource GapChip}"
+                 AutomationProperties.Name="{localization:Loc Inspector_Tab_Notes}"
+                 ItemsSource="{Binding ProjectState.ActiveProject.Annotations}"
+                 Background="Transparent" BorderThickness="0"
+                 DoubleTapped="NotesList_DoubleTapped">
+            <ListBox.Styles>
+                <!-- A row is announced by its own words, not its CLR type name (#311). -->
+                <Style Selector="ListBoxItem" x:DataType="events:ChartAnnotation">
+                    <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+                </Style>
+            </ListBox.Styles>
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="events:ChartAnnotation">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
+                        <CheckBox Grid.Column="0" Margin="0,-6" VerticalAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Notes_Resolved}"
+                                  IsChecked="{Binding Resolved, Mode=TwoWay}"
+                                  ToolTip.Tip="{localization:Loc Notes_Resolved}" />
+                        <TextBlock Grid.Column="1" Theme="{StaticResource MonoText}" Classes="Mono"
+                                   Text="{Binding TimeLabel}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Classes="AnnotationText"
+                                   Text="{Binding Text}"
+                                   ToolTip.Tip="{Binding Text}"
+                                   VerticalAlignment="Center"
+                                   Classes.Resolved="{Binding Resolved}" />
+                        <Button Grid.Column="3" Background="Transparent" BorderThickness="0"
+                                Padding="4,2" VerticalAlignment="Center"
+                                Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).Annotations.RemoveAnnotationCommand}"
+                                CommandParameter="{Binding}"
+                                AutomationProperties.Name="{localization:Loc Action_Delete}"
+                                ToolTip.Tip="{localization:Loc Action_Delete}">
+                            <PathIcon Data="{DynamicResource IconClose}" Width="9" Height="9"
+                                      Foreground="{DynamicResource TextMuted}" />
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Empty state. The shared class now, not a hand-copy of its setters:
+             the inline version repeated alignment, spacing, opacity, muted
+             foreground and centred wrapping verbatim, so a theme change to the
+             real one would have left this tab behind. -->
+        <StackPanel Grid.Row="1" Classes="InspectorEmpty"
+                    IsVisible="{Binding !ProjectState.ActiveProject.Annotations.Count, FallbackValue=True}">
+            <PathIcon Data="{DynamicResource IconPencil}" />
+            <TextBlock Text="{localization:Loc Notes_Empty_Hint}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

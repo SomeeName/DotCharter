@@ -1,0 +1,364 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. Section: Inputs. -->
+
+    <Styles.Resources>
+        <!-- Border families are ControlThemes (#240): a Border wears
+             Theme="{StaticResource <Family>Border}" AND its class, and every
+             rule here is gated on that class. UI/BorderControlThemeTests. -->
+        <ControlTheme x:Key="FireFieldBorder" TargetType="Border">
+            <!-- The chrome around a search box. The TextBox itself stays the app's, so
+                 caret/selection/IME behaviour is untouched — this is the frame. -->
+            <Style Selector="^.FireField">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="MinHeight" Value="{StaticResource FireFieldHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadField}" />
+            </Style>
+            <!-- …and the TALL spelling, for a frame around a wrapping editor. Only the
+                 interior changes: `FirePadField` has no vertical inset at all, which is
+                 right for a one-line field centred in 36 px and puts a multi-line
+                 editor's first line hard against the top edge. -->
+            <Style Selector="^.FireField.Tall">
+                <Setter Property="Padding" Value="{StaticResource FirePadFieldTall}" />
+            </Style>
+            <!-- …and the COMPACT size (#600), for a docked pane's composer. After
+                 `.Tall` so it wins, and its own `.Tall.Compact` after that. -->
+            <Style Selector="^.FireField.Compact">
+                <Setter Property="MinHeight" Value="{StaticResource FireFieldHeightCompact}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadFieldCompact}" />
+            </Style>
+            <Style Selector="^.FireField.Tall.Compact">
+                <Setter Property="Padding" Value="{StaticResource FirePadFieldTallCompact}" />
+            </Style>
+            <!-- …and its STATES. The frame is what the user sees as the control — the
+                 input inside it deliberately has no chrome — so hover and focus have to
+                 land HERE or the field is the one thing on a Fire screen that never
+                 reacts. `FireFieldInput` gives up its own focus adorner for the same
+                 reason: a 2 px ring drawn around the INPUT sits inside the frame with a
+                 gap on every side and reads as two controls. Matches
+                 `ComboBox.FireCombo:pointerover`, which already worked this way. -->
+            <Style Selector="^.FireField:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+            </Style>
+            <Style Selector="^.FireField:focus-within">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireSegmentBorder" TargetType="Border">
+            <!-- Segmented control: an outlined frame of quiet mono captions, one of
+                 which is tinted. Used for time ranges, count-in length, view modes,
+                 snapshots, snap, routing and mic models — ONE component, everywhere.
+
+                 The FRAME is a Border (it holds no state). The ITEM is the shared
+                 `FireSegmentItemToggle` ControlTheme, reached through
+                 `ToggleButton.FireSegmentItem` or `RadioButton.FireSegmentItem`. -->
+            <Style Selector="^.FireSegment">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceRaised}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadSegment}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- ══ Inputs ══════════════════════════════════════════════════════════ -->
+
+    <!-- A COMBOBOX wearing the field chrome. `FireField` is a Border you put a
+         control INSIDE, which works for a search box and not for a picker — a
+         ComboBox in that frame draws its own edge and the surface gets a double
+         border. Plain property setters are enough: Fluent's ComboBox template
+         root template-binds Background/BorderBrush/CornerRadius. The POPUP
+         deliberately keeps the app's theme — it is a separate HWND with its own
+         composition rules (see DotCharter.UI/AGENTS.md), and restyling it is a
+         different job from styling a screen. -->
+    <!-- The two app controls the Online hub still needs, in Fire colours.
+         Restyled rather than replaced: a ComboBox is virtualized and
+         keyboard-navigable, and a segmented strip of four metrics would be
+         neither. `FireFieldInput` is the TextBox counterpart of
+         `ComboBox.FireCombo.Bare` — inside a `Border.FireField` frame the
+         input brings no chrome of its own, and without this the app's 1 px
+         border and 32 px box are drawn inside the Fire frame.
+         Promoted here from OnlineHubView's own `UserControl.Styles`, same
+         reason as the board list above. -->
+    <!-- The input INSIDE a Border.FireField. That Border is only the frame
+         (by design — the TextBox stays the app's so caret/selection/IME
+         behaviour is untouched), which leaves the app's own 1 px border and
+         32 px box drawn inside it. These setters take the chrome off;
+         everything else about the control is unchanged. Local rather than
+         in Fire.axaml: it is composition detail for one field, not a mark.
+
+         **THIS CLASS IS ONLY VALID INSIDE A `Border.FireField`.** It gives up
+         padding, border and background, so a bare one has NO box at all: the
+         text and caret start at x=0 with nothing around them, and there is
+         nothing for a focus or selection state to fill. Four surfaces wore it
+         (or hand-copied its setters) with no frame and shipped exactly that in
+         v0.44 — pinned now by `UI/FireFieldInputPairingTests`, which also
+         forbids restating any of these setters at a call site.
+
+         THE THREE VERTICAL SETTERS ARE THE FIX, and they belong together:
+           • `VerticalAlignment=Stretch` — WITHOUT it the app-wide
+             `Style Selector="TextBox, ComboBox, NumericUpDown"` (Inputs.axaml)
+             supplies `Center`, and since this class also clears `Height` and
+             `MinHeight` the input collapses to ONE TEXT LINE — measured 18 px
+             inside a 36 px frame. Its `PART_BorderElement`, its selection band
+             and its focus ring are that same 18 px, which is why the focus and
+             selection highlights covered a strip through the middle of the
+             field instead of the field. Nine call sites had each written
+             `VerticalAlignment="Center"` by hand, which made it WORSE, not
+             better; they were removed with this change.
+           • `VerticalContentAlignment=Center` — stated, not inherited. Once
+             the input stretches, the app-wide default is the only thing
+             keeping the text off the top edge, and a class that overrides half
+             of a pairing must own both halves.
+           • `FocusAdorner={x:Null}` — the frame lights instead (see
+             `Border.FireField:focus-within` above). -->
+    <Style Selector="TextBox.FireFieldInput">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="Height" Value="NaN" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <!-- …and the chrome those property setters CANNOT reach. Fluent's TextBox
+         ControlTheme paints hover and focus by setting Background, BorderBrush
+         and BorderThickness on `PART_BorderElement` from its own
+         `^:pointerover` / `^:focus` template setters — a `/template/` setter
+         beats the TemplateBinding that would have carried our
+         `BorderThickness=0`, so the moment you clicked into a Fire field the
+         app drew a 2 px accent rectangle plus a lighter fill sized to the
+         INPUT rather than to the frame. That rectangle is what the owner
+         reported as "the focus highlight does not cover the whole box": before
+         the stretch above it was an 18 px band through the middle of a 36 px
+         field, and even stretched it would sit 12 px inside the frame on each
+         side, because the frame's padding is what insets the input. The frame
+         carries the state instead (`Border.FireField:focus-within`). -->
+    <Style Selector="TextBox.FireFieldInput:pointerover /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="TextBox.FireFieldInput:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <!-- …and the MULTI-LINE spelling. A wrapping editor is anchored to the TOP
+         of its frame; centring is right for a one-line field and wrong the
+         moment the box is taller than its text, which is how the rig's lyrics
+         editor came to start its first line halfway down a 72 px box
+         (measured: presenter at y=27). -->
+    <Style Selector="TextBox.FireFieldInput.Multiline">
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+
+    <Style Selector="CheckBox.FireCheckBox">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+    </Style>
+
+    <!-- A search box inside a FireField (the rig's capture library): the
+         caption size, and the marker the family-editor smoke test uses to
+         tell it from a phrase field. -->
+    <Style Selector="TextBox.FireFieldInput.Search">
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="MinHeight" Value="30" />
+    </Style>
+
+    <Style Selector="ComboBox.FireCombo">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="MinHeight" Value="{StaticResource FireFieldHeight}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadField}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="ComboBox.FireCombo:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+    </Style>
+    <!-- Open or focused: the accent edge, like every other Fire field. The
+         chevron is the muted ink rather than Fluent's white so it sits with
+         the caption beside it (tone-rig design: .preset-trigger-chevron). -->
+    <Style Selector="ComboBox.FireCombo:focus, ComboBox.FireCombo:dropdownopen">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+    </Style>
+    <Style Selector="ComboBox.FireCombo /template/ PathIcon#DropDownGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="Width" Value="11" />
+        <Setter Property="Height" Value="11" />
+    </Style>
+    <Style Selector="ComboBox.FireCombo:pointerover /template/ PathIcon#DropDownGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <!-- The COMPACT picker (#600): `FireFieldHeightCompact` tall, the caption a
+         step smaller, the chevron smaller and nearer the edge so the selected
+         text can use the template's chevron column (`FirePadComboCompact`). -->
+    <Style Selector="ComboBox.FireCombo.Compact">
+        <Setter Property="MinHeight" Value="{StaticResource FireFieldHeightCompact}" />
+        <Setter Property="Height" Value="{StaticResource FireFieldHeightCompact}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadComboCompact}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+    </Style>
+    <Style Selector="ComboBox.FireCombo.Compact /template/ PathIcon#DropDownGlyph">
+        <Setter Property="Width" Value="9" />
+        <Setter Property="Height" Value="9" />
+        <Setter Property="Margin" Value="{StaticResource FireComboGlyphCompact}" />
+    </Style>
+
+    <!-- A NUMERIC field in Fire colours (the rig's assignment range): the same
+         frame as the combo, a mono readout, and a spinner narrow enough that
+         two of them fit a 300 px rack side by side. -->
+    <Style Selector="NumericUpDown.FireNumeric">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+        <Setter Property="MinHeight" Value="{StaticResource FireFieldHeight}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <!-- No spinner: Fluent's two side-by-side chevrons hung off the field's
+             edge in a 140 px column. Arrow keys and the wheel still step. -->
+        <Setter Property="ShowButtonSpinner" Value="False" />
+    </Style>
+    <Style Selector="NumericUpDown.FireNumeric:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+    </Style>
+    <Style Selector="NumericUpDown.FireNumeric:focus-within">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+    </Style>
+    <Style Selector="NumericUpDown.FireNumeric /template/ TextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadChip}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="NumericUpDown.FireNumeric /template/ ButtonSpinner">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="NumericUpDown.FireNumeric /template/ ButtonSpinner RepeatButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinWidth" Value="22" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="NumericUpDown.FireNumeric /template/ ButtonSpinner RepeatButton:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+    </Style>
+    <!-- Inside a `FireField` frame the picker brings no chrome of its own. -->
+    <Style Selector="ComboBox.FireCombo.Bare">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!-- A SLIDER in Fire colours. Reached by class rather than by a
+         `ControlTheme` because the app already retemplates the Fluent slider's
+         three parts in `Styles/Inputs.axaml`; this file loads after it, so the
+         same three overrides win on a `.FireSlider` and nothing else in the app
+         moves. Track 6 px (`FireTrackHeight`), accent fill, white knob with the
+         accent glow — the planner mockup's "session length" row.
+         NOTE the base thumb template animates its own `RenderTransform` on
+         hover; that Transitions object lives INSIDE a `ControlTemplate` (built
+         on the UI thread when the control templates), not in a `Transitions`
+         SETTER, which is the thing this file may never have. -->
+    <Style Selector="Slider.FireSlider">
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Slider.FireSlider:horizontal /template/ Track RepeatButton#PART_DecreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{StaticResource FireTrackHeight}" CornerRadius="{StaticResource FireRadiusTrack}"
+                        Background="{DynamicResource FireAccentFill}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FireSlider:horizontal /template/ Track RepeatButton#PART_IncreaseButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{StaticResource FireTrackHeight}" CornerRadius="{StaticResource FireRadiusTrack}"
+                        Background="{DynamicResource FireSurfaceTrack}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FireSlider /template/ Thumb">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Width="18" Height="18"
+                        CornerRadius="{StaticResource FireRadiusPill}"
+                        Background="{DynamicResource FireTextBright}"
+                        BoxShadow="{DynamicResource FireGlowAccentSoft}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Slider.FireSlider:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+
+    <Style Selector="RadioButton.FireSegmentItem">
+        <Setter Property="Theme" Value="{DynamicResource FireSegmentItemToggle}" />
+    </Style>
+    <!-- …and the big `.Tab` spelling of it, which the Network screen's strip
+         wears. The LOOK already reaches a RadioButton through the
+         `:is(ToggleButton)` selectors below (`:is` matches a derived type), so
+         this restates only the theme — it exists because a Fire class must be
+         DECLARED for the element type it is worn on, and
+         `FireClassReachabilityTests` reads the selectors literally. Without it a
+         `RadioButton.FireSegmentItem.Tab` is indistinguishable from a typo. -->
+    <Style Selector="RadioButton.FireSegmentItem.Tab">
+        <Setter Property="Theme" Value="{DynamicResource FireSegmentItemToggle}" />
+    </Style>
+
+    <Style Selector="RadioButton.FireSegmentItem.Dense">
+        <Setter Property="Padding" Value="{StaticResource FirePadSegmentItemDense}" />
+    </Style>
+    <Style Selector=":is(ToggleButton).FireSegmentItem TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector=":is(ToggleButton).FireSegmentItem:checked TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector=":is(ToggleButton).FireSegmentItem PathIcon">
+        <Setter Property="Width" Value="13" />
+        <Setter Property="Height" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector=":is(ToggleButton).FireSegmentItem:checked PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector=":is(ToggleButton).FireSegmentItem.Tab TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="LetterSpacing" Value="1" />
+    </Style>
+
+</Styles>

@@ -1,0 +1,89 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:DotCharter.UI.Controls">
+
+    <!-- Split out of ControlThemes.axaml when the design system moved to
+         DotCharter.Tone.UI: the keybind capture box binds a KeyChord, which is
+         DotCharter.Services (the charting app's keybinds), so the control and
+         its theme stay here. -->
+    <Styles.Resources>
+        <!--
+            The keybind capture pill. A type-keyed ControlTheme, which is the
+            only mechanism that reaches a custom TemplatedControl from ANY
+            surface: it used to be a plain Style in SettingsView.axaml's own
+            UserControl.Styles, so the Pattern Builder's three capture fields
+            had no template at all and rendered as an empty column — no
+            warning, no exception, and a control that still measures because it
+            stretches to fill its cell. (An app-level Style with a Template
+            setter is not enough either; TemplatedControl resolves its template
+            through the ControlTheme lookup.)
+        -->
+        <ControlTheme x:Key="{x:Type controls:KeybindCaptureBox}"
+                      TargetType="controls:KeybindCaptureBox">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="Root"
+                            Background="{DynamicResource SurfaceElevated}"
+                            BorderBrush="{DynamicResource BorderDefault}"
+                            BorderThickness="{StaticResource BorderHairline}"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Padding="10,3"
+                            MinHeight="30">
+                        <Border.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                                <BrushTransition Property="Background" Duration="0:0:0.12" />
+                            </Transitions>
+                        </Border.Transitions>
+                        <Grid>
+                            <!--
+                                TextTrimming is the BACKSTOP, not the fix. The
+                                pill sits in a fixed column on every surface
+                                that hosts it, so a chord wider than the column
+                                used to be sliced mid-glyph with no ellipsis and
+                                no tooltip — "Ctrl+Shift+PageDown" read as
+                                "Ctrl+Shift+Pag". Nine DEFAULT chords did that in
+                                Settings → Keybinds. The column there is now wide
+                                enough for the longest default; this makes any
+                                future overflow READ as truncated instead of
+                                looking like a different chord.
+                            -->
+                            <TextBlock x:Name="DisplayLabel"
+                                       Text="{TemplateBinding DisplayText}"
+                                       FontFamily="{StaticResource FireFontMono}"
+                                       TextTrimming="CharacterEllipsis"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextPrimary}" />
+                            <TextBlock x:Name="PromptLabel"
+                                       Text="{TemplateBinding Placeholder}"
+                                       FontStyle="Italic"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       IsVisible="False" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#Root">
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+            </Style>
+            <Style Selector="^:capturing /template/ Border#Root">
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+            </Style>
+            <Style Selector="^:capturing /template/ TextBlock#DisplayLabel">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+            <Style Selector="^:capturing /template/ TextBlock#PromptLabel">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+</Styles>

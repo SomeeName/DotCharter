@@ -1,0 +1,159 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter">
+
+    <!-- INTERFACE SCALE FOR POPUPS.
+
+         The global scale is a LayoutTransformControl around the shell, and an
+         overlay popup host is NOT inside it: it lives in the window's
+         PopupOverlayLayer, a sibling of the content presenter. Avalonia 12
+         mostly handles this itself — it sets OverlayPopupHost.Transform from
+         the anchor's accumulated transform — but measured on 12.1.2 at a 1.5x
+         shell scale it does so for a ComboBox dropdown and NOT for a Flyout, a
+         MenuFlyout or a ToolTip, which came out at 1.0 beside 150 % content.
+
+         A Style setter on OverlayPopupHost.Transform does NOT work and was
+         tried first: Avalonia assigns that property - including assigning
+         nothing - as a LOCAL value while positioning the host, and a local
+         value beats every style. So this style only tags each Popup, and
+         Views/Shell/PopupUiScale fills the transform in per instance on open,
+         and only when the host was handed none (a ComboBox keeps the exact
+         factor Avalonia computed from its own anchor).
+
+         PopupRoot — the separate-HWND path under the native-3D opt-out — is
+         NOT covered: it is a WindowBase, not a ContentControl, and it has no
+         Transform property. -->
+    <Style Selector="Popup">
+        <Setter Property="shell:PopupUiScale.FollowShellScale" Value="True" />
+    </Style>
+
+
+    <!-- ToolTip — themed popup. Simple bordered card; the popup host window
+         is fully transparent on supported platforms, so we don't need the
+         transparent-outer trick and the previous Margin="6" was reading as
+         a black gutter around the card on opaque popup hosts. -->
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+    </Style>
+
+    <!-- ScrollViewer — slim, near-invisible at rest, auto-fading -->
+    <Style Selector="ScrollViewer /template/ ScrollBar">
+        <Setter Property="Opacity" Value="0.2" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ScrollViewer:pointerover /template/ ScrollBar">
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+
+    <!-- Menu -->
+    <Style Selector="Menu">
+        <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="MenuItem /template/ Border#PART_LayoutRoot">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <!-- A DROPDOWN PANEL'S FILL CANNOT BE SET FROM HERE, and this rule used to
+         try. Avalonia's MenuItem template sets that Border's Background,
+         BorderBrush, BorderThickness, CornerRadius and Padding from
+         `{DynamicResource …}` INSIDE the template — a local value, which beats
+         any style setter — so five of the six setters this rule carried were
+         silent no-ops for as long as it existed, and every menu in the app kept
+         opening in Fluent's own #1c1d28 at radius 5. Only the sixth (a
+         BoxShadow, which the template does not set) ever applied, which is what
+         made the rule look like it worked. The lever is the resource KEY: see
+         `Styles/FireMenuChrome.axaml`, and the editor's chrome grammar that
+         merges it. Nothing may be added here that the template already sets. -->
+    <!-- No drop shadow on a menu. The popup window is exactly the frame's size, so a shadow
+         (it was 0 10 24 #90000000) was cut off at the window's square edge, and under the
+         frame's rounded corners that cut read as a square "border" (owner screenshot,
+         2026-09-24). The frame's border and lighter fill already lift it off the window. -->
+    <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    </Style>
+    <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    </Style>
+
+    <!-- ScrollBar — 6px, slim floating thumb -->
+    <Style Selector="ScrollBar:vertical">
+        <Setter Property="Width" Value="6" />
+        <Setter Property="MinWidth" Value="6" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal">
+        <Setter Property="Height" Value="6" />
+        <Setter Property="MinHeight" Value="6" />
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Margin" Value="2,0" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ScrollBar:pointerover /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource SurfaceStrong}" />
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb:pressed">
+        <Setter Property="Background" Value="{DynamicResource AccentColor}" />
+    </Style>
+
+    <!-- Focus visuals — clear accent ring on every focusable templated control.
+         Drawn outside the control's own border (Margin negative) so it never
+         eats into the control's layout, plus a faint halo for extra contrast
+         on dense surfaces. The ring uses the live accent so it tracks every
+         theme switch automatically.
+
+         NOT gated on `:focus-visible`, and that is deliberate (#240). Avalonia
+         reads FocusAdorner once, when a control takes focus by Tab or arrow
+         key — exactly when `:focus-visible` turns on — so the gate changed
+         nothing about WHEN the ring shows. What it changed was PRIORITY: a
+         gated setter is a style TRIGGER, and a trigger in an app style beats
+         every ControlTheme. The button families are ControlThemes now, and
+         their own rings (FireGhost, FireQuiet, FireBack, …) would have lost to
+         this one. Ungated, it is a plain style setter: it still beats a theme's
+         plain setter (Fluent's ComboBox/TextBox `{x:Null}`, FireCtaButton's
+         own ring) exactly as before, and loses to a class-gated one, as the
+         Fire families' rings did when they were global styles. It is also one
+         shared instance instead of an activator on every templated control. -->
+    <Style Selector=":is(TemplatedControl)">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderBrush="{DynamicResource AccentColor}"
+                        BorderThickness="{StaticResource BorderFocusRing}"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Margin="-3"
+                        BoxShadow="0 0 0 1 #33000000" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+</Styles>

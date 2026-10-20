@@ -1,0 +1,122 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:dsp="clr-namespace:DotCharter.Tone.UI.Controls.Dsp;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigDynamicsView"
+             x:DataType="vm:RigDockUnit">
+    <!-- THE DYNAMICS RACK (RigEditorFamily.Dynamics) — compressor, noise gate
+         and noise reducer. The three modules do not share a control set, so the
+         SECTIONS come from RigDockUnit.DynamicsSections rather than from the
+         markup, and a section whose params the module lacks is not drawn.
+         The engraved word on the foot names which of the three this is. -->
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+            <fire:FireKnob HardwareStyle="True" HorizontalAlignment="Center"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}"
+                           Maximum="{Binding Maximum}" DefaultValue="{Binding Default}"
+                           Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel MinWidth="160" Margin="{StaticResource FireGapTag}">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding DisplayName}" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <!-- Sized to its sections, top-left — not a 1600 px strip of empty metal. -->
+    <!-- The editor's own scroller RESTS VISIBLE (AllowAutoHide=False), the same
+         treatment ScrollViewer.FireBoardScroll gets: the dock row is routinely
+         shorter than a family face, and an auto-hidden bar made the cut edge
+         read as the editor being drawn UNDER the footer strip (owner,
+         2026-09-12). Named so RigFooterStabilityUiPerfSmokeTests can find it. -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <!-- SCALE TO FIT THE DOCK ROW (lane E, 2026-09-13). The face is laid
+             out at its NATURAL size and the whole thing is scaled once, the way
+             RigPedalEditorView's enclosure already was — so at 1920x1080 it is
+             shrunk into the row instead of being cut by it, and at 3840x2160 it
+             GROWS to use a row that has ~5x the area. `TargetHeight` has to be
+             the scroller's viewport because a ScrollViewer offers its content
+             infinite height and the vertical fit would otherwise never engage;
+             the WIDTH binds on its own now that the horizontal bar is Disabled.
+             Stretch, not Left: the scale comes from the face's NATURAL size, but
+             a face with a star column has to be ARRANGED at the slot the
+             transform leaves it or its sliders collapse to their content.
+             `MaxScale` is the breakpointed `FireRigFaceMaxScale` token. -->
+        <fire:RigScaleToFit x:Name="RigFaceFit"
+                            TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                            MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+            <Border Theme="{StaticResource FireRackPanelBorder}" Classes="FireRackPanel" x:Name="RigDynamicsPanel" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <Panel>
+                    <fire:RigArtworkImage File="{x:Static dsp:RigArtwork.BrushedAluminium}" Fill="True" CornerRadius="12" />
+                    <Border Theme="{StaticResource FireRackTintBorder}" Classes="FireRackTint" />
+                    <Border Theme="{StaticResource FireRackBodyBorder}" Classes="FireRackBody">
+                        <StackPanel Spacing="{StaticResource FireSpaceMd}">
+
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel>
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_Dynamics_Eyebrow}" />
+                                    <TextBlock Theme="{StaticResource FireRackTitleText}" Classes="FireRackTitle" Text="{Binding DisplayName}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Theme="{StaticResource FireRackBrandText}" Classes="FireRackBrand" Text="{Binding Node.BrandWordmark}" />
+                            </Grid>
+
+                            <ItemsControl x:Name="RigDynamicsSections" ItemsSource="{Binding DynamicsSections}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RigParamSection">
+                                        <Border Theme="{StaticResource FireSectionPanelBorder}" Classes="FireSectionPanel">
+                                            <StackPanel>
+                                                <TextBlock Theme="{StaticResource FireSectionHeadText}" Classes="FireSectionHead" Text="{Binding Title}" />
+                                                <ItemsControl ItemsSource="{Binding Knobs}">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:PedalParamViewModel">
+                                                            <Border Theme="{StaticResource FireKnobCellBorder}" Classes="FireKnobCell"><ContentControl Content="{Binding}" /></Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel IsVisible="{Binding HasMoreKnobs}" Spacing="{StaticResource FireSpaceXs}">
+                                <TextBlock Theme="{StaticResource FireSectionHeadText}" Classes="FireSectionHead" Text="{localization:Loc Rig_Editor_More}" />
+                                <ItemsControl ItemsSource="{Binding MoreKnobs}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding MoreChoices}" IsVisible="{Binding HasMoreChoices}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
+
+                            <Border Theme="{StaticResource FireRackFootBorder}" Classes="FireRackFoot" x:Name="RigDynamicsFoot">
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock Theme="{StaticResource FireRackFootLabelText}" Classes="FireRackFootLabel" Text="{Binding DynamicsLabel}" />
+                                    <ToggleButton Grid.Column="1" Theme="{StaticResource FireHardwareFootswitchToggle}" Classes="FireHardwareFootswitch"
+                                                  IsChecked="{Binding Node.Bypassed, Mode=TwoWay}"
+                                                  AutomationProperties.Name="{localization:Loc Rig_BypassUnit}"
+                                                  ToolTip.Tip="{localization:Loc Rig_BypassUnit}" />
+                                    <Panel Grid.Column="2" VerticalAlignment="Center" Margin="{StaticResource FireGapLeftSm}">
+                                        <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding !Node.Bypassed}"
+                                                   Text="{localization:Loc Rig_Editor_Engaged}" />
+                                        <TextBlock Theme="{StaticResource FireSwitchStateText}" Classes="FireSwitchState" IsVisible="{Binding Node.Bypassed}"
+                                                   Text="{localization:Loc Rig_Editor_Bypass}" />
+                                    </Panel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Panel>
+            </Border>
+        </fire:RigScaleToFit>
+    </ScrollViewer>
+</UserControl>

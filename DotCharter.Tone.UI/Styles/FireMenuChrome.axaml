@@ -1,0 +1,97 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      FLUENT'S POPUP KEYS, RESTATED IN FIRE VALUES.
+
+      Merged by `Views/Shell/ShellChromeStyles.axaml`, i.e. into the style scope
+      of the chart editor's three chrome views ONLY — a menu on a surface that
+      has not been converted yet still opens in the app's own look.
+
+      WHY THIS IS A RESOURCE DICTIONARY AND NOT A SET OF STYLE SETTERS.
+      Avalonia's `MenuItem` / `ComboBox` / `FlyoutPresenter` templates set their
+      popup Border's Background, BorderBrush, CornerRadius and Padding from
+      `{DynamicResource …}` INSIDE the template. That lands as a LOCAL value,
+      which beats any style setter aimed at the same property — so
+      `MenuItem /template/ Popup Border { Background … }` is a silent no-op.
+      The app shipped exactly those selectors in `Styles/Chrome.axaml` and
+      `Styles/Inputs.axaml` for several releases and every colour, radius and
+      padding setter in them was dead (only the properties the template does NOT
+      set — a `BoxShadow`, a `Margin` — ever applied). That is why the dropdowns
+      still looked like the old design after everything around them had moved.
+      Overriding the KEY is the only lever that reaches them, and it is properly
+      scoped: a resource lookup from inside a popup walks up to the control that
+      opened it.
+
+      WHY THE VALUES ARE LITERAL. This dictionary cannot reference
+      `FireTokens.axaml` — that is a `<Styles>`, not a `<ResourceDictionary>`, so
+      it cannot be merged here, and a `Brush` resource has no way to defer to
+      another brush. Every entry below therefore RESTATES a Fire token's value
+      and names it in the comment, and
+      `DotCharter.Tests/UI/EditorChromeTests` compares the two sides
+      brush-by-brush so they cannot drift. It lives under `Styles/` rather than
+      `Views/` for the same reason every other colour does: that is where colour
+      is DECLARED (`UI/ViewHardCodedColourTests` scans `Views/**` only).
+    -->
+
+    <!-- ── The dropdown PANEL: every menu, every flyout, every ComboBox ────── -->
+    <!-- FireSurfaceMenu — the dropdown ground, OPAQUE (2026-08-11): a popup is
+         its own HWND over arbitrary chrome, and at .98 the toolbar icons
+         ghosted through it. -->
+    <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="#FF1B1F25" />
+    <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FF1B1F25" />
+    <SolidColorBrush x:Key="FlyoutPresenterBackground" Color="#FF1B1F25" />
+    <!-- FireBorderStrong — .12, the spec's weight for a control edge. -->
+    <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="FlyoutBorderThemeBrush" Color="#1FFFFFFF" />
+    <Thickness x:Key="MenuFlyoutPresenterBorderThemeThickness">1</Thickness>
+    <Thickness x:Key="FlyoutBorderThemeThickness">1</Thickness>
+    <!-- FirePadMenuPanel / FireRadiusCard. -->
+    <Thickness x:Key="MenuFlyoutPresenterThemePadding">6</Thickness>
+    <Thickness x:Key="ComboBoxDropdownBorderPadding">6</Thickness>
+    <CornerRadius x:Key="OverlayCornerRadius">12</CornerRadius>
+
+    <!-- ── One ROW inside a dropdown ──────────────────────────────────────────
+         Rest transparent; hover is the mockup's `rgba(139,92,246,.2)` violet
+         wash, which is the layer's own `FireAccentTint`; pressed one step up. -->
+    <SolidColorBrush x:Key="MenuFlyoutItemBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundDisabled" Color="Transparent" />
+    <!-- FireAccentTint (.22) / FireAccentTintStrong (.28). -->
+    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#385E9FF2" />
+    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#475E9FF2" />
+    <!-- FireTextBody → FireTextBright on hover; FireTextFaint when disabled. -->
+    <SolidColorBrush x:Key="MenuFlyoutItemForeground" Color="#D3D8DF" />
+    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="MenuFlyoutItemForegroundDisabled" Color="#687080" />
+
+    <!-- The gesture column is the mockup's quietest text (FireTextFaint) and it
+         stays quiet on hover (FireTextMuted): a shortcut is a reminder, not the
+         row's subject. -->
+    <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForeground" Color="#687080" />
+    <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" Color="#929BA8" />
+    <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundDisabled" Color="#687080" />
+
+    <!-- A row that opens a SUBMENU is the same row plus a chevron — and Fluent
+         ships that chevron in BLACK, which on this ground is invisible. Every
+         grouped Import / Tools / Bookmarks submenu had an unreadable arrow. -->
+    <SolidColorBrush x:Key="MenuFlyoutSubItemBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver" Color="#385E9FF2" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemForeground" Color="#D3D8DF" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPointerOver" Color="#FFFFFF" />
+    <!-- FireTextMuted → FireTextBright → FireTextFaint. -->
+    <SolidColorBrush x:Key="MenuFlyoutSubItemChevron" Color="#929BA8" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPointerOver" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronDisabled" Color="#687080" />
+
+    <!-- The hairline between two groups of rows: FireBorder (.08), inset the
+         way the mockup's own separator is (`margin: 5px 8px`). -->
+    <SolidColorBrush x:Key="MenuFlyoutSeparatorBackground" Color="#14FFFFFF" />
+    <Thickness x:Key="MenuFlyoutSeparatorThemePadding">8,5</Thickness>
+
+    <!-- A ComboBox row wears the same wash as a menu row. -->
+    <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#385E9FF2" />
+    <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#D3D8DF" />
+
+</ResourceDictionary>

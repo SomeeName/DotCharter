@@ -1,0 +1,135 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.AboutDialogView"
+             x:DataType="contracts:IAboutScreen"
+             x:CompileBindings="True">
+
+    <!-- Help ▸ About: a build LOCKUP (mark, wordmark, version) over the
+         tagline, then the facts as four cards. Hosted by Views/Shell/DialogHost
+         like every other dialog; Esc and Close dismiss it.
+
+         THE LICENCE TEXT IS THE REPO'S. DotCharter is GPL-3.0-or-later, and the
+         shipped juce_sharp.dll statically links JUCE 9 + Rubber Band 4 + the
+         Steinberg VST 3 SDK, all GPL-compatible under that licence. Both halves
+         are load-bearing; neither may be dropped for brevity. The footer's one link
+         shows THIRD-PARTY-NOTICES.md and the GPL text in LICENSE as one document. -->
+    <UserControl.Styles>
+        <!-- The one screen the product names itself on: the wordmark is a
+             bigger step than any dialog title. -->
+        <Style Selector="TextBlock.AboutWordmark">
+            <Setter Property="FontFamily" Value="{DynamicResource FireFontDisplay}" />
+            <Setter Property="FontWeight" Value="{DynamicResource FireWeightDisplay}" />
+            <Setter Property="FontSize" Value="{DynamicResource FireSizeStat}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        </Style>
+        <Style Selector="TextBlock.AboutFact">
+            <Setter Property="FontFamily" Value="{DynamicResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{DynamicResource FireSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.AboutFact.Version">
+            <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconInfo}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc About_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc About_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody">
+                    <StackPanel Spacing="{DynamicResource FireSpaceXlPlus}">
+
+                        <Grid x:Name="BuildLockup" ColumnDefinitions="Auto,*"
+                              ColumnSpacing="{DynamicResource FireSpaceXl}">
+                            <Image AutomationProperties.AccessibilityView="Raw" Grid.Column="0" Source="avares://DotCharter/Assets/app-icon.png"
+                                   Width="58" Height="58" VerticalAlignment="Center"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                        Spacing="{DynamicResource FireSpaceXs}">
+                                <TextBlock Classes="AboutWordmark" Text="DotCharter" />
+                                <StackPanel Orientation="Horizontal" Spacing="{DynamicResource FireSpaceMd}">
+                                    <TextBlock x:Name="VersionText" Classes="AboutFact Version"
+                                               Text="{Binding Version}" />
+                                    <!-- A plain separator dot, not Border.FireDot:
+                                         that class is a status light. -->
+                                    <Border Width="3" Height="3" VerticalAlignment="Center"
+                                            CornerRadius="{DynamicResource FireRadiusPill}"
+                                            Background="{DynamicResource FireTextFaint}" />
+                                    <TextBlock Classes="AboutFact" Text="{localization:Loc About_Runtime}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc About_Tagline}" />
+                        <TextBlock x:Name="AboutDisclaimer" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap"
+                                   Text="{localization:Loc Legal_RocksmithDisclaimer}" />
+
+                        <Grid x:Name="AboutCards" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                              ColumnSpacing="{DynamicResource FireSpaceLg}"
+                              RowSpacing="{DynamicResource FireSpaceLg}">
+                            <Border Theme="{DynamicResource DlgSectionBorder}" Grid.Row="0" Grid.Column="0" Classes="DlgSection"
+                                    Margin="{DynamicResource FirePadNone}">
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FireGapRowSm}"
+                                               Text="{localization:Loc About_LicenseHeader}" />
+                                    <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc About_LicenseBody}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{DynamicResource DlgSectionBorder}" Grid.Row="0" Grid.Column="1" Classes="DlgSection"
+                                    Margin="{DynamicResource FirePadNone}">
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FireGapRowSm}"
+                                               Text="{localization:Loc About_CreditsHeader}" />
+                                    <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc About_CreditsBody}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{DynamicResource DlgSectionBorder}" Grid.Row="1" Grid.Column="0" Classes="DlgSection"
+                                    Margin="{DynamicResource FirePadNone}">
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FireGapRowSm}"
+                                               Text="{localization:Loc About_AudioHeader}" />
+                                    <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc About_AudioBody}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{DynamicResource DlgSectionBorder}" Grid.Row="1" Grid.Column="1" Classes="DlgSection"
+                                    Margin="{DynamicResource FirePadNone}">
+                                <StackPanel>
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="{DynamicResource FireGapRowSm}"
+                                               Text="{localization:Loc About_RenderingHeader}" />
+                                    <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc About_RenderingBody}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <Button Classes="DlgLink" Cursor="Hand"
+                                    Content="{localization:Loc Menu_License}"
+                                    Command="{Binding OpenLicenseCommand}" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc About_Close}"
+                                    Command="{Binding CloseCommand}" IsDefault="True" IsCancel="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

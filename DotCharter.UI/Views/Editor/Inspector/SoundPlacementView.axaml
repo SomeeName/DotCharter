@@ -1,0 +1,172 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundPlacementView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Sound tab's PLACEMENT section for one note (#601): what it sounds, the fretboard,
+         string, fret, length, slide target and the provenance badges. The rail entry names the
+         section, so nothing here repeats it as a heading. -->
+    <StackPanel Spacing="{StaticResource SpaceSm}">
+        <!-- WHAT IT SOUNDS (#118): the pitch a charter cannot work out in their head under a
+             capo or an odd tuning, and the length. Hidden rather than wrong when there is
+             nothing honest to name (rule L01). -->
+        <WrapPanel x:Name="NotePlacementReadout" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXs}"
+                   HorizontalAlignment="Right">
+            <TextBlock Text="{localization:Loc Inspector_SoundingPitch}"
+                       FontSize="{StaticResource FontSizeXs}"
+                       Foreground="{DynamicResource TextDim}"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding HasNotePitch}"
+                       ToolTip.Tip="{localization:Loc Inspector_SoundingPitchTip}" />
+            <TextBlock x:Name="NotePitchReadout" Text="{Binding NotePitchName}"
+                       FontFamily="{StaticResource FireFontMono}"
+                       Foreground="{DynamicResource AccentColor}"
+                       VerticalAlignment="Center"
+                       Margin="{StaticResource GapRightMd}"
+                       IsVisible="{Binding HasNotePitch}"
+                       ToolTip.Tip="{localization:Loc Inspector_SoundingPitchTip}" />
+            <TextBlock Text="{Binding NoteSustainLabel}"
+                       FontFamily="{StaticResource FireFontMono}"
+                       FontSize="{StaticResource FontSizeXs}"
+                       Foreground="{DynamicResource TextDim}"
+                       VerticalAlignment="Center" />
+        </WrapPanel>
+
+        <Border Classes="FretboardWell">
+            <ctl:ChordBoxControl Height="96"
+                                 Role="MoveNote"
+                                 Chord="{Binding NotePreviewChord}"
+                                 StringCount="{Binding NoteStringCount}"
+                                 FlipStrings="{Binding ProjectState.FlipStrings}"
+                                 TuningNames="{Binding NoteTuningNames}"
+                                 Mask="{Binding ProjectState.StringEditMask}"
+                                 ToggleMaskCommand="{Binding StringMask.ToggleStringMaskCommand}"
+                                 ToggleNoteCommand="{Binding SetNoteTargetCommand}"
+                                 ToolTip.Tip="{localization:Loc Inspector_FretboardPickHint}" />
+        </Border>
+
+        <!-- The note's own string is outside the mask: the
+             keyboard verbs skip it, so say so and offer the
+             clear inline instead of leaving the user guessing. -->
+        <Border Classes="FieldIssue Warn" IsVisible="{Binding NoteStringIsOutsideMask}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <PathIcon Grid.Column="0" Data="{DynamicResource IconInfo}"
+                          Margin="{StaticResource GapRightSm}" />
+                <TextBlock Grid.Column="1"
+                           Text="{localization:Loc Inspector_Scope_NoteOutsideMask}" />
+                <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                        Content="{localization:Loc Inspector_Scope_ClearMask}"
+                        Command="{Binding StringMask.ClearStringMaskCommand}" />
+            </Grid>
+        </Border>
+
+        <!-- One grid, one input style (#118). String is a choice
+             named like the lane gutter ("E (6)"); its index IS the
+             model index. Length stays a grid-relative FRACTION box
+             (commits on LostFocus) in the spinner chrome; a spin
+             is one grid step, like ] / [. -->
+        <!-- #601: dense "label | value" rows, one field each, so every value keeps a usable
+             width down to the dock's 320 px floor (a 2 x 2 grid left Length ~25 px at 380). -->
+        <Grid x:Name="NotePlacementFields" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto"
+              ColumnSpacing="{StaticResource SpaceMd}"
+              RowSpacing="{StaticResource SpaceXs}">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{localization:Loc Inspector_String}"
+                       Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
+                       ToolTip.Tip="{localization:Loc Inspector_StringTip}" />
+            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="NoteStringPicker"
+                      ItemsSource="{Binding NoteStringLabels}"
+                      SelectedIndex="{Binding NoteStringIndex}"
+                      AutomationProperties.Name="{localization:Loc Inspector_String}"
+                      HorizontalAlignment="Stretch"
+                      ToolTip.Tip="{localization:Loc Inspector_StringTip}">
+                <!-- Trims at the dock's 320 px floor rather than clipping "E (6)" (#572). -->
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{localization:Loc Inspector_Fret}"
+                       Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
+                       ToolTip.Tip="{localization:Loc Inspector_FretTip}" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" Classes="InspectorNumber"
+                           Value="{Binding NoteFret}"
+                           AutomationProperties.Name="{localization:Loc Inspector_Fret}"
+                           Minimum="0" Maximum="24"
+                           ToolTip.Tip="{localization:Loc Inspector_FretTip}" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{localization:Loc Inspector_NoteLength}"
+                       Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
+                       ToolTip.Tip="{localization:Loc Inspector_NoteLengthTip}" />
+            <ButtonSpinner Grid.Row="2" Grid.Column="1" Classes="InspectorNumber"
+                           x:Name="NoteLengthSpinner"
+                           Spin="OnNoteLengthSpin"
+                           AutomationProperties.Name="{localization:Loc Inspector_NoteLength}"
+                           ToolTip.Tip="{localization:Loc Inspector_NoteLengthTip}">
+                <TextBox AutomationProperties.Name="{localization:Loc Inspector_NoteLength}"
+                         Text="{Binding NoteSustainText, UpdateSourceTrigger=LostFocus}" />
+            </ButtonSpinner>
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="{localization:Loc Inspector_SlideTo}"
+                       Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
+                       ToolTip.Tip="{localization:Loc Inspector_SlideToTip}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" Classes="InspectorNumber"
+                           Value="{Binding NoteSlideTo}"
+                           AutomationProperties.Name="{localization:Loc Inspector_SlideTo}"
+                           Minimum="0" Maximum="24"
+                           ToolTip.Tip="{localization:Loc Inspector_SlideToFretTip}" />
+        </Grid>
+        <!-- The enforcer only ever SHORTENS. Never tell the user
+             their value stuck when it did not. -->
+        <Border Classes="FieldIssue Warn" IsVisible="{Binding SustainWasShortened}">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
+                <PathIcon Data="{DynamicResource IconInfo}" />
+                <TextBlock Text="{localization:Loc Inspector_LengthShortened}" />
+            </StackPanel>
+        </Border>
+
+        <!-- ▸ MORE — tier 3. These round-trip in the model but
+             nothing in the app authors them, and INVISIBLE is
+             worse than read-only: a charter destroys them
+             without knowing they were there (§6.4). -->
+        <StackPanel Spacing="{StaticResource SpaceXs}" IsVisible="{Binding HasProvenanceBadges}">
+            <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_More}" Classes="Disclosure" x:Name="MoreDisclosure">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceSm}">
+                    <PathIcon Classes="DisclosureChevron" Data="{DynamicResource IconChevronRight}" />
+                    <TextBlock Classes="DisclosureLabel"
+                               Text="{localization:Loc Inspector_More}" />
+                </StackPanel>
+            </ToggleButton>
+            <WrapPanel Orientation="Horizontal"
+                       IsVisible="{Binding #MoreDisclosure.IsChecked}">
+                <Border Classes="ProvenanceBadge"
+                        IsVisible="{Binding HasImportedVibratoDepth}"
+                        ToolTip.Tip="{localization:Loc Inspector_More_VibratoDepthTip}">
+                    <TextBlock Text="{Binding VibratoDepthBadge}" />
+                </Border>
+                <Border Classes="ProvenanceBadge"
+                        IsVisible="{Binding HasGraceFret}"
+                        ToolTip.Tip="{localization:Loc Inspector_More_GraceTip}">
+                    <TextBlock Text="{Binding GraceFretBadge}" />
+                </Border>
+                <!-- NotationDuration is a READ-ONLY badge by
+                     owner decision: it is notation-only, never
+                     gameplay, never exported to RS, and the
+                     sheet palette already owns editing it. A
+                     second editor would rebuild the duplication
+                     this rework exists to remove. -->
+                <Border Classes="ProvenanceBadge"
+                        IsVisible="{Binding HasNotationDuration}"
+                        ToolTip.Tip="{localization:Loc Inspector_More_NotationDurationTip}">
+                    <TextBlock Text="{Binding NotationDurationBadge}" />
+                </Border>
+                <Border Classes="ProvenanceBadge"
+                        IsVisible="{Binding NoteIgnoreIsDerived}"
+                        ToolTip.Tip="{localization:Loc Inspector_More_IgnoreDerivedTip}">
+                    <TextBlock Text="{localization:Loc Inspector_More_IgnoreDerived}" />
+                </Border>
+            </WrapPanel>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

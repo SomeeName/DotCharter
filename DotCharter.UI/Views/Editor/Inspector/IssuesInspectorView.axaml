@@ -1,0 +1,429 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:dialogVms="clr-namespace:DotCharter.UI.ViewModels.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:validation="clr-namespace:DotCharter.Core.Domain.Validation;assembly=DotCharter.Core"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.IssuesInspectorView"
+             x:DataType="viewModels:InspectorViewModel">
+
+    <!--
+        FEHLER triage surface. 0.16 made it severity-grouped and click-to-jump;
+        0.51 rebuilt its SHAPE from `Chart Editor.dc.html`:
+
+          • Header — a severity dot, the counted headline, and Auto-fix /
+            Refresh as QUIET actions on the right (`Button.FireQuiet`).
+          • Rows — a mono CODE chip on the left in the severity's colour, the
+            message ellipsised in the middle, and a right-aligned mono LOCATION
+            (`M19.3 · 02:13.16`). Three fixed columns and one flexible one, so
+            the codes line up down the left and the positions down the right.
+          • Footer — Audio lint and Export readiness as two labelled rows, each
+            with its action on the right and its findings underneath.
+
+        The severity GROUPS survive but render no header of their own: the
+        outer ItemsControl is still `Issues.IssueGroups`, which is what keeps Important
+        above Warning (`IssueGrouping.Build`), while the row's own code colour
+        is what says which is which — the mockup's flat list, with the ordering
+        the triage surface was built for.
+
+        WHAT IS REAL AND WHAT IS NOT DRAWN:
+          • The location is derived from the issue's own `TimeMs` against the
+            project's beat map (`ChartPositionLabel`, via
+            `ChartPositionLabelConverter`), and prints the TIME alone when the
+            chart carries no measure markers. An arrangement-wide finding
+            (`NoEndPhrase`, `MoreThan100Phrases`) has no position at all and its
+            cell stays EMPTY — the mockup's phrase-named location has no
+            equivalent in `ArrangementIssue`, and inventing one is worse than a
+            blank.
+          • "The selected row" is the row that was last acted on: clicking a
+            button in this app leaves it focused, and the jump SELECTS the
+            offending element, so `:focus-within` really does mark the issue you
+            are on. There is no per-row selection model to bind instead.
+    -->
+    <UserControl.Styles>
+        <!-- Flat, full-width, hover-lit clickable issue row — the Fire data-list
+             row at pane density (0.50). The chrome is stated on the
+             `/template/ ContentPresenter` in ALL states, not on the Button:
+             Fluent's Button template ROOT is the presenter, so a fill set on
+             the control is painted straight over and the row renders as bare
+             text with no box. -->
+        <Style Selector="Button.IssueRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <!-- At rest a row is a DIVIDER, not a box: the layer's data-list
+             hairline under transparent ink, exactly as the mockup draws it. A
+             filled, fully-bordered card per row turns a 14-item list into 14
+             competing surfaces. Chrome only appears on hover and on the row you
+             are actually on. -->
+        <Style Selector="Button.IssueRow /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderRow}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+        </Style>
+        <Style Selector="Button.IssueRow:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+        </Style>
+        <!-- THE ONE SELECTION IDIOM: an accent wash plus a lit 3 px bar on the
+             left edge. The bar is a real cell in the row grid so it is there
+             (transparent) at rest — lighting a zero-width element would shift
+             every other column by 3 px the moment a row was picked. -->
+        <Style Selector="Button.IssueRow:focus-within /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Border.IssueSpine">
+            <Setter Property="Width" Value="3" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.IssueRow:focus-within Border.IssueSpine">
+            <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+        </Style>
+
+        <!-- The three cells. Both fixed rails carry their width here rather than
+             on a ColumnDefinition, so every row in every group shares them. -->
+        <Style Selector="TextBlock.IssueCode">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackMicro}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.IssueMessage">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- 112 px and NO letter-spacing: "M116.3 · 02:16.02" is the widest
+             thing this cell can hold, and a tracked mono figure overflows the
+             rail and has its last digits clipped by the scroll viewport. -->
+        <Style Selector="TextBlock.IssueLocation">
+            <Setter Property="Width" Value="112" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="TextAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- The headline's status dot. Its colour is the WORST severity present,
+             read off `InspectorIssuesViewModel.TopIssueSeverity` — a property, not the
+             group collection's indexer, because that collection is emptied and
+             refilled on every recompute. -->
+        <Style Selector="Border.IssueDot">
+            <Setter Property="Width" Value="7" />
+            <Setter Property="Height" Value="7" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Footer row lockup: a 13.5 px title with its action and its verdict
+             on the right, twice — Audio lint, then Export readiness. -->
+        <Style Selector="TextBlock.FooterRowTitle">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+            <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.FooterVerdict">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Right" />
+        </Style>
+        <Style Selector="TextBlock.FooterVerdict.Ok">
+            <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+        </Style>
+        <Style Selector="TextBlock.FooterVerdict.Bad">
+            <Setter Property="Foreground" Value="{DynamicResource FireDanger}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- ● 14 issues found · Auto-fix · Refresh -->
+        <Border Grid.Row="0" Classes="InspectorHeader">
+            <StackPanel Spacing="{StaticResource FireSpaceXs}">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+                <!-- TopIssueSeverity, never IssueGroups[0].Severity: the
+                     collection is Clear()ed on every recompute, so the indexer
+                     bound against an empty list in the all-clear state and
+                     Avalonia logged "Index was out of range" instead of pushing
+                     a value — leaving this Background unset rather than falling
+                     back to the converter's grey. -->
+                <Border Grid.Column="0" Classes="IssueDot"
+                        IsVisible="{Binding Issues.IssueCount}"
+                        Background="{Binding Issues.TopIssueSeverity,
+                            Converter={x:Static converters:SeverityToBrushConverter.Instance}}" />
+                <TextBlock Grid.Column="1" Classes="HeaderTitle"
+                           Text="{Binding Issues.IssueSummary}" />
+                <!-- Nothing to fix, nothing to offer. -->
+                <Button Grid.Column="2" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                        IsVisible="{Binding Issues.IssueCount}"
+                        Content="{localization:Loc Inspector_Issues_AutoFix}"
+                        ToolTip.Tip="{localization:Loc Inspector_Issues_AutoFixTip}"
+                        Command="{Binding Issues.AutoFixIssuesCommand}" />
+                <Button Grid.Column="3" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                        Content="{localization:Loc Action_Refresh}"
+                        ToolTip.Tip="{localization:Loc Inspector_Issues_RefreshTip}"
+                        Command="{Binding Issues.RefreshIssuesCommand}" />
+            </Grid>
+            <!-- Easier difficulty levels (#397): listed on request; the hardest level and the one on screen always. -->
+            <Grid x:Name="EasierLevelIssuesRow" ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSm}"
+                  IsVisible="{Binding Issues.HasEasierLevelIssues}">
+                <CheckBox x:Name="ShowEasierLevelIssuesBox" Grid.Column="0" VerticalAlignment="Center"
+                          Content="{localization:Loc Dialog_QualityReport_ShowEasierLevels}"
+                          AutomationProperties.Name="{localization:Loc Dialog_QualityReport_ShowEasierLevels}"
+                          ToolTip.Tip="{localization:Loc Dialog_QualityReport_ShowEasierLevelsTip}"
+                          IsChecked="{Binding Issues.ShowEasierLevelIssues, Mode=TwoWay}" />
+                <TextBlock Grid.Column="1" VerticalAlignment="Center" Opacity="0.75" TextWrapping="Wrap"
+                           Text="{Binding Issues.EasierLevelIssuesNote}" />
+            </Grid>
+            <!-- #618: the fix menu for the finding last jumped to (E04 / I46), the
+                 default first — re-finger as the arrangement plays the grip under
+                 this anchor when it does, else move the anchor — and the other
+                 one under it. Each is one undo step (IssueFixViewModel). -->
+            <StackPanel x:Name="IssueFixRow" Spacing="{StaticResource FireSpaceXs}"
+                        IsVisible="{Binding Issues.IssueFix.HasFix}">
+                <TextBlock Opacity="0.75" TextWrapping="Wrap" Text="{Binding Issues.IssueFix.Title}" />
+                <Button x:Name="IssueFixDefaultButton" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                        HorizontalAlignment="Left"
+                        Content="{Binding Issues.IssueFix.DefaultLabel}"
+                        ToolTip.Tip="{Binding Issues.IssueFix.DefaultTip}"
+                        AutomationProperties.Name="{Binding Issues.IssueFix.DefaultLabel}"
+                        Command="{Binding Issues.IssueFix.ApplyDefaultCommand}" />
+                <Button x:Name="IssueFixAlternativeButton" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                        HorizontalAlignment="Left"
+                        IsVisible="{Binding Issues.IssueFix.HasAlternative}"
+                        Content="{Binding Issues.IssueFix.AlternativeLabel}"
+                        ToolTip.Tip="{Binding Issues.IssueFix.AlternativeTip}"
+                        AutomationProperties.Name="{Binding Issues.IssueFix.AlternativeLabel}"
+                        Command="{Binding Issues.IssueFix.ApplyAlternativeCommand}" />
+            </StackPanel>
+            <!-- #803: Fix / Explain with AI for the finding last jumped to, beside the deterministic
+                 fixes above and Auto-fix, which stay the first choice. Both go to the AI chat: a fix is a
+                 scoped pass held for the review card that must remove the finding and add none; an
+                 explanation writes nothing. A finding no AI job can fix says so instead of the button. -->
+            <StackPanel x:Name="IssueAiRow" Spacing="{StaticResource FireSpaceXs}"
+                        IsVisible="{Binding Issues.IssueAi.HasIssue}">
+                <WrapPanel Orientation="Horizontal">
+                    <Button x:Name="IssueAiFixButton" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                            IsVisible="{Binding Issues.IssueAi.CanFix}"
+                            Content="{localization:Loc Inspector_IssueAi_Fix}"
+                            ToolTip.Tip="{localization:Loc Inspector_IssueAi_FixTip}"
+                            AutomationProperties.Name="{localization:Loc Inspector_IssueAi_Fix}"
+                            Command="{Binding Issues.IssueAi.FixCommand}" />
+                    <Button x:Name="IssueAiFixPhraseButton" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                            IsVisible="{Binding Issues.IssueAi.HasPhraseFix}"
+                            Content="{Binding Issues.IssueAi.FixPhraseLabel}"
+                            ToolTip.Tip="{localization:Loc Inspector_IssueAi_FixPhraseTip}"
+                            AutomationProperties.Name="{Binding Issues.IssueAi.FixPhraseLabel}"
+                            Command="{Binding Issues.IssueAi.FixPhraseCommand}" />
+                    <Button x:Name="IssueAiExplainButton" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                            Content="{localization:Loc Inspector_IssueAi_Explain}"
+                            ToolTip.Tip="{localization:Loc Inspector_IssueAi_ExplainTip}"
+                            AutomationProperties.Name="{localization:Loc Inspector_IssueAi_Explain}"
+                            Command="{Binding Issues.IssueAi.ExplainCommand}" />
+                </WrapPanel>
+                <TextBlock x:Name="IssueAiNoJobText" Opacity="0.75" TextWrapping="Wrap"
+                           IsVisible="{Binding Issues.IssueAi.HasNoJob}"
+                           Text="{Binding Issues.IssueAi.NoJobText}" />
+            </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- All-clear empty state. -->
+        <StackPanel Grid.Row="1" Classes="InspectorEmpty" IsVisible="{Binding !Issues.IssueCount}">
+            <PathIcon Data="{DynamicResource IconCheck}" />
+            <TextBlock Text="{localization:Loc Inspector_NoIssues}" />
+        </StackPanel>
+
+        <!-- Click-to-jump issue list, Important before Warning. -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding Issues.IssueCount}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled" Padding="{StaticResource PaddingRow}">
+            <ItemsControl ItemsSource="{Binding Issues.IssueGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="viewModels:InspectorIssueGroup">
+                        <ItemsControl ItemsSource="{Binding Issues}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="validation:ArrangementIssue">
+                                    <Button AutomationProperties.Name="{Binding Message}" Classes="IssueRow"
+                                            ToolTip.Tip="{Binding Message}"
+                                            Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).Issues.JumpToIssueCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                                              ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                                            <Border Grid.Column="0" Classes="IssueSpine" />
+                                            <TextBlock Grid.Column="1"
+                                                       Classes="IssueCode"
+                                                       Text="{Binding Code}"
+                                                       Foreground="{Binding Severity,
+                                                           Converter={x:Static converters:SeverityToBrushConverter.Instance}}" />
+                                            <TextBlock Grid.Column="2"
+                                                       Classes="IssueMessage"
+                                                       Text="{Binding Message}" />
+                                            <TextBlock Grid.Column="3" Classes="IssueLocation">
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{x:Static converters:ChartPositionLabelConverter.Instance}">
+                                                        <Binding Path="TimeMs" />
+                                                        <Binding Path="$parent[UserControl].((viewModels:InspectorViewModel)DataContext).ProjectState.Beats" />
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- The two things the tab reports that are not per-element findings.
+             v0.29 audio-verified lint is an EXPLICIT-run heavyweight analysis
+             (offline CQT vs. the chart) whose findings live on the sub-VM and
+             persist until the next run, deliberately outside RecomputeIssues;
+             export readiness runs the whole-project ChartExportValidator on
+             demand and then follows edits via the debounced issue refresh. -->
+        <Border Grid.Row="2" Classes="InspectorFooter">
+            <StackPanel Spacing="{StaticResource FireSpaceMd}">
+
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+                        <TextBlock Grid.Column="0" Classes="FooterRowTitle"
+                                   Text="{localization:Loc Inspector_AudioLint_Title}" />
+                        <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                Content="{localization:Loc Inspector_AudioLint_Run}"
+                                ToolTip.Tip="{localization:Loc Inspector_AudioLint_RunTip}"
+                                Command="{Binding AudioLint.RunCommand}"
+                                IsEnabled="{Binding !AudioLint.IsRunning}"
+                                IsVisible="{Binding AudioLint.CanRun}" />
+                    </Grid>
+                    <TextBlock Text="{Binding AudioLint.SummaryLine}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource FireTextMuted}"
+                               FontFamily="{StaticResource FireFontUi}"
+                               FontSize="{StaticResource FireSizeMeta}"
+                               IsVisible="{Binding AudioLint.HasResult}" />
+                    <ItemsControl ItemsSource="{Binding AudioLint.AudioFindings}" MaxHeight="140">
+                        <ItemsControl.Template>
+                            <ControlTemplate>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="viewModels:AudioLintFindingRow">
+                                <Button AutomationProperties.Name="{Binding Description}" Classes="IssueRow"
+                                        Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).AudioLint.JumpToCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                                        <Border Grid.Column="0" Classes="IssueSpine" />
+                                        <TextBlock Grid.Column="1" Classes="IssueMessage"
+                                                   Text="{Binding Description}" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+                        <TextBlock Grid.Column="0" Classes="FooterRowTitle"
+                                   Text="{localization:Loc Inspector_Export_Section}" />
+                        <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                                Content="{localization:Loc Inspector_Export_Check}"
+                                ToolTip.Tip="{localization:Loc Inspector_Export_CheckTip}"
+                                Command="{Binding ExportReadiness.CheckExportReadinessCommand}" />
+                        <!-- The verdict is the validator's own sentence, in the
+                             colour of what it MEANS: dim while nothing has been
+                             checked, green when the package would build, danger
+                             when it would not. Three states, three real flags —
+                             nothing here says "no blockers" before the check
+                             has run. -->
+                        <Panel Grid.Column="2">
+                            <TextBlock Classes="FooterVerdict"
+                                       IsVisible="{Binding !ExportReadiness.HasExportCheckRun}"
+                                       Text="{Binding ExportReadiness.ExportReadinessSummary}" />
+                            <Panel IsVisible="{Binding ExportReadiness.HasExportCheckRun}">
+                                <TextBlock Classes="FooterVerdict Ok"
+                                           IsVisible="{Binding !ExportReadiness.HasExportFindings}"
+                                           Text="{Binding ExportReadiness.ExportReadinessSummary}" />
+                                <TextBlock Classes="FooterVerdict Bad"
+                                           IsVisible="{Binding ExportReadiness.HasExportFindings}"
+                                           Text="{Binding ExportReadiness.ExportReadinessSummary}" />
+                            </Panel>
+                        </Panel>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding ExportReadiness.ExportFindings}"
+                                  IsVisible="{Binding ExportReadiness.HasExportFindings}"
+                                  MaxHeight="140">
+                        <ItemsControl.Template>
+                            <ControlTemplate>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="dialogVms:ExportValidationItem">
+                                <!-- The row is the jump; Fix sits BESIDE it, never inside a button. -->
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                    <Button Grid.Column="0" AutomationProperties.Name="{Binding Message}" Classes="IssueRow"
+                                            ToolTip.Tip="{Binding Message}"
+                                            Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).ExportReadiness.JumpToExportFindingCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto"
+                                              ColumnSpacing="{StaticResource FireSpaceSmPlus}">
+                                            <Border Grid.Column="0" Classes="IssueSpine" />
+                                            <Panel Grid.Column="1" Width="7" VerticalAlignment="Center">
+                                                <Border Classes="IssueDot"
+                                                        Background="{DynamicResource FireDanger}"
+                                                        IsVisible="{Binding IsError}" />
+                                                <Border Classes="IssueDot"
+                                                        Background="{DynamicResource FireWarning}"
+                                                        IsVisible="{Binding !IsError}" />
+                                            </Panel>
+                                            <TextBlock Grid.Column="2" Classes="IssueMessage"
+                                                       Text="{Binding Message}" />
+                                            <TextBlock Grid.Column="3" Classes="IssueLocation"
+                                                       Text="{Binding Location}" />
+                                        </Grid>
+                                    </Button>
+                                    <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link" VerticalAlignment="Center"
+                                            Content="{localization:Loc Dialog_Export_Fix}"
+                                            ToolTip.Tip="{Binding FixDescription}"
+                                            AutomationProperties.Name="{Binding FixDescription}"
+                                            IsVisible="{Binding HasFix}"
+                                            Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).ExportReadiness.FixExportFindingCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

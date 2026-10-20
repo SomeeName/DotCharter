@@ -1,0 +1,186 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellViews="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Shell.WindowChromeView"
+             x:DataType="viewModels:MainWindowViewModel">
+
+    <!-- THE WINDOW CHROME (#654): the three rows that take MainWindow's title-bar
+         row, one at a time — the editor's TITLE BAR, a full-bleed Library's or
+         Settings' BACK BAR and Home's and Play Mode's WINDOW CAPTION. Each carries a
+         move-drag strip and the three window buttons, because
+         `WindowDecorations="BorderOnly"` means the OS draws neither.
+
+         Which row shows is the view model's (IsShellChromeVisible, IsBackBarVisible,
+         IsWindowFullScreen through ShellPresentation), and the row's HEIGHT is
+         MainWindow's TitleBarRowHeight: this view is a plain Panel in that cell, so
+         it is exactly as tall as the row it sits in, and with no Background it takes
+         no pointer of its own.
+
+         Its own namescope: MainWindow reaches these names through the element
+         (`WindowChrome.TitleBarRow`, `WindowChrome.MainMenuBarHost`). No Styles here
+         — every theme these rows wear is app-scoped. -->
+    <Panel>
+        <!-- The Graphite workbench's title bar: BREADCRUMB left, song
+             TRANSPORT centred, "go to anything" right. -->
+        <Grid x:Name="TitleBarRow"
+              ColumnDefinitions="Auto, *, Auto"
+              IsVisible="{Binding IsShellChromeVisible}">
+            <!-- The editor's top bar (Editor Project Settings.dc.html): 38 px,
+                 a 1 px bottom hairline and a faint white fill, spanning the
+                 whole window so the caption buttons sit on the same rail. -->
+            <Border Grid.Column="0" Grid.ColumnSpan="3" Theme="{StaticResource FireMenuBarBorder}" Classes="FireMenuBar" />
+
+            <!-- The menu bar is the ContentTemplate body of a host (#194): the
+                 title bar is hidden on the default boot (Play Mode, Home), so
+                 its ~235 elements are built when a layout pass first reaches
+                 the host — the prewarm drain's TitleBarRow, or the user's first
+                 switch into the workbench — instead of inside `new MainWindow()`.
+                 Code reaches the view through MainWindowPrewarm.DeferredChrome. -->
+            <ContentControl x:Name="MainMenuBarHost" Grid.Column="0" VerticalAlignment="Center"
+                            Margin="{StaticResource FireGapLeftMd}" Content="{Binding}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="viewModels:MainWindowViewModel">
+                        <shellViews:MainMenuView x:Name="MainMenuBar" />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+
+            <!-- THE WINDOW DRAG REGION. `WindowDecorations="BorderOnly"` means
+                 the OS draws no caption, so these strips are the only way to
+                 move the window - `BeginMoveDrag` in WindowChromeView.axaml.cs.
+                 **Nothing may cover them.** A full-window overlay layered over
+                 the whole root grid takes the pointer here and the window
+                 stops being movable, which is what v0.48.5's rig overlay did.
+                 `Perf/TitleBarDragUiPerfSmokeTests` hit-tests this point
+                 with every shell overlay open. -->
+            <Border Grid.Column="1" x:Name="TitleBarDragArea"
+                    Background="Transparent" PointerPressed="TitleBar_PointerPressed"
+                    DoubleTapped="TitleBar_DoubleTapped" />
+
+            <!-- NOTHING the editor already shows twice: the chart's name, its
+                 unsaved dot, the song position and the tempo are on the status
+                 rail, play / pause / stop on the toolbar, and where you are is
+                 the lit rail row (owner, 2026-09-23: "the play button is
+                 duplicated … also the chart name there as well"). -->
+            <!-- The right-hand cluster: the way into everything. -->
+            <StackPanel Grid.Column="1" x:Name="TitleBarContext" Orientation="Horizontal"
+                        HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Spacing="{StaticResource FireSpaceRow}"
+                        Margin="{StaticResource FireGapRightLg}">
+                <Button Theme="{StaticResource FireGoToAnythingButton}" Classes="FireGoToAnything" x:Name="TitleGoToAnything"
+                        Command="{Binding CommandPalette.OpenCommand}"
+                        AutomationProperties.Name="{localization:Loc Shell_GoToAnything}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                        <PathIcon Data="{DynamicResource IconRigSearch}" Width="11" Height="11"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Text="{localization:Loc Shell_GoToAnything}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button Theme="{StaticResource WindowBtn}" Click="MinimizeWindow"
+                        ToolTip.Tip="{localization:Loc Window_Minimize}"
+                        AutomationProperties.Name="{localization:Loc Window_Minimize}">
+                    <PathIcon Data="M 0,5 H 10 V 6 H 0 Z" Width="10" Height="10" />
+                </Button>
+                <Button Theme="{StaticResource WindowBtn}" Click="MaximizeWindow"
+                        ToolTip.Tip="{localization:Loc Window_Maximize}"
+                        AutomationProperties.Name="{localization:Loc Window_Maximize}">
+                    <!-- Data swaps to a restore glyph while maximized (code-behind). -->
+                    <PathIcon x:Name="MaximizeGlyph" Data="M 1,1 H 9 V 9 H 1 Z M 2,2 V 8 H 8 V 2 Z"
+                              Width="10" Height="10" />
+                </Button>
+                <Button Theme="{StaticResource WindowBtn}" Classes="CloseBtn" Click="CloseWindow"
+                        ToolTip.Tip="{localization:Loc Window_Close}"
+                        AutomationProperties.Name="{localization:Loc Window_Close}">
+                    <PathIcon
+                        Data="M 1.41,0 L 5,3.59 L 8.59,0 L 10,1.41 L 6.41,5 L 10,8.59 L 8.59,10 L 5,6.41 L 1.41,10 L 0,8.59 L 3.59,5 L 0,1.41 Z"
+                        Width="10" Height="10" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- THE BACK BAR (wave 5). A Library or Settings reached as a player is
+             full-bleed and has no rail to leave by, so it gets Back and the window
+             buttons in the title bar's row (no name: both screens print their own
+             title right under it) (44 px through
+             TitleBarRowHeight). The strip behind them moves the window, as the
+             title bar does, so the full-bleed drag strip steps aside for it. -->
+        <Grid x:Name="BackBar" ColumnDefinitions="Auto, *, Auto"
+              IsVisible="{Binding IsBackBarVisible}">
+            <Border Grid.Column="0" Grid.ColumnSpan="3" x:Name="BackBarDragArea" Background="Transparent"
+                    PointerPressed="TitleBar_PointerPressed"
+                    DoubleTapped="TitleBar_DoubleTapped" />
+            <Button Grid.Column="0" x:Name="BackBarBack" Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                    Command="{Binding GoBackCommand}" VerticalAlignment="Center"
+                    Margin="{StaticResource FireGapLeftMd}"
+                    AutomationProperties.Name="{localization:Loc Action_Back}">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                    <PathIcon Data="{DynamicResource IconChevronLeft}" Width="14" Height="14"
+                              VerticalAlignment="Center" />
+                    <TextBlock Text="{localization:Loc Action_Back}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button Theme="{StaticResource WindowBtn}" Click="MinimizeWindow"
+                        ToolTip.Tip="{localization:Loc Window_Minimize}"
+                        AutomationProperties.Name="{localization:Loc Window_Minimize}">
+                    <PathIcon Data="{DynamicResource IconWindowMinimize}" Width="10" Height="10" />
+                </Button>
+                <Button Theme="{StaticResource WindowBtn}" Click="MaximizeWindow"
+                        ToolTip.Tip="{localization:Loc Window_Maximize}"
+                        AutomationProperties.Name="{localization:Loc Window_Maximize}">
+                    <PathIcon x:Name="BackBarMaximizeGlyph" Data="{DynamicResource IconWindowMaximize}"
+                              Width="10" Height="10" />
+                </Button>
+                <Button Theme="{StaticResource WindowBtn}" Classes="CloseBtn" Click="CloseWindow"
+                        ToolTip.Tip="{localization:Loc Window_Close}"
+                        AutomationProperties.Name="{localization:Loc Window_Close}">
+                    <PathIcon Data="{DynamicResource IconWindowClose}" Width="10" Height="10" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- THE WINDOW CAPTION (wave 5). Home and Play Mode are full-bleed, and
+             `WindowDecorations="BorderOnly"` means the OS draws no caption, so hiding
+             the title bar took the window buttons with it: in a window there was no
+             way to minimise, maximise or close (owner, 2026-09-23), and only an
+             invisible strip to move it by. A slim row instead: the app's mark, a strip
+             that moves the window, and the three buttons. It takes the title bar's ROW
+             (32 px through TitleBarRowHeight), so it never covers a screen; fullscreen
+             drops it (ShellPresentation.ShowsWindowCaption). -->
+        <Grid x:Name="WindowCaption" ColumnDefinitions="Auto, *, Auto"
+              IsVisible="{Binding IsWindowCaptionVisible}">
+            <Border Grid.Column="0" Grid.ColumnSpan="3" x:Name="WindowCaptionDragArea"
+                    Background="{DynamicResource FireGroundScreen}"
+                    PointerPressed="TitleBar_PointerPressed"
+                    DoubleTapped="TitleBar_DoubleTapped" />
+            <Image AutomationProperties.AccessibilityView="Raw" Grid.Column="0" Source="avares://DotCharter/Assets/app-icon.png"
+                   Width="16" Height="16" VerticalAlignment="Center" IsHitTestVisible="False"
+                   Margin="{StaticResource FireGapLeftMd}"
+                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button Theme="{StaticResource WindowBtn}" Click="MinimizeWindow"
+                        ToolTip.Tip="{localization:Loc Window_Minimize}"
+                        AutomationProperties.Name="{localization:Loc Window_Minimize}">
+                    <PathIcon Data="{DynamicResource IconWindowMinimize}" Width="10" Height="10" />
+                </Button>
+                <Button Theme="{StaticResource WindowBtn}" Click="MaximizeWindow"
+                        ToolTip.Tip="{localization:Loc Window_Maximize}"
+                        AutomationProperties.Name="{localization:Loc Window_Maximize}">
+                    <PathIcon x:Name="CaptionMaximizeGlyph" Data="{DynamicResource IconWindowMaximize}"
+                              Width="10" Height="10" />
+                </Button>
+                <Button Theme="{StaticResource WindowBtn}" Classes="CloseBtn" Click="CloseWindow"
+                        ToolTip.Tip="{localization:Loc Window_Close}"
+                        AutomationProperties.Name="{localization:Loc Window_Close}">
+                    <PathIcon Data="{DynamicResource IconWindowClose}" Width="10" Height="10" />
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Panel>
+</UserControl>

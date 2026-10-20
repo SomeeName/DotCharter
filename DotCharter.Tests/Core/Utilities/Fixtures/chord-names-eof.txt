@@ -1,0 +1,120 @@
+# #493 EOF parity: chord-template names Editor on Fire gave the shapes in finished charts, one
+# representative per transposition class (same sounding intervals, same name relative to the bass).
+# tuning (low string first) | capo | frets (absolute, x = unused) | chart name | templates in the class
+E A D G B E|0|x,x,x,x,17,19|E5|234
+E A D G B E|0|2,4,4,3,2,x|F#|131
+E A D G B E|0|x,x,x,x,12,12|E5|78
+E A D G B E|0|x,6,8,6,7,x|D#min7|77
+C G C F A D|0|5,5,8,x,x,x|Fmin|65
+E A D G B E|0|x,x,5,4,3,x|G|65
+E A D G B E|0|2,x,2,2,x,x|F#min7|64
+E A D G B E|0|x,x,x,7,7,7|D6|62
+E A D G B E|3|x,x,0,5,6,0|Fsus2|51
+E A D G B E|0|x,x,x,15,14,16|A#min7|50
+E A D G B E|0|x,x,x,15,14,14|F#|50
+E A D G B E|3|x,0,5,5,6,x|Csus4|49
+E A D G B E|0|x,x,12,12,12,x|G|44
+E A D G B E|0|x,2,4,2,4,x|B7|43
+E A D G B E|3|6,x,x,5,6,x|A#sus2|41
+E A D G B E|0|x,x,x,7,7,x|D3|38
+E A D G B E|0|x,x,x,14,15,15|A7sus4|35
+E A D G B E|3|5,x,0,5,6,x|F|32
+E A D G B E|0|x,0,5,5,5,x|Amin7|26
+Eb G# C# F# Bb Eb|0|x,3,2,0,3,3|D#min7/B|22
+E A D G B E|0|0,x,2,0,0,x|Emin|22
+E A D G B E|3|x,4,5,0,5,x|C#dim7|21
+E A D G B E|0|x,x,x,12,12,13|G7|19
+E A D G B E|0|x,x,9,11,11,11|BMaj7|18
+E A D G B E|0|x,7,x,7,7,x|D3/E|18
+E A D G B E|0|x,x,x,x,14,17|A3|15
+E A D G B E|0|5,x,5,6,x,x|A7|15
+E A D G B E|0|7,x,8,8,7,x|BMaj7|15
+E A D G B E|0|x,2,2,0,0,0|Emin|15
+Eb G# C# F# Bb Eb|0|x,x,x,7,7,9|C#Maj7|13
+Eb G# C# F# Bb Eb|0|0,2,2,0,3,x|D#min7|13
+E A D G B E|0|5,x,7,5,7,x|Amin6|12
+Eb G# C# F# Bb Eb|0|x,x,4,5,5,5|Fm7b5|11
+E A D G B E|0|x,x,10,10,8,x|Csus4|9
+E A D G B E|0|x,7,9,7,10,7|E7sus4|9
+E A D G B E|0|x,x,x,10,9,x|Fmin|8
+Eb G# C# F# Bb Eb|0|x,7,9,8,x,x|A#3/D#|7
+E A D G B E|0|x,1,x,2,3,x|A#Maj7|7
+E A D G B E|0|x,6,8,7,6,6|A#add4|7
+E A D G B E|0|x,x,8,9,9,x|EMajb5|7
+E A D G B E|3|x,x,x,17,20,17|Amin7|6
+Eb G# C# F# Bb Eb|0|x,0,0,0,0,x|F#/G#|6
+C G C F A D|0|x,x,4,4,4,4|F#min7|6
+Eb G# C# F# Bb Eb|0|6,x,5,6,x,x|Amin6|5
+E A D G B E|0|x,2,1,2,1,x|Cmin6/Maj7|5
+E A D G B E|0|x,x,x,x,16,17|D#(b5)|5
+E A D G B E|0|2,x,2,3,3,x|F#aug7|5
+E A D G B E|2|x,10,9,10,10,x|FMajb5/G|5
+Eb G# C# F# Bb Eb|0|5,x,4,5,4,x|G#dim7|5
+E A D G B E|0|3,x,3,4,3,x|G7|5
+A D G C|0|5,x,5,6|A7|4
+E A D G B E|0|x,0,2,2,3,3|A7sus4|4
+Eb G# C# F# Bb Eb|0|x,3,2,0,0,0|BMaj7|4
+E A D G B E|0|x,2,3,x,3,x|Bdim|4
+E A D G B E|0|x,x,8,9,8,x|Edim|4
+Eb G# C# F# Bb Eb|0|x,x,1,2,0,2|A#7|3
+E A D G B E|0|x,x,8,9,11,x|A#b5|3
+E A D G|0|x,3,4,5|Cb5|3
+E A D G B E|0|x,8,10,8,8,x|Cmadd4|3
+E A D G B E|0|x,x,1,2,3,x|D5/D#|3
+E A D G B E|0|0,x,0,2,3,x|E7sus4|3
+Eb G# C# F# Bb Eb|0|x,x,0,5,6,3|F#7sus4|3
+E A D G B E|3|6,x,6,7,5,x|A#7b5|2
+E A D G B E|3|6,x,7,6,6,x|A#m/Maj7|2
+A D G C|0|x,0,2,2|A5|2
+E A D G B E|2|9,x,7,9,9,x|AMaj7|2
+Eb G# C# F# Bb Eb|0|x,1,2,3,3,x|AMajb5|2
+E A D G B E|0|x,0,0,x,0,x|Bmin7|2
+Eb G# C# F# Bb Eb|0|x,0,x,5,6,3|Bsus4/G#|2
+E A D G B E|0|7,x,x,6,5,x|C#min7|2
+E A D G B E|0|8,x,x,9,9,x|Caug|2
+A D G C|0|x,7,x,7|D3/E|2
+A D G C|0|x,x,x,7|D6|2
+E A D G B E|2|10,x,9,9,9,x|E7|2
+E A D G B E|0|x,2,0,2,x,0|E7sus4|2
+Eb G# C# F# Bb Eb|0|1,x,x,2,0,x|EMajb5|2
+E A D G B E|0|x,2,2,x,3,3|Emin7|2
+A D G C|0|2,x,2,2|F#min7|2
+E A D G B E|0|x,0,x,5,6,0|FMaj7|2
+E A D G B E|0|x,x,10,10,10,12|FMaj7|2
+E A D G B E|0|6,x,x,5,6,5|Fadd4|2
+F C F Bb Eb G|0|10,12,12,10,x,x|Fmin7|2
+Eb G# C# F# Bb Eb|0|x,4,7,6,4,x|G#Majb5|2
+E A D G B E|0|x,x,14,15,15,17|A#Maj7b5|1
+E A D G B E|3|x,x,x,12,10,12|A5/G|1
+A D G C|0|x,x,x,14|A7sus4|1
+A D G C|0|x,2,x,2|B7|1
+A D G C|0|x,2,4,2|B7|1
+E A D G B E|0|x,x,7,4,4,x|B7|1
+E A D G B E|0|x,2,1,2,3,x|B7(#9)|1
+E A D G B E|3|7,x,7,7,6,x|Bm7b5|1
+E A D G B E|0|x,x,x,x,0,0|C#(b5)|1
+E A D G B E|0|x,x,x,x,0,0|C#(b5) (Isolated)|1
+A D G C|0|x,2,1,2|Cmin6/Maj7|1
+C G C F A D|0|x,x,14,10,13,10|Cmin7/D|1
+E A D G B E|0|x,0,5,5,6,x|Csus4/A|1
+E A D G B E|0|x,x,19,x,19,22|D|1
+C G C F A D|0|x,x,14,10,13,12|D#5/D|1
+E A D G B E|0|x,x,x,11,x,11|D#min|1
+A D G C|0|x,x,1,2|D5/D#|1
+E A D G B E|3|4,x,0,7,6,x|Ddim|1
+E A D G B E|0|x,2,0,2,3,3|Dsus4/B|1
+E A D G B E|2|x,x,6,7,5,x|E7|1
+E A D G B E|0|x,x,9,9,10,10|E7sus4|1
+E A D G B E|0|x,0,6,4,5,x|Eadd4|1
+A D G C|0|0,x,2,0|Emin|1
+A D G C|0|x,x,12,12|Emin7|1
+A D G C|0|2,x,2,2|F#m7b5|1
+E A D G B E|0|2,x,2,2,1,x|F#min7(b5)|1
+Eb G# C# F# Bb Eb|0|3,4,4,3,x,x|F/F#|1
+E A D G B E|0|x,x,6,5,6,6|Fmadd4|1
+C G C F A D|0|x,3,3,3,3,3|Fmin7/A#|1
+A D G C|0|x,x,12,12|G|1
+C G C F A D|0|7,7,8,x,x,x|G#b5/G|1
+E A D G B E|0|x,x,12,12,12,12|G6|1
+A D G C|0|x,x,x,12|G7|1
+E A D G B E|0|x,3,x,3,3,3|Gmadd4|1

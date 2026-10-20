@@ -1,0 +1,194 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.UpdatesSettingsView"
+             x:DataType="contracts:IUpdatesSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > Updates. First the recovery strip for a payload an earlier
+        run staged but never copied — the only thing on the screen that is
+        already broken — then the application-updates group and the GitHub
+        sign-in group. Every row's IsVisible is the contract's: that is how the
+        cross-tab search filters this tab.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <ctl:MasonryPanel Classes="SettingsFlow" Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource NoticeStripBorder}" Classes="NoticeStrip" IsVisible="{Binding HasInterruptedUpdate}">
+                <StackPanel Spacing="6">
+                    <TextBlock Theme="{StaticResource NoticeStripText}" Classes="NoticeText" Text="{localization:Loc Update_InterruptedTitle}"
+                               FontWeight="SemiBold"
+                               FontSize="{StaticResource FireSizeRow}" />
+                    <TextBlock Theme="{StaticResource NoticeStripText}" Classes="NoticeText" Text="{Binding InterruptedUpdateText}" TextWrapping="Wrap" />
+                    <SelectableTextBlock Classes="Mono"
+                                         Text="{Binding InterruptedUpdateDetail}"
+                                         TextWrapping="Wrap"
+                                         IsVisible="{Binding HasInterruptedUpdateDetail}" />
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+                        <Button Theme="{StaticResource PrimaryButton}" Classes="Primary" MinWidth="0"
+                                Content="{localization:Loc Update_InterruptedFinish}"
+                                Command="{Binding FinishInterruptedUpdateCommand}"
+                                IsEnabled="{Binding CanFinishInterruptedUpdate}" />
+                        <Button Classes="RowAction"
+                                Content="{localization:Loc Update_InterruptedDiscard}"
+                                Command="{Binding DiscardInterruptedUpdateCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Application updates -->
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding IsUpdatesGroupVisible}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconUpdate}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Updates}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Update_GroupTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Update_GroupSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" IsVisible="{Binding IsCurrentVersionRowVisible}">
+                        <TextBlock Margin="0,8,0,0" VerticalAlignment="Top" Theme="{StaticResource SettingTitleText}" Grid.Column="0" Classes="SettingTitle" Text="{localization:Loc Update_CurrentVersion}" />
+                        <SelectableTextBlock VerticalAlignment="Top" Grid.Column="1" Classes="Mono ValueText"
+                                             Text="{Binding CurrentVersionText}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" IsVisible="{Binding IsCheckNowRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Update_CheckNow}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_UpdateCheckNow}" />
+                            <!-- What the last check found, under the button that checks: it sat
+                                 below the startup toggle, where it read as that row's note. -->
+                            <TextBlock x:Name="UpdateCheckStatus" Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0,6,0,0"
+                                       Text="{Binding CheckStatusText}"
+                                       TextWrapping="Wrap"
+                                       IsVisible="{Binding HasCheckStatus}" />
+                        </StackPanel>
+                        <!-- Two captions in a FIXED 300 px column: a WrapPanel,
+                             so the pair takes a second line in German rather
+                             than drawing past the row's right edge. -->
+                        <WrapPanel Grid.Column="1" Orientation="Horizontal"
+                                   ItemSpacing="{StaticResource FireSpaceSm}"
+                                   LineSpacing="{StaticResource FireSpaceSm}">
+                            <Button Classes="RowAction"
+                                    Content="{localization:Loc Update_CheckNow}"
+                                    Command="{Binding CheckForUpdatesCommand}"
+                                    IsEnabled="{Binding !IsChecking}" />
+                            <!-- A downloaded update is the one thing here worth
+                                 the accent: it is waiting on the user. -->
+                            <Button Theme="{StaticResource PrimaryButton}" Classes="Primary" MinWidth="0"
+                                    Content="{localization:Loc Update_ShowPending}"
+                                    Command="{Binding ShowPendingUpdateCommand}"
+                                    IsVisible="{Binding HasPendingUpdate}" />
+                        </WrapPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" IsVisible="{Binding IsCheckOnStartupRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Update_CheckOnStartup}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_UpdateCheckOnStartup}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Update_CheckOnStartup}" Grid.Column="1"
+                                      IsChecked="{Binding UpdateCheckOnStartup, Mode=TwoWay}" />
+                    </Grid>
+
+                </StackPanel>
+            </Border>
+
+            <!-- GitHub sign-in -->
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding IsGitHubGroupVisible}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconGithub}" />
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Updates}" />
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc GitHub_GroupTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc GitHub_GroupSubtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" IsVisible="{Binding GitHub.IsAccountRowVisible}">
+                        <TextBlock Margin="0,8,0,0" VerticalAlignment="Top" Theme="{StaticResource SettingTitleText}" Grid.Column="0" Classes="SettingTitle" Text="{localization:Loc GitHub_Account}" />
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="10">
+                            <TextBlock Theme="{StaticResource SettingsValueText}" Classes="ValueText" Text="{Binding GitHub.SignedInText}" />
+                            <Button Classes="RowAction"
+                                    Content="{localization:Loc GitHub_SignOut}"
+                                    Command="{Binding GitHub.SignOutCommand}"
+                                    IsVisible="{Binding GitHub.IsSignedIn}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" IsVisible="{Binding GitHub.IsDeviceFlowRowVisible}">
+                        <TextBlock Margin="0,8,0,0" VerticalAlignment="Top" Theme="{StaticResource SettingTitleText}" Grid.Column="0" Classes="SettingTitle" Text="{localization:Loc GitHub_BrowserSignInLabel}" />
+                        <WrapPanel Grid.Column="1" Orientation="Horizontal"
+                                   ItemSpacing="8" LineSpacing="6">
+                            <Button Classes="RowAction"
+                                    Content="{localization:Loc GitHub_StartDeviceFlow}"
+                                    Command="{Binding GitHub.StartDeviceFlowCommand}"
+                                    IsVisible="{Binding !GitHub.IsDeviceFlowRunning}" />
+                            <Button Classes="RowAction"
+                                    Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding GitHub.CancelDeviceFlowCommand}"
+                                    IsVisible="{Binding GitHub.IsDeviceFlowRunning}" />
+                        </WrapPanel>
+                    </Grid>
+
+                    <Border Theme="{StaticResource StatusBlockBorder}" Classes="StatusBlock" IsVisible="{Binding GitHub.HasDeviceCode}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0"
+                                       Text="{localization:Loc GitHub_DeviceCodePrompt}" />
+                            <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="8">
+                                <SelectableTextBlock Text="{Binding GitHub.DeviceUserCode}"
+                                                     FontFamily="{StaticResource FireFontMono}"
+                                                     FontSize="{StaticResource FireSizeCardTitle}"
+                                                     FontWeight="SemiBold"
+                                                     VerticalAlignment="Center"
+                                                     Foreground="{DynamicResource FireTextPrimary}" />
+                                <Button Classes="RowAction"
+                                        Content="{localization:Loc GitHub_CopyCode}"
+                                        Command="{Binding GitHub.CopyDeviceCodeCommand}" />
+                                <Button Classes="RowAction"
+                                        Content="{localization:Loc GitHub_OpenVerificationPage}"
+                                        Command="{Binding GitHub.OpenVerificationPageCommand}" />
+                            </WrapPanel>
+                            <SelectableTextBlock Classes="Mono" Text="{Binding GitHub.DeviceVerificationUri}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300" IsVisible="{Binding GitHub.IsPatRowVisible}">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc GitHub_PatLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc GitHub_PatHint}" />
+                        </StackPanel>
+                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                            <TextBox Text="{Binding GitHub.PatInput, Mode=TwoWay}" PasswordChar="●"
+                                     AutomationProperties.Name="{localization:Loc GitHub_PatLabel}" />
+                            <Button Classes="RowAction" HorizontalAlignment="Left"
+                                    Content="{localization:Loc GitHub_SignInWithPat}"
+                                    Command="{Binding GitHub.SignInWithPatCommand}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0,0,0,12"
+                               Text="{Binding GitHub.AuthStatusText}"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding GitHub.HasAuthStatus}" />
+                </StackPanel>
+            </Border>
+
+        </ctl:MasonryPanel>
+    </ScrollViewer>
+</UserControl>

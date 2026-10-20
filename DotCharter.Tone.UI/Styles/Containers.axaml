@@ -1,0 +1,229 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctl="using:DotCharter.Tone.UI.Controls">
+
+    <!-- The two Border families that lived here went to the grammars of the
+         only views that wear them (#428): `SettingsGroupBorder` to
+         Views/Settings/SettingsStyles.axaml, `DialogCardBorder` to
+         Views/Dialogs/DialogStyles/ShellAndHead.axaml. -->
+
+    <!-- Expander — collapsible sections for the inspector -->
+    <Style Selector="Expander">
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="16,12,16,16" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <!-- ClipToBounds keeps the inner toggle button's hover/pressed
+             background from bleeding past the rounded outer border, which
+             on Win10 DWM produced a small dark wedge in the top corners. -->
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <!-- Expanders directly inside the Inspector's masonry layout: the panel
+         itself provides column/row gaps, so children reset margins. -->
+    <Style Selector="ctl|MasonryPanel.InspectorMasonry > Expander">
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Expander /template/ ToggleButton#PART_toggle">
+        <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Expander /template/ ToggleButton#PART_toggle:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHover}" />
+    </Style>
+    <Style Selector="Expander /template/ Border#ExpanderContent">
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Expander /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Padding" Value="16,10,16,16" />
+    </Style>
+
+    <!-- Compact expander — used in the redesigned note/chord inspectors so
+         each section consumes ~half the vertical chrome of the default. The
+         header still hosts an icon + title; only padding shrinks. -->
+    <Style Selector="Expander.Compact">
+        <Setter Property="Padding" Value="8,4,8,6" />
+        <Setter Property="Margin" Value="0,0,0,4" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    </Style>
+    <Style Selector="Expander.Compact /template/ ToggleButton#PART_toggle">
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="Expander.Compact /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Padding" Value="8,4,8,6" />
+    </Style>
+
+    <!-- Tabs -->
+    <Style Selector="TabControl">
+        <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+    </Style>
+    <Style Selector="TabItem">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+        <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="TabItem:selected">
+        <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+    </Style>
+    <Style Selector="TabItem:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+
+    <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+        <Setter Property="IsVisible" Value="True" />
+        <Setter Property="Background" Value="{DynamicResource AccentColor}" />
+        <Setter Property="Height" Value="2" />
+        <Setter Property="CornerRadius" Value="2" />
+        <Setter Property="Margin" Value="16,0,16,2" />
+        <!-- Soft neutral glow underneath the selected pipe. The previous
+             value was a hard-coded purple (#665E9FF2) that did NOT track the
+             active accent, so under non-purple presets (Forest Night, Amber
+             Dusk, …) the tab indicator kept glowing purple. Switching to a
+             neutral black box-shadow makes it preset-agnostic. -->
+        <Setter Property="BoxShadow" Value="0 0 8 0 #66000000" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                <ThicknessTransition Property="Margin" Duration="0:0:0.22" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- GridSplitter — slim hairline at rest, accent track + grip dots on hover -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="{DynamicResource HoverFadeStart}" />
+        <Setter Property="MinHeight" Value="1" />
+        <Setter Property="MinWidth" Value="1" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel Background="{TemplateBinding Background}">
+                    <!-- Hairline always visible (subtle indicator the panel is draggable). -->
+                    <Border x:Name="SplitterHairline"
+                            Background="{DynamicResource BorderSubtle}"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Opacity="0.45" />
+                    <!-- Accent track on hover/press -->
+                    <Border x:Name="SplitterTrack"
+                            Background="{DynamicResource AccentColor}"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            CornerRadius="{StaticResource RadiusTrack}"
+                            Opacity="0.0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                    <!-- Centered grip dots — fade in on hover so the user always knows where to grab.
+                         `TextPrimary` rather than a literal White: these ride ON the accent track
+                         above, so they are the same brightest-foreground role a label plays, and a
+                         literal is the one pixel a community palette or a light pack cannot reach.
+                         The two Borders above already resolve BorderSubtle/AccentColor. -->
+                    <StackPanel x:Name="SplitterGrip"
+                                Orientation="Horizontal"
+                                Spacing="3"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Opacity="0.0"
+                                IsHitTestVisible="False">
+                        <StackPanel.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                            </Transitions>
+                        </StackPanel.Transitions>
+                        <Ellipse Width="3" Height="3" Fill="{DynamicResource TextPrimary}" Opacity="0.85" />
+                        <Ellipse Width="3" Height="3" Fill="{DynamicResource TextPrimary}" Opacity="0.85" />
+                        <Ellipse Width="3" Height="3" Fill="{DynamicResource TextPrimary}" Opacity="0.85" />
+                    </StackPanel>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="GridSplitter:pointerover /template/ Border#SplitterTrack">
+        <Setter Property="Opacity" Value="0.9" />
+        <Setter Property="Background" Value="{DynamicResource AccentColor}" />
+    </Style>
+    <Style Selector="GridSplitter:pointerover /template/ Border#SplitterHairline">
+        <Setter Property="Opacity" Value="0.0" />
+    </Style>
+    <Style Selector="GridSplitter:pointerover /template/ StackPanel#SplitterGrip">
+        <Setter Property="Opacity" Value="1.0" />
+    </Style>
+    <Style Selector="GridSplitter:pressed /template/ Border#SplitterTrack">
+        <Setter Property="Opacity" Value="1.0" />
+        <Setter Property="Background" Value="{DynamicResource AccentHover}" />
+    </Style>
+    <Style Selector="GridSplitter:pressed /template/ Border#SplitterHairline">
+        <Setter Property="Opacity" Value="0.0" />
+    </Style>
+
+    <!-- FlyoutPresenter — themed popup chrome so toolbar / menu flyouts pick
+         up the app palette instead of Avalonia's default dark/light look. -->
+    <Style Selector="FlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="14,12" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MaxWidth" Value="640" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <!-- …unless it hosts a FirePopover, which draws its own edge, fill and
+         radius: then the presenter is only a slot (FirePopover.HostClass). -->
+    <Style Selector="FlyoutPresenter.FirePopoverHost">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+
+    <!-- `Border.PaneHeader` / `TextBlock.PaneTitle` / `Button.PaneAction` USED
+         TO LIVE HERE. They moved to `Views/Editor/EditorWorkspaceStyles.axaml`
+         in 0.51, with the rest of the chart editor's workspace chrome, because
+         this file speaks the APP ladder and that strip is on the Fire layer now.
+
+         The move is also what fixed the `Transitions` setter the action button
+         carried: a pane header sits inside `IsVisible`-gated panes, and a hidden
+         control's style clocks keep ticking. Hover is instant there now.
+
+         The grammar is included by each pane view ITSELF rather than by the
+         window, because a floated pane renders inside a Dock.Avalonia
+         `HostWindow` that never sees a window-scoped style. -->
+
+</Styles>

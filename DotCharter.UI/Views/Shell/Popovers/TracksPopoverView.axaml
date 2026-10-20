@@ -1,0 +1,268 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:editorVms="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:corevocals="clr-namespace:DotCharter.Core.Domain.Vocals;assembly=DotCharter.Core"
+             xmlns:locSvc="clr-namespace:DotCharter.Localization;assembly=DotCharter.Localization"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Shell.Popovers.TracksPopoverView"
+             x:CompileBindings="True"
+             x:DataType="viewModels:MainWindowViewModel">
+    <!-- TRACKS — `Play Menus.dc.html`, `tracks()`. 376 px. -->
+    <controls:FirePopover Width="376"
+                          Title="{localization:Loc Toolbar_TracksFlyout}"
+                          Icon="{DynamicResource IconLibraryMusic}">
+        <controls:FirePopover.Footer>
+            <Grid Theme="{StaticResource FirePopoverFooterGrid}" Classes="FirePopoverFooter" ColumnDefinitions="*,Auto">
+                <Button Grid.Column="0" Theme="{StaticResource FirePopoverLinkButton}" Classes="FirePopoverLink"
+                        HorizontalAlignment="Left"
+                        Content="{localization:Loc Toolbar_Tracks_Manage}"
+                        Command="{Binding ShellDialogs.OpenArrangementSettingsCommand}" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="1" Theme="{StaticResource FirePopoverChordText}" Classes="FirePopoverChord"
+                           Text="{Binding ProjectState.Keybinds.OpenTracksPopover, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+            </Grid>
+        </controls:FirePopover.Footer>
+
+        <StackPanel>
+            <!-- ARRANGEMENT — first, because everything below it is relative to
+                 this answer. The picker is the mockup's SELECT: a face that
+                 opens an INLINE list, not a popup.
+
+                 That is the mockup's own structure (the "select open" specimen
+                 pushes the Solo/Mute row down rather than covering it), and it
+                 is also the only version that survives this app's constraints —
+                 a second popup HWND over the first is where transparent pixels
+                 go black on the Win32 composition mode this app runs, and a
+                 real popup can be neither laid out nor captured headlessly. -->
+            <StackPanel Theme="{StaticResource FirePopoverBodyPanel}" Classes="FirePopoverBody Wide">
+                <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                           Text="{localization:Loc Toolbar_Arrangement}" />
+                <StackPanel>
+                    <ToggleButton x:Name="ArrangementSelect" Theme="{StaticResource FirePopoverSelectToggle}" Classes="FirePopoverSelect"
+                                  ToolTip.Tip="{localization:Loc Toolbar_Arrangement}"
+                                  AutomationProperties.Name="{localization:Loc Toolbar_Arrangement}">
+                        <Grid ColumnDefinitions="*,Auto,Auto"
+                              ColumnSpacing="{StaticResource FirePopoverGap}">
+                            <TextBlock Grid.Column="0" Classes="FirePopoverSelectValue"
+                                       Text="{Binding ChartEditor.ActiveArrangement.Name}" />
+                            <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                       Text="{Binding ChartEditor.ActiveArrangement, Converter={x:Static converters:ArrangementTuningConverter.Instance}}" />
+                            <PathIcon Grid.Column="2" Classes="FirePopoverChevron"
+                                      Data="{DynamicResource IconChevronDown}" />
+                        </Grid>
+                    </ToggleButton>
+                    <Border Theme="{StaticResource FirePopoverOptionsBorder}" Classes="FirePopoverOptions"
+                            IsVisible="{Binding #ArrangementSelect.IsChecked}">
+                        <!-- `AllEntries`, not `Entries`: this list is the PICKER,
+                             so it has to include the arrangement you are already
+                             on — that is the row wearing the ✓. `Entries` is the
+                             non-active set the ghost/stack sections below use. -->
+                        <ItemsControl ItemsSource="{Binding MultiTrackOverlay.AllEntries}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="editorVms:MultiTrackEntry">
+                                    <Button AutomationProperties.Name="{Binding Name}" Theme="{StaticResource FirePopoverOptionButton}" Classes="FirePopoverOption"
+                                            Classes.Picked="{Binding IsActive}"
+                                            Command="{Binding MakeActiveCommand}">
+                                        <Grid ColumnDefinitions="*,Auto,Auto"
+                                              ColumnSpacing="{StaticResource FirePopoverGap}">
+                                            <TextBlock Grid.Column="0" Classes="FirePopoverOptionName"
+                                                       Text="{Binding Name}" />
+                                            <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                                       Text="{Binding Arrangement, Converter={x:Static converters:ArrangementTuningConverter.Instance}}" />
+                                            <PathIcon Grid.Column="2" Width="10" Height="10"
+                                                      Data="{DynamicResource IconCheck}"
+                                                      Foreground="{DynamicResource FireAccentBright}"
+                                                      VerticalAlignment="Center"
+                                                      IsVisible="{Binding IsActive}" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </StackPanel>
+
+                <!-- DIFFICULTY LEVEL — the level the editor shows. A Go to from the Inspector
+                     or the Chart quality report can land on an easier level; this is the way
+                     back. Hidden on a one-level arrangement: there is nothing to pick. -->
+                <StackPanel x:Name="LevelRow" DataContext="{Binding ChartEditor.Levels}" x:DataType="editorVms:DifficultyLevelSelector"
+                            IsVisible="{Binding HasLevels}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_Level}" />
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                        <TextBlock x:Name="LevelValue" Grid.Column="0" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="{}{0} / {1}">
+                                    <Binding Path="LevelNumber" />
+                                    <Binding Path="LevelCount" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                        <Button Grid.Column="1" Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
+                                Content="−" Command="{Binding EasierCommand}"
+                                AutomationProperties.Name="{localization:Loc Toolbar_Level_Easier}"
+                                ToolTip.Tip="{localization:Loc Toolbar_Level_Easier}" />
+                        <Button Grid.Column="2" Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
+                                Content="+" Command="{Binding HarderCommand}"
+                                AutomationProperties.Name="{localization:Loc Toolbar_Level_Harder}"
+                                ToolTip.Tip="{localization:Loc Toolbar_Level_Harder}" />
+                        <Button x:Name="LevelHardestButton" Grid.Column="3" Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
+                                Content="{localization:Loc Toolbar_Level_Hardest}" Command="{Binding HardestCommand}"
+                                ToolTip.Tip="{localization:Loc Toolbar_Level_Hardest_Tip}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Solo / Mute / Settings…, and each says exactly what it does.
+                     SOLO is a TIMELINE solo: on, nothing but the arrangement you
+                     are editing is drawn, and off puts back exactly the ghosts
+                     and stacked rows it hid. MUTE is the MIDI instrument bus —
+                     the thing that actually SOUNDS these notes — because an
+                     `Arrangement` has no volume, mute or bus of its own anywhere
+                     in this app, and a chip claiming to silence one would be the
+                     per-player-tone mistake again. -->
+                <WrapPanel ItemSpacing="{StaticResource FireSpaceSm}"
+                           LineSpacing="{StaticResource FireSpaceSm}">
+                    <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip"
+                                  Content="{localization:Loc Toolbar_Tracks_Solo}"
+                                  ToolTip.Tip="{localization:Loc Toolbar_Tracks_Solo_Tip}"
+                                  IsEnabled="{Binding MultiTrackOverlay.CanSolo}"
+                                  IsChecked="{Binding MultiTrackOverlay.IsSoloed, Mode=TwoWay}" />
+                    <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip"
+                                  Content="{localization:Loc Toolbar_Tracks_Mute}"
+                                  ToolTip.Tip="{localization:Loc Toolbar_Tracks_Mute_Tip}"
+                                  IsChecked="{Binding Transport.IsMidiMuted, Mode=TwoWay}" />
+                    <Button Theme="{StaticResource FirePopoverChipButton}" Classes="FirePopoverChip"
+                            Content="{localization:Loc Toolbar_Tracks_Settings}"
+                            ToolTip.Tip="{localization:Loc Toolbar_Tracks_Manage}"
+                            Command="{Binding ShellDialogs.OpenArrangementSettingsCommand}" />
+                </WrapPanel>
+            </StackPanel>
+
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection"
+                    ToolTip.Tip="{localization:Loc Toolbar_MultiTrack_Tooltip}">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_MultiTrack}" />
+                    <!-- A bordered explanatory panel, never stray coloured text:
+                         it says what is missing AND how to make it appear. -->
+                    <Panel IsVisible="{Binding !MultiTrackOverlay.HasOtherArrangements}">
+                        <Rectangle Classes="FirePopoverDash" />
+                        <Border Theme="{StaticResource FirePopoverEmptyBorder}" Classes="FirePopoverEmpty">
+                            <StackPanel>
+                                <TextBlock Theme="{StaticResource FirePopoverEmptyTitleText}" Classes="FirePopoverEmptyTitle"
+                                           Text="{localization:Loc Toolbar_MultiTrack_Empty}" />
+                                <TextBlock Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote"
+                                           Text="{localization:Loc Toolbar_MultiTrack_EmptyHint}" />
+                            </StackPanel>
+                        </Border>
+                    </Panel>
+                    <ItemsControl ItemsSource="{Binding MultiTrackOverlay.Entries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="editorVms:MultiTrackEntry">
+                                <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto"
+                                      MinHeight="30">
+                                    <CheckBox Grid.Column="0" Classes="FireCheckBox"
+                                              Content="{Binding Name}"
+                                              IsChecked="{Binding IsGhostVisible, Mode=TwoWay}"
+                                              ToolTip.Tip="{localization:Loc Toolbar_MultiTrack_ShowGhost}" />
+                                    <Button Grid.Column="1" Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon"
+                                            Command="{Binding SendSelectionHereCommand}">
+                                        <!-- Localized "Send selection to {0}" — a plain
+                                             StringFormat binding cannot pull the template
+                                             from the resource indexer, so a MultiBinding
+                                             formats the localized template with Name. -->
+                                        <ToolTip.Tip>
+                                            <MultiBinding
+                                                Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                                                <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                                         Path="[Toolbar_MultiTrack_SendSelectionTip]" />
+                                                <Binding Path="Name" />
+                                            </MultiBinding>
+                                        </ToolTip.Tip>
+                                        <!-- …and the SAME string again as the
+                                             accessible name. A tooltip is not a
+                                             name: it is announced only on hover,
+                                             so an icon-only button that carries
+                                             one still reaches a screen reader
+                                             unnamed. -->
+                                        <AutomationProperties.Name>
+                                            <MultiBinding
+                                                Converter="{x:Static converters:StringFormatMultiConverter.Instance}">
+                                                <Binding Source="{x:Static locSvc:LocalizationService.Instance}"
+                                                         Path="[Toolbar_MultiTrack_SendSelectionTip]" />
+                                                <Binding Path="Name" />
+                                            </MultiBinding>
+                                        </AutomationProperties.Name>
+                                        <PathIcon Data="{DynamicResource IconOpenInNew}" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- STACKED. Only with a second arrangement to stack: with one, the
+                 Multi-Track card above already says to add another, and this
+                 section said the same thing again under its own "Unavailable"
+                 (live capture, 2026-09-24). -->
+            <Border x:Name="StackedTracksSection" Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection"
+                    IsVisible="{Binding MultiTrackOverlay.HasOtherArrangements}">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc StackedTracks_Pick}"
+                               ToolTip.Tip="{localization:Loc StackedTracks_Pick_Tooltip}" />
+                    <ToggleButton Theme="{StaticResource FirePopoverChipToggle}" Classes="FirePopoverChip"
+                                  HorizontalAlignment="Left"
+                                  Content="{localization:Loc StackedTracks_Toggle}"
+                                  ToolTip.Tip="{localization:Loc StackedTracks_Toggle_Tooltip}"
+                                  IsChecked="{Binding IsStackedTracksVisible, Mode=TwoWay}" />
+                    <ItemsControl ItemsSource="{Binding MultiTrackOverlay.Entries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="editorVms:MultiTrackEntry">
+                                <CheckBox Classes="FireCheckBox"
+                                          Content="{Binding Name}"
+                                          IsChecked="{Binding IsStackVisible, Mode=TwoWay}"
+                                          Margin="0,2"
+                                          ToolTip.Tip="{localization:Loc StackedTracks_Pick_Tooltip}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource FirePopoverSectionBorder}" Classes="FirePopoverSection">
+                <StackPanel Spacing="{StaticResource FirePopoverGap}">
+                    <TextBlock Theme="{StaticResource FirePopoverKickText}" Classes="FirePopoverKick"
+                               Text="{localization:Loc Toolbar_Vocals}" />
+                    <Grid Theme="{StaticResource FirePopoverRowGrid}" Classes="FirePopoverRow" ColumnDefinitions="*,Auto"
+                          ToolTip.Tip="{localization:Loc Toolbar_Vocals}">
+                        <TextBlock VerticalAlignment="Center" Grid.Column="0" Theme="{StaticResource FirePopoverLabelText}" Classes="FirePopoverLabel"
+                                   Text="{localization:Loc Toolbar_Vocals_Track}" />
+                        <!-- 150 px left the placeholder a 98 px slot and
+                             "Keine Gesangsspur" wants 114.9 (measured
+                             2026-08-28, headless suite seeded de-DE) — a
+                             ComboBox placeholder has no ellipsis, so it was
+                             simply sliced. The card is 376 px wide and column 0
+                             holds one word ("Spur" / "Track" / "トラック"), so
+                             the room was already there. -->
+                        <ComboBox Grid.Column="1" Width="188"
+                                  PlaceholderText="{localization:Loc Toolbar_Vocals_NoTrack}"
+                                  ItemsSource="{Binding ChartEditor.VocalTracks}"
+                                  AutomationProperties.Name="{localization:Loc Toolbar_Vocals_Track}"
+                                  SelectedItem="{Binding ChartEditor.ActiveVocalTrack}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="corevocals:VocalTrack">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </controls:FirePopover>
+</UserControl>

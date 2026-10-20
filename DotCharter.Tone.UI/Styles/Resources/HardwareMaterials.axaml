@@ -1,0 +1,660 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the app theme's resource layer — see `Styles/Resources.axaml`,
+         which merges this file and its siblings IN ORDER. The PEDALBOARD MATERIAL TOKENS (`Pedal*`) — the one surface that obeys
+         physics rather than the theme — plus the podium medals, the wordmark
+         treatment and the screen-header accent. -->
+
+    <Styles.Resources>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             PEDALBOARD MATERIAL TOKENS (Pedal*)
+
+             The pedalboard is the one surface that obeys PHYSICS rather than
+             the theme: it depicts real objects, so its colours are material
+             constants, not UI intent. `CardBackground` cannot express brushed
+             aluminium and `BorderSubtle` cannot express the seam where a cream
+             cord meets black tolex — which is why substituting semantic tokens
+             here would be wrong, and why these are FIXED like the Rig*/Medal*
+             groups: deliberately NOT in Theming/ThemeTokens, so they never
+             enter a theme preset, a community pack or the theme-switch
+             completeness gate. Gear looks the same under every theme, exactly
+             as real gear does under every light bulb.
+
+             The rulebook these encode (one key light upper-left at 315°, three
+             material classes whose CONTRAST is the realism, depth as edges
+             rather than blur, saturation only in paint/LED/accent, printed
+             ink) is pedalboard-visual-language.md (retired v0.43; see docs/agents/ui/pedalboard.md). Read it
+             before adding a token — an ad-hoc colour is how the board
+             accumulated ~135 hard-coded hexes in the first place.
+             ══════════════════════════════════════════════════════════════════ -->
+
+        <!-- ── Shade ladder: generic OCCLUSION washes (black alphas) ──────────
+             Every inset shadow, seam and dark edge on the board picks a step
+             from this one ladder, so two surfaces at the same physical depth
+             can never disagree. Step 0 is the transparent end of a gradient. -->
+        <SolidColorBrush x:Key="PedalShade0" Color="#00000000" />
+        <SolidColorBrush x:Key="PedalShade1" Color="#1E000000" />
+        <SolidColorBrush x:Key="PedalShade2" Color="#26000000" />
+        <SolidColorBrush x:Key="PedalShade3" Color="#33000000" />
+        <SolidColorBrush x:Key="PedalShade4" Color="#44000000" />
+        <SolidColorBrush x:Key="PedalShade5" Color="#5C000000" />
+        <SolidColorBrush x:Key="PedalShade6" Color="#78000000" />
+        <SolidColorBrush x:Key="PedalShade7" Color="#8C000000" />
+        <SolidColorBrush x:Key="PedalShade8" Color="#B0000000" />
+
+        <!-- ── Sheen ladder: generic LIFT washes (white alphas) ───────────────
+             The mirror of the shade ladder. Used ONLY on top / top-left faces —
+             a sheen on a bottom-right face contradicts the key light. -->
+        <SolidColorBrush x:Key="PedalSheen0" Color="#00FFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen1" Color="#12FFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen2" Color="#1AFFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen3" Color="#26FFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen4" Color="#33FFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen5" Color="#44FFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen6" Color="#66FFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen7" Color="#7AFFFFFF" />
+        <SolidColorBrush x:Key="PedalSheen8" Color="#E6FFFFFF" />
+
+        <!-- ── Chrome ladder: PLATED METAL (material class 2) ─────────────────
+             Neutral-cool and fully desaturated: a red distortion and a teal
+             delay buy the same footswitch, so hardware is NEVER tinted by the
+             module accent. Narrow, high-contrast specular is what separates
+             plating from the broad soft sweep on painted die-cast. -->
+        <Color x:Key="PedalChrome0Color">#EEF1F6</Color>
+        <Color x:Key="PedalChrome1Color">#C6CDD8</Color>
+        <Color x:Key="PedalChrome2Color">#9BA2AD</Color>
+        <Color x:Key="PedalChrome3Color">#6C727C</Color>
+        <Color x:Key="PedalChrome4Color">#474C55</Color>
+        <SolidColorBrush x:Key="PedalChrome0" Color="{DynamicResource PedalChrome0Color}" />
+        <SolidColorBrush x:Key="PedalChrome2" Color="{DynamicResource PedalChrome2Color}" />
+        <SolidColorBrush x:Key="PedalChrome4" Color="{DynamicResource PedalChrome4Color}" />
+        <!-- Composed hardware brushes. Every dome on the board is lit from the
+             same origin (~35%,28%) and every ring runs the same 20%→80%
+             diagonal, so the parts read as one alloy under one light. -->
+        <RadialGradientBrush x:Key="PedalDomeBrush" GradientOrigin="35%,28%"
+                             Center="50%,50%" RadiusX="68%" RadiusY="68%">
+            <GradientStop Offset="0" Color="#EEF1F6" />
+            <GradientStop Offset="0.6" Color="#B7BEC9" />
+            <GradientStop Offset="1" Color="#7C838F" />
+        </RadialGradientBrush>
+        <RadialGradientBrush x:Key="PedalDomeHoverBrush" GradientOrigin="35%,28%"
+                             Center="50%,50%" RadiusX="68%" RadiusY="68%">
+            <GradientStop Offset="0" Color="#FFFFFF" />
+            <GradientStop Offset="0.6" Color="#C6CDD8" />
+            <GradientStop Offset="1" Color="#89909C" />
+        </RadialGradientBrush>
+        <!-- Stomped = seated deeper in its collar, so the whole dome drops one
+             step down the ladder. NOT the theme's checked accent. -->
+        <RadialGradientBrush x:Key="PedalDomePressedBrush" GradientOrigin="35%,28%"
+                             Center="50%,50%" RadiusX="68%" RadiusY="68%">
+            <GradientStop Offset="0" Color="#9AA1AC" />
+            <GradientStop Offset="0.6" Color="#6C727C" />
+            <GradientStop Offset="1" Color="#474C55" />
+        </RadialGradientBrush>
+        <SolidColorBrush x:Key="PedalDomeEdge" Color="#8A9099" />
+        <!-- The machined dress-nut ring a footswitch stands proud of. -->
+        <LinearGradientBrush x:Key="PedalCollarBrush" StartPoint="18%,0%" EndPoint="82%,100%">
+            <GradientStop Offset="0" Color="#DCE1E8" />
+            <GradientStop Offset="0.45" Color="#9BA2AD" />
+            <GradientStop Offset="1" Color="#5D636D" />
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PedalCollarEdge" Color="#B0101216" />
+        <!-- Screw head: a small dome, same alloy, same light. -->
+        <RadialGradientBrush x:Key="PedalScrewBrush" GradientOrigin="35%,30%"
+                             Center="50%,50%" RadiusX="65%" RadiusY="65%">
+            <GradientStop Offset="0" Color="#DCE0E6" />
+            <GradientStop Offset="1" Color="#697079" />
+        </RadialGradientBrush>
+        <!-- ONE bezel ring for every countersunk lens on the board — the LED
+             jewel and the amp's power lamp are the same piece of hardware, so
+             they had no business being two near-identical gradients. -->
+        <LinearGradientBrush x:Key="PedalBezelBrush" StartPoint="20%,0%" EndPoint="80%,100%">
+            <GradientStop Offset="0" Color="#E2E7EE" />
+            <GradientStop Offset="0.5" Color="#8E959F" />
+            <GradientStop Offset="1" Color="#565C66" />
+        </LinearGradientBrush>
+
+        <!-- ── Ink: SCREEN PRINT, never rendered text ─────────────────────────
+             Warm off-white on paint, cool off-white on metal, brand one step
+             fainter and one step more tracked than the model name. Never
+             #FFFFFF, never the theme's TextPrimary. -->
+        <SolidColorBrush x:Key="PedalInk" Color="#F0ECE3" />
+        <SolidColorBrush x:Key="PedalInkFaint" Color="#7AE8E2D6" />
+        <SolidColorBrush x:Key="PedalPlateInk" Color="#F6F7FA" />
+        <SolidColorBrush x:Key="PedalPlateInkFaint" Color="#8FA8AEBD" />
+        <SolidColorBrush x:Key="PedalGlyphInk" Color="#E6E8EC" />
+
+        <!-- ── Covering: TOLEX, PIPING, HANDLES (material class 3) ────────────
+             Essentially no specular — depth is the baked tile plus a vignette.
+             A shiny tolex reads as plastic. The piping is a vinyl-covered CORD:
+             dark seam outside, lit cream rope, shadow seam against the tolex. -->
+        <LinearGradientBrush x:Key="PedalPipingBrush" StartPoint="18%,0%" EndPoint="82%,100%">
+            <GradientStop Offset="0" Color="#F4EDD6" />
+            <GradientStop Offset="0.42" Color="#D6CCA9" />
+            <GradientStop Offset="1" Color="#877F63" />
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PedalPipingSeamOuter" Color="#8A0C0A07" />
+        <!-- Moulded carry strap on the amp head's top edge. -->
+        <LinearGradientBrush x:Key="PedalStrapBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#3E3128" />
+            <GradientStop Offset="0.5" Color="#1F1812" />
+            <GradientStop Offset="1" Color="#0C0906" />
+        </LinearGradientBrush>
+        <!-- Recessed side-handle cup on a cabinet's side wall. -->
+        <SolidColorBrush x:Key="PedalCupFill" Color="#1E0A0806" />
+        <!-- The light falling on a whole covered box: the centre stays lit, the
+             edges sink. Drawn OVER the face content, so it darkens the panel's
+             corners too — which is what stops an amp reading as a flat card
+             with a picture on it. -->
+        <RadialGradientBrush x:Key="PedalChassisVignetteBrush" Center="50%,42%"
+                             GradientOrigin="50%,42%" RadiusX="78%" RadiusY="85%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.72" Color="#00000000" />
+            <GradientStop Offset="1" Color="#3D000000" />
+        </RadialGradientBrush>
+        <!-- The board mat's own vignette (the rack floor, not a chassis). -->
+        <RadialGradientBrush x:Key="PedalBoardVignetteBrush" Center="50%,46%"
+                             GradientOrigin="50%,46%" RadiusX="72%" RadiusY="78%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.68" Color="#00000000" />
+            <GradientStop Offset="1" Color="#5C000000" />
+        </RadialGradientBrush>
+
+        <!-- ── THE ROOM: the light the board itself stands under ───────────────
+             R1 gives every PART one key light, but the floor had none — it was
+             evenly lit corner to corner under a symmetric vignette, which is
+             why a board of correctly-shaded gear could still read as gear on a
+             swatch. These three put the room under the same lamp as the gear.
+
+             Draw order, bottom to top: floor material, ramp, key light,
+             vignette. They go UNDER the rails and the pedals, because they are
+             the floor being lit and not a wash over the scene. -->
+
+        <!-- A warm overhead lamp, hung high and slightly forward of the board.
+             The one warm thing in the picture: it is the practice-room bulb,
+             which is why the gear's own highlights stay neutral. -->
+        <RadialGradientBrush x:Key="PedalRoomKeyLight" Center="50%,12%"
+                             GradientOrigin="50%,12%" RadiusX="85%" RadiusY="70%">
+            <GradientStop Offset="0" Color="#33FFE2B4" />
+            <GradientStop Offset="0.58" Color="#00FFE2B4" />
+            <GradientStop Offset="1" Color="#00FFE2B4" />
+        </RadialGradientBrush>
+        <!-- The floor turning away from that lamp: dark at the far edge, a lit
+             band about a quarter down where the light lands, sinking again into
+             the near edge. A floor with no ramp reads as a backdrop. -->
+        <LinearGradientBrush x:Key="PedalRoomFloorRamp" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#52000000" />
+            <GradientStop Offset="0.26" Color="#08000000" />
+            <GradientStop Offset="1" Color="#85000000" />
+        </LinearGradientBrush>
+        <!-- The walls the room does not draw. A deep, soft, slightly warm inner
+             shadow that closes the box in — much deeper than a panel vignette,
+             because this is a space rather than a surface. -->
+        <BoxShadows x:Key="PedalRoomInsetShadow">inset 0 0 110 0 #99140A00</BoxShadows>
+
+        <!-- ── THE CONSOLE: the rack furniture the room is built into ──────────
+             A board is not gear floating in a void; it is gear in a case, and a
+             case has a top lip you read controls off and a routed well the
+             patchbay sits down inside. Both are panel-grey — this is the one
+             place on the board where UI-coloured furniture is correct, exactly
+             as §2.4 says of the junction card, because the object depicted IS a
+             rack blank. Neither may borrow the gear's paint or its plating. -->
+
+        <!-- The lip: a raised strip, lit along its top edge like every other
+             raised thing on the board (R3). -->
+        <LinearGradientBrush x:Key="PedalConsoleLip" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF232629" />
+            <GradientStop Offset="1" Color="#FF191B1E" />
+        </LinearGradientBrush>
+        <BoxShadows x:Key="PedalConsoleLipShadow">inset 0 1 0 0 #17FFFFFF, 0 2 5 0 #6E000000</BoxShadows>
+        <!-- The well: routed INTO the console, so the R3 inversion applies —
+             hard shadow along the TOP edge, light spilling back at the bottom. -->
+        <LinearGradientBrush x:Key="PedalConsoleWell" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF101215" />
+            <GradientStop Offset="1" Color="#FF08090B" />
+        </LinearGradientBrush>
+        <BoxShadows x:Key="PedalConsoleWellShadow">inset 0 3 7 0 #A0000000, inset 0 -1 2 0 #1AFFFFFF</BoxShadows>
+
+        <!-- ── THE RACK FACE: the chrome the console furniture is made of ──────
+             The command bar at the top of the rig and the transport bar at its
+             foot are the SAME object seen twice: a bent-steel front panel
+             screwed onto the case. They are class-2 metal (R2), so they take a
+             narrow machining grain and a lit top edge, never a paint sweep.
+             Everything here is panel-grey on the §2.4 licence — the object
+             depicted really is a rack blank.
+
+             One panel material, one button material, one well material: two
+             surfaces at the same physical depth must never disagree. -->
+
+        <!-- The bent-steel panel face: lit along the top fold, a hard crease
+             just under the middle where the metal turns, then falling away. -->
+        <LinearGradientBrush x:Key="PedalRackFace" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF34383D" />
+            <GradientStop Offset="0.46" Color="#FF272B2F" />
+            <GradientStop Offset="0.48" Color="#FF1C1F23" />
+            <GradientStop Offset="1" Color="#FF14171A" />
+        </LinearGradientBrush>
+        <!-- The machining grain over it — a 2 px horizontal streak, the same
+             family as PedalPanelBrushing but running across rather than down
+             (a panel is rolled, a knob plate is brushed). Translucent so the
+             face gradient underneath still reads. -->
+        <DrawingBrush x:Key="PedalRackGrain" TileMode="Tile" Stretch="None"
+                      SourceRect="0,0,2,2" DestinationRect="0,0,2,2">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing Brush="#0DFFFFFF" Geometry="M0,0 L2,0 L2,1 L0,1 Z" />
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <BoxShadows x:Key="PedalRackFaceShadow">inset 0 1 0 0 #24FFFFFF, inset 0 -1 0 0 #E6000000, 0 3 8 0 #80000000</BoxShadows>
+
+        <!-- A panel button: a small pressed-steel cap, lit top, seated bottom. -->
+        <LinearGradientBrush x:Key="PedalRackButton" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF3A3F44" />
+            <GradientStop Offset="1" Color="#FF22252A" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PedalRackButtonHover" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF454A50" />
+            <GradientStop Offset="1" Color="#FF2A2E33" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PedalRackButtonLit" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF3B4046" />
+            <GradientStop Offset="1" Color="#FF24282C" />
+        </LinearGradientBrush>
+        <BoxShadows x:Key="PedalRackButtonShadow">inset 0 1 0 0 #29FFFFFF, 0 1 2 0 #80000000</BoxShadows>
+        <BoxShadows x:Key="PedalRackButtonPressedShadow">inset 0 2 5 0 #B3000000</BoxShadows>
+
+        <!-- A readout WELL: the dark glass an LCD-style value sits behind. Same
+             R3 inversion as the console well, one step shallower. -->
+        <LinearGradientBrush x:Key="PedalRackWell" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF090C0E" />
+            <GradientStop Offset="0.62" Color="#FF12171A" />
+            <GradientStop Offset="1" Color="#FF0C1012" />
+        </LinearGradientBrush>
+        <BoxShadows x:Key="PedalRackWellShadow">inset 0 2 7 0 #E6000000, 0 1 0 0 #14FFFFFF</BoxShadows>
+        <!-- The glass over that well: fine scanlines plus one diagonal sheen.
+             Two layers cannot live in one tile, so the scanline is the tile and
+             the sheen is a sibling Border (see the call site). -->
+        <DrawingBrush x:Key="PedalRackScanline" TileMode="Tile" Stretch="None"
+                      SourceRect="0,0,3,3" DestinationRect="0,0,3,3">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing Brush="#0BFFFFFF" Geometry="M0,0 L3,0 L3,1 L0,1 Z" />
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <LinearGradientBrush x:Key="PedalRackGlassSheen" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#1FFFFFFF" />
+            <GradientStop Offset="0.32" Color="#00FFFFFF" />
+            <GradientStop Offset="1" Color="#00FFFFFF" />
+        </LinearGradientBrush>
+
+        <!-- The vertical seam between two groups on a panel: a dark score line
+             with a lit edge on its right, i.e. two folded sheets meeting. -->
+        <LinearGradientBrush x:Key="PedalRackSeam" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.5" Color="#BF000000" />
+            <GradientStop Offset="1" Color="#00000000" />
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PedalRackSeamLight" Color="#10FFFFFF" />
+        <SolidColorBrush x:Key="PedalRackHairline" Color="#12FFFFFF" />
+
+        <!-- Panel ink. Stamped on dark metal, so it is COOL off-white (R5) and
+             the caption is the fainter of the pair. -->
+        <SolidColorBrush x:Key="PedalRackInk" Color="#FFC3C9CF" />
+        <SolidColorBrush x:Key="PedalRackInkBright" Color="#FFEDF0F2" />
+        <SolidColorBrush x:Key="PedalRackInkFaint" Color="#FF7D848A" />
+        <SolidColorBrush x:Key="PedalRackInkDim" Color="#FF5D646A" />
+
+        <!-- Status emitters on the panel: the ONE saturated hardware family
+             (R4). A dark lamp is a lamp, not an absence. -->
+        <SolidColorBrush x:Key="PedalRackLampOff" Color="#1FFFFFFF" />
+        <SolidColorBrush x:Key="PedalRackLampGreen" Color="#FF4FD07A" />
+        <SolidColorBrush x:Key="PedalRackLampAmber" Color="#FFE0B234" />
+        <BoxShadows x:Key="PedalRackLampGlowGreen">0 0 8 2 #804FD07A</BoxShadows>
+        <BoxShadows x:Key="PedalRackLampGlowAmber">0 0 8 2 #80E0B234</BoxShadows>
+
+        <!-- The slot strip: a shallower band than the rack face — it is the
+             console's front rail, not its top panel. -->
+        <LinearGradientBrush x:Key="PedalRackRailFace" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF2B2F33" />
+            <GradientStop Offset="1" Color="#FF1B1E21" />
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PedalRackRailSelected" Color="#1FFFFFFF" />
+
+        <!-- The routing/patch bay's graph paper: the ONE place a grid is right,
+             because a patchbay diagram is drawn ON something. -->
+        <SolidColorBrush x:Key="PedalGraphPaperFill" Color="#FF0C0E10" />
+        <DrawingBrush x:Key="PedalGraphPaper" TileMode="Tile" Stretch="None"
+                      SourceRect="0,0,16,16" DestinationRect="0,0,16,16">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#08FFFFFF" Geometry="M0,0 L16,0 L16,1 L0,1 Z" />
+                    <GeometryDrawing Brush="#08FFFFFF" Geometry="M0,0 L1,0 L1,16 L0,16 Z" />
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+
+        <!-- The VU meter's cream face — an illuminated paper scale behind glass,
+             which is why it is the one warm thing on the transport bar. -->
+        <LinearGradientBrush x:Key="PedalVuFace" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FFF2E8CA" />
+            <GradientStop Offset="1" Color="#FFD6C69C" />
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PedalVuInk" Color="#FF6B5B34" />
+        <SolidColorBrush x:Key="PedalVuNeedle" Color="#FF2A2418" />
+
+        <!-- The OFFLINE stamp: a control that is DRAWN but not wired must say
+             so. Danger-derived (a brush-level Opacity over an existing Color
+             token — the PanelGlass pattern), so no new Color key. -->
+        <SolidColorBrush x:Key="PedalInertFill" Color="{DynamicResource DangerColorValue}" Opacity="0.10" />
+        <SolidColorBrush x:Key="PedalInertStroke" Color="{DynamicResource DangerColorValue}" Opacity="0.30" />
+        <SolidColorBrush x:Key="PedalInertInk" Color="{DynamicResource DangerColorValue}" Opacity="0.75" />
+        <!-- Grille cloth sagging into shadow toward its frame. -->
+        <RadialGradientBrush x:Key="PedalClothSagBrush" Center="50%,48%"
+                             GradientOrigin="50%,44%" RadiusX="66%" RadiusY="70%">
+            <GradientStop Offset="0" Color="#00000000" />
+            <GradientStop Offset="0.66" Color="#00000000" />
+            <GradientStop Offset="1" Color="#59000000" />
+        </RadialGradientBrush>
+        <!-- The diagonal light wash over a machined amp faceplate: the ONE broad
+             specular the panel gets, running top-left → bottom-right like every
+             other highlight on the board. -->
+        <LinearGradientBrush x:Key="PedalFacePlateSheenBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#26FFFFFF" />
+            <GradientStop Offset="0.35" Color="#08FFFFFF" />
+            <GradientStop Offset="0.65" Color="#00FFFFFF" />
+            <GradientStop Offset="1" Color="#12000000" />
+        </LinearGradientBrush>
+
+        <!-- ── ANODISED BRASS: the amp head's control panel (Kestrel Rig) ─────
+             The ONE sanctioned tinted member of material class 2. Everything
+             else plated on the board stays neutral-cool (a red drive and a
+             teal delay buy the same chrome footswitch) — but a head's front
+             panel is anodised aluminium, and anodising IS a colour. The tint
+             comes from the finish, never from the module accent, so both heads
+             wear exactly the same brass no matter what their accent is.
+
+             Five stops rather than two: a real panel has a bright top band, a
+             dark waist where the light rakes off, and a second lift near the
+             bottom edge. Run along the house diagonal (R1) so it agrees with
+             every other highlight on the board. -->
+        <Color x:Key="PedalBrass0Color">#FBF1D3</Color>
+        <Color x:Key="PedalBrass1Color">#D8B96B</Color>
+        <Color x:Key="PedalBrass2Color">#A5822F</Color>
+        <Color x:Key="PedalBrass3Color">#6F5518</Color>
+        <SolidColorBrush x:Key="PedalBrass1" Color="{DynamicResource PedalBrass1Color}" />
+        <SolidColorBrush x:Key="PedalBrass3" Color="{DynamicResource PedalBrass3Color}" />
+        <LinearGradientBrush x:Key="PedalBrassPlateBrush" StartPoint="18%,0%" EndPoint="82%,100%">
+            <GradientStop Offset="0" Color="#DCBD6D" />
+            <GradientStop Offset="0.20" Color="#C9A552" />
+            <GradientStop Offset="0.55" Color="#B18C3C" />
+            <GradientStop Offset="0.86" Color="#CCA857" />
+            <GradientStop Offset="1" Color="#A67F34" />
+        </LinearGradientBrush>
+        <!-- The anodising streak: a fine VERTICAL brush across the panel.
+             AmpBrushedSheen is its horizontal sibling for machined aluminium —
+             a surface gets ONE grain, never both (R2). Tiled DrawingBrush, so
+             the pattern stays vector at every zoom and costs no bitmap. -->
+        <DrawingBrush x:Key="PedalPanelBrushing" TileMode="Tile"
+                      DestinationRect="0,0,3,3" Stretch="None">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#14FFFFFF">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,1,3" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#0D000000">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="1,0,2,3" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <!-- Ink STAMPED INTO a brass panel is a dark warm brown, not the cool
+             off-white R5 prescribes for bare aluminium: on a bright anodised
+             plate the legend is etched and filled dark, because light ink on
+             gold is unreadable. Same rule underneath — printed, never rendered,
+             and it sits UNDER the panel's specular. -->
+        <Color x:Key="PedalBrassInkColor">#3A2D0F</Color>
+        <Color x:Key="PedalBrassInkFaintColor">#A63A2D0F</Color>
+        <!-- The little milled window the numbers sit in. A pale wash, not a
+             chip: it lifts the etched figure off mid-brass without becoming a
+             second object on the panel. -->
+        <Color x:Key="PedalBrassReadoutPlateColor">#59FFFFFF</Color>
+        <SolidColorBrush x:Key="PedalBrassInk" Color="{DynamicResource PedalBrassInkColor}" />
+        <SolidColorBrush x:Key="PedalBrassInkFaint" Color="{DynamicResource PedalBrassInkFaintColor}" />
+        <!-- The panel is SCREWED ONTO the box, so it is genuinely a part above
+             a surface: light spills over its top edge, and it drops a TIGHT
+             contact shadow onto the tolex. Not a wide float (R3). -->
+        <BoxShadows x:Key="PedalBrassPlateShadow">inset 0 2 5 0 #66FFFFFF, 0 3 8 0 #8C000000</BoxShadows>
+
+        <!-- ── GRILLE CLOTH, ORTHOGONAL WEAVE: a head's front (Kestrel Rig) ───
+             RigGrilleCloth is the cab's DIAGONAL weave, seen close up over a
+             driver. This is the head's front cloth: a tight orthogonal
+             warp/weft basketweave — the "salt and pepper" a real head wears
+             behind its logo. Material class 3, so it gets NO specular; all its
+             depth is the tile plus the frame's inset vignette.
+
+             CSS ships this as two stacked repeating-linear-gradients (0deg
+             cream/dark + 90deg cream/dark over a #232019 base). A tiled
+             DrawingBrush cannot stack translucent layers, so the four cells
+             are PRE-COMPOSITED here — one opaque brush instead of three
+             layers, and identical output. The 3 px cell is the real thread
+             pitch; it must stay small or the cloth reads as a checkerboard. -->
+        <DrawingBrush x:Key="PedalGrilleBasketweave" TileMode="Tile"
+                      DestinationRect="0,0,3,3" Stretch="None">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <!-- warp × weft crossing: both threads lit -->
+                    <GeometryDrawing Brush="#585246">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,1,1" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- lit weft over a shadowed warp -->
+                    <GeometryDrawing Brush="#2A2721">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="1,0,2,1" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- lit warp over a shadowed weft -->
+                    <GeometryDrawing Brush="#333029">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,1,1,2" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <!-- the gap between threads: the cloth's shadow -->
+                    <GeometryDrawing Brush="#0F0D0B">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="1,1,2,2" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <!-- The row of dark fixing studs punched along a cabinet's name strip.
+             A tiled cell rather than N hand-placed ellipses, so the row is
+             exactly as long as the strip at any width or zoom. -->
+        <DrawingBrush x:Key="PedalStudRow" TileMode="Tile"
+                      DestinationRect="0,0,14,14" Stretch="None">
+            <DrawingBrush.Drawing>
+                <GeometryDrawing>
+                    <GeometryDrawing.Brush>
+                        <RadialGradientBrush GradientOrigin="38%,28%" Center="50%,50%"
+                                             RadiusX="60%" RadiusY="60%">
+                            <GradientStop Offset="0" Color="#4C4632" />
+                            <GradientStop Offset="1" Color="#16130B" />
+                        </RadialGradientBrush>
+                    </GeometryDrawing.Brush>
+                    <GeometryDrawing.Geometry>
+                        <EllipseGeometry Center="7,7" RadiusX="4" RadiusY="4" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <!-- The cream vinyl beading the cloth is stretched over. Same cord as
+             PedalPipingBrush, seen edge-on as a flat frame rather than rolled. -->
+        <SolidColorBrush x:Key="PedalGrilleFrame" Color="#80E2D6BA" />
+        <!-- Cloth sags away from its frame into shadow on all four edges — the
+             single strongest cue that it is fabric stretched over a hole and
+             not a printed panel. -->
+        <BoxShadows x:Key="PedalGrilleInsetShadow">inset 0 0 22 0 #D9000000</BoxShadows>
+
+        <!-- ── 1/4" jack sockets + the plate they are bored into ──────────────
+             The deepest hole on the board: a bored barrel under a hex dress
+             nut, in a recessed plate. -->
+        <SolidColorBrush x:Key="PedalJackPlateFill" Color="#191B22" />
+        <SolidColorBrush x:Key="PedalSocketNut" Color="#5C616C" />
+        <RadialGradientBrush x:Key="PedalSocketBrush" GradientOrigin="38%,32%"
+                             Center="50%,50%" RadiusX="60%" RadiusY="60%">
+            <GradientStop Offset="0" Color="#2B2E37" />
+            <GradientStop Offset="1" Color="#0A0B0E" />
+        </RadialGradientBrush>
+
+        <!-- ── Speaker driver (the cabinet's hero) ────────────────────────────
+             Read THROUGH the grille weave, so every layer stays DIMMER than the
+             cloth in front of it — a driver brighter than its own grille is
+             physically impossible and reads wrong instantly. -->
+        <SolidColorBrush x:Key="PedalDriverBasketFill" Color="#0A0B0E" />
+        <SolidColorBrush x:Key="PedalDriverBasketRing" Color="#3C3F48" />
+        <RadialGradientBrush x:Key="PedalDriverConeBrush" GradientOrigin="42%,36%"
+                             Center="50%,50%" RadiusX="70%" RadiusY="70%">
+            <GradientStop Offset="0" Color="#2B2E36" />
+            <GradientStop Offset="0.7" Color="#191B21" />
+            <GradientStop Offset="1" Color="#0D0E12" />
+        </RadialGradientBrush>
+        <RadialGradientBrush x:Key="PedalDriverCapBrush" GradientOrigin="38%,32%"
+                             Center="50%,50%" RadiusX="68%" RadiusY="68%">
+            <GradientStop Offset="0" Color="#3E414B" />
+            <GradientStop Offset="1" Color="#191B20" />
+        </RadialGradientBrush>
+        <!-- The soft bulge the driver makes in the cloth stretched in front of
+             it — the ONLY specular a woven surface is allowed (material class 3). -->
+        <RadialGradientBrush x:Key="PedalDriverBulgeBrush" GradientOrigin="42%,36%"
+                             Center="50%,50%" RadiusX="50%" RadiusY="50%">
+            <GradientStop Offset="0" Color="#1AFFFFFF" />
+            <GradientStop Offset="0.7" Color="#08FFFFFF" />
+            <GradientStop Offset="1" Color="#00FFFFFF" />
+        </RadialGradientBrush>
+
+        <!-- ── Emitters: the ONLY saturated hardware on the board ─────────────
+             An LED's own colour is the module accent and stays a binding; these
+             are the parts around it. A lit lamp always clips to white at its
+             core, and a cut jewel throws HARD little facet glints — never one
+             smooth blob. -->
+        <SolidColorBrush x:Key="PedalLedWell" Color="#0B0C0F" />
+        <SolidColorBrush x:Key="PedalJewelBody" Color="#120E0A" />
+        <SolidColorBrush x:Key="PedalLampCore" Color="#F2FFF4DE" />
+        <SolidColorBrush x:Key="PedalSheenGlint" Color="#A8FFFFFF" />
+        <RadialGradientBrush x:Key="PedalLampHaloBrush" Center="50%,50%"
+                             GradientOrigin="50%,50%" RadiusX="50%" RadiusY="50%">
+            <GradientStop Offset="0" Color="#80FFC773" />
+            <GradientStop Offset="1" Color="#00FFC773" />
+        </RadialGradientBrush>
+        <!-- The amp power lamp's bloom. Declared HERE rather than inline on the
+             Ellipse because an Effect's Color is not a Brush: a DynamicResource
+             on a control property (Visual.Effect) is safe, one inside an Effect
+             on a face is not a pattern this codebase has proven. -->
+        <DropShadowEffect x:Key="PedalLampBloom" BlurRadius="20"
+                          OffsetX="0" OffsetY="0"
+                          Color="{DynamicResource AmpPowerLampColor}" Opacity="0.95" />
+
+        <!-- ── Status pills: the two genuinely SEMANTIC survivors ─────────────
+             "model loaded / rate mismatch" is intent, not a material, so unlike
+             everything above it derives from the theme's success/danger colour.
+             Brush-level Opacity over an existing Color token (the PanelGlass
+             pattern) — no new Color token, completeness gate untouched. -->
+        <SolidColorBrush x:Key="PedalStatusOkFill" Color="{DynamicResource SuccessColorValue}" Opacity="0.12" />
+        <SolidColorBrush x:Key="PedalStatusOkStroke" Color="{DynamicResource SuccessColorValue}" Opacity="0.24" />
+        <SolidColorBrush x:Key="PedalStatusWarnFill" Color="{DynamicResource DangerColorValue}" Opacity="0.15" />
+        <SolidColorBrush x:Key="PedalStatusWarnStroke" Color="{DynamicResource DangerColorValue}" Opacity="0.40" />
+
+        <!-- ── Elevation: drop shadows for things OFF the surface only ────────
+             A raised part gets edges, not blur (see the shade/sheen ladders);
+             a drop shadow means the object is physically above what it sits on
+             — a pedal over the board, a popup over the panel, a pedal in
+             flight. Wide variants are for the amp/cab chassis.
+
+             A real object standing on a surface casts TWO shadows: a tight,
+             dark CONTACT shadow right at the seam, and a wide soft AMBIENT one.
+             With only the ambient half an object floats — the "sticker on a
+             background" look, and the single biggest reason a board of gear
+             reads as a row of cards. So every enclosure shadow here is a pair,
+             and the LIFT variants deliberately let the contact layer soften and
+             separate: a pedal in flight is genuinely off the board, and the
+             widening gap between its two shadows is what says so. -->
+        <BoxShadows x:Key="PedalShadowRest">0 2 3 0 #96000000, 0 14 30 0 #8E000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowRestWide">0 3 4 0 #A0000000, 0 14 32 0 #98000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowHover">0 2 4 0 #96000000, 0 16 34 0 #98000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowHoverWide">0 3 5 0 #A0000000, 0 18 40 0 #A4000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowLift">0 6 10 0 #78000000, 0 20 44 0 #B0000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowLiftWide">0 8 14 0 #78000000, 0 28 64 0 #C0000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowCard">0 10 24 0 #96000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowCardHover">0 12 28 0 #B0000000</BoxShadows>
+        <BoxShadows x:Key="PedalShadowPopup">0 12 30 0 #B0000000</BoxShadows>
+        <!-- Recess + raised-dome edge pairs (inset shadow on top, light spill
+             at the bottom — the R3 inversion that makes a recess a recess). -->
+        <BoxShadows x:Key="PedalPlateInsetShadow">inset 0 2 4 0 #59000000, 0 1 0 0 #26FFFFFF</BoxShadows>
+        <BoxShadows x:Key="PedalCollarShadow">inset 0 1.5 2 0 #66FFFFFF, 0 4 9 0 #96000000</BoxShadows>
+        <BoxShadows x:Key="PedalDomeShadow">inset 0 1.5 2 0 #70FFFFFF, 0 3 5 0 #80000000</BoxShadows>
+        <BoxShadows x:Key="PedalRecessShadow">inset 0 4 7 0 #8C000000, inset 0 -2 4 0 #26FFFFFF</BoxShadows>
+        <BoxShadows x:Key="PedalSocketInsetShadow">inset 0 1 2 0 #60000000</BoxShadows>
+        <BoxShadows x:Key="PedalCupInsetShadow">inset 0 2 3 0 #90000000, inset 0 -1 2 0 #40FFFFFF</BoxShadows>
+        <BoxShadows x:Key="PedalBaffleInsetShadow">inset 0 3 8 0 #A0000000</BoxShadows>
+        <BoxShadows x:Key="PedalCornerCupShadow">inset 0 1 1 0 #66FFFFFF</BoxShadows>
+        <!-- Selection: the APP accent, never the module's body colour (a red
+             amp painted a red ring that read as an error — shipped bug, 0.16). -->
+        <BoxShadows x:Key="PedalRingSelected">0 0 18 2 #66FFFFFF</BoxShadows>
+        <BoxShadows x:Key="PedalRingPreset">0 0 12 0 #66E8873A</BoxShadows>
+
+        <SolidColorBrush x:Key="CloseButtonBg" Color="{DynamicResource CloseButtonColor}" />
+
+        <!-- Scoreboard podium medals (theme-agnostic metallics) + the dark
+             ink used for glyphs sitting on a bright medal. Shared by
+             LanOverallView and LanSongBoardView. -->
+        <SolidColorBrush x:Key="MedalGold" Color="#E8B341" />
+        <SolidColorBrush x:Key="MedalSilver" Color="#C2CAD4" />
+        <SolidColorBrush x:Key="MedalBronze" Color="#C7834A" />
+        <SolidColorBrush x:Key="MedalInk" Color="#101418" />
+
+        <SolidColorBrush x:Key="OverlayScrim" Color="{DynamicResource OverlayScrimColor}" />
+        <SolidColorBrush x:Key="OverlayScrimSoft" Color="{DynamicResource OverlayScrimSoftColor}" />
+        <SolidColorBrush x:Key="OverlayScrimStrong" Color="{DynamicResource OverlayScrimStrongColor}" />
+        <SolidColorBrush x:Key="MenuFocusBarrier" Color="{DynamicResource MenuFocusBarrierColor}" />
+
+        <LinearGradientBrush x:Key="ToolbarBackground" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="{DynamicResource ToolbarTopColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource ToolbarBottomColor}" />
+        </LinearGradientBrush>
+
+        <!-- Graphite's primary is FLAT: both stops are the accent. Kept a
+             gradient brush so a theme can bring a ramp back in one place. -->
+        <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="{DynamicResource AccentColorValue}" />
+            <GradientStop Offset="1" Color="{DynamicResource AccentColorValue}" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="PrimaryGradientHover" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="{DynamicResource AccentHoverColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource AccentHoverColor}" />
+        </LinearGradientBrush>
+
+        <!-- Wordmark treatment (Play Mode front door): bright top fading into
+             the live accent. Built only from existing colour tokens so every
+             theme preset / community pack keeps working unchanged. -->
+        <LinearGradientBrush x:Key="WordmarkGradient" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="{DynamicResource TextPrimaryColor}" />
+            <GradientStop Offset="0.5" Color="{DynamicResource TextPrimaryColor}" />
+            <GradientStop Offset="1" Color="{DynamicResource AccentColorValue}" />
+        </LinearGradientBrush>
+
+        <!-- Play Mode screen-header accent underline: the live accent ramp
+             fading out to the right (existing colour tokens only). -->
+        <LinearGradientBrush x:Key="HeaderAccentUnderline" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="{DynamicResource AccentColorValue}" />
+            <GradientStop Offset="0.6" Color="{DynamicResource AccentGradientEndColor}" />
+            <GradientStop Offset="1" Color="Transparent" />
+        </LinearGradientBrush>
+    </Styles.Resources>
+</Styles>

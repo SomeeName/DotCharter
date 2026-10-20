@@ -1,0 +1,3 @@
+[submodule "JuceSharp"]
+	path = JuceSharp
+	url = https://github.com/SomeeName/JuceSharp.git

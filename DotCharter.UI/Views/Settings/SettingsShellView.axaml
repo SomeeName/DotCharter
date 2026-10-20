@@ -1,0 +1,481 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:shell="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.SettingsShellView"
+             x:DataType="contracts:ISettingsShellScreen"
+             x:CompileBindings="True">
+
+    <!--
+        The Settings page's chrome, on the target architecture: the header with
+        the cross-tab search, the rail of tabs, the content pane and the footer.
+        The tab bodies are screens of their own; the ScreenTabHost below shows
+        the selected one.
+
+        Embedded only: the page fills the shell's Settings tab and has no
+        floating-card mode.
+    -->
+
+    <UserControl.Resources>
+        <converters:ResourceKeyConverter x:Key="ResourceKey" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- NOT the settings row/group grammar (SettingsStyles.axaml): every tab
+             includes it itself, and this shell wears none of its classes. Included
+             here as well, it attached each rule TWICE to every control in every tab,
+             ~33,500 duplicate value frames (#412; SettingsGrammarScopeTests). -->
+
+        <!-- The rail's own look lives ON THE RAIL (`Border.Styles` below, #428):
+             at this level every rule was attached to the controls of every tab
+             this shell hosts (1,261 TextBlocks, 859 Borders, prewarmed), worn or
+             not, ~9,000 value frames for a dozen wearers that are all in the
+             rail. -->
+
+        <!-- The content column: capped at FireColumnMaxWidthLg (1040; 1400
+             above the wide breakpoint) and STRETCHED — Avalonia centres a
+             Stretch child whose size the cap clamped, so the cap and the
+             centring both hold while every row gets the column. -->
+        <!-- The column: a LeftColumnPanel gives each tab exactly min(pane, cap)
+             from the left edge, and the tab stretches to it. The token grows
+             at the wide breakpoint. -->
+        <Style Selector="Grid#TabContentGrid shell|ScreenTabHost > :is(UserControl)">
+            <Setter Property="MaxWidth" Value="{DynamicResource FireColumnMaxWidthLg}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- GRAPHITE (0.62): no page header and no footer bar. The rail carries
+         the page's title, its search and its save block, so the content pane
+         is ONE readable column from the top of the window to the bottom, and
+         the unsaved count sits beside the buttons it is about. -->
+    <Border Background="{DynamicResource FireGroundScreen}">
+        <Grid ColumnDefinitions="264,*">
+
+            <Border Grid.Column="0"
+                    Background="{DynamicResource FireSurfaceChrome}"
+                    BorderBrush="{DynamicResource FireBorderSeam}"
+                    BorderThickness="0,0,1,0">
+                <Border.Styles>
+            <!-- The page header's lockup, on the Fire type ladder: a Chakra Petch
+                 screen title over a Space Grotesk subtitle. -->
+            <Style Selector="TextBlock.PageTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeScreenTitle}" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+
+            <!-- The rail rows are the shared Fire nav row (FireNavRowToggle), the
+                 same component the Play Mode settings modal's rail uses: the 3 px
+                 accent bar is there at rest, and lights when hovered or current. -->
+            <Style Selector="ToggleButton.SideTabButton">
+                <Setter Property="Theme" Value="{DynamicResource FireNavRowToggle}" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+                <Setter Property="MinHeight" Value="38" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton:checked">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="FontWeight" Value="Bold" />
+            </Style>
+            <!-- The nav row's one-line description. WRAPPING, not trimming: German
+                 runs ~40 % longer, and a trimmed entry says less than its label. -->
+            <!-- Graphite's rail: no bar at rest (a column of dim bars is noise),
+                 the selected row gets the accent bar and a quiet raised fill, and
+                 no border anywhere. Scoped to this rail; the shared nav row keeps
+                 its look for the Play Mode modal. -->
+            <Style Selector="ToggleButton.SideTabButton /template/ Border#Bar">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton:checked /template/ Border#Bar">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton:pointerover">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="RenderTransform" Value="translateX(0px)" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton:checked, ToggleButton.SideTabButton:checked:pointerover">
+                <Setter Property="Background" Value="{DynamicResource SurfaceElevated}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton PathIcon.SideTabIcon">
+                <Setter Property="Width" Value="16" />
+                <Setter Property="Height" Value="16" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton:checked PathIcon.SideTabIcon">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+            <Style Selector="ToggleButton.SideTabButton:pointerover PathIcon.SideTabIcon">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+
+            <!-- Rail section captions: the Fire eyebrow (mono, uppercase, tracked). -->
+            <Style Selector="TextBlock.RailSection">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="Margin" Value="14,18,0,6" />
+            </Style>
+            <Style Selector="StackPanel.RailStack > ContentPresenter:nth-child(1) TextBlock.RailSection">
+                <Setter Property="Margin" Value="14,4,0,6" />
+            </Style>
+
+            <!-- The footer's unsaved-changes note: an amber dot beside the count,
+                 and the dot only exists while there IS something unsaved. -->
+            <Style Selector="StackPanel.SettingsDirtyNote TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="StackPanel.SettingsDirtyNote.dirty TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+            </Style>
+
+            <!-- Search: the one control that has to work on a page with ~250
+                 settings. Ctrl+F focuses it from anywhere on the page; the
+                 shortcut chip inside the empty field advertises that. -->
+            <Style Selector="Border.SearchShortcutChip">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
+            <Style Selector="Border.SearchShortcutChip TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+            <Style Selector="TextBox#SettingsSearchBox">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+            </Style>
+
+            <!-- One hit in the results dropdown. `kbd-active` follows the view
+                 model's highlight so Up/Down walk the list while focus stays in
+                 the text box. -->
+            <Style Selector="Button.SearchResult">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="Button.SearchResult /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="Button.SearchResult:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="Button.SearchResult.Highlighted /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+            </Style>
+            <Style Selector="Border.SearchTabChip">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!-- The save block's buttons. GRAPHITE: an 8 px rounded rectangle,
+                 no chamfer, no glow. The primary is the ONE accent fill on the
+                 page; Cancel is a quiet field; Reset section is a text link,
+                 because it acts on one tab and should read smaller than the two
+                 buttons that act on the page. -->
+            <Style Selector="Grid.SettingsActions > Button">
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+            </Style>
+            <Style Selector="Grid.SettingsActions > Button /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+            </Style>
+            <Style Selector="Grid.SettingsActions > Button:pointerover /template/ ContentPresenter">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="Grid.SettingsActions > Button.Primary /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextOnAccent}" />
+            </Style>
+            <Style Selector="Grid.SettingsActions > Button.Primary:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextOnAccent}" />
+            </Style>
+            <!-- Clean: Save is a quiet field whose label steps back, so the two
+                 buttons do not read as the same button. -->
+            <Style Selector="Grid.SettingsActions > Button.Save:not(.Primary) /template/ ContentPresenter">
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+            <Style Selector="Grid.SettingsActions > Button:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextFaint}" />
+            </Style>
+            <Style Selector="Button.ResetLink">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="Button.ResetLink /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="Button.ResetLink:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource FireAccent}" />
+            </Style>
+                </Border.Styles>
+                <Grid RowDefinitions="Auto,Auto,*,Auto">
+                    <TextBlock Grid.Row="0" Theme="{StaticResource PageTitleText}" Classes="PageTitle" Margin="24,30,24,18"
+                               Text="{localization:Loc Nav_Settings}" />
+
+                    <Grid Grid.Row="1" Margin="16,0,16,14">
+                        <TextBox x:Name="SettingsSearchBox"
+                                 AutomationProperties.Name="{localization:Loc Settings_SearchPlaceholder}"
+                                 Text="{Binding SearchQuery, Mode=TwoWay}"
+                                 Padding="34,7,74,7"
+                                 MinHeight="36"
+                                 CornerRadius="{StaticResource RadiusSm}"
+                                 ToolTip.Tip="{localization:Loc Settings_SearchTooltip}">
+                            <!-- Up/Down/Enter drive the dropdown without taking
+                                 focus out of the box, so typing can go on. -->
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Down" Command="{Binding HighlightNextResultCommand}" />
+                                <KeyBinding Gesture="Up" Command="{Binding HighlightPreviousResultCommand}" />
+                                <KeyBinding Gesture="Enter" Command="{Binding ActivateResultCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <PathIcon Data="{DynamicResource IconSearch}"
+                                  Width="14" Height="14"
+                                  HorizontalAlignment="Left"
+                                  VerticalAlignment="Center"
+                                  Margin="12,0,0,0"
+                                  Foreground="{DynamicResource TextDim}"
+                                  IsHitTestVisible="False" />
+                        <TextBlock Text="{localization:Loc Settings_SearchPlaceholder}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Left"
+                                   Margin="34,0,0,0"
+                                   Foreground="{DynamicResource TextDim}"
+                                   IsHitTestVisible="False"
+                                   IsVisible="{Binding !HasSearchQuery}" />
+                        <Border Classes="SearchShortcutChip"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"
+                                IsVisible="{Binding !HasSearchQuery}">
+                            <TextBlock Text="{localization:Loc Settings_SearchShortcutHint}" />
+                        </Border>
+                        <Button x:Name="SettingsSearchClear"
+                                Command="{Binding ClearSearchCommand}"
+                                Width="22" Height="22"
+                                Padding="0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                IsVisible="{Binding HasSearchQuery}"
+                                ToolTip.Tip="{localization:Loc Action_Clear}"
+                                AutomationProperties.Name="{localization:Loc Action_Clear}">
+                            <PathIcon Data="M 1.41,0 L 5,3.59 L 8.59,0 L 10,1.41 L 6.41,5 L 10,8.59 L 8.59,10 L 5,6.41 L 1.41,10 L 0,8.59 L 3.59,5 L 0,1.41 Z"
+                                      Width="9" Height="9"
+                                      Foreground="{DynamicResource TextMuted}" />
+                        </Button>
+
+                        <!-- Hits from EVERY tab, visited or not. A click, or
+                             Up/Down + Enter, jumps to the hit's tab with the
+                             filter still applied. -->
+                        <Popup x:Name="SearchResultsPopup"
+                               PlacementTarget="{Binding #SettingsSearchBox}"
+                               Placement="BottomEdgeAlignedLeft"
+                               IsLightDismissEnabled="True"
+                               IsOpen="{Binding IsSearchOpen, Mode=TwoWay}">
+                            <Border Background="{DynamicResource PanelBackground}"
+                                    BorderBrush="{DynamicResource BorderDefault}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    BoxShadow="{DynamicResource ShadowMd}"
+                                    Width="440" Padding="6" Margin="0,6,0,0">
+                                <StackPanel Spacing="2">
+                                    <TextBlock x:Name="SearchResultsCount"
+                                               Theme="{StaticResource CaptionText}" Classes="Caption"
+                                               Margin="8,4,8,6"
+                                               Text="{Binding SearchResultCountText}"
+                                               IsVisible="{Binding HasSearchResults}" />
+                                    <TextBlock x:Name="SearchResultsEmpty"
+                                               Theme="{StaticResource CaptionText}" Classes="Caption"
+                                               Text="{localization:Loc Settings_SearchNoResults}"
+                                               Margin="8,6"
+                                               IsVisible="{Binding !HasSearchResults}" />
+                                    <ScrollViewer MaxHeight="380" VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="contracts:ISettingsSearchHit">
+                                                    <Button AutomationProperties.Name="{Binding Label}" Classes="SearchResult"
+                                                            Classes.Highlighted="{Binding IsHighlighted}"
+                                                            shell:ScrollIntoView.WhenTrue="{Binding IsHighlighted}"
+                                                            Command="{Binding GoCommand}">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Label}"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Foreground="{DynamicResource TextPrimary}" />
+                                                                <TextBlock Text="{Binding GroupName}"
+                                                                           Theme="{StaticResource CaptionText}" Classes="Caption"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           IsVisible="{Binding HasGroupName}" />
+                                                            </StackPanel>
+                                                            <Border Grid.Column="1" Classes="SearchTabChip">
+                                                                <TextBlock Text="{Binding TabName}"
+                                                                           FontSize="{StaticResource FontSizeXs}"
+                                                                           Foreground="{DynamicResource TextMuted}" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="8,0,8,12">
+                    <ItemsControl x:Name="SettingsRail" ItemsSource="{Binding Sections}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Classes="RailStack" Orientation="Vertical" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:ISettingsRailSection">
+                                <StackPanel>
+                                    <TextBlock Classes="RailSection" Text="{Binding Title}" />
+                                    <ItemsControl ItemsSource="{Binding Items}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:ISettingsRailItem">
+                                                <ToggleButton Classes="SideTabButton"
+                                                              IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                              Command="{Binding SelectCommand}"
+                                                              ToolTip.Tip="{Binding Description}"
+                                                              AutomationProperties.Name="{Binding Title}">
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                                        <PathIcon Grid.Column="0" Classes="SideTabIcon"
+                                                                  Data="{Binding IconKey, Converter={StaticResource ResourceKey}}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Title}"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </ToggleButton>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- The save block: what is unsaved, and the ways out. -->
+                    <Border Grid.Row="3"
+                            BorderBrush="{DynamicResource FireBorderSeam}"
+                            BorderThickness="0,1,0,0"
+                            Padding="16,14,16,18">
+                        <StackPanel Spacing="12">
+                    <!-- Only when there IS something to say: a permanent "No unsaved changes"
+                         told the user nothing (screenshot review, 2026-09-23). -->
+                    <StackPanel x:Name="SettingsDirtyNote"
+                                Classes="SettingsDirtyNote"
+                                Classes.dirty="{Binding HasUnsavedChanges}"
+                                IsVisible="{Binding HasUnsavedChanges}"
+                                Orientation="Horizontal" VerticalAlignment="Center"
+                                Spacing="{StaticResource FireSpaceMd}">
+                        <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot Warn" VerticalAlignment="Center"
+                                IsVisible="{Binding HasUnsavedChanges}" />
+                        <TextBlock Text="{Binding UnsavedChangesText}" />
+                    </StackPanel>
+
+                            <!-- Stacked, full width: side by side each half was 90 px and the
+                                 German "Änderungen speichern" needs 138 (UI sweep, de-DE).
+                                 Save sits on top; the markup keeps Cancel first. -->
+                            <Grid Classes="SettingsActions" RowDefinitions="Auto,Auto" RowSpacing="8">
+                                <!-- One command, two honest captions: with nothing to
+                                     revert the button only leaves, so it says Close. -->
+                                <Button Grid.Row="1"
+                                        AutomationProperties.Name="{localization:Loc Action_Cancel}"
+                                        Command="{Binding CancelCommand}">
+                                    <Panel>
+                                        <TextBlock Text="{localization:Loc Action_Cancel}"
+                                                   IsVisible="{Binding HasUnsavedChanges}" />
+                                        <TextBlock Text="{localization:Loc Action_Close}"
+                                                   IsVisible="{Binding !HasUnsavedChanges}" />
+                                    </Panel>
+                                </Button>
+                                <Button Grid.Row="0" Theme="{StaticResource PrimaryButton}" Classes="Save"
+                                        Classes.Primary="{Binding HasUnsavedChanges}"
+                                        Content="{localization:Loc Action_SaveChanges}"
+                                        Command="{Binding SaveCommand}" />
+                            </Grid>
+                            <Button Classes="ResetLink"
+                                    Content="{localization:Loc Settings_ResetSection}"
+                                    ToolTip.Tip="{localization:Loc Settings_ResetSectionTip}"
+                                    Command="{Binding ResetSectionCommand}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- The content pane: every tab is a screen in the tab host. -->
+            <Grid Grid.Column="1" Margin="56,12,56,0" x:Name="TabContentGrid">
+                <ctl:LeftColumnPanel ColumnMaxWidth="{DynamicResource FireColumnMaxWidthLg}">
+                    <shell:ScreenTabHost x:Name="TabHost"
+                                         Screens="{Binding TabScreens}"
+                                         Current="{Binding CurrentScreen}" />
+                </ctl:LeftColumnPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

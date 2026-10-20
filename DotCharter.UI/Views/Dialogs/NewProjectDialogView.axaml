@@ -1,0 +1,190 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.NewProjectDialogView"
+             x:DataType="contracts:INewProjectScreen"
+             x:CompileBindings="True">
+
+    <!-- Two stages behind one card: pick audio (or start empty), then edit the
+         metadata that was read off the file. Grammar: Views/Dialogs/DialogStyles.axaml
+         — the local TextBox / TextBlock.Label styles this view used to carry
+         are gone; fields are DlgRow rows over one 240 px control column. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconMusicNote}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_NewProject_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" IsVisible="{Binding IsChooserStage}"
+                                   Text="{localization:Loc Dialog_NewProject_ChooseSubtitle}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" IsVisible="{Binding IsFormStage}"
+                                   Text="{localization:Loc Dialog_NewProject_FormSubtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody">
+                    <StackPanel>
+                        <!-- Stage 1: pick audio, or start empty. The audio route is
+                             the recommended one and says WHY on its own face — the
+                             tags it reads are the reason to take it, and as a
+                             one-line button that reason was nowhere on the screen.
+                             "Start without audio" is a real second choice, so it is
+                             a button and not a link. -->
+                        <StackPanel Spacing="{DynamicResource FireSpaceLg}" IsVisible="{Binding IsChooserStage}">
+                            <Button AutomationProperties.Name="{localization:Loc Dialog_NewProject_ChooseAudio}" x:Name="ChooseAudio" Theme="{DynamicResource PrimaryButton}" Classes="Primary"
+                                    Command="{Binding ChooseAudioCommand}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    MinHeight="84" Padding="18,12">
+                                <StackPanel Spacing="{DynamicResource FireSpaceXxs}">
+                                    <TextBlock Text="{localization:Loc Dialog_NewProject_ChooseAudio}"
+                                               FontFamily="{DynamicResource FireFontDisplay}"
+                                               FontSize="{DynamicResource FireSizeCardTitle}"
+                                               FontWeight="{DynamicResource FireWeightDisplay}"
+                                               HorizontalAlignment="Center" />
+                                    <!-- Opacity, not a colour: the button's own
+                                         foreground is whatever the primary look
+                                         gives it, and a second literal would be a
+                                         hard-coded colour on a lit surface. -->
+                                    <TextBlock x:Name="ChooseAudioSub" Opacity="0.78"
+                                               Text="{localization:Loc Dialog_NewProject_ChooseAudio_Sub}"
+                                               FontSize="{DynamicResource FireSizeMeta}"
+                                               TextWrapping="Wrap" TextAlignment="Center"
+                                               HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="StartWithoutAudio" Theme="{DynamicResource SubtleButton}" Classes="Subtle"
+                                    Command="{Binding StartWithoutAudioCommand}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    MinHeight="44"
+                                    Content="{localization:Loc Dialog_NewProject_StartWithoutAudio}" />
+                        </StackPanel>
+
+                        <!-- Reading tags + cover art off-thread. -->
+                        <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" IsVisible="{Binding IsExtracting}">
+                            <ProgressBar />
+                            <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" Classes="DlgBusyText" HorizontalAlignment="Center"
+                                       Text="{localization:Loc Dialog_NewProject_ReadingTags}" />
+                        </StackPanel>
+
+                        <!-- Stage 2: editable metadata form. -->
+                        <StackPanel IsVisible="{Binding IsFormStage}">
+                            <Border IsVisible="{Binding HasCoverArt}" HorizontalAlignment="Center"
+                                    Width="96" Height="96" ClipToBounds="True"
+                                    CornerRadius="{DynamicResource FireRadiusCard}"
+                                    BorderBrush="{DynamicResource FireBorder}" BorderThickness="1"
+                                    Margin="{DynamicResource FireGapRowLg}">
+                                <Image AutomationProperties.AccessibilityView="Raw" Source="{Binding CoverArtPng, Converter={x:Static converters:PngBytesToBitmapConverter.Instance}}"
+                                       Stretch="UniformToFill" />
+                            </Border>
+
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_Artist}" />
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Artist}" dlgv:FocusOnOpen.IsTarget="True"
+                                         AutomationProperties.Name="{localization:Loc Dialog_Artist}"
+                                         PlaceholderText="{localization:Loc Dialog_ArtistPlaceholder}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_SongTitle}" />
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Title}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_SongTitle}"
+                                         PlaceholderText="{localization:Loc Dialog_SongTitlePlaceholder}" />
+                            </Grid>
+                            <!-- The ORIGINAL script, beside the Latin names rather
+                                 than instead of them. Filled automatically when the
+                                 tags are non-Latin, and this is where the originals
+                                 LAND when an online suggestion is applied — without
+                                 these rows that transfer is invisible and the
+                                 charter cannot correct it. Rocksmith has no
+                                 Japanese ALBUM field, so there is no row for one. -->
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Inspector_Project_JapaneseArtist}" />
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseArtist}"
+                                         AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseArtist}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Inspector_Project_JapaneseSong}" />
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding JapaneseTitle}"
+                                         AutomationProperties.Name="{localization:Loc Inspector_Project_JapaneseSong}" />
+                            </Grid>
+
+                            <!-- The online name suggestion. A ROW, not a popup:
+                                 it appears while the form is being read, it is
+                                 never applied on its own, and it collapses to
+                                 nothing when there is nothing to offer. -->
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240"
+                                  IsVisible="{Binding HasNameSuggestion}">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           TextWrapping="Wrap"
+                                           Text="{localization:Loc Dialog_NameSuggestion}" />
+                                <Button VerticalAlignment="Center" Grid.Column="1" Theme="{DynamicResource SecondaryButton}" Classes="Secondary"
+                                        HorizontalAlignment="Stretch"
+                                        Command="{Binding ApplyNameSuggestionCommand}"
+                                        Content="{localization:Loc Dialog_ApplyNameSuggestion}" />
+                            </Grid>
+
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_Album}" />
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Album}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_Album}"
+                                         PlaceholderText="{localization:Loc Dialog_AlbumPlaceholder}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_AlbumYear}" />
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" x:Name="NewProjectYear"
+                                         Text="{Binding AlbumYear}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_AlbumYear}"
+                                         PlaceholderText="{localization:Loc Dialog_AlbumYearPlaceholder}" />
+                            </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                           Text="{localization:Loc Dialog_Genre}" />
+                                <TextBox VerticalAlignment="Center" Grid.Column="1" Text="{Binding Genre}"
+                                         AutomationProperties.Name="{localization:Loc Dialog_Genre}"
+                                         PlaceholderText="{localization:Loc Dialog_GenrePlaceholder}" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <!-- Stage 1 has no Back, so the slot says what the
+                                 chooser will open instead — read off the same
+                                 AudioFileTypes list the picker filters on. -->
+                            <TextBlock x:Name="AcceptedFormats" IsVisible="{Binding IsChooserStage}"
+                                       Text="{Binding AcceptedAudioFormats}"
+                                       FontFamily="{DynamicResource FireFontMono}"
+                                       FontSize="{DynamicResource FireSizeMicro}"
+                                       LetterSpacing="{DynamicResource FireTrackMicro}"
+                                       Foreground="{DynamicResource FireTextFaint}"
+                                       VerticalAlignment="Center" />
+                            <Button Classes="DlgLink" Content="{localization:Loc Action_Back}"
+                                    Command="{Binding BackCommand}" IsVisible="{Binding IsFormStage}" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" IsCancel="True" />
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Create}"
+                                    Command="{Binding CreateCommand}" IsVisible="{Binding IsFormStage}"
+                                    IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

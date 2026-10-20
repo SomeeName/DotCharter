@@ -1,0 +1,87 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.MidiImportDialogView"
+             x:DataType="contracts:IMidiImportScreen"
+             x:CompileBindings="True">
+
+    <!-- MIDI import. Grammar: Views/Dialogs/DialogStyles.axaml — the local
+         TextBlock.Label style this view used to carry is gone. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconPiano}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_MidiImport_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_MidiImport_Subtitle}" />
+                        <!-- Which file this is about — the third, quietest line. -->
+                        <TextBlock Theme="{DynamicResource DialogContextText}" Classes="DialogContext" Text="{Binding FileName}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_MidiImport_Track}" />
+                        <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding Tracks}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_MidiImport_Track}"
+                                  SelectedIndex="{Binding SelectedTrackIndex}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                        <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                   Text="{localization:Loc Dialog_MidiImport_IncludeDrums}" />
+                        <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding IncludeDrumChannel}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_MidiImport_IncludeDrums}" />
+                    </Grid>
+
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                        <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                            <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_MidiImport_ReplaceBeatGrid}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                       Text="{localization:Loc Dialog_MidiImport_ReplaceBeatGrid_Tip}" />
+                        </StackPanel>
+                        <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding ReplaceBeatGrid}"
+                                  AutomationProperties.Name="{localization:Loc Dialog_MidiImport_ReplaceBeatGrid}" />
+                    </Grid>
+
+                    <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" Margin="{DynamicResource GapTopLg}"
+                                IsVisible="{Binding IsBusy}">
+                        <ProgressBar />
+                        <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" Classes="DlgBusyText" Text="{localization:Loc Dialog_MidiImport_Busy}" />
+                    </StackPanel>
+
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip" Margin="{DynamicResource GapTopLg}"
+                            IsVisible="{Binding Summary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding Summary}" />
+                    </Border>
+
+                    <!-- A CRASH, not an empty selection. The converter throwing
+                         used to be shown as the honest-empty summary above. -->
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Error" Margin="{DynamicResource GapTopLg}"
+                            IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <!-- No IsEnabled here: the command's CanExecute already
+                             carries HasDraft AND !IsBusy, and two sources of
+                             truth for one button is how they drift apart. -->
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Import}"
+                                Command="{Binding ImportCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

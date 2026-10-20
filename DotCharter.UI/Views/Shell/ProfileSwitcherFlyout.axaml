@@ -1,0 +1,21 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:vm="clr-namespace:DotCharter.UI.ViewModels.Application;assembly=DotCharter"
+                    xmlns:popovers="clr-namespace:DotCharter.UI.Views.Shell.Popovers;assembly=DotCharter">
+    <!-- Player-profile switcher popover, shared by the status-bar profile button
+         and the Play Mode front-door profile chip (Play Mode hides the shell
+         chrome, so the switcher must be reachable there too). Bind Content to
+         the shell's single StatusBarViewModel — it owns the profile list,
+         avatars and every switch/rename/create command.
+
+         SINCE 0.54 this dictionary holds only the HOP. The panel itself is
+         `Views/Shell/Popovers/ProfilePopoverView`, which is a real type: it can
+         be constructed by a test, rendered to a picture and compared against the
+         drawing it came from — none of which a `DataTemplate` body can be. It
+         also removes the old restriction this file carried, that its markup
+         could use only marks BOTH hosts define, because a view carries its own
+         style scope. -->
+    <DataTemplate x:Key="ProfileSwitcherFlyoutContent" x:DataType="vm:StatusBarViewModel">
+        <popovers:ProfilePopoverView />
+    </DataTemplate>
+</ResourceDictionary>

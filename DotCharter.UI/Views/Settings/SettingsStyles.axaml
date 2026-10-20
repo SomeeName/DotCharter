@@ -1,0 +1,612 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctl="using:DotCharter.Tone.UI.Controls">
+    <!-- A disabled settings checkbox keeps its caption READABLE at the
+         dim-text step. The theme's own disabled caption brush sat so close to
+         the ground that "Mono" and "Two guitars" read as missing, not off. -->
+    <Styles.Resources>
+        <SolidColorBrush x:Key="CheckBoxForegroundUncheckedDisabled" Color="{DynamicResource FireTextDimColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundCheckedDisabled" Color="{DynamicResource FireTextDimColor}" />
+        <SolidColorBrush x:Key="CheckBoxForegroundIndeterminateDisabled" Color="{DynamicResource FireTextDimColor}" />
+
+        <!-- THE FAMILIES ARE CONTROLTHEMES (#428). A `Border.X` / `TextBlock.X` /
+             `Grid.X` / `StackPanel.X` rule here was attached to EVERY control of
+             that type on EVERY tab (each tab includes this file; ~6,000
+             prewarmed controls), worn or not: ~30,000 value frames. A control
+             wears the theme AND the class:
+             `Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"`.
+             The section and its head (`SettingsGroupBorder`, `GroupTitleText`,
+             `GroupSubtitleText`) used to be app-level themes in
+             Styles/Containers.axaml and Styles/Typography.axaml that a style here
+             overrode setter for setter; only these tabs wear them, so each is now
+             ONE theme here with the look the tabs had. `SettingDescText` is based on
+             `MonoText` for the one `SettingDesc Mono` row. A theme ranks BELOW
+             every style, so the tab-local rules (`Border.Intro TextBlock.GroupTitle`,
+             `ItemsControl.KeybindRows Grid.FormRow`, …) still win, as they did.
+             UI/StyleIncludeScopeTests. -->
+        <ControlTheme x:Key="SettingsGroupBorder" TargetType="Border">
+            <!-- ─── The section ──────────────────────────────────────────────────
+                 Graphite is flat: a section is a hairline TOP rule over open ground,
+                 not a card: no fill, no corner, no shadow. No hover response and NO
+                 transition: the tabs are IsVisible-gated, and a style clock on a
+                 hidden surface keeps ticking (DotCharter.UI/AGENTS.md). -->
+            <Style Selector="^.SettingsGroup">
+                <Setter Property="BoxShadow" Value="none" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+                <Setter Property="BorderThickness" Value="0,1,0,0" />
+                <Setter Property="CornerRadius" Value="0" />
+                <Setter Property="Padding" Value="0,32,0,16" />
+                <Setter Property="Margin" Value="0" />
+            </Style>
+            <!-- The first section needs no rule above it: the page edge is the rule. -->
+            <Style Selector="^.SettingsGroup.First">
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0,8,0,16" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="GroupHeadGrid" TargetType="Grid">
+            <!-- ─── Section header: title + subtitle ─────────────────────────────
+                 Markup still declares
+                     <Grid Classes="GroupHead" ColumnDefinitions="Auto,*">
+                         <Border Grid.Column="0" Classes="GroupIconBox"> … </Border>
+                         <StackPanel Grid.Column="1"> kicker + title + subtitle </StackPanel>
+                     </Grid>
+                 and this grammar hides the badge and the kicker: the title carries the
+                 section on its own. The geometry stays DynamicResource so a tab
+                 constructed with no Application does not throw on a missing
+                 StaticResource. -->
+            <Style Selector="^.GroupHead">
+                <Setter Property="ColumnSpacing" Value="0" />
+                <Setter Property="Margin" Value="0,0,0,22" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="GroupSubtitleText" TargetType="TextBlock">
+            <!-- Inside a header block the gap below belongs to the header. -->
+            <Style Selector="^.GroupSubtitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="MaxWidth" Value="620" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="GroupKickerText" TargetType="TextBlock">
+            <Style Selector="^.GroupKicker">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="GroupTitleText" TargetType="TextBlock">
+            <Style Selector="^.GroupTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="Margin" Value="{StaticResource FirePadNone}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="GroupIconBoxBorder" TargetType="Border">
+            <Style Selector="^.GroupIconBox">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FormRowGrid" TargetType="Grid">
+            <!-- ─── The row ──────────────────────────────────────────────────────
+                 Rhythm lives HERE, never inline: the old tabs sprinkled
+                 Margin="0,4,0,0" / "0,8,0,0" / "0,12,0,0" / "0" per row and no two
+                 groups lined up. -->
+            <Style Selector="^.FormRow">
+                <Setter Property="Margin" Value="0,0,0,16" />
+                <Setter Property="ColumnSpacing" Value="{StaticResource FireSpaceXxl}" />
+                <Setter Property="MinHeight" Value="36" />
+            </Style>
+            <!-- A row whose meaning is "…and this is how", i.e. only reachable while
+                 the row above it is on. Indented so the dependency is visible without
+                 reading the labels; the control column is unaffected (the label column
+                 is the star one), so the right edge still lines up. -->
+            <Style Selector="^.FormRow.Sub">
+                <Setter Property="Margin" Value="20,0,0,16" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SettingTitleText" TargetType="TextBlock">
+            <!-- ─── Row typography — the Fire row pair ───────────────────────────
+                 A 13.5 px Bold title over an 11.5 px muted description; every list,
+                 rail and form row in every mockup is this. The title must read
+                 BRIGHTER than its description — the inline titles used to set only
+                 FontWeight and inherited a dim ambient foreground, so they came out
+                 lower-contrast than the text underneath them. -->
+            <Style Selector="^.SettingTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+                <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <!-- A disabled row says so through its LABEL, and its control stays legible:
+                 the app-wide 0.45 fade on top of hairline borders made a disabled
+                 dropdown indistinguishable from a missing one. -->
+            <Style Selector="^.SettingTitle:disabled">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SettingDescText" TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
+            <Style Selector="^.SettingDesc">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="MaxWidth" Value="560" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+            </Style>
+            <Style Selector="^.SettingDesc:disabled">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            </Style>
+            <!-- A second help paragraph under a row (a note that applies only in one
+                 state) is separated from the first, not run on as one text wall. -->
+            <Style Selector="^.SettingDesc.Note">
+                <Setter Property="Margin" Value="0,8,0,0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            </Style>
+            <Style Selector="^.SettingDesc.Note:disabled">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ValueReadoutText" TargetType="TextBlock">
+            <Style Selector="^.ValueReadout:disabled">
+                <Setter Property="Opacity" Value="0.4" />
+            </Style>
+            <!-- The live number beside a slider. MONO, because that is what this
+                 vocabulary uses for a figure — and the fixed min width keeps the
+                 slider track from twitching as the digits change. -->
+            <Style Selector="^.ValueReadout">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+                <Setter Property="TextAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="MinWidth" Value="58" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SettingsValueText" TargetType="TextBlock">
+            <Style Selector="^.ValueText">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="VerticalAlignment" Value="Top" />
+                <Setter Property="Margin" Value="0,8,0,0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="StatusBlockBorder" TargetType="Border">
+            <!-- Monospace status block (backend status, fingerprints, paths): the Fire
+                 SUNKEN surface, which is what this layer uses for a well something is
+                 reported into. -->
+            <Style Selector="^.StatusBlock">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="NoticeStripBorder" TargetType="Border">
+            <!-- Inline notice strip (warnings, hints that must not be missed). The
+                 3 px left bar is deliberately identical to the dialog grammar's
+                 `Border.DlgStrip`: a notice is a notice, and the two surfaces are one
+                 product. -->
+            <Style Selector="^.NoticeStrip">
+                <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+                <Setter Property="BorderThickness" Value="3,0,0,0" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="NoticeStripText" TargetType="TextBlock">
+            <Style Selector="^.NoticeText">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireWarning}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SettingsReadoutBorder" TargetType="Border">
+            <!-- ─── The readout strip (GRAPHITE, 0.62) ───────────────────────────
+                 A tab with LIVE state opens on a strip that reads it back — Audio's
+                 device, rate, buffer and latency — like the display on a piece of
+                 hardware. Cells are divided by hairlines, labels sit quiet above the
+                 figures, and every figure is mono so it does not jitter as it
+                 changes. It is the one bold element on the page; nothing else on a
+                 settings tab may borrow this treatment. -->
+            <Style Selector="^.SettingsReadout">
+                <Setter Property="Background" Value="{DynamicResource CardBackground}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="4,18" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ReadoutCellPanel" TargetType="StackPanel">
+            <Style Selector="^.ReadoutCell">
+                <Setter Property="Margin" Value="20,0" />
+                <Setter Property="Spacing" Value="6" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ReadoutRuleBorder" TargetType="Border">
+            <Style Selector="^.ReadoutRule">
+                <Setter Property="Width" Value="1" />
+                <Setter Property="Background" Value="{DynamicResource FireBorder}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ReadoutLabelText" TargetType="TextBlock">
+            <Style Selector="^.ReadoutLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ReadoutValueText" TargetType="TextBlock">
+            <Style Selector="^.ReadoutValue">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeTitle}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+            <Style Selector="^.ReadoutValue.Name">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="Bold" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+    <!-- ══════════════════════════════════════════════════════════════════
+         The settings row/group vocabulary, ON THE FIRE LAYER. EVERY settings
+         tab shares it, so a change here re-spaces all eight at once — which is
+         the point: the tabs used to each invent their own label width, row gap
+         and description styling, and the result read as eight different
+         screens.
+
+         Three levels of hierarchy, and nothing else (GRAPHITE, 0.62):
+            tab     → a scroll of sections
+            group   → Border.SettingsGroup: NOT a card. A hairline across the
+                      top, a 16 px bold title and a one-line muted subtitle,
+                      then rows. The icon badge and the caps kicker are hidden
+                      here rather than deleted from ~40 groups of markup, so
+                      the search walk and the tab markup are untouched
+            row     → Grid.FormRow: a 13.5 px Bold title (+ an 11.5 px
+                      description) on the left and exactly one control,
+                      right-aligned, in a FIXED-WIDTH column so every control
+                      on a tab shares one right edge.
+
+         `Grid.FormRow`, Border.SettingsGroup and TextBlock.GroupTitle /
+         GroupSubtitle are the grammar every tab is built from, and the lints
+         and headless tests find rows and groups by those classes. None of
+         those names may be renamed by a restyle. See docs/agents/ui/settings.md.
+
+         WHY THE FIRE TOKENS AND NOT THE APP'S: the palette and the typeface
+         are already global, so what was left of the old grammar was its
+         SHAPES — a 15 px SemiBold group title against Chakra 17, radius 6/10
+         against the layer's 8/10/12/16, and an app-scale spacing ladder beside
+         the Fire one. Everything below reaches for FireRadius*/FireSize*/
+         FirePad*/FireGap*/FireSpace* ONLY; mixing two ladders is how a surface
+         ends up half-converted (docs/agents/ui/fire-design-system.md).
+
+         ─── THE TWO SETTERS THAT MAY NEVER APPEAR IN THIS FILE ───────────
+         It is included by tabs that SettingsSearchTests constructs WITH NO
+         AVALONIA PLATFORM and on whatever thread xUnit hands them, so:
+           • no `Cursor` setter — building a Cursor resolves ICursorFactory
+             from the platform. A single one here threw out of all nine search
+             tests. The three tabs with an Advanced section set Cursor="Hand"
+             INLINE on the header instead. NOTE this is also why a settings
+             control may not simply wear `Button.FireGhost`: that class sets a
+             Cursor — harmlessly, because it lives in the app-scoped
+             Styles/Fire.axaml which is only built under a real App, but a
+             COPY of it here would not be harmless. The ghost below is
+             restated Cursor-free for exactly that reason.
+           • no `Transitions` setter — AvaloniaList<ITransition>.Add calls
+             Dispatcher.VerifyAccess, so the file could only be built on the UI
+             thread; it passed alone and threw for all nine tests as soon as
+             anything else had created the dispatcher first. It is also the
+             house rule: these tabs are IsVisible-gated and a hidden control's
+             style clocks keep ticking.
+         Source lint: SettingsSearchTests.SettingsStyles_StayPlatformAndThreadFree.
+
+         Every `{DynamicResource Fire…}` below resolves to NOTHING under that
+         platform-free construction, which is harmless — the control simply
+         keeps its default. It also means SettingsConstructionUiPerfSmokeTests,
+         not the search tests, is what proves the Fire chrome really applied.
+         ══════════════════════════════════════════════════════════════════ -->
+    <Style Selector="PathIcon.GroupIcon">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+
+
+    <!-- Every child of a `FormRow` (StackPanel, Grid, Panel, UniformGrid,
+         TextBlock, SelectableTextBlock, ToggleSwitch, CheckBox, ComboBox, TextBox,
+         NumericUpDown, Slider, Button) is TOP-aligned by a LOCAL
+         `VerticalAlignment="Top"` (#428): as a child rule it was attached to
+         every child of every Grid on every tab. A child whose own class sets
+         another alignment (`ValueReadout`, the keybind `Label`) carries none. -->
+    <!-- GRAPHITE: rows are TOP-aligned, and the label column drops 8 px so the
+         title's line sits level with the text inside a 36 px control: a LOCAL
+         `Margin="0,8,0,0"` on a row's first child when it is a StackPanel, and
+         on a `SettingTitle` child (#428, as above). A centred label beside a
+         three-control stack floated in its middle. -->
+    <Style Selector="Grid.FormRow > ToggleSwitch, Grid.FormRow > CheckBox">
+        <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+
+    <!-- Fill the fixed control column so every dropdown/field shares one
+         width, and pin the switches/checkboxes to its right edge. -->
+    <Style Selector="Grid.FormRow > ComboBox,
+                     Grid.FormRow > TextBox,
+                     Grid.FormRow > NumericUpDown">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <!-- A device name is often longer than the column. A template set by
+         style only reaches the dropdowns that bring no template of their own
+         (a local ItemTemplate wins), so choice lists with their own look keep it. -->
+    <Style Selector="Grid.FormRow ComboBox">
+        <Setter Property="ItemTemplate">
+            <DataTemplate x:CompileBindings="False">
+                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding}" />
+            </DataTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Grid.FormRow > ToggleSwitch,
+                     Grid.FormRow > CheckBox">
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <!-- The boolean is the Fire 44×24 pill, reached through the SHARED
+         `FireToggleSwitch` ControlTheme rather than restated here: a
+         TemplatedControl takes its template from a ControlTheme, never from a
+         Style with a Template setter (the KeybindCaptureBox story in
+         docs/agents/ui/layout-traps.md). Under a platform-free construction the
+         DynamicResource resolves to nothing and the switch keeps Fluent's
+         look, which is why the three setters under it stay: Fluent's
+         ToggleSwitch ships untranslated English On/Off captions and a 154 px
+         MinWidth, and — because "On" and "Off" are different widths — they
+         left every switch on a tab sitting at a slightly different x. The knob
+         position already says which way it is. -->
+    <Style Selector="Grid.FormRow > ToggleSwitch">
+        <Setter Property="Theme" Value="{DynamicResource FireToggleSwitch}" />
+        <Setter Property="OnContent" Value="" />
+        <Setter Property="OffContent" Value="" />
+        <Setter Property="MinWidth" Value="0" />
+    </Style>
+
+
+    <!-- The keybind rows' rule lives in KeybindsSettingsView.axaml alone: a second
+         rule here matched the same ~150 rows only to be overridden there (#639). -->
+
+
+    <!-- A settings checkbox's box is drawn at the dim-text step, not the
+         hairline: on the ground a #2F3236 box vanished even when enabled,
+         and a faded one read as missing rather than off. -->
+    <Style Selector="Grid.FormRow CheckBox /template/ Border#NormalRectangle">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireTextDim}" />
+    </Style>
+    <Style Selector="Grid.FormRow CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <!-- The dropdown chevron and the empty-list placeholder read at the
+         secondary / muted steps, one tone apart from a disabled value. -->
+    <Style Selector="Grid.FormRow ComboBox /template/ PathIcon#DropDownGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+    </Style>
+    <Style Selector="Grid.FormRow ComboBox">
+        <Setter Property="PlaceholderForeground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+    <Style Selector="Grid.FormRow ComboBox:disabled, Grid.FormRow TextBox:disabled,
+                     Grid.FormRow NumericUpDown:disabled, Grid.FormRow CheckBox:disabled">
+        <Setter Property="Opacity" Value="0.7" />
+    </Style>
+    <!-- A slider's fill is the accent, so a disabled one has to fade further
+         than a field does, or it still reads as live. -->
+    <Style Selector="Grid.FormRow Slider:disabled">
+        <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+
+    <!-- Typography's `TextBlock.Mono` is an EXACT type selector, so it does not
+         reach SelectableTextBlock — and every path, fingerprint and status dump
+         on these tabs is selectable by design. Mirror it here (declared before
+         ValueText so a row that wears both still takes ValueText's colour). -->
+    <Style Selector="SelectableTextBlock.Mono">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- A read-only value a row reports rather than edits (measured latency,
+         cache usage, models folder). -->
+    <Style Selector="SelectableTextBlock.ValueText">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Margin" Value="0,8,0,0" />
+    </Style>
+
+
+
+    <!-- ─── Collapsible "Advanced" section ──────────────────────────────────
+         A ToggleButton header (NOT an Avalonia Expander) drives an inline,
+         IsVisible-bound content panel. This is deliberate: the settings search
+         enumerates the LOGICAL tree for FormRows, and an Expander's collapsed
+         ContentPresenter never realizes its child — its rows would disappear
+         from the cross-tab search. Inline content stays in the tree even while
+         collapsed, and a tab's ApplySearch opens its Advanced section while
+         a query matches a row inside it, so a matched expert row is actually
+         visible on its tab. -->
+    <!-- NOTE: no `Cursor` setter here, and none may be added — see the file
+         header. The three tabs with an Advanced section set it inline. -->
+    <Style Selector="ToggleButton.AdvancedHeader">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="0,28,0,12" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader:checked /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!-- The header's own label is THE FIRE EYEBROW — mono, uppercase, 9.5 px
+         on .24em tracking, dim. It is the layer's single most repeated mark,
+         and this is one of the two places in these two grammars that already
+         had a string shaped like one (the other is the shell's RailSection).
+         An expert section therefore never competes with a real group title. -->
+    <Style Selector="ToggleButton.AdvancedHeader TextBlock.AdvancedSubtitle">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader TextBlock.AdvancedLabel">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader:pointerover TextBlock.AdvancedLabel">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader Border.AdvancedRule">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Disclosure triangle: points right when collapsed, rotates down when
+         the section is expanded.
+         The rotation is INSTANT, and the `Transitions` setter that used to be
+         here may not come back — see the file header for both reasons.
+         Pinned by SettingsSearchTests.SettingsStyles_StayPlatformAndThreadFree. -->
+    <Style Selector="PathIcon.AdvancedChevron">
+        <Setter Property="Width" Value="13" />
+        <Setter Property="Height" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+        <Setter Property="RenderTransform" Value="rotate(0deg)" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader:checked PathIcon.AdvancedChevron">
+        <Setter Property="RenderTransform" Value="rotate(90deg)" />
+    </Style>
+    <Style Selector="ToggleButton.AdvancedHeader:pointerover PathIcon.AdvancedChevron">
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+    </Style>
+
+    <!-- ─── The tab's group FLOW (audit P0.4, lane D 2026-09-13) ──────────
+         A tab that opts into two columns above the wide breakpoint replaces
+         its root `StackPanel` with `ctl:MasonryPanel Classes="SettingsFlow"`.
+         At `ColumnCount="1"` — the default, and the ONLY shape below the wide
+         breakpoint — the panel is a vertical stack byte for byte: each child
+         is measured at the full available width and arranged at x=0, and
+         `RowSpacing` is 0 because `Border.SettingsGroup` already carries the
+         vertical rhythm in its own margin. So a tab that opts in looks
+         IDENTICAL at 1080p and 1440p to the StackPanel it replaced.
+
+         `MasonryPanel` and not a `WrapPanel`: a WrapPanel needs an `ItemWidth`
+         (a numeric card cap this page must not grow — the `DialogWidthLadder`
+         instinct) and makes every row as tall as its tallest card, which on a
+         tab whose groups run 1 to 11 rows is most of the column. The masonry
+         packs each card into the currently-shortest column instead, so the two
+         columns end level. Children keep their DECLARATION order, which is
+         what keeps the search walk, the tab order and keyboard navigation
+         unchanged — the panel moves boxes, not the tree.
+
+         WHICH TABS OPT IN, and why the rest do not:
+           • in  — General (11 groups), Graphics (6), Audio (5),
+                   Stem Models (6), Updates (2)
+           • out — Keybinds: its 140 rows are ALREADY two-up inside a
+                   `UniformGrid Columns="2"` on a `*,184` grammar, so a second
+                   split makes four chord columns of ~230 px and the pill
+                   truncates (see docs/agents/ui/layout-traps.md § Columns)
+           • out — Appearance: its three groups are a theme-preset grid and an
+                   ItemsControl of colour pickers, both of which are WIDE
+                   controls that want the whole column rather than half of it
+           • out — AI and the TONE3000 panel: one group each; two columns of
+                   one card is a column and an empty gutter.
+         The two-column shape is asserted at 3840x2160 by
+         `Perf/UiResolutionAuditUiPerfSmokeTests`. -->
+    <Style Selector="ctl|MasonryPanel.SettingsFlow">
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="ColumnCount" Value="1" />
+        <Setter Property="ColumnSpacing" Value="56" />
+        <Setter Property="RowSpacing" Value="0" />
+    </Style>
+    <Style Selector="Window.Wide ctl|MasonryPanel.SettingsFlow">
+        <Setter Property="ColumnCount" Value="2" />
+    </Style>
+
+
+    <!-- Row actions are quiet: the accent belongs to the save block and
+         at most one primary action per screen. Shared by every tab. -->
+    <Style Selector="Button.RowAction">
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="Button.RowAction /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="Button.RowAction:pointerover /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Button.RowAction.Danger /template/ ContentPresenter">
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireDanger}" />
+    </Style>
+    <!-- A row action that cannot run now is drawn OFF, never like a live one: the
+         template setters above win over Fluent's disabled brushes, so without this a
+         disabled Download looked exactly like a working one. The row prints why. -->
+    <Style Selector="Button.RowAction:disabled /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextFaint}" />
+    </Style>
+</Styles>

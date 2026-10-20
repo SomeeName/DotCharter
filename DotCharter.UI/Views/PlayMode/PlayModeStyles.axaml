@@ -1,0 +1,172 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- PlayModeView's own style grammar, included from its
+         UserControl.Styles right after SongListHeaderStyles, in the order the
+         rules had inline. Its own file so the view stays inside its size
+         budget (#240). These are view-scoped rules: they reach only what
+         PlayModeView hosts, exactly as they did inline. -->
+
+    <!-- The ControlThemes this grammar's families wear live in
+         PlayModeThemes.axaml, a resource dictionary every Play Mode view
+         merges itself (#294): a lifted screen view loads outside
+         PlayModeView's resource scope, so its StaticResources cannot reach
+         a Styles.Resources block here. -->
+
+    <Style Selector="Button.PlayMenu">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="Padding" Value="20,10" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeLg}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <!-- Constant thickness (thicker left edge) so the accent edge on
+             hover/focus never shifts layout. -->
+        <Setter Property="BorderThickness" Value="3,1,1,1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="RenderTransform" Value="scale(1.0)" />
+        <!-- Mirrors Button.Primary's transition set: a Transitions setter
+             here replaces the app-level one wholesale for the
+             "PlayMenu Primary" combination. -->
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08" />
+                <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.PlayMenu /template/ ContentPresenter">
+        <!-- BoxShadow entry keeps Button.Primary's shadow lift animating
+             (this setter replaces its presenter Transitions wholesale). -->
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.18" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.PlayMenu:pointerover">
+        <Setter Property="RenderTransform" Value="scale(1.02)" />
+    </Style>
+    <Style Selector="Button.PlayMenu:pointerover /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+    </Style>
+    <Style Selector="Button.PlayMenu:pressed">
+        <Setter Property="RenderTransform" Value="scale(0.97)" />
+    </Style>
+    <!-- Keyboard nav (XYFocus) mirrors the hover affordance on top of the
+         global focus-visible adorner ring (Chrome.axaml). -->
+    <Style Selector="Button.PlayMenu:focus-visible /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+    </Style>
+
+
+
+
+    <!-- Secondary main-menu entry: icon rail + label + caption, filling
+         its grid cell. Not Button.PlayMenu (that one is the tall primary
+         CTA and centres a single line of text).
+         Since 0.45 it is a RAIL entry, tall enough to carry a badge, a name
+         and a wrapping caption without crowding — and BOTH rails of the
+         front door use it (the destinations on the left, the practice-plan
+         rows on the right), so the screen has one row vocabulary rather
+         than one per column. -->
+    <Style Selector="Button.MenuTile">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="MinHeight" Value="84" />
+        <Setter Property="Background" Value="{DynamicResource CardGlass}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingCard}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.MenuTile /template/ ContentPresenter">
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.MenuTile:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+    </Style>
+    <Style Selector="Button.MenuTile:focus-visible /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+    </Style>
+    <Style Selector="Button.MenuTile:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+    </Style>
+    <Style Selector="Button.MenuTile PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+    </Style>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         RESULTS AT THE WIDE BREAKPOINT (resolution audit §4 P0.2).
+
+         `Services/UiBreakpointController` puts `Wide` on the WINDOW above
+         2560 INNER (post-`RootScaler`) DIPs; these are the "selector" half
+         of the two opt-in routes `docs/agents/ui/fire-design-system.md`
+         §Breakpoints describes, and the default shape deliberately wears no
+         class — the unqualified markup IS the design look.
+
+         Nothing here is a ramp of `FontSize*`/`Space*`: those are the
+         interface-scale transform's job and ramping them per breakpoint
+         compounds with it. What moves is SHAPE (which cell a block sits in)
+         and, for the two figures this screen is built around, a step to the
+         NEXT rung of the existing type ladder — the grade stamp and the
+         stat figures are the screen's subject, and at 1400 px of column
+         they were the same 44/28 px they are on a laptop.
+         ══════════════════════════════════════════════════════════════ -->
+    <!-- The DEFAULT cell of each half is a STYLE, not an attribute on the
+         element, and that is load-bearing: a local value set in markup
+         outranks every style setter in Avalonia, so `Grid.ColumnSpan="2"`
+         on the StackPanel would silently win over the `Wide` rule below and
+         the screen would stay one column at every width. (Measured: the Tag
+         the same style set DID apply, which is exactly how a fault like
+         this reads as "the selector does not match".) The two levels are
+         ordered — base first, `Wide` after — because the LAST matching
+         style wins. -->
+    <Style Selector="StackPanel#ResultsPrimaryColumn">
+        <Setter Property="Grid.Row" Value="0" />
+        <Setter Property="Grid.Column" Value="0" />
+        <Setter Property="Grid.ColumnSpan" Value="2" />
+    </Style>
+    <Style Selector="StackPanel#ResultsDetailColumn">
+        <Setter Property="Grid.Row" Value="1" />
+        <Setter Property="Grid.Column" Value="0" />
+        <Setter Property="Grid.ColumnSpan" Value="2" />
+    </Style>
+    <!-- `:is(Window)` rather than a bare `Window`, and the reason is NOT
+         the one you would guess from Avalonia's docs. This app's root is
+         `Views.MainWindow : Window`, and a type selector is documented as
+         matching the EXACT type — but `Perf/UiResolutionAuditUiPerfSmokeTests
+         .ABreakpointSelector_ReachesAWindowSubclass` MEASURES both forms
+         against a real Window subclass and both match today, so the guide's
+         `Window.Wide` example is correct as written. `:is()` is used here
+         because this rule's failure mode is silent and ships, and that case
+         pins both halves so a future Avalonia change names which one went
+         dead. -->
+    <Style Selector=":is(Window).Wide StackPanel#ResultsPrimaryColumn">
+        <Setter Property="Grid.ColumnSpan" Value="1" />
+    </Style>
+    <Style Selector=":is(Window).Wide StackPanel#ResultsDetailColumn">
+        <Setter Property="Grid.Row" Value="0" />
+        <Setter Property="Grid.Column" Value="1" />
+        <Setter Property="Grid.ColumnSpan" Value="1" />
+    </Style>
+    <Style Selector=":is(Window).Wide TextBlock#ResultGradeFigure">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeStampLg}" />
+    </Style>
+    <!-- The four tile figures. FontSize and LineHeight move TOGETHER — the
+         `TextBlock.StatFigure` style above pins a line box, and a figure
+         raised inside a frozen one renders as a clipped middle band, which
+         is the exact fault that style's own comment records. -->
+    <Style Selector=":is(Window).Wide Grid#ResultsTileBoard TextBlock.StatFigure">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeHeroLg}" />
+        <Setter Property="LineHeight" Value="{StaticResource LineHeightHeroLg}" />
+    </Style>
+
+</Styles>

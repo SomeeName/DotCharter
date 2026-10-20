@@ -1,0 +1,169 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigSceneBar"
+             x:DataType="vm:PedalboardViewModel">
+
+    <!-- THE SCENE BAR (2026-09-27): the rig's live strip. Scenes A–H of the tone
+         that is playing, the active setlist's ◀ song ▶, and the last MIDI message.
+         Its own view so a host hooks it in with ONE element (AmpFxRigView puts it
+         at the top of RigWorkspace, over the stage: its height comes out of the
+         stage, never out of the map a split rig's lanes need). EVERY cell has a fixed width or takes the
+         star: a scene lighting up, a name arriving or a MIDI message printing
+         must never move anything beside it (pinned by
+         Perf/RigSceneBarUiPerfSmokeTests). -->
+    <UserControl.Styles>
+        <!-- one scene: the design's mode button, narrower, a letter and a name -->
+        <Style Selector="ToggleButton.FireModeButton.SceneSlot">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Width" Value="72" />
+            <Setter Property="Height" Value="{StaticResource FireFieldHeight}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadSegmentItemDense}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ToggleButton.SceneSlot TextBlock.SceneLetter">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ToggleButton.SceneSlot TextBlock.SceneCaption">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="{StaticResource FireGapLeftSm}" />
+        </Style>
+        <!-- The text colours are set on the TEXT: Fluent's checked template writes
+             the presenter's own foreground, which a setter on the button loses to,
+             and the lit scene's letter came out ink-on-navy. -->
+        <Style Selector="ToggleButton.SceneSlot TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        </Style>
+        <Style Selector="ToggleButton.SceneSlot:checked TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        </Style>
+        <Style Selector="ToggleButton.SceneSlot:checked TextBlock.SceneLetter">
+            <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        </Style>
+        <!-- an unused scene is there to be picked, just quieter: its letter alone, dim -->
+        <Style Selector="ToggleButton.SceneSlot.unused TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+        </Style>
+        <Style Selector="TextBlock.SceneBarText">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border x:Name="RigSceneBarRoot" Theme="{StaticResource FireDockBarBorder}" Classes="FireDockBar FireGearBar"
+            Height="48" Padding="{StaticResource FirePadMenuBar}" ClipToBounds="True">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto" VerticalAlignment="Center">
+
+            <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                       Text="{localization:Loc Rig_Scenes}" />
+
+            <!-- A–H. Buttons, never Borders dressed as buttons, and never
+                 disabled: an unused scene forks from what is playing. Right-click
+                 renames, stores the live sound into it, or clears it. -->
+            <Border Grid.Column="1" Theme="{StaticResource FireModeStripBorder}" Classes="FireModeStrip" x:Name="RigSceneSlots"
+                    Margin="{StaticResource FireGapLeftMd}">
+                <ItemsControl ItemsSource="{Binding SceneSlots}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:RigSceneSlotViewModel">
+                            <Panel>
+                                <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton SceneSlot"
+                                              IsVisible="{Binding !IsRenaming}"
+                                              Classes.unused="{Binding !IsStored}"
+                                              IsChecked="{Binding IsActive, Mode=OneWay}"
+                                              Command="{Binding SelectCommand}"
+                                              ToolTip.Tip="{Binding ToolTip}"
+                                              AutomationProperties.Name="{Binding AccessibleName}">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <TextBlock Classes="SceneLetter" Text="{Binding Letter}" />
+                                        <TextBlock Grid.Column="1" Classes="SceneCaption" Text="{Binding Caption}" />
+                                    </Grid>
+                                    <ToggleButton.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{localization:Loc Rig_Scene_Rename}"
+                                                      Command="{Binding BeginRenameCommand}" />
+                                            <MenuItem Header="{localization:Loc Rig_Scene_Store}"
+                                                      Command="{Binding StoreCommand}" />
+                                            <MenuItem Header="{localization:Loc Rig_Scene_Clear}"
+                                                      Command="{Binding ClearCommand}" />
+                                        </ContextMenu>
+                                    </ToggleButton.ContextMenu>
+                                </ToggleButton>
+                                <!-- the name is typed IN PLACE, over the button and
+                                     exactly its size: Enter keeps it, Esc drops it -->
+                                <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField" Width="72" Height="{StaticResource FireFieldHeight}"
+                                        IsVisible="{Binding IsRenaming}">
+                                    <TextBox Classes="FireFieldInput" Name="SceneName"
+                                             Text="{Binding EditName}"
+                                             MaxLength="24"
+                                             AutomationProperties.Name="{localization:Loc Rig_Scene_Rename}" />
+                                </Border>
+                            </Panel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <Border Grid.Column="2" Theme="{StaticResource FireRuleBorder}" Classes="FireRule Vertical" Margin="{StaticResource FireGapLeftLg}" />
+
+            <!-- the ACTIVE setlist: ◀ name · position · the song's tone ▶ -->
+            <TextBlock Grid.Column="3" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                       Margin="{StaticResource FireGapLeftLg}"
+                       Text="{localization:Loc Rig_Setlist}" />
+            <Button Grid.Column="4" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep" x:Name="RigSetlistPrevious"
+                    Margin="{StaticResource FireGapLeftSm}"
+                    Command="{Binding Setlists.PreviousCommand}"
+                    Content="◀"
+                    ToolTip.Tip="{localization:Loc Rig_Setlist_Previous}"
+                    AutomationProperties.Name="{localization:Loc Rig_Setlist_Previous}" />
+            <!-- the position in a fixed cell, then ONE line that trims as a whole
+                 ("Friday · Crunch chorus"), so the star column can be any width -->
+            <Grid Grid.Column="5" x:Name="RigSetlistNow" ColumnDefinitions="Auto,*"
+                  Margin="{StaticResource FireGapLeftSm}" VerticalAlignment="Center">
+                <TextBlock Theme="{StaticResource FireMonoText}" Classes="SceneBarText FireMono" Width="44"
+                           TextAlignment="Center"
+                           Text="{Binding Setlists.ActivePosition}" />
+                <TextBlock Grid.Column="1" Theme="{StaticResource RigRoleBodyText}" Classes="SceneBarText RigRoleBody"
+                           Margin="{StaticResource FireGapLeftSm}"
+                           IsVisible="{Binding !Setlists.HasActive}"
+                           Text="{Binding Setlists.ActiveName}" />
+                <TextBlock Grid.Column="1" Theme="{StaticResource RigRoleBodyText}" Classes="SceneBarText RigRoleBody" x:Name="RigSetlistNowText"
+                           Margin="{StaticResource FireGapLeftSm}"
+                           IsVisible="{Binding Setlists.HasActive}"
+                           ToolTip.Tip="{Binding Setlists.ActiveEntryName}">
+                    <Run FontWeight="{StaticResource FireWeightUi}" Foreground="{DynamicResource FireTextBright}"
+                         Text="{Binding Setlists.ActiveName}" />
+                    <Run Text="{Binding Setlists.ActiveEntrySuffix}" />
+                </TextBlock>
+            </Grid>
+            <Button Grid.Column="6" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep" x:Name="RigSetlistNext"
+                    Margin="{StaticResource FireGapLeftSm}"
+                    Command="{Binding Setlists.NextCommand}"
+                    Content="▶"
+                    ToolTip.Tip="{localization:Loc Rig_Setlist_Next}"
+                    AutomationProperties.Name="{localization:Loc Rig_Setlist_Next}" />
+
+            <Border Grid.Column="7" Theme="{StaticResource FireRuleBorder}" Classes="FireRule Vertical" Margin="{StaticResource FireGapLeftLg}" />
+
+            <!-- what the controller last sent — a fixed cell, so the first
+                 message arriving moves nothing -->
+            <StackPanel Grid.Column="8" x:Name="RigMidiMonitor" Orientation="Horizontal"
+                        Margin="{StaticResource FireGapLeftLg}" Spacing="{StaticResource FireSpaceSm}"
+                        VerticalAlignment="Center">
+                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center" Text="{localization:Loc Rig_Midi_Short}" />
+                <TextBlock x:Name="RigMidiMonitorText" Theme="{StaticResource FireMonoText}" Classes="SceneBarText FireMono" Width="176"
+                           Text="{Binding MidiMonitorText}"
+                           ToolTip.Tip="{localization:Loc Rig_Midi_Last}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

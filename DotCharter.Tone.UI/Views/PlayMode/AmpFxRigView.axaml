@@ -1,0 +1,1655 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:conv="using:DotCharter.Tone.UI.Converters"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.AmpFxRigView"
+             x:DataType="vm:AmpFxRigViewModel">
+
+    <UserControl.Resources>
+        <!-- The gear browser's tile, its own dictionary so this view stays
+             inside its size budget (#240). -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Views/PlayMode/RigGearTileTemplate.axaml" />
+                <ResourceInclude Source="avares://DotCharter.Tone.UI/Views/PlayMode/RigBoardLaneTemplate.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- The rig's own rules that are not ControlThemes (descendant selectors,
+             Path / Panel / Grid / ScrollViewer marks): FIRST, so every rule below
+             and every hosted view's own styles still come after them (#242). -->
+        <StyleInclude Source="avares://DotCharter.Tone.UI/Views/PlayMode/AmpFxRigStyles.axaml" />
+        <!-- the design's board is a plain dark panel with a faint glow at the top -->
+        <Style Selector="Border.FireWash.StageKey"><Setter Property="Opacity" Value="0.25" /></Style>
+        <!-- …and the STAGE above the map is lit: the selected gear stands in the light -->
+        <Style Selector="Border.FireWash.StageKey.Lit"><Setter Property="Opacity" Value="0.85" /></Style>
+
+        <Style Selector="fire|FireKnob">
+            <Setter Property="HardwareStyle" Value="True" />
+        </Style>
+        <Style Selector="TextBlock.FireRowTitle, TextBlock.FireCardTitle">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+        </Style>
+        <Style Selector="TextBlock.FireTitle">
+            <Setter Property="FontSize" Value="{StaticResource FireSizePanelTitle}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!--
+        The Amp & FX rig (§6.8) — the app's ONE tone-rig surface.
+
+        It lived inline in PlayModeView.axaml until v0.43, which is the only
+        reason the CHART EDITOR still opened a second, older pedalboard: the
+        editor's toolbar button, its Tools menu entry and the `tools.pedalboard`
+        palette command all raise MainWindowViewModel.IsPedalboardOpen, and the
+        overlay that flag shows had nothing else it could host. Markup nested in
+        another screen is not addressable, so the ViewLocator could resolve the
+        RETIRED PedalboardView and not this.
+
+        As its own view it is a view over AmpFxRigViewModel, which the locator
+        finds by the ViewModel -> View rename, and BOTH hosts — Play Mode and the
+        editor overlay — are now one line: Content="{Binding AmpFxRig}". One
+        surface, one chain, one set of features.
+    -->
+    <Grid x:Name="RigScreenRoot"
+          Background="{DynamicResource FireOverlayFill}">
+        <Border Theme="{StaticResource FireScreenBorder}" Classes="FireScreen" Margin="18"
+                MinWidth="1000" MinHeight="720">
+            <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto">
+
+                <!-- ── HEADER (56) ─────────────────────────────────────── -->
+                <Border Grid.Row="0" Grid.ColumnSpan="2" x:Name="RigHeader"
+                        Theme="{StaticResource FireHeaderBorder}" Classes="FireHeader" Height="64"
+                        Padding="{StaticResource FirePadBar}">
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto,Auto"
+                          VerticalAlignment="Center">
+
+                        <!-- the design's brand: the waveform mark and the name -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceSm}">
+                            <Path Classes="FireBrandMark" Data="{DynamicResource IconRigBrand}" />
+                            <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Title}" />
+                        </StackPanel>
+
+                        <!-- The mockup's TONE PILL: the applied tone's name,
+                             the EDITED badge and a caret, all in one control
+                             that opens the tone drawer. It replaced a bare
+                             ComboBox because a picker is not a browser — it
+                             cannot search, cannot say which tones are the
+                             player's own and offers no save/overwrite/delete
+                             (the owner's "the dropdown doesn't open the
+                             browser for tones like the old one"). The name is
+                             the browser's own ActivePresetName, so the pill
+                             and the drawer can never disagree.
+
+                             It keeps the name `RigBrowseButton`: the drawer's
+                             close button binds THIS button's command instance
+                             rather than climbing back out through an ancestor
+                             binding. -->
+                        <Border Grid.Column="1" Theme="{StaticResource FireRuleBorder}" Classes="FireRule Vertical"
+                                Margin="{StaticResource FireGapLeftLg}" />
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Margin="{StaticResource FireGapLeftMd}"
+                                    Spacing="{StaticResource FireSpaceSm}">
+                            <!-- PRESET: the design's dropdown trigger (215×40) that opens
+                                 the tone browser, printing the applied tone's name and
+                                 its EDITED badge. It keeps the name `RigBrowseButton`:
+                                 the drawer's close binds this button's command. -->
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Preset_Eyebrow}" />
+                            <Button Theme="{StaticResource FireTonePillButton}" Classes="FireTonePill" x:Name="RigBrowseButton"
+                                    Command="{Binding Rig.ToggleBrowserCommand}"
+                                    ToolTip.Tip="{localization:Loc PresetBrowser_ToggleDrawer}"
+                                    AutomationProperties.Name="{localization:Loc Rig_Preset}">
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding PresetName}" />
+                                    <!-- EDITED: derived, not a flag — the live chain compared
+                                         against the applied preset's rig. -->
+                                    <TextBlock Grid.Column="1" Theme="{StaticResource FireMonoText}" Classes="FireMono Warn" x:Name="RigEditedBadge"
+                                               VerticalAlignment="Center" Margin="{StaticResource FireGapLeftSm}"
+                                               IsVisible="{Binding IsEdited}"
+                                               Text="{localization:Loc Rig_Edited}" />
+                                    <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Center"
+                                               Margin="{StaticResource FireGapLeftSm}" Text="▼" />
+                                </Grid>
+                            </Button>
+                            <!-- ▲▼ = previous / next tone: a stepper in the same
+                                 frame and height as everything else on the bar,
+                                 not two bare glyphs floating beside the pill -->
+                            <Border Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment" Height="{StaticResource FireHeaderControlHeight}"
+                                    Padding="{StaticResource FirePadNone}">
+                                <StackPanel>
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Stepper" x:Name="RigPresetPrev"
+                                            Command="{Binding Rig.Browser.PrevPresetCommand}"
+                                            Content="▲"
+                                            ToolTip.Tip="{localization:Loc PresetBrowser_Prev}"
+                                            AutomationProperties.Name="{localization:Loc PresetBrowser_Prev}" />
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Stepper" x:Name="RigPresetNext"
+                                            Command="{Binding Rig.Browser.NextPresetCommand}"
+                                            Content="▼"
+                                            ToolTip.Tip="{localization:Loc PresetBrowser_Next}"
+                                            AutomationProperties.Name="{localization:Loc PresetBrowser_Next}" />
+                                </StackPanel>
+                            </Border>
+                            <Button Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton" x:Name="RigSaveButton"
+                                    Command="{Binding Rig.Browser.BeginSaveAsNewCommand}"
+                                    Content="{localization:Loc Rig_Save}" />
+                            <TextBlock Theme="{StaticResource FireConsequenceText}" Classes="FireConsequence" VerticalAlignment="Center"
+                                       MaxWidth="240" TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding HasToneFileStatus}"
+                                       Text="{Binding ToneFileStatus}"
+                                       ToolTip.Tip="{Binding ToneFileStatus}" />
+                        </StackPanel>
+
+                        <!-- The input meter and its CLIP lamp moved to the footer
+                             with the tone-rig design (INPUT / OUTPUT next to the
+                             jack picker). -->
+
+                        <!-- DI · RE-AMP (ABI v37): record the dry guitar, then play
+                             a take back INTO the rig in place of the guitar. A
+                             header button with a popover rather than a footer
+                             cluster: the footer must stay ONE line at 1920
+                             (RigFooterStabilityUiPerfSmokeTests). The lamp lights
+                             while recording or re-amping, so a take still running
+                             behind a closed popover is never invisible. -->
+                        <Button Grid.Column="4" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton" x:Name="RigReampButton"
+                                IsVisible="{Binding HasReamp}"
+                                Margin="{StaticResource FireGapLeftMd}"
+                                ToolTip.Tip="{localization:Loc Rig_Reamp_ButtonTip}"
+                                AutomationProperties.Name="{localization:Loc Rig_Reamp_Title}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <Panel Width="7" Height="7" VerticalAlignment="Center">
+                                    <Ellipse Fill="{DynamicResource FireTextFaint}" IsVisible="{Binding !Reamp.IsActive}" />
+                                    <Ellipse Fill="{DynamicResource FireDanger}" IsVisible="{Binding Reamp.IsActive}" />
+                                </Panel>
+                                <TextBlock VerticalAlignment="Center" Text="{localization:Loc Rig_Reamp_Button}" />
+                            </StackPanel>
+                            <Button.Flyout>
+                                <Flyout Placement="BottomEdgeAlignedRight">
+                                    <views:RigReampPanel DataContext="{Binding Reamp}" />
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+
+                        <!-- SCENE: the rig has TWO compare slots, not four.
+                             A/B is what ToneCompareSlots really holds, so
+                             the strip prints two.
+
+                             A and B are BUTTONS. They drew as two lit
+                             `Border`s until 0.61 — the same FireSegment /
+                             FireSegmentItem look the ROUTING strip in the
+                             footer wears, where the items ARE ToggleButtons —
+                             so the owner clicked the pair the whole strip is
+                             named after and nothing happened. Jumping to a
+                             named slot is the primary A/B gesture in every amp
+                             sim; SWITCH is the same verb without having to aim.
+
+                             Neither is ever disabled: an empty target slot is
+                             FORKED from what is playing (ToneCompareSlots
+                             .SelectSlot), so the first press on a fresh rig
+                             lands somewhere instead of reading as dead. -->
+                        <StackPanel Grid.Column="5" Orientation="Horizontal"
+                                    Spacing="{StaticResource FireSpaceSm}"
+                                    Margin="{StaticResource FireGapLeftMd}"
+                                    VerticalAlignment="Center">
+                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule Vertical"
+                                    Margin="{StaticResource FireGapRightLg}" />
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Scene}" />
+                            <Border Theme="{StaticResource FireModeStripBorder}" Classes="FireModeStrip" x:Name="RigSceneStrip">
+                                <StackPanel Orientation="Horizontal">
+                                    <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton Scene" x:Name="RigSceneA"
+                                                  IsChecked="{Binding Rig.IsCompareSlotA, Mode=OneWay}"
+                                                  Command="{Binding Rig.SelectCompareSlotCommand}"
+                                                  CommandParameter="A"
+                                                  ToolTip.Tip="{localization:Loc Rig_Scene_Tip}"
+                                                  AutomationProperties.Name="{localization:Loc Rig_SceneA}">
+                                        <TextBlock Text="A" />
+                                    </ToggleButton>
+                                    <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton Scene" x:Name="RigSceneB"
+                                                  IsChecked="{Binding Rig.IsCompareSlotB, Mode=OneWay}"
+                                                  Command="{Binding Rig.SelectCompareSlotCommand}"
+                                                  CommandParameter="B"
+                                                  ToolTip.Tip="{localization:Loc Rig_Scene_Tip}"
+                                                  AutomationProperties.Name="{localization:Loc Rig_SceneB}">
+                                        <TextBlock Text="B" />
+                                    </ToggleButton>
+                                </StackPanel>
+                            </Border>
+                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule Vertical" Margin="{StaticResource FireGapLeftSm}" />
+                            <Button AutomationProperties.Name="{localization:Loc Rig_SeedCompare}" Theme="{StaticResource FireTextButton}" Classes="FireTextButton" x:Name="RigSeedButton"
+                                    Command="{Binding Rig.SeedCompareCommand}"
+                                    ToolTip.Tip="{localization:Loc Rig_SeedCompare_Tip}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                    <Path Classes="FireHeaderIcon" Data="{DynamicResource IconRigCopy}" />
+                                    <TextBlock VerticalAlignment="Center" Text="{localization:Loc Rig_SeedCompare}" />
+                                </StackPanel>
+                            </Button>
+                            <views:RigCompareLevelView x:Name="RigCompareLevel" DataContext="{Binding Rig.CompareLevel}" />
+                        </StackPanel>
+
+                        <!-- WHOSE rig this is. Every seat has its own
+                             tone rig (ABI v28) on its own input channel, so one
+                             surface has to be able to address any of them. Present
+                             ONLY with a real roster: over a single player a picker
+                             is a live-looking control over nothing.
+
+                             Switching copies nothing — each seat keeps the rig it
+                             already had, which is the entire point of per-player
+                             rigs. See PedalboardViewModel.Seats.cs. -->
+                        <StackPanel Grid.Column="6" Orientation="Horizontal"
+                                    x:Name="RigSeatPicker"
+                                    IsVisible="{Binding Rig.HasMultipleSeats}"
+                                    Margin="{StaticResource FireGapLeftLg}"
+                                    Spacing="{StaticResource FireSpaceXs}"
+                                    VerticalAlignment="Center">
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Seat}" />
+                            <ComboBox Classes="FireCombo" MinWidth="130"
+                                      x:Name="RigSeatCombo"
+                                      ItemsSource="{Binding Rig.Seats}"
+                                      SelectedItem="{Binding Rig.SelectedSeat, Mode=TwoWay}"
+                                      ToolTip.Tip="{localization:Loc Rig_Seat_Tip}"
+                                      AutomationProperties.Name="{localization:Loc Rig_Seat}" />
+                        </StackPanel>
+
+                        <Button Grid.Column="7" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton Bold" x:Name="RigMasterBypass"
+                                Margin="{StaticResource FireGapLeftMd}"
+                                Command="{Binding Rig.ToggleMasterBypassCommand}"
+                                Content="{localization:Loc Rig_Bypass}" />
+                        <!-- the design's cog: the actions the header has no room for -->
+                        <Button Grid.Column="8" Theme="{StaticResource FireHeaderIconButton}" Classes="FireHeaderIconButton" x:Name="RigHeaderMenu"
+                                Margin="{StaticResource FireGapLeftSm}"
+                                ToolTip.Tip="{localization:Loc Rig_Header_More}"
+                                AutomationProperties.Name="{localization:Loc Rig_Header_More}">
+                            <Path Classes="FireHeaderIcon" Data="{DynamicResource IconCog}" Fill="{DynamicResource FireAccentBright}" Stroke="{x:Null}" />
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuItem x:Name="RigCompareButton" Header="{localization:Loc Rig_Compare}"
+                                              Command="{Binding Rig.ToggleCompareCommand}" />
+                                    <MenuItem x:Name="RigExportTone" Header="{localization:Loc Rig_ToneExportTitle}"
+                                              Command="{Binding ExportToneCommand}" />
+                                    <MenuItem x:Name="RigImportTone" Header="{localization:Loc Rig_ToneImportTitle}"
+                                              Command="{Binding ImportToneCommand}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+
+                        <!-- The §7 "flat vs textured" skin switch is GONE, and
+                             with it the classic rack it opened. There is one
+                             pedalboard: two skins over one chain read as two
+                             pedalboards, which is exactly what the owner
+                             reported ("the old pedalboard still exists"). -->
+
+                        <!-- The ✕ is HOST-DEPENDENT since 0.62. In the chart
+                             editor it is absent: the activity rail's rig row is
+                             a two-way toggle over `IsPedalboardOpen`, so it is
+                             the door in BOTH directions and a ✕ beside it would
+                             be a second, quieter door onto one boolean. Play
+                             Mode has no rail — a run hides every piece of
+                             chrome — so there it is the only pointer door and
+                             stays. Pinned by `UI/RigDismissalTests`. -->
+                        <Button Grid.Column="9" Theme="{StaticResource FireOverlayCloseButton}" Classes="FireOverlayClose" x:Name="RigCloseButton"
+                                Width="{StaticResource FireHeaderControlHeight}" Height="{StaticResource FireHeaderControlHeight}"
+                                Margin="{StaticResource FireGapLeftSm}"
+                                Command="{Binding CloseCommand}"
+                                IsVisible="{Binding ShowCloseButton}"
+                                Content="✕"
+                                ToolTip.Tip="{localization:Loc Action_Close}"
+                                AutomationProperties.Name="{localization:Loc Action_Close}" />
+                    </Grid>
+                </Border>
+
+                <!-- ── THE BODY, the AmpliTube 5 way: STAGE · gear bar · routing MAP ──
+                     (2026-09-27) The selected gear stands BIG on the stage at the top,
+                     a slim gear bar under it names it and powers it, and the whole chain
+                     is drawn small and schematic in the routing map at the foot, with the
+                     routing modes in a rail on its left. The gear browser is the right
+                     column (RigGearPanel) and the footer stays. -->
+                <Grid Grid.Row="1" Grid.Column="0" x:Name="RigFlatBody"
+                      IsVisible="{Binding !IsTonesMode}">
+                    <!-- Three rows. Row 0 is THE WORKSPACE (stage + gear bar) and its height is
+                         ABSOLUTE, written by AmpFxRigView.SyncWorkspaceRow: the user's dragged
+                         divider (RigWorkspaceViewModel.Height) or, until then, a share of
+                         the body (AmpFxRigView.StageShare). It never depends on what is inside it,
+                         so selecting a unit or opening its details never moves the map (W1, pinned
+                         by Perf/RigCanvasOwnershipUiPerfSmokeTests). Row 2, the map, is `*` with
+                         a floor a divider drag cannot take. -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="170" />
+                    </Grid.RowDefinitions>
+
+                    <!-- ══ THE WORKSPACE: the stage and its gear bar ══════════════════════ -->
+                    <Grid Grid.Row="0" x:Name="RigWorkspace" RowDefinitions="Auto,*">
+                    <!-- THE SCENE BAR (scenes A–H, the active setlist, the MIDI monitor) over the stage: its own view, Views/PlayMode/RigSceneBar -->
+                    <views:RigSceneBar Grid.Row="0" x:Name="RigScenes" DataContext="{Binding Rig}" />
+                    <Grid Grid.Row="1" x:Name="RigDock" RowDefinitions="*,Auto">
+
+                        <!-- ══ THE STAGE ══════════════════════════════════════════════════
+                             The selected gear, as big as its aspect allows: RigModuleEditorView
+                             opens the unit's family view (the faceplate with its live knobs, the
+                             cabinet console, the routing console) and, when the gear bar's
+                             DETAILS toggle is on, its details column beside it. -->
+                        <!-- ══ THE MODULE EDITOR ══════════════════════════
+                             The mockup opens a DIFFERENT editor per unit
+                             kind, and its own switch is on the unit's ID — a
+                             per-module table, which is the second catalogue
+                             §7 exists to forbid. The fold here is
+                             `RigEditorFaces.For(PedalSkin)`: the rack already
+                             derives a skin from the module's metadata, so a
+                             module added to the native catalogue tomorrow
+                             lands on the right face with nothing here to
+                             update.
+
+                             Three faces share live catalogue parameters. Dual IR,
+                             polarity/alignment and delay sync/trails are real native
+                             controls; selected-module meters read native telemetry. -->
+                        <!-- THE EDITOR ENDS ABOVE THE FOOTER, AND IT SAYS SO.
+                             Owner, 2026-09-12: "the pedal's options view renders
+                             behind the footer strip". It does not — the strip is
+                             row 2 of the screen and this is inside row 1, and a
+                             sweep of all 100 catalogue modules at 1920×1080 and
+                             1600×900 finds ZERO painted pixels of this subtree
+                             inside RigFooter's box (RigFooterStabilityUiPerfSmoke
+                             Tests.TheModuleEditor_NeverPaintsIntoTheFooter). What
+                             the owner sees is the CUT: every family view's root
+                             `ScrollViewer` (RigEditorScroll) is taller than the
+                             dock row — 401 px of editor in a 335 px viewport for
+                             57 of the 100 modules — and Avalonia AUTO-HIDES a
+                             scrollbar, so the last row of knobs is sliced off
+                             exactly at the strip's top edge with nothing on
+                             screen saying the content continues. Two halves, and
+                             both must stay:
+                               • every family view's root scroller is now
+                                 `x:Name="RigEditorScroll"` with
+                                 `VerticalScrollBarVisibility="Visible"
+                                 AllowAutoHide="False"` — the treatment
+                                 `ScrollViewer.FireBoardScroll` already had, and
+                                 that the cabinet and routing-console editors had
+                                 found for themselves while the other seven were
+                                 left on `Auto`. It is set per view and NOT here:
+                                 `ScrollViewer.AllowAutoHide` does NOT inherit
+                                 down the tree (measured — setting it on this
+                                 Border left every RigEditorScroll reading true),
+                                 which is exactly the kind of "one place" fix that
+                                 looks applied and is not.
+                               • `ClipToBounds="True"` makes the containment
+                                 STRUCTURAL. Today it holds only because every
+                                 family view happens to have a ScrollViewer at its
+                                 root; a family view without one would overflow
+                                 this Border (a Border does not clip) into row 2,
+                                 where the footer — a LATER sibling in the same
+                                 Grid — would paint over it, which is the bug this
+                                 comment says we do not have. -->
+                        <Border Grid.Row="0" x:Name="RigDockBody"
+                                Background="{DynamicResource FireSurfaceSunken}"
+                                Padding="{StaticResource FirePadRow}"
+                                ClipToBounds="True"
+                                IsVisible="{Binding IsDockBodyVisible}">
+                            <Panel>
+                                <!-- the stage's light: the selected gear stands in it -->
+                                <Border Theme="{StaticResource FireWashBorder}" Classes="FireWash StageKey Lit" IsHitTestVisible="False" />
+                                <ContentControl Content="{Binding DockUnit}"
+                                                fire:FireUnitState.Category="{Binding DockUnit.FireCategory}">
+                                    <ContentControl.ContentTemplate>
+                                        <DataTemplate x:DataType="vm:RigDockUnit">
+                                            <views:RigModuleEditorView />
+                                        </DataTemplate>
+                                    </ContentControl.ContentTemplate>
+                                </ContentControl>
+                            </Panel>
+                        </Border>
+
+                        <!-- THE EMPTY WORKSPACE (W4, 2026-09-16). W1 fixed the
+                             canvas by giving the workspace a height that does
+                             not depend on its content, and the price it named
+                             was this: with no editor up the row was 34 px of
+                             dock bar over bare SUNKEN SPACE that said nothing.
+                             An empty state occupies the space the loaded state
+                             would and says what to do next.
+
+                             TWO STATES, TWO SENTENCES (round 2). The gate is
+                             `!IsDockBodyVisible`, which is true both when
+                             nothing is selected AND when a unit is selected and
+                             HIDE collapsed it — and "Nothing selected" is FALSE
+                             in the second: the bar directly above is printing
+                             that unit's name and its ENABLED switch, and the
+                             canvas is drawing the block lit. The hidden variant
+                             names the unit and points at the button that undoes
+                             it, whose own caption is SHOW while it is hidden. -->
+                        <Border Grid.Row="0" x:Name="RigDockEmpty"
+                                Background="{DynamicResource FireSurfaceSunken}"
+                                Padding="{StaticResource FirePadPanel}"
+                                IsVisible="{Binding !IsDockBodyVisible}">
+                            <Panel>
+                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="RigDockEmptyNoSelection"
+                                            Classes="FireEmptyState"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Center"
+                                            IsVisible="{Binding HasNoDockSelection}">
+                                    <TextBlock TextAlignment="Center" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                               HorizontalAlignment="Center"
+                                               Text="{localization:Loc Rig_TonesMode_EmptyTitle}" />
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                               HorizontalAlignment="Center"
+                                               TextAlignment="Center"
+                                               MaxWidth="420"
+                                               Text="{localization:Loc Rig_TonesMode_EmptyBody}" />
+                                </StackPanel>
+
+                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="RigDockEmptyHidden"
+                                            Classes="FireEmptyState"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Center"
+                                            IsVisible="{Binding IsEditorHidden}">
+                                    <TextBlock TextAlignment="Center" Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel"
+                                               HorizontalAlignment="Center"
+                                               Text="{localization:Loc Rig_Editor_HiddenTitle}" />
+                                    <TextBlock x:Name="RigDockEmptyHiddenBody"
+                                               Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                               HorizontalAlignment="Center"
+                                               TextAlignment="Center"
+                                               MaxWidth="420"
+                                               Text="{Binding HiddenEditorHint}" />
+                                </StackPanel>
+                            </Panel>
+                        </Border>
+
+                        <!-- ══ THE GEAR BAR ═════════════════════════════════════════════
+                             AmpliTube's strip under the stage: POWER (the unit's bypass — the same
+                             flag the face's footswitch and the ··· menu write), ▲ / ▼ through the
+                             chain in signal order, where the unit sits and its name; on the right
+                             the branch choice inside a split, the unit's actions, HIDE and the
+                             DETAILS toggle. -->
+                        <Border Grid.Row="1" Theme="{StaticResource FireDockBarBorder}" Classes="FireDockBar FireGearBar" x:Name="RigDockBar">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto" VerticalAlignment="Center">
+                                <ToggleButton Grid.Column="0" Theme="{StaticResource FirePowerToggle}" Classes="FirePowerButton" x:Name="RigDockEnabled"
+                                              IsVisible="{Binding HasDockUnit}"
+                                              IsChecked="{Binding DockUnit.IsUnitEnabled, Mode=TwoWay}"
+                                              ToolTip.Tip="{localization:Loc Rig_BypassUnit}"
+                                              AutomationProperties.Name="{localization:Loc Rig_Editor_Enabled}">
+                                    <Path Classes="FireRigGlyph" Data="{DynamicResource IconRigPower}" />
+                                </ToggleButton>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                            Margin="{StaticResource FireGapLeftSm}" IsVisible="{Binding HasDockUnit}">
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep" x:Name="RigDockPrev"
+                                            Command="{Binding SelectPreviousUnitCommand}"
+                                            Content="▲"
+                                            ToolTip.Tip="{localization:Loc Rig_Editor_Previous}"
+                                            AutomationProperties.Name="{localization:Loc Rig_Editor_Previous}" />
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep" x:Name="RigDockNext"
+                                            Command="{Binding SelectNextUnitCommand}"
+                                            Content="▼"
+                                            ToolTip.Tip="{localization:Loc Rig_Editor_Next}"
+                                            AutomationProperties.Name="{localization:Loc Rig_Editor_Next}" />
+                                </StackPanel>
+                                <!-- where it sits, then its name: "LANE B / Overdrive" -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                            Margin="{StaticResource FireGapLeftMd}" Spacing="{StaticResource FireSpaceSm}"
+                                            IsVisible="{Binding HasDockUnit}">
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                               Foreground="{Binding DockLaneTokenKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}"
+                                               Text="{Binding DockLaneLabel}" />
+                                    <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint" VerticalAlignment="Center" Text="/" />
+                                    <TextBlock Theme="{StaticResource FireGearBarNameText}" Classes="FireGearBarName" x:Name="RigGearBarName"
+                                               Text="{Binding DockUnit.DisplayName}" ToolTip.Tip="{Binding DockUnit.DisplayName}" />
+                                </StackPanel>
+                                <!-- nothing picked: say what the stage is for -->
+                                <StackPanel Grid.Column="2" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center"
+                                            Margin="{StaticResource FireGapLeftMd}" Spacing="{StaticResource FireSpaceSm}"
+                                            IsVisible="{Binding !HasDockUnit}">
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center" Text="{localization:Loc Rig_Module}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Text="{localization:Loc Rig_Dock_Empty_Body}" />
+                                </StackPanel>
+
+                                <!-- Which BRANCH of the parallel region this
+                                     unit runs on. Only up when the footer has
+                                     actually opened one, and never for the
+                                     splitter or merger — they ARE the region's
+                                     boundary, so they are not on a lane. -->
+                                <StackPanel Grid.Column="5" Orientation="Horizontal"
+                                            x:Name="RigDockBranch"
+                                            VerticalAlignment="Center"
+                                            Margin="{StaticResource FireGapLeftSm}"
+                                            IsVisible="{Binding HasBranchChoice}">
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                               Text="{localization:Loc Rig_Branch}" />
+                                    <Border Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment"
+                                            Margin="{StaticResource FireGapLeftSm}">
+                                        <ItemsControl ItemsSource="{Binding BranchOptions}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:RigBranchOption">
+                                                    <ToggleButton Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                                                  IsChecked="{Binding IsActive, Mode=OneWay}"
+                                                                  Command="{Binding $parent[ItemsControl].((vm:AmpFxRigViewModel)DataContext).SetBranchCommand}"
+                                                                  CommandParameter="{Binding}">
+                                                        <TextBlock Text="{Binding Label}" />
+                                                    </ToggleButton>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- ··· the module actions: bypass / enable and remove.
+                                     A menu, because the design puts the rarer verbs
+                                     behind one button instead of a row of them. -->
+                                <Button Grid.Column="6" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" x:Name="RigDockActions"
+                                        Margin="{StaticResource FireGapLeftSm}"
+                                        IsVisible="{Binding HasDockUnit}"
+                                        Content="···"
+                                        ToolTip.Tip="{localization:Loc Rig_Editor_Actions}"
+                                        AutomationProperties.Name="{localization:Loc Rig_Editor_Actions}">
+                                    <Button.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuItem Header="{Binding DockUnit.ToggleEnabledLabel}"
+                                                      Command="{Binding DockUnit.ToggleEnabledCommand}" />
+                                            <MenuItem Header="{localization:Loc Rig_Duplicate}"
+                                                      Command="{Binding DockUnit.DuplicateCommand}"
+                                                      CommandParameter="{Binding DockUnit.Node}" />
+                                            <!-- REPLACE WITH…: one row per catalogue module, each row its
+                                                 own command + request (RigReplaceOption). -->
+                                            <MenuItem Header="{localization:Loc Rig_Replace}"
+                                                      IsVisible="{Binding DockUnit.HasReplaceOptions}"
+                                                      ItemsSource="{Binding DockUnit.ReplaceOptions}">
+                                                <MenuItem.Styles>
+                                                    <Style Selector="MenuItem > MenuItem" x:DataType="vm:RigReplaceOption">
+                                                        <Setter Property="Header" Value="{Binding Label}" />
+                                                        <Setter Property="Command" Value="{Binding Command}" />
+                                                        <Setter Property="CommandParameter" Value="{Binding Request}" />
+                                                    </Style>
+                                                </MenuItem.Styles>
+                                            </MenuItem>
+                                            <MenuItem Header="{Binding UndoRemoveLabel}"
+                                                      IsVisible="{Binding CanUndoRemove}"
+                                                      Command="{Binding UndoRemoveCommand}" />
+                                            <MenuItem Header="{localization:Loc Rig_RemoveUnit}"
+                                                      Command="{Binding Rig.RemoveCommand}"
+                                                      CommandParameter="{Binding DockUnit.Node}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+
+                                <Button Grid.Column="7" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                        x:Name="RigDockToggle"
+                                        Margin="{StaticResource FireGapLeftMd}"
+                                        IsVisible="{Binding HasDockUnit}"
+                                        Command="{Binding ToggleDockCommand}"
+                                        Content="{Binding DockToggleLabel}" />
+
+                                <!-- DETAILS: the unit's extras beside the stage (AmpFxRigViewModel.IsDetailsOpen) -->
+                                <ToggleButton Grid.Column="8" Theme="{StaticResource FireDetailsToggle}" Classes="FireDetailsToggle" x:Name="RigDetailsToggle"
+                                              Margin="{StaticResource FireGapLeftMd}"
+                                              IsVisible="{Binding HasDockUnit}"
+                                              IsChecked="{Binding IsDetailsOpen, Mode=OneWay}"
+                                              Command="{Binding ToggleDetailsCommand}"
+                                              ToolTip.Tip="{localization:Loc Rig_Details_Tip}"
+                                              AutomationProperties.Name="{localization:Loc Rig_Details}">
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                        <Path Classes="FireRigGlyph" Data="{DynamicResource IconRigDetails}" />
+                                        <TextBlock VerticalAlignment="Center" Text="{localization:Loc Rig_Details}" />
+                                    </StackPanel>
+                                </ToggleButton>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    </Grid><!-- /RigWorkspace -->
+
+                    <!-- THE DIVIDER between the stage and the map: drag to trade one for the
+                         other (committed to RigWorkspaceViewModel.Height on release),
+                         double-click for the default share, arrow keys nudge it. It carries no
+                         Background: the app-wide GridSplitter style draws the hairline and grip. -->
+                    <GridSplitter Grid.Row="1" x:Name="RigBrowserSplitter"
+                                  Height="6"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch"
+                                  ResizeDirection="Rows"
+                                  ResizeBehavior="PreviousAndNext"
+                                  ToolTip.Tip="{localization:Loc Rig_ResizeToneLibrary}"
+                                  AutomationProperties.Name="{localization:Loc Rig_ResizeToneLibrary}" />
+
+                    <!-- ══ THE ROUTING MAP ════════════════════════════════════════════════
+                         The whole chain, small and schematic: every unit a non-interactive
+                         thumbnail of its own faceplate on thin wires (the main path in its
+                         token, each parallel lane in its own), IN at the left, the speaker at
+                         the right, the selected unit framed in amber. Click selects (the stage
+                         above opens it), drag reorders or re-lanes (RigBoardDragController), a
+                         gap's + arms the insert point. Left of it, the routing rail. -->
+                    <!-- RigSignalStrip is the map's CONSOLE: the routing rail, the board and
+                         the board's tools (the zoom cluster and Fit ride its caption row). -->
+                    <Border Grid.Row="2" x:Name="RigSignalStrip">
+                    <Grid x:Name="RigMap" ColumnDefinitions="Auto,*">
+                        <!-- THE ROUTING RAIL: Series / Dual / Triple as icons (the
+                             lit one is the rig's routing), and Add at its foot. -->
+                        <Border Grid.Column="0" x:Name="RigRoutingRail" Theme="{StaticResource FireMapRailBorder}" Classes="FireMapRail">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" x:Name="RigRoutingStrip" Spacing="{StaticResource FireSpaceXs}">
+                                    <TextBlock Theme="{StaticResource FireMapRailLabelText}" Classes="FireMapRailLabel" Text="{localization:Loc Rig_Routing_Title}" />
+                                    <ToggleButton Theme="{StaticResource FireMapModeToggle}" Classes="FireMapMode"
+                                                  IsChecked="{Binding Rig.IsRoutingSerial, Mode=OneWay}"
+                                                  Command="{Binding Rig.RoutingSerialCommand}"
+                                                  ToolTip.Tip="{localization:Loc Rig_Routing_Series}"
+                                                  AutomationProperties.Name="{localization:Loc Rig_Routing_Series}">
+                                        <Path Classes="FireRigGlyph" Data="{DynamicResource IconRigSeries}" />
+                                    </ToggleButton>
+                                    <ToggleButton Theme="{StaticResource FireMapModeToggle}" Classes="FireMapMode"
+                                                  IsChecked="{Binding Rig.IsRoutingSplit2, Mode=OneWay}"
+                                                  Command="{Binding Rig.RoutingSplit2Command}"
+                                                  ToolTip.Tip="{localization:Loc Rig_Routing_Dual}"
+                                                  AutomationProperties.Name="{localization:Loc Rig_Routing_Dual}">
+                                        <Path Classes="FireRigGlyph" Data="{DynamicResource IconRigDual}" />
+                                    </ToggleButton>
+                                    <ToggleButton Theme="{StaticResource FireMapModeToggle}" Classes="FireMapMode"
+                                                  IsChecked="{Binding Rig.IsRoutingSplit3, Mode=OneWay}"
+                                                  Command="{Binding Rig.RoutingSplit3Command}"
+                                                  ToolTip.Tip="{localization:Loc Rig_Routing_Triple}"
+                                                  AutomationProperties.Name="{localization:Loc Rig_Routing_Triple}">
+                                        <Path Classes="FireRigGlyph" Data="{DynamicResource IconRigTriple}" />
+                                    </ToggleButton>
+                                </StackPanel>
+                                <!-- ADD: the gear browser is where a unit comes from, so this puts the
+                                     caret in its search (AmpFxRigView.OnRigAddUnit) -->
+                                <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom" Spacing="{StaticResource FireSpaceXs}">
+                                    <Border Theme="{StaticResource FireMapRailRuleBorder}" Classes="FireMapRailRule" />
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireMapTool Accent" x:Name="RigAddUnit"
+                                            Click="OnRigAddUnit"
+                                            Content="+"
+                                            ToolTip.Tip="{localization:Loc Rig_Gear_AddToRig}"
+                                            AutomationProperties.Name="{localization:Loc Rig_Gear_AddToRig}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" x:Name="RigBoard" Theme="{StaticResource FireBoardWellBorder}" Classes="FireBoardWell">
+                            <Panel>
+                                <!-- the stage wash, faint: the map is a recess, not a second stage -->
+                                <Border Theme="{StaticResource FireWashBorder}" Classes="FireWash StageKey" IsHitTestVisible="False" />
+                                <Grid RowDefinitions="*,Auto">
+                                    <!-- RigBoardScroll + RigBoardZoomHost: a long chain
+                                         SCROLLS here (wheel = horizontal, the code-behind
+                                         translates it) and the whole row scales through
+                                         the persisted Rig.Zoom (Ctrl+wheel or the footer
+                                         cluster; a LayoutTransform, so scrolling extents
+                                         stay honest). The transform is pushed from
+                                         code-behind — a {Binding} inside a Transform has
+                                         no DataContext to inherit. -->
+                                    <!-- `FireBoardScroll` + Visible/no-auto-hide: the board's
+                                         scrollbars are REST-VISIBLE (the v8 mockup's styled
+                                         tracks) — the global chrome fades scrollbars to
+                                         near-invisible at rest, which on a chain running
+                                         past the edge read as "the rig ends here". Scoped
+                                         to this scroller; Chrome.axaml is untouched. -->
+                                    <!-- HORIZONTAL IS `Auto`, NOT `Visible` (W1,
+                                         2026-09-16): the chain is fitted to the canvas
+                                         width by AmpFxRigView.BoardFitScale, so a normal
+                                         rig produces NO horizontal bar at all. The
+                                         rest-visible treatment that mattered is
+                                         `AllowAutoHide="False"` — a bar that is needed
+                                         stays solid instead of fading to 0.2 and reading
+                                         as "the rig ends here". `Visible` reserved a
+                                         permanent empty track under a chain that fits. -->
+                                    <ScrollViewer x:Name="RigBoardScroll"
+                                                  Classes="FireBoardScroll"
+                                                  HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  AllowAutoHide="False"
+                                                  Padding="{StaticResource FirePadRowLg}">
+                                        <!-- The CENTRING is the host's, not the path's: a LayoutTransformControl
+                                             scales its child's CONTENT but not the offset an aligned child is
+                                             arranged at, so a centred path under a 0.5 fit drew half a map to
+                                             the right (measured at 1280x800, three lanes). -->
+                                        <LayoutTransformControl x:Name="RigBoardZoomHost"
+                                                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- ONE wire from jack to jack. Everything on the
+                                             path — the two jacks, the IN lead, the run's
+                                             connectors and the OUT connector — takes the
+                                             SAME lane token (lane A's colour on a series
+                                             board, the accent around a split region) and
+                                             sits on ONE centre line: the "Lane A" caption
+                                             is a row of its own ABOVE the path, never a
+                                             row inside the run. Until 2026-09-08 the
+                                             caption lived inside the serial segment, so
+                                             the run's wires sat 8 px below the jacks'
+                                             leads in a different colour, and OUT's
+                                             arrowhead stopped 16 px short of its jack with
+                                             a bare lead running on past it ("arrows in rig
+                                             view not nicely connected").
+                                             RigBoardWiresUiPerfSmokeTests pins the geometry
+                                             and the colour. -->
+                                        <Grid x:Name="RigBoardPath" RowDefinitions="Auto,*"
+                                              HorizontalAlignment="Left" VerticalAlignment="Top"
+                                              IsVisible="{Binding HasChain}"
+                                              fire:FireUnitState.LaneToken="{Binding SerialLaneToken}">
+                                            <!-- 44 + 16 - 7 + 44: above the first card -->
+                                            <TextBlock x:Name="RigSerialLaneLabel" Theme="{StaticResource FireLaneLabelText}" Classes="FireLaneLabel"
+                                                       Margin="97,0,0,2"
+                                                       IsVisible="{Binding Rig.IsRoutingSerial}"
+                                                       Text="{Binding SerialLaneLabel}" />
+                                        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                                                    VerticalAlignment="Center">
+
+                                            <!-- The guitar goes IN here. A jack + a lead
+                                                 is what makes the row read as a signal
+                                                 PATH rather than a shelf of cards. The
+                                                 well is 44 wide around a 30 px ring, so
+                                                 the -7 pulls the lead onto the ring. -->
+                                            <Grid Classes="FireJackWell" x:Name="RigJackIn" Margin="0,0,-7,0">
+                                                <Border Theme="{StaticResource FireJackBorder}" Classes="FireJack"
+                                                        BorderBrush="{Binding SerialLaneToken, Converter={x:Static conv:FireTokenBrushConverter.Instance}}">
+                                                    <Border Theme="{StaticResource FireJackPinBorder}" Classes="FireJackPin"
+                                                            Background="{Binding SerialLaneToken, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                                </Border>
+                                                <!-- hangs 4 px under the ring, out of the well's height -->
+                                                <TextBlock Theme="{StaticResource FireJackLabelText}" Classes="FireJackLabel" VerticalAlignment="Bottom" Margin="0,0,0,-17"
+                                                           Text="{localization:Loc Rig_In}" />
+                                            </Grid>
+                                            <fire:RigWire x:Name="RigLeadIn" Width="16" ShowsArrow="False" />
+
+                                            <!-- The board is SEGMENTS now, not one flat run:
+                                                 a serial run of full cards, or the split
+                                                 region with its stacked lanes (the v8
+                                                 mockup's split panel). The fold is the
+                                                 VM's (`BoardSegments`, over the same pure
+                                                 `SplitRegionLayout` the native routing
+                                                 mirrors through), so the board can never
+                                                 draw a region the engine is not running. -->
+                                            <ItemsControl x:Name="RigBoardItems"
+                                                          ItemsSource="{Binding BoardSegments}"
+                                                          VerticalAlignment="Center">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.DataTemplates>
+
+                                                <!-- ══ a SERIAL run: [connector][full card]… ══
+                                                     The connector lives INSIDE the item
+                                                     container on purpose: the drag controller
+                                                     reads a run's items-panel children as its
+                                                     lane and decides by item CENTRES, so a
+                                                     uniform prefix moves every centre by the
+                                                     same amount and the insertion maths is
+                                                     untouched. -->
+                                                <!-- NOTE the casts inside these templates: the
+                                                     templates are NESTED ItemsControls now, so
+                                                     `$parent[ItemsControl]` is the inner run —
+                                                     whose DataContext is the SEGMENT, not the
+                                                     screen. A cast that misses the ancestor's
+                                                     real type matches NOTHING: no warning, no
+                                                     exception, the button draws and does
+                                                     nothing (the trap that already shipped
+                                                     once from PlayModeView). Every command in
+                                                     a board template therefore goes through
+                                                     `$parent[UserControl]` — this view — and
+                                                     `RigScreen_composesItsSixRegions_…` pins
+                                                     each one resolving at runtime. -->
+                                                <DataTemplate DataType="{x:Type vm:RigSerialSegment}">
+                                                    <!-- On a series board the run IS lane A and draws in lane
+                                                         A's colour; around a split region the same run is the
+                                                         trunk and keeps the accent. The token and the "Lane A"
+                                                         caption are the BOARD's (RigBoardPath, inherited), so the
+                                                         run, the leads and the jacks share one colour and one
+                                                         centre line. -->
+                                                    <ItemsControl ItemsSource="{Binding Items}"
+                                                                  VerticalAlignment="Center">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                    </ItemsControl>
+                                                </DataTemplate>
+
+                                                <!-- ══ ONE unit: [connector][graph node] ══
+                                                     The typed template BOTH runs resolve —
+                                                     the serial run and the split region's
+                                                     lanes have no ItemTemplate of their
+                                                     own, so they inherit this one through
+                                                     the board's DataTemplates. A lane
+                                                     holds the same node as the serial run
+                                                     (same drag, same selection), and the
+                                                     board grows vertically to fit
+                                                     (RigBoardScroll scrolls both axes). -->
+                                                    <DataTemplate DataType="{x:Type vm:PedalNodeViewModel}">
+                                                        <StackPanel Orientation="Horizontal"
+                                                                    VerticalAlignment="Center">
+                                                            <Panel Classes="FireConnector">
+                                                                <fire:RigWire />
+                                                                <Button Classes="FireInsertDot"
+                                                                        Command="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).InsertBeforeCommand}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Content="+"
+                                                                        ToolTip.Tip="{localization:Loc Rig_InsertHere}"
+                                                                        AutomationProperties.Name="{localization:Loc Rig_InsertHere}" />
+                                                            </Panel>
+                                                            <!-- ONE unit on the chain, the AmpliTube / BIAS FX way: the
+                                                                 gear's own picture (its faceplate, every knob drawn at its
+                                                                 live value) with its name under it — no card around it.
+                                                                 Clicking it SELECTS it, and the dock below opens the same
+                                                                 gear BIG with its live controls. The whole unit is the
+                                                                 drag handle (RigBoardDragController); the picture is not
+                                                                 a hit target, so the press lands on the card. The height
+                                                                 is AmpFxRigViewModel.BoardFaceHeight (RigBoardFaceSize). -->
+                                                            <!-- FireDragGhost: the drag ghost is THIS card, not the
+                                                                 whole item container with its wire and arrowhead -->
+                                                            <Border Theme="{StaticResource FireUnitCardBorder}" Classes="FireUnitCard FireDragGhost"
+                                                                    Classes.selected="{Binding IsSelected}"
+                                                                    Classes.bypassed="{Binding Bypassed}"
+                                                                    Classes.series="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.IsRoutingSerial}"
+                                                                    fire:FireUnitState.Category="{Binding FireCategory}"
+                                                                    fire:FireUnitState.IsBypassed="{Binding Bypassed}">
+                                                                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                                                    <Border Theme="{StaticResource FireUnitArtFrameBorder}" Classes="FireUnitArtFrame" HorizontalAlignment="Center">
+                                                                        <fire:RigFaceplateView Node="{Binding}" IsInteractive="False" DecodeWidth="480"
+                                                                                               Height="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).BoardFaceHeight}" />
+                                                                    </Border>
+                                                                    <!-- the name, one line (the gear bar names it in full); the lamp says on / bypassed -->
+                                                                    <StackPanel Classes="FireUnitHead" Orientation="Horizontal" HorizontalAlignment="Center"
+                                                                                Spacing="{StaticResource FireSpaceXs}">
+                                                                        <Panel VerticalAlignment="Center">
+                                                                            <Border Theme="{StaticResource FireUnitLedBorder}" Classes="FireUnitLed" IsVisible="{Binding !Bypassed}"
+                                                                                    Background="{Binding FireTokenKey, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                                                            <Border Theme="{StaticResource FireUnitLedBorder}" Classes="FireUnitLed Dim" IsVisible="{Binding Bypassed}" />
+                                                                        </Panel>
+                                                                        <TextBlock Theme="{StaticResource FireCardTitleText}" Classes="FireCardTitle" Text="{Binding DisplayName}"
+                                                                                   ToolTip.Tip="{Binding BoardSummary}"
+                                                                                   TextAlignment="Center" TextWrapping="NoWrap" MaxLines="1"
+                                                                                   TextTrimming="CharacterEllipsis" />
+                                                                    </StackPanel>
+                                                                    <fire:FireLevelMeter Classes="RigBoardMeter" AutomationProperties.Name="{Binding DisplayName}" LevelDb="{Binding BoardOutputDb}" IsVisible="{Binding HasBoardMeter}"
+                                                                                         MinimumDb="-60" MaximumDb="6" SegmentCount="12" Width="72" HorizontalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+
+                                                <!-- ══ the SPLIT REGION: fan · lanes · fan ══
+                                                     The design's graph translated onto the
+                                                     real routing: the splitter/merger nodes
+                                                     ARE the region's frame, every lane is
+                                                     its branch's own horizontal run of graph
+                                                     nodes (the shared unit template above)
+                                                     ending in its mixer node, and the fan
+                                                     buses + per-lane stubs draw the
+                                                     split/merge by layout, so they stay
+                                                     aligned however tall a lane grows. -->
+                                                <DataTemplate DataType="{x:Type vm:RigSplitSegment}">
+                                                    <StackPanel Orientation="Horizontal"
+                                                                VerticalAlignment="Center">
+                                                        <fire:RigWire Width="16" ShowsArrow="False" />
+                                                        <!-- The design draws the region as a fan: the Split
+                                                             node, one row per lane (chip, cards, the lane's
+                                                             mixer node), then the Merge node. No frame and no
+                                                             header — Series in the header dissolves it. -->
+                                                        <Border Theme="{StaticResource FireSplitRegionBorder}" Classes="FireSplitRegion">
+                                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                                                                <!-- the SPLIT node: click opens its routing console -->
+                                                                <Button Grid.Column="0" Theme="{StaticResource FireJunctionNodeButton}" Classes="FireJunctionNode"
+                                                                        Command="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).SelectUnitCommand}"
+                                                                        CommandParameter="{Binding Splitter}"
+                                                                        AutomationProperties.Name="{localization:Loc Rig_Editor_SplitNode}">
+                                                                    <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                                                        <Path Classes="FireJunctionGlyph" Data="{DynamicResource IconRigFork}" />
+                                                                        <TextBlock Theme="{StaticResource FireJunctionLabelText}" Classes="FireJunctionLabel" Text="{localization:Loc Rig_Editor_SplitNode}" />
+                                                                    </StackPanel>
+                                                                </Button>
+                                                                <fire:RigFan Grid.Column="1" Classes="FireLaneBus" />
+                                                                <ItemsControl Grid.Column="2"
+                                                                              ItemsSource="{Binding Lanes}"
+                                                                              ItemTemplate="{StaticResource RigBoardLaneTemplate}" />
+                                                                <fire:RigFan Grid.Column="3" Classes="FireLaneBus" Merges="True"
+                                                                             IsVisible="{Binding !HasAutoMerge}" />
+                                                                <!-- the MERGE node, when the region has a real merger… -->
+                                                                <Button Grid.Column="4" Theme="{StaticResource FireJunctionNodeButton}" Classes="FireJunctionNode"
+                                                                        IsVisible="{Binding !HasAutoMerge}"
+                                                                        Command="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).SelectUnitCommand}"
+                                                                        CommandParameter="{Binding Merger}"
+                                                                        AutomationProperties.Name="{localization:Loc Rig_Editor_MergeNode}">
+                                                                    <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                                                                        <Path Classes="FireJunctionGlyph" Data="{DynamicResource IconRigFork}" RenderTransform="scaleX(-1)" />
+                                                                        <TextBlock Theme="{StaticResource FireJunctionLabelText}" Classes="FireJunctionLabel" Text="{localization:Loc Rig_Editor_MergeNode}" />
+                                                                    </StackPanel>
+                                                                </Button>
+                                                                <!-- …or the honest tag when the engine sums the lanes at the chain end -->
+                                                                <Border Grid.Column="4" Theme="{StaticResource FireTagBorder}" Classes="FireTag" VerticalAlignment="Center"
+                                                                        IsVisible="{Binding HasAutoMerge}">
+                                                                    <TextBlock Text="{localization:Loc Rig_Split_AutoMerge}" />
+                                                                </Border>
+                                                            </Grid>
+                                                        </Border>
+                                                        <fire:RigWire Width="16" ShowsArrow="False" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                                </ItemsControl.DataTemplates>
+                                            </ItemsControl>
+
+                                            <!-- the trailing gap, then OUT. The connector runs
+                                                 the whole 60 px to the jack so its arrowhead
+                                                 lands ON the ring - the same 16 + 44 the IN
+                                                 side spends between its ring and the first
+                                                 card. -->
+                                            <Panel Classes="FireConnector" Width="60" x:Name="RigLeadOut">
+                                                <fire:RigWire />
+                                                <Button Classes="FireInsertDot" x:Name="RigInsertEnd"
+                                                        Command="{Binding InsertAtEndCommand}"
+                                                        Content="+"
+                                                        ToolTip.Tip="{localization:Loc Rig_InsertHere}"
+                                                        AutomationProperties.Name="{localization:Loc Rig_InsertHere}" />
+                                            </Panel>
+                                            <Grid Classes="FireJackWell" x:Name="RigJackOut" Margin="-7,0,0,0">
+                                                <Border Theme="{StaticResource FireJackBorder}" Classes="FireJack"
+                                                        BorderBrush="{Binding SerialLaneToken, Converter={x:Static conv:FireTokenBrushConverter.Instance}}">
+                                                    <Border Theme="{StaticResource FireJackPinBorder}" Classes="FireJackPin"
+                                                            Background="{Binding SerialLaneToken, Converter={x:Static conv:FireTokenBrushConverter.Instance}}" />
+                                                </Border>
+                                                <TextBlock Theme="{StaticResource FireJackLabelText}" Classes="FireJackLabel" VerticalAlignment="Bottom" Margin="0,0,0,-17"
+                                                           Text="{localization:Loc Rig_Out}" />
+                                            </Grid>
+                                            <!-- …into the speaker: the map ends where the sound leaves -->
+                                            <Path Classes="FireRigGlyph FireMapSpeaker" x:Name="RigMapSpeaker" Data="{DynamicResource IconRigSpeaker}" />
+                                        </StackPanel>
+                                        </Grid>
+                                        </LayoutTransformControl>
+                                    </ScrollViewer>
+
+                                    <!-- The design's caption under the graph: what the routing
+                                         is, and how the board is used. -->
+                                    <!-- The map's foot: what the routing is, how the map is used,
+                                         and its tools — the zoom (the persisted Rig.Zoom; Ctrl+wheel
+                                         too, the % resets) and Fit. -->
+                                    <Grid x:Name="RigBoardCaption" ColumnDefinitions="Auto,Auto,*,Auto,Auto"
+                                          Grid.Row="1" IsVisible="{Binding HasChain}" Height="34"
+                                          Margin="12,0,8,4">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="{StaticResource FireSpaceSm}">
+                                            <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot" />
+                                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center" Text="{Binding RoutingSummary}" />
+                                        </StackPanel>
+                                        <!-- The map's two transient chips: WHERE the next unit lands while
+                                             a gap is armed, and the undo for a removed unit. In the caption
+                                             row, never over the chain: an overlay covered the last unit. -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                                    Margin="{StaticResource FireGapLeftMd}" Spacing="{StaticResource FireSpaceSm}">
+                                            <!-- The armed insertion gap, and the way back
+                                                 out of it. It reads the same state the
+                                                 board's + buttons write, so the two can
+                                                 never disagree about where the next unit
+                                                 lands. -->
+                                            <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill Accent FireMapChip" x:Name="RigInsertChip"
+                                                    IsVisible="{Binding HasInsertPoint}">
+                                                <StackPanel Orientation="Horizontal"
+                                                            Spacing="{StaticResource FireSpaceSm}">
+                                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText Accent"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding InsertPointLabel}" />
+                                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                                            Command="{Binding ClearInsertPointCommand}"
+                                                            Content="✕"
+                                                            ToolTip.Tip="{localization:Loc Rig_InsertClear}"
+                                                            AutomationProperties.Name="{localization:Loc Rig_InsertClear}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <!-- "Removed Overdrive — undo": the board's undo for a removed
+                                                 unit, while there is one to put back. -->
+                                            <Border Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill FireMapChip" x:Name="RigUndoChip"
+                                                    IsVisible="{Binding CanUndoRemove}">
+                                                <StackPanel Orientation="Horizontal"
+                                                            Spacing="{StaticResource FireSpaceSm}">
+                                                    <TextBlock Theme="{StaticResource FireStatusText}" Classes="FireStatusText"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding UndoRemoveLabel}" />
+                                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link" x:Name="RigUndoRemove"
+                                                            Command="{Binding UndoRemoveCommand}"
+                                                            Content="{localization:Loc Rig_UndoRemove}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" x:Name="RigChainLatency" VerticalAlignment="Center"
+                                                       Text="{Binding Rig.BoardMeters.ChainLatencyText}" IsVisible="{Binding Rig.BoardMeters.HasChainLatency}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"
+                                                   Margin="{StaticResource FireGapLeftMd}"
+                                                   Text="{localization:Loc Rig_Board_Hint}" />
+                                        <StackPanel Grid.Column="3" x:Name="RigZoomCluster" Orientation="Horizontal"
+                                                    VerticalAlignment="Center" Margin="{StaticResource FireGapLeftMd}">
+                                            <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireMapTool" x:Name="RigZoomOut" Width="28"
+                                                    Command="{Binding Rig.ZoomOutCommand}"
+                                                    Content="−"
+                                                    ToolTip.Tip="{localization:Loc Rig_ZoomOut}"
+                                                    AutomationProperties.Name="{localization:Loc Rig_ZoomOut}" />
+                                            <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireMapTool" x:Name="RigZoomReset" MinWidth="48"
+                                                    Command="{Binding Rig.ZoomResetCommand}"
+                                                    ToolTip.Tip="{localization:Loc Rig_ZoomReset}"
+                                                    AutomationProperties.Name="{localization:Loc Rig_ZoomReset}">
+                                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Value FireMapZoomText" Text="{Binding Rig.ZoomPercentLabel}" />
+                                            </Button>
+                                            <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireMapTool" x:Name="RigZoomIn" Width="28"
+                                                    Command="{Binding Rig.ZoomInCommand}"
+                                                    Content="+"
+                                                    ToolTip.Tip="{localization:Loc Rig_ZoomIn}"
+                                                    AutomationProperties.Name="{localization:Loc Rig_ZoomIn}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="4" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireMapTool" x:Name="RigFitButton" Width="28"
+                                                Click="OnRigFit"
+                                                Content="⛶"
+                                                ToolTip.Tip="{localization:Loc Rig_Fit}"
+                                                AutomationProperties.Name="{localization:Loc Rig_Fit}" />
+                                    </Grid>
+                                </Grid>
+
+                                <!-- Empty board: a sentence and the fix, never a
+                                     lone glyph in a big box (§4 Empty state). -->
+                                <StackPanel Theme="{StaticResource FireEmptyStatePanel}" x:Name="RigBoardEmpty" Classes="FireEmptyState"
+                                            IsVisible="{Binding !HasChain}">
+                                    <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                                               Text="{localization:Loc Rig_Empty_Kicker}" />
+                                    <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                               Text="{localization:Loc Rig_Empty_Body}" />
+                                </StackPanel>
+                            </Panel>
+                        </Border>
+                    </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- ══ THE TONES MODE ══════════════════════════════════════
+                     Its own view since 2026-09-27 (RigTonesView): the chain
+                     strip, the tone library and the AI designer. A SIBLING of
+                     RigFlatBody in the same cell, each gated on the flag, so
+                     leaving the mode returns the canvas and the editor exactly as
+                     left — nothing inside the canvas body is touched while the
+                     mode is up. The gear rail is column 1 and stays. -->
+                <views:RigTonesView Grid.Row="1" Grid.Column="0" x:Name="RigTonesMode"
+                                    IsVisible="{Binding IsTonesMode}" />
+
+                <!-- ── GEAR PANEL (FireRigGearPanelWidth: 320, 420 wide) ──
+                     It spans the board row AND the footer row: in the mockup
+                     the gear column runs from under the header to the floor
+                     and the footer stops at its left edge. Spanning only the
+                     board row (with a full-width footer under it) put the
+                     tuner and the routing strip UNDERNEATH the gear panel,
+                     squeezed into whatever was left.
+
+                     The width is the `FireRigGearPanelWidth` token rather than
+                     a literal (lane E, 2026-09-13): this is the rig's context
+                     rail and it halved as a share of the screen exactly as the
+                     front door's two rails did — 16.7 % of 1920, 8.3 % of 3840
+                     — so it steps to 420 above the wide breakpoint. A
+                     DynamicResource, so nothing here has to know the
+                     breakpoint; `Services/UiBreakpointController` merges the
+                     wide ladder and the value re-resolves. -->
+                <Border Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" x:Name="RigGearPanel"
+                        Theme="{StaticResource FireContextRailBorder}" Classes="FireContextRail" Width="{DynamicResource FireRigGearPanelWidth}">
+                        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+                        <!-- "Gear · 57 modules" — the design's panel header. While a
+                             gap is armed the count gives way to WHERE the next unit
+                             lands: the panel is the thing you are about to click. -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Gear_Title}" />
+                            <TextBlock Grid.Column="2" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding !HasInsertPoint}"
+                                       Text="{Binding ModuleCountLabel}" />
+                            <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono Accent"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding HasInsertPoint}"
+                                       Text="{Binding InsertPointLabel}" />
+                        </Grid>
+
+                        <!-- BROWSE | FAVOURITES: the library's two tabs. Each tab row carries its own command. -->
+                        <Border Grid.Row="1" Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment" x:Name="RigGearTabs" HorizontalAlignment="Stretch"
+                                Margin="{StaticResource FireGapTopSm}">
+                            <ItemsControl ItemsSource="{Binding GearLibraryTabs}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><UniformGrid Rows="1" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RigGearLibraryTab">
+                                        <ToggleButton Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" HorizontalAlignment="Stretch"
+                                                      IsChecked="{Binding IsActive, Mode=OneWay}"
+                                                      Command="{Binding Command}">
+                                            <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" />
+                                        </ToggleButton>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+
+                        <!-- THE CATEGORY TABS, AmpliTube's row of icons across the browser: ALL and
+                             the eight identities (RigCategoryFilter.IconKey names each glyph), the
+                             label a tooltip away. Icons, not words, so nine fit one row in every
+                             culture — the word grid needed three rows and clipped in de / ja. -->
+                        <ItemsControl Grid.Row="2" x:Name="RigGearFilters"
+                                      Margin="0,6,1,0"
+                                      ItemsSource="{Binding CategoryFilters}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RigCategoryFilter">
+                                    <ToggleButton Theme="{StaticResource FireGearCatTabToggle}" Classes="FireGearCatTab"
+                                                  IsChecked="{Binding IsActive, Mode=OneWay}"
+                                                  Command="{Binding $parent[ItemsControl].((vm:AmpFxRigViewModel)DataContext).FilterCategoryCommand}"
+                                                  CommandParameter="{Binding}"
+                                                  ToolTip.Tip="{Binding Label}"
+                                                  AutomationProperties.Name="{Binding Label}">
+                                        <Path Classes="FireRigGlyph"
+                                              Data="{Binding IconKey, Converter={x:Static conv:FireResourceConverter.Instance}}" />
+                                    </ToggleButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Border Grid.Row="3" Theme="{StaticResource FireFieldBorder}" Classes="FireField" Margin="{StaticResource FireGapTopSm}">
+                            <TextBox x:Name="RigGearSearch" Classes="FireFieldInput"
+                                     Text="{Binding Rig.GearRail.SearchText}"
+                                     PlaceholderText="{localization:Loc Rig_SearchGear}"
+                                     AutomationProperties.Name="{localization:Loc Rig_SearchGear}" />
+                        </Border>
+
+                        <!-- THE GRID: two thumbnails a row, each the gear's own faceplate with its
+                             name under it. VIRTUALIZED: a ListBox over GearTilePairs (GearRows two to
+                             a row) with the default VirtualizingStackPanel, because a wrapping panel
+                             cannot virtualize and a hundred faceplate tiles realized at once is the
+                             cost Perf/PlayModeScreensUiPerfSmokeTests.Rig pins. Clicking a tile
+                             highlights it for "Add to rig" (and it is the drag handle onto the map —
+                             RigBoardDragController finds its RigGearItem); its + adds at once, to the
+                             armed gap or the add-to lane; the star keeps it in Favourites. -->
+                        <ListBox Grid.Row="4" x:Name="RigGearGroups"
+                                 Classes="FireList"
+                                 Margin="{StaticResource FireGapTopSm}"
+                                 ItemsSource="{Binding GearTilePairs}"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 KeyboardNavigation.TabNavigation="Continue"
+                                 AutomationProperties.Name="{localization:Loc Rig_Gear_Title}">
+                            <!-- A ROW is a layout trick, not a piece of gear (#857): it is presentation only
+                                 (Raw, so a screen reader never announces the pair as its type name, and not a
+                                 tab stop). Each TILE inside it is its own named Button, reached by Tab
+                                 (TabNavigation=Continue) and picked by Enter / Space like a click. -->
+                            <ListBox.Styles>
+                                <Style Selector="ListBoxItem">
+                                    <Setter Property="Focusable" Value="False" />
+                                    <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+                                </Style>
+                            </ListBox.Styles>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RigGearTilePair">
+                                    <Grid ColumnDefinitions="*,*" Classes="FireGearTileRow">
+                                        <ContentControl Grid.Column="0" Content="{Binding Left}" ContentTemplate="{StaticResource RigGearTileTemplate}" />
+                                        <ContentControl Grid.Column="1" Content="{Binding Right}" IsVisible="{Binding HasRight}"
+                                                        ContentTemplate="{StaticResource RigGearTileTemplate}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Nothing matched: a sentence, not a blank column. -->
+                        <StackPanel Theme="{StaticResource FireEmptyStatePanel}" Grid.Row="4" Classes="FireEmptyState"
+                                    IsVisible="{Binding !HasGearGroups}">
+                            <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyKickerText}" Classes="FireEmptyKicker"
+                                       Text="{localization:Loc Rig_Gear}" />
+                            <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                       IsVisible="{Binding !IsGearLibraryFavorites}"
+                                       Text="{localization:Loc Rig_Gear_NoMatch}" />
+                            <TextBlock TextAlignment="Center" Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody"
+                                       IsVisible="{Binding IsGearLibraryFavorites}"
+                                       Text="{localization:Loc Rig_Gear_NoFavorites}" />
+                        </StackPanel>
+
+                        <!-- the design's foot: "Add to [lane]" and the outlined Add to rig -->
+                        <StackPanel Grid.Row="5" Margin="{StaticResource FireGapTopSm}"
+                                    Spacing="{StaticResource FireSpaceSm}">
+                            <Grid ColumnDefinitions="Auto,*" x:Name="RigAddTarget" IsVisible="{Binding HasAddTargetChoice}">
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                           Margin="{StaticResource FireGapRightLg}"
+                                           Text="{localization:Loc Rig_Editor_AddTo}" />
+                                <ComboBox Grid.Column="1" x:Name="RigAddTargetPicker" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding AddTargetLanes}"
+                                          SelectedItem="{Binding AddTargetOption, Mode=TwoWay}"
+                                          DisplayMemberBinding="{Binding Label}"
+                                          AutomationProperties.Name="{localization:Loc Rig_Editor_AddTo}" />
+                            </Grid>
+                            <Button Theme="{StaticResource FireOutlineCtaButton}" Classes="FireOutlineCta" x:Name="RigAddToRig"
+                                    Command="{Binding AddSelectedGearCommand}"
+                                    Content="{localization:Loc Rig_Gear_AddToRig}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ── FOOTER ────────────────────────────────────────────
+                     Column 0 only: the gear panel owns the right edge all
+                     the way down (see its RowSpan above). The groups WRAP
+                     onto a second line on a narrow window, as the design's
+                     footer does, instead of running under the gear panel. -->
+                <Border Grid.Row="2" Grid.Column="0" x:Name="RigFooter"
+                        Theme="{StaticResource FireFooterBorder}" Classes="FireFooter" MinHeight="52"
+                        Padding="{StaticResource FirePadBar}">
+                    <!-- EVERY DYNAMIC READOUT IN HERE SITS IN A FIXED COLUMN.
+                         Owner, 2026-09-12: "the footer jumps around while the
+                         tuner reads". Three faults, all of them width:
+                         `Rig.RigTuner.NoteText` swings 24 px ("–") to 36 px
+                         ("A#10"); the cents readout and the status hint are
+                         MUTUALLY EXCLUSIVE and 32 px against 150 px, so every
+                         note that came and went shoved the reference box, the
+                         tempo box and both meters sideways; and `FireRowDesc`
+                         carries `TextWrapping="Wrap"`, so the "Audio engine not
+                         running…" hint wrapped to THREE lines and made the whole
+                         strip 80 px tall instead of 52 — which then came out of
+                         the module editor's row.
+                         Each cluster is therefore ONE wrap item that is
+                         internally a Grid with FIXED columns, sized from the
+                         widest value it can print, measured headless in the real
+                         Fire faces (RigFooterStabilityUiPerfSmokeTests re-measures
+                         them): note 36 -> 40, cents "-50 ¢" 32 and status 150
+                         share one 150 px cell, the CLIP lamp 41 -> 44, the tempo
+                         "Mixed" label (66 in de-DE) -> 72. The WrapPanel stays:
+                         it is what lets the clusters fall onto a second line on a
+                         narrow window instead of running under the gear panel. -->
+                    <WrapPanel Orientation="Horizontal"
+                               ItemSpacing="{StaticResource FireSpaceSm}"
+                               LineSpacing="{StaticResource FireSpaceXs}"
+                               VerticalAlignment="Center">
+
+                        <!-- ── TUNER ────────────────────────────────────────
+                             tuning · (note | strings) · needle · (cents | status)
+                             · A=Hz. The PICKER is the strip's label: "Chromatic" or
+                             "Drop D" beside a needle says what it is. With a
+                             tuning, the note's cell shows the tuning's strings
+                             instead (the lit chip is the note) — a width that
+                             follows the tuning PICKED, never a reading, like the
+                             tempo's "Mixed" flag. EVERY cell is fixed, so picking a
+                             tuning moves nothing either (owner, 2026-09-27: it did):
+                             the picker fits "Bass · E Standard", the note / strings
+                             cell is six chips wide whichever it shows, and the
+                             meter is centred on the strip, not top-aligned. -->
+                        <Grid x:Name="RigTunerStrip" VerticalAlignment="Center"
+                              ColumnDefinitions="180,101,Auto,86,Auto"
+                              ColumnSpacing="{StaticResource FireSpaceSm}"
+                              Margin="{StaticResource FireGapLeftMd}">
+                            <!-- the tuning to tune TO: chromatic, or a tuning whose
+                                 nearest string each note is judged against -->
+                            <ComboBox Grid.Column="0" x:Name="RigTunerTuning"
+                                      HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                      ItemsSource="{Binding Rig.RigTuner.Tunings}"
+                                      SelectedItem="{Binding Rig.RigTuner.SelectedTuning, Mode=TwoWay}"
+                                      ToolTip.Tip="{localization:Loc Rig_TunerTuningTip}"
+                                      AutomationProperties.Name="{localization:Loc Rig_TunerTuning}">
+                                <ComboBox.SelectionBoxItemTemplate>
+                                    <DataTemplate x:DataType="vm:RigTunerTuningChoice">
+                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ComboBox.SelectionBoxItemTemplate>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RigTunerTuningChoice">
+                                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" Text="{Binding Notes}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource FireTextMuted}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <!-- the widest note name the tuner can print is a
+                                 sharp over a two-digit octave, "A#10" = 42 px in JetBrains Mono -->
+                            <Panel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                                <TextBlock x:Name="RigTunerNote" Width="46" HorizontalAlignment="Center"
+                                           Theme="{StaticResource FireTunerNoteText}" Classes="FireTunerNote"
+                                           IsVisible="{Binding !Rig.RigTuner.HasTuning}"
+                                           TextWrapping="NoWrap" TextAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding Rig.RigTuner.NoteText}" />
+                                <ItemsControl x:Name="RigTunerStrings"
+                                              VerticalAlignment="Center" HorizontalAlignment="Center"
+                                              IsVisible="{Binding Rig.RigTuner.HasTuning}"
+                                              ItemsSource="{Binding Rig.RigTuner.Strings}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="1" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:RigTunerStringChip">
+                                            <Border Theme="{StaticResource FireTunerStringBorder}" Classes="FireTunerString"
+                                                    Classes.current="{Binding IsCurrent}"
+                                                    Classes.tuned="{Binding IsTuned}">
+                                                <TextBlock Text="{Binding Note}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Panel>
+                            <fire:FireTunerMeter Grid.Column="2" x:Name="RigTunerMeter" VerticalAlignment="Center"
+                                                 Width="130"
+                                                 AutomationProperties.Name="{localization:Loc Rig_TunerReading}"
+                                                 Cents="{Binding Rig.RigTuner.CentsOff}"
+                                                 HasReading="{Binding Rig.RigTuner.HasReading}" />
+                            <!-- ONE cell for the two readouts, because they are
+                                 alternatives: with a reading the cents number is
+                                 up, without one the status hint is, and swapping
+                                 a 32 px string for a 150 px one is what moved
+                                 everything to the right of here. -->
+                            <Panel Grid.Column="3" x:Name="RigTunerReadout" VerticalAlignment="Center">
+                                <TextBlock x:Name="RigTunerCents" Theme="{StaticResource FireMonoText}" Classes="FireMono Value"
+                                           VerticalAlignment="Center" HorizontalAlignment="Left"
+                                           TextWrapping="NoWrap" TextAlignment="Left"
+                                           IsVisible="{Binding Rig.RigTuner.HasReading}"
+                                           Text="{Binding Rig.RigTuner.CentsText}" />
+                            <!-- WHY THE NEEDLE IS STILL. The tuner polls only
+                                 while this screen is live and only reads a seat
+                                 the engine is running, and it already words
+                                 every one of those states in StatusHint
+                                 ("Pluck a string…", "Audio engine not running -
+                                 configure an input device in Settings first",
+                                 "This player's input is only live during a
+                                 co-op run"). Nothing DREW it: the footer showed
+                                 a dash and a dead meter, and the owner reported
+                                 the tuner as a control with no function. A
+                                 capability the app cannot honour must say so —
+                                 same rule as the disabled-with-a-reason engine
+                                 features. NoWrap is load-bearing: FireRowDesc
+                                 wraps, and the longest hint took the strip to
+                                 three lines. -->
+                                <TextBlock x:Name="RigTunerStatus"
+                                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                           IsVisible="{Binding !Rig.RigTuner.HasReading}"
+                                           Text="{Binding Rig.RigTuner.StatusShort}"
+                                           ToolTip.Tip="{Binding Rig.RigTuner.StatusHint}" />
+                            </Panel>
+                            <!-- concert pitch: what the needle judges against -->
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                                <!-- "A4 =", the tuner's own notation: the full name
+                                     ("Reference pitch", 95 px) cost the strip its line -->
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                           Margin="{StaticResource FireGapLeftMd}"
+                                           ToolTip.Tip="{localization:Loc Rig_Editor_ReferencePitch}"
+                                           Text="{localization:Loc Rig_TunerReferenceShort}" />
+                                <NumericUpDown x:Name="RigTunerReference"
+                                               Width="60" ShowButtonSpinner="False"
+                                               Minimum="415" Maximum="466" Increment="1" FormatString="0"
+                                               Value="{Binding Rig.RigTuner.ReferenceHz, Mode=TwoWay}"
+                                               ToolTip.Tip="{localization:Loc Rig_TunerReferenceTip}"
+                                               AutomationProperties.Name="{localization:Loc Rig_Editor_ReferencePitch}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- The footer's two meters are the rig's INPUT and the
+                             LAST unit's output. Nothing here claims to be a
+                             master or song-output reading. -->
+
+                        <!-- ── TEMPO ────────────────────────────────────────
+                             The BPM box is fixed at 84 (20..400 to one decimal),
+                             so the digits cannot move the Tap button. The "Mixed"
+                             flag's column is Auto and NOT reserved: it follows the
+                             SELECTION, not a value the tuner writes, and reserving
+                             its widest face (66 px in de-DE) permanently pushed
+                             the OUTPUT cluster onto a second line at 1920. -->
+                        <Grid x:Name="RigTempoStrip" VerticalAlignment="Center"
+                              ColumnDefinitions="Auto,84,Auto,Auto"
+                              ColumnSpacing="{StaticResource FireSpaceXs}"
+                              Margin="{StaticResource FireGapLeftMd}"
+                              ToolTip.Tip="{localization:Loc Rig_TempoHint}">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Tempo}" />
+                            <NumericUpDown Grid.Column="1" x:Name="RigTempoBox"
+                                           ShowButtonSpinner="False" Minimum="20" Maximum="400" Increment="1"
+                                           FormatString="0.#"
+                                           Value="{Binding Rig.Tempo.BPM, Mode=TwoWay}"
+                                           IsEnabled="{Binding Rig.Tempo.HasTargets}"
+                                           AutomationProperties.Name="{localization:Loc Rig_Tempo}" />
+                            <Button Grid.Column="2" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" x:Name="RigTempoTap"
+                                    Command="{Binding Rig.Tempo.TapCommand}"
+                                    Content="{localization:Loc Rig_Tap}" />
+                            <TextBlock Grid.Column="3" x:Name="RigTempoMixed" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding Rig.Tempo.HasMixedValues}"
+                                       Text="{localization:Loc Rig_TempoMixed}" />
+                        </Grid>
+
+                        <!-- GUITAR INPUT JACK. The owner's guitar is on the
+                             interface's second input, and the only place that
+                             could say so was a pair of index boxes in
+                             Settings > Audio - nothing where the amp is picked.
+                             This is the SAME setting (AppConfig.AsioInputChannel*),
+                             applied at once through ApplyAudioConfiguration, and
+                             it follows the seat picker. Disabled with its reason
+                             in the tooltip when the jack cannot be chosen (input
+                             off, or WASAPI, which has no input mask). -->
+                        <Grid x:Name="RigInputChannelPicker"
+                              VerticalAlignment="Center"
+                              ColumnDefinitions="Auto,110,Auto,Auto,44"
+                              ColumnSpacing="{StaticResource FireSpaceXs}"
+                              Margin="{StaticResource FireGapLeftMd}"
+                              ToolTip.Tip="{Binding InputChannel.Hint}">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Input}" />
+                            <ComboBox Grid.Column="1" x:Name="RigInputChannelCombo"
+                                      HorizontalAlignment="Stretch"
+                                      IsEnabled="{Binding InputChannel.IsAvailable}"
+                                      ItemsSource="{Binding InputChannel.Options}"
+                                      SelectedItem="{Binding InputChannel.Selected, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc Rig_Input}" />
+                            <!-- WHY the picker is grey, printed beside it. The reason
+                                 lived in the tooltip alone, and an empty disabled combo
+                                 next to a live tuner read as "input selector doesn't
+                                 work anymore" (owner, 2026-09-08). Same rule as the
+                                 tuner's StatusHint: a capability the app cannot honour
+                                 says so where the control is. It is ONE line: the
+                                 strip's height is the module editor's row, and 80
+                                 (240, then 180) is what keeps the OUTPUT cluster on
+                                 the first line at 1920 since the DROP pedal joined
+                                 it; the whole reason is the cluster's tooltip. -->
+                            <TextBlock Grid.Column="2" x:Name="RigInputChannelReason" MaxWidth="80"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                       Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                                       IsVisible="{Binding !InputChannel.IsAvailable}"
+                                       Text="{Binding InputChannel.ShortHint}"
+                                       ToolTip.Tip="{Binding InputChannel.Hint}" />
+                            <!-- A custom-drawn meter has no face a screen reader can
+                                 read, so it carries its own name. -->
+                            <fire:FireLevelMeter Grid.Column="3" x:Name="RigInputMeter" Width="60" SegmentCount="10"
+                                                 VerticalAlignment="Center"
+                                                 AutomationProperties.Name="{localization:Loc Rig_InputLevel}"
+                                                 LevelDb="{Binding InputLevelDb}" />
+                            <!-- the CLIP lamp: the real peak crossing 0 dBFS. Its
+                                 column is reserved (41 px of tag in 44) because it
+                                 comes and goes at audio rate — unreserved, every
+                                 clip shoved the OUTPUT meter sideways. -->
+                            <Border Grid.Column="4" Theme="{StaticResource FireTagBorder}" Classes="FireTag Warn" x:Name="RigClipTag"
+                                    VerticalAlignment="Center" HorizontalAlignment="Left"
+                                    IsVisible="{Binding IsInputClipping}">
+                                <TextBlock Text="{localization:Loc Rig_Clip}" />
+                            </Border>
+                        </Grid>
+
+                        <!-- DROP TUNE: the digital drop pedal on the live input
+                             (−12…+12 semitones, before the chain), next to the jack
+                             it shifts. The host owns the value (RigDropTuneViewModel):
+                             DotCharter's transport, or RigLab's engine + config.
+                             Fixed 84 px so "−12" and "0" sit in the same box, untrimmed. -->
+                        <Grid x:Name="RigDropTuneStrip" VerticalAlignment="Center"
+                              ColumnDefinitions="Auto,84"
+                              ColumnSpacing="{StaticResource FireSpaceXs}"
+                              Margin="{StaticResource FireGapLeftMd}"
+                              IsVisible="{Binding DropTune, Converter={x:Static ObjectConverters.IsNotNull}}"
+                              ToolTip.Tip="{localization:Loc Toolbar_DropTune_Tip}">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                       Classes.Accent="{Binding DropTune.IsEngaged, FallbackValue=False}"
+                                       Text="{localization:Loc Rig_DropTune}" />
+                            <ComboBox Grid.Column="1" x:Name="RigDropTuneCombo"
+                                      HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                      ItemsSource="{Binding DropTune.Steps}"
+                                      SelectedItem="{Binding DropTune.SelectedStep, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc Toolbar_DropTune}" />
+                        </Grid>
+
+                        <!-- OUTPUT: what leaves the last unit in the chain — the
+                             only output the engine meters, so this is that, not a
+                             master meter. Same floor as IN when nothing runs. -->
+                        <StackPanel x:Name="RigOutputStrip" Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Margin="{StaticResource FireGapLeftMd}"
+                                    Spacing="{StaticResource FireSpaceXs}"
+                                    ToolTip.Tip="{localization:Loc Rig_OutputLevelHint}">
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Output}" />
+                            <fire:FireLevelMeter x:Name="RigOutputMeter" Width="72" SegmentCount="12" VerticalAlignment="Center"
+                                                 AutomationProperties.Name="{localization:Loc Rig_OutputLevel}"
+                                                 LevelDb="{Binding Rig.OutputMeters.OutputDb}" />
+                        </StackPanel>
+
+                        <!-- CPU: the audio CALLBACK's load, measured inside it by the
+                             engine (ABI v46) - average here, peak in the tooltip, amber
+                             past 80 %. A fixed 24 px cell fits "99%" / "99+"; no engine = a
+                             dash and the reason. No left gap: at 1920 the strip has ~60 px
+                             left after OUTPUT and must stay ONE line. RigCpuLoadViewModel. -->
+                        <Grid x:Name="RigCpuStrip" VerticalAlignment="Center"
+                              ColumnDefinitions="Auto,24" ColumnSpacing="{StaticResource FireSpaceXs}"
+                              IsVisible="{Binding CpuLoad, Converter={x:Static ObjectConverters.IsNotNull}}"
+                              ToolTip.Tip="{Binding CpuLoad.ToolTip, FallbackValue={x:Null}}">
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center"
+                                       Text="{localization:Loc Rig_Cpu}" />
+                            <TextBlock Grid.Column="1" x:Name="RigCpuValue" Theme="{StaticResource FireMonoText}" Classes="FireMono Value"
+                                       Classes.Warn="{Binding CpuLoad.IsHigh, FallbackValue=False}"
+                                       VerticalAlignment="Center" TextWrapping="NoWrap"
+                                       AutomationProperties.Name="{localization:Loc Rig_Cpu}"
+                                       Text="{Binding CpuLoad.ValueText, FallbackValue=-}" />
+                        </Grid>
+                    </WrapPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- SAVE TONE — the screen's one modal: name · description · category.
+             It is opened from TWO places (the header's Save and the drawer's
+             "Save as new…") and it snapshots the LIVE RIG, not anything the
+             drawer has selected — so it lives at the SCREEN root, scrimming
+             the whole rig. Its first home was inside the drawer's subtree,
+             where the header button with the drawer CLOSED opened an
+             invisible dialog: the flag flipped, Esc ate a keypress, nothing
+             appeared. Pinned by AmpFxRigScreenTests
+             .TheSaveDialog_IsAScreenModal_VisibleWithTheDrawerClosed. -->
+        <Border Theme="{StaticResource FireOverlayScrimBorder}" Classes="FireOverlayScrim" x:Name="RigBrowserSaveDialog"
+                IsVisible="{Binding Rig.Browser.IsSaveDialogOpen}">
+            <Border Theme="{StaticResource FireOverlayCardBorder}" Classes="FireOverlayCard" Width="440"
+                    Padding="{StaticResource FirePadPanelLg}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    DataContext="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.Browser}"
+                    x:DataType="vm:PresetBrowserViewModel">
+                <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                    <!-- One dialog, two modes: "Save tone" over the live rig, or
+                         "Edit tone details" over a card's own tone (the card
+                         menu's Rename / edit details…). The VM names both. -->
+                    <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" x:Name="RigSaveDialogTitle"
+                               Text="{Binding SaveDialogTitle}" />
+
+                    <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   Text="{localization:Loc PresetBrowser_NameLabel}" />
+                        <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                            <TextBox Classes="FireFieldInput" x:Name="RigSaveNameBox"
+                                     Text="{Binding SaveName}"
+                                     PlaceholderText="{localization:Loc PresetBrowser_NamePlaceholder}"
+                                     AutomationProperties.Name="{localization:Loc PresetBrowser_NameLabel}" />
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   Text="{localization:Loc PresetBrowser_DescriptionLabel}" />
+                        <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                            <TextBox Classes="FireFieldInput"
+                                     Text="{Binding SaveDescription}"
+                                     PlaceholderText="{localization:Loc PresetBrowser_DescriptionPlaceholder}"
+                                     AutomationProperties.Name="{localization:Loc PresetBrowser_DescriptionLabel}" />
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="{StaticResource FireSpaceXxs}">
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                   Text="{localization:Loc PresetBrowser_CategoryLabel}" />
+                        <ComboBox Classes="FireCombo" HorizontalAlignment="Stretch"
+                                  ItemsSource="{Binding SaveCategories}"
+                                  SelectedItem="{Binding SelectedSaveCategory}"
+                                  AutomationProperties.Name="{localization:Loc PresetBrowser_CategoryLabel}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PresetCategoryOption">
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                                Command="{Binding CancelSaveCommand}"
+                                Content="{localization:Loc PresetBrowser_Cancel}" />
+                        <Button Grid.Column="2" Theme="{StaticResource FireCtaButton}" Classes="FireCta Compact"
+                                Margin="{StaticResource FireGapLeftSm}"
+                                Command="{Binding ConfirmSaveCommand}">
+                            <TextBlock Classes="FireCtaLabel"
+                                       Text="{Binding SaveDialogConfirmText}" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- DELETE TONE — the confirmation a tone card's "Delete…" (and the
+             head's) opens: nothing is deleted until it is confirmed here. The
+             save dialog's own shape and place — a screen modal at the root —
+             and for the same reason: it is opened from the drawer but must not
+             depend on the drawer's subtree being visible. -->
+        <Border Theme="{StaticResource FireOverlayScrimBorder}" Classes="FireOverlayScrim" x:Name="RigBrowserDeleteDialog"
+                IsVisible="{Binding Rig.Browser.IsDeleteConfirmOpen}">
+            <Border Theme="{StaticResource FireOverlayCardBorder}" Classes="FireOverlayCard" Width="440"
+                    Padding="{StaticResource FirePadPanelLg}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    DataContext="{Binding $parent[UserControl].((vm:AmpFxRigViewModel)DataContext).Rig.Browser}"
+                    x:DataType="vm:PresetBrowserViewModel">
+                <StackPanel Spacing="{StaticResource FireSpaceMd}">
+                    <TextBlock Theme="{StaticResource FirePanelTitleText}" Classes="FirePanelTitle" x:Name="RigDeleteDialogTitle"
+                               TextWrapping="Wrap"
+                               Text="{Binding DeleteConfirmTitle}" />
+                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody" TextWrapping="Wrap"
+                               Text="{localization:Loc PresetBrowser_DeleteConfirmBody}" />
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <Button Grid.Column="1" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" x:Name="RigDeleteDialogCancel"
+                                Command="{Binding CancelDeleteCommand}"
+                                Content="{localization:Loc PresetBrowser_Cancel}" />
+                        <Button Grid.Column="2" Theme="{StaticResource FireCtaButton}" Classes="FireCta Compact Danger" x:Name="RigDeleteDialogConfirm"
+                                Margin="{StaticResource FireGapLeftSm}"
+                                Command="{Binding ConfirmDeleteCommand}">
+                            <TextBlock Classes="FireCtaLabel"
+                                       Text="{localization:Loc PresetBrowser_Delete}" />
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Border>
+
+    </Grid>
+</UserControl>

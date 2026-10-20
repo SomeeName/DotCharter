@@ -1,0 +1,837 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="using:DotCharter.Tone.UI.Converters"
+        xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         THE "FIRE" DESIGN LAYER — component half.
+         Tokens: Styles/FireTokens.axaml.  Written up: docs/agents/ui/fire-design-system.md.
+
+         Every class here is prefixed `Fire`. That is not decoration: the app
+         already has THREE partly-overlapping grammars using bare names
+         (`Eyebrow`, `StatTile`, `GlassPanel`, … in PlayModeView / ShellStyles /
+         BoardStyles). A bare `Eyebrow` here would silently re-style all of them
+         the moment a Fire surface was hosted inside the Play Mode shell.
+
+         WHAT A FIRE SCREEN IS MADE OF (this is the whole vocabulary):
+
+            ground   Border.FireGround (+ .Screen) with a Border.FireWash on top
+            screen   Border.FireScreen        a floating modal, radius 18
+            regions  Border.FireRail | FireContextRail | FireHeader | FireFooter
+            surfaces Border.FirePanel | FireCard | FireHeroPanel
+            lockup   TextBlock.FireEyebrow over TextBlock.FireScreenTitle/FireTitle
+            rows     FireNavRowButton/Toggle — 3 px accent bar + title + desc
+                                                       (+ an optional trailing badge)
+            state    Border.FireStatusPill (.Success/.Warn/.Danger/.Accent)
+                                            = Border.FireDot + TextBlock.FireStatusText
+            figures  TextBlock.FireFigure over TextBlock.FireStatLabel
+            actions  Button.FireCta > Button.FirePrimary > Button.FireGhost > Button.FireQuiet
+            inputs   Border.FireField, Border.FireSegment/FireSegmentItem,
+                     ToggleSwitch Theme={FireToggleSwitch}
+            marks    Border.FireTag/.FireBadge/.FireChip, Border.FireTrack/FireTrackFill
+
+         TWO HOUSE RULES THIS FILE OBEYS, AND SO MUST ANY ADDITION:
+
+         • NO `Transitions` SETTER. Building an `AvaloniaList<ITransition>`
+           calls `Dispatcher.VerifyAccess`, which makes the whole dictionary
+           UI-thread-only — the trap that took out all nine `SettingsSearchTests`
+           in 0.35 — and every Fire surface so far is an `IsVisible`-gated one
+           whose style clocks would keep ticking while hidden. The mockups'
+           `transition: all .16s ease` is therefore deliberately NOT ported;
+           hover is instant, like the rest of this app's shell.
+         • ACCENT IS INFORMATION. The 3 px bar, one primary action per surface,
+           and a status colour are the sanctioned uses. A row of equally
+           accent-tinted cards says nothing.
+         • EVERY INTERACTIVE CONTROL HAS HOVER, FOCUS **AND** DISABLED. The
+           menu is keyboard and controller navigable, so a control you can
+           reach with Tab and cannot SEE is a defect, not a polish item. Focus
+           is a 2 px `FireAccentPale` ring offset outside the control
+           (`FocusAdornerTemplate`) on anything button-shaped, and a violet
+           tint + border on a list row, where a ring around a full-width row
+           would read as a second selection.
+         ══════════════════════════════════════════════════════════════════════ -->
+
+    <Styles.Resources>
+
+        <!-- The primary action's CHAMFER. Bound to the button's live Bounds so
+             the 45° cut off its top-right and bottom-left corners stays a
+             constant 16 px at every size — see the converter's own notes for
+             why a static geometry cannot do this. -->
+        <conv:FireChamferClipConverter x:Key="FireChamferClip" />
+
+        <!-- ─── ToggleSwitch ─────────────────────────────────────────────────
+             A 44×24 accent pill with a lit track and a white knob. A
+             `TemplatedControl` gets its template from a `ControlTheme`, never
+             from a `Style` with a `Template` setter (`KeybindCaptureBox` lived
+             as the latter for four releases and rendered as an empty column).
+             Keyed rather than type-keyed so it stays opt-in: a surface asks for
+             it with `Theme="{DynamicResource FireToggleSwitch}"` and every other
+             ToggleSwitch in the app keeps the Fluent-derived look. -->
+        <ControlTheme x:Key="FireToggleSwitch" TargetType="ToggleSwitch">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="OnContent" Value="" />
+            <Setter Property="OffContent" Value="" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <!-- `PART_MovingKnobs` is a REQUIRED template part on
+                         Avalonia's ToggleSwitch (AVLN2205 at build time if it
+                         is missing) and it must be a Panel — the built-in
+                         knob transition animates its RenderTransform. This
+                         template positions the knob by alignment instead, so
+                         the panel is a pass-through wrapper. -->
+                    <Border x:Name="PART_Track"
+                            Width="44" Height="24"
+                            CornerRadius="{StaticResource FireRadiusPill}"
+                            Background="{DynamicResource SurfaceElevated}"
+                            BorderThickness="{StaticResource FireBorderHairline}"
+                            BorderBrush="{DynamicResource FireBorderStrong}">
+                        <Panel x:Name="PART_SwitchKnob">
+                            <Panel x:Name="PART_MovingKnobs">
+                                <Border x:Name="PART_Knob"
+                                        Width="18" Height="18"
+                                        Margin="2,0,0,0"
+                                        CornerRadius="{StaticResource FireRadiusPill}"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource FireTextDim}" />
+                            </Panel>
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <!-- Graphite: ON is the one accent, flat — no second blue, no glow —
+                 and the knob is dark ink so it reads against the light track. -->
+            <Style Selector="^:checked /template/ Border#PART_Track">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#PART_Knob">
+                <Setter Property="Background" Value="{DynamicResource FireTextOnAccent}" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="Margin" Value="0,0,2,0" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#PART_Track">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ─── …and the popover's 38 × 21 version ───────────────────────────
+             `Play Menus.dc.html`'s PLAY STYLE row: `width:38; height:21;
+             padding:2; radius:999`, an unlit track of `rgba(255,255,255,.1)`,
+             a `linear-gradient(100deg,#3c7bd1,#5e9ff2)` when on, and a 17 px
+             white knob under `0 2px 6px rgba(0,0,0,.5)`.
+
+             A separate theme rather than size setters on the one above, because
+             the TRACK and KNOB sizes are literals inside a `ControlTemplate` and
+             a setter on the control cannot reach them. It also carries NO
+             `BoxShadow` on the track: the 44 px switch lights a settings row,
+             this one sits 13 px from a popup's edge, where a feather falls
+             outside the presenter and renders flat black. -->
+        <ControlTheme x:Key="FirePopoverSwitch" TargetType="ToggleSwitch">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="OnContent" Value="" />
+            <Setter Property="OffContent" Value="" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="PART_Track"
+                            Width="{StaticResource FirePopoverSwitchWidth}"
+                            Height="{StaticResource FirePopoverSwitchHeight}"
+                            CornerRadius="{StaticResource FireRadiusPill}"
+                            Background="{DynamicResource FireSurfaceTrack}">
+                        <!-- `PART_MovingKnobs` is a REQUIRED part (AVLN2205 at
+                             build time without it) and must be a Panel — the
+                             built-in transition animates its RenderTransform.
+                             This template positions by alignment instead, so it
+                             is a pass-through wrapper. -->
+                        <Panel x:Name="PART_SwitchKnob">
+                            <Panel x:Name="PART_MovingKnobs">
+                                <Border x:Name="PART_Knob"
+                                        Width="{StaticResource FirePopoverSwitchKnob}"
+                                        Height="{StaticResource FirePopoverSwitchKnob}"
+                                        Margin="2,0,0,0"
+                                        CornerRadius="{StaticResource FireRadiusPill}"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource FireTextBright}" />
+                            </Panel>
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Border#PART_Track">
+                <Setter Property="Background" Value="{DynamicResource FirePopoverAccentAction}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#PART_Knob">
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="Margin" Value="0,0,2,0" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ─── Nav row ──────────────────────────────────────────────────────
+             THE signature component: a 3 px accent bar, a title over a
+             description, and an optional trailing badge. Selected = accent
+             tint + accent border + the bar lit and glowing.
+
+             It exists twice on purpose — as a `ToggleButton` (a rail whose
+             selection is state, e.g. the settings tabs) and as a `Button` (a
+             menu whose entries are destinations). Same template, so the two
+             cannot drift; `^` selectors inside a ControlTheme keep each one's
+             states with its own theme.
+
+             THE BAR IS THERE AT REST. The spec is explicit — "transparent at
+             rest with a 3 px violet-DIM indicator bar" — and the toggle
+             variant used to paint it `Transparent`, so a rail of unselected
+             rows had no left edge at all and the selected row's bar read as
+             decoration rather than as a position in a list.
+
+             HOVER SLIDES 3 px RIGHT (`translateX(3px)`, spec). It is a
+             `RenderTransform`, applied instantly: this file may never carry a
+             `Transitions` setter, so the motion token exists for the
+             custom-drawn controls and not for this. -->
+        <ControlTheme x:Key="FireNavRowToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+            <Setter Property="Margin" Value="{StaticResource FireGapNavRow}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="RenderTransform" Value="translateX(0px)" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:CompileBindings="False"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                              Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}">
+                            <Border x:Name="Bar" Grid.Column="0"
+                                    Width="{StaticResource FireBarWidth}"
+                                    Height="{StaticResource FireBarHeight}"
+                                    CornerRadius="{StaticResource FireRadiusBar}"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource FireAccentBar}" />
+                            <ContentPresenter Grid.Column="1"
+                                              Content="{TemplateBinding Content}"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderBrush="{DynamicResource FireFocusRowBorder}"
+                            BorderThickness="{StaticResource FireBorderHairline}"
+                            Background="{DynamicResource FireFocusRowFill}"
+                            CornerRadius="{StaticResource FireRadiusRow}" />
+                </FocusAdornerTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+                <Setter Property="RenderTransform" Value="translateX(3px)" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#Bar">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccent}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#Bar">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccent}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ─── Choice chip ──────────────────────────────────────────────────
+             ONE option of a multi-select cluster, as a real `ToggleButton`
+             rather than a Border. The mockups draw the planner's pillar cards
+             and its MON–SUN day strip as tinted outlined boxes with no checkbox
+             in sight, and nothing here covered that: `FireTag` is decoration,
+             `FireSegmentItem` is a Border inside a single-SELECT frame, and
+             `FireNavRow` is a rail row with a 3 px bar. Any of them would have
+             rendered right and toggled nothing — the exact fault design 6's
+             practice queue shipped with. -->
+        <ControlTheme x:Key="FireChoiceToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceCard}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadSegmentItem}" />
+            <Setter Property="MinHeight" Value="{StaticResource FireFieldHeight}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <!-- CornerRadius is template-bound so a row used as a CARD
+                         (the online hub's two offline destinations) can round
+                         itself; the default stays 0, which is what a row in a
+                         list wants. -->
+                    <Border x:CompileBindings="False"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}"
+                                          HorizontalAlignment="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource TemplatedParent}}"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderBrush="{DynamicResource FireAccentPale}"
+                            BorderThickness="{StaticResource FireFocusRingThickness}"
+                            Margin="{StaticResource FireFocusRingOffset}"
+                            CornerRadius="{StaticResource FireRadiusControl}" />
+                </FocusAdornerTemplate>
+            </Setter>
+            <!-- The taller card form: the planner's four pillars, which carry a caption
+                 over a description instead of one word. -->
+            <Style Selector="^.FireChoice.Card">
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusControl}" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireNavRowButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusControl}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+            <Setter Property="Margin" Value="{StaticResource FireGapNavRow}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="RenderTransform" Value="translateX(0px)" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:CompileBindings="False"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource FireSpaceLg}"
+                              Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}">
+                            <Border x:Name="Bar" Grid.Column="0"
+                                    Width="{StaticResource FireBarWidth}"
+                                    Height="{StaticResource FireBarHeightTall}"
+                                    CornerRadius="{StaticResource FireRadiusBar}"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource FireAccentBar}" />
+                            <ContentPresenter Grid.Column="1"
+                                              Content="{TemplateBinding Content}"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderBrush="{DynamicResource FireFocusRowBorder}"
+                            BorderThickness="{StaticResource FireBorderHairline}"
+                            Background="{DynamicResource FireFocusRowFill}"
+                            CornerRadius="{StaticResource FireRadiusControl}" />
+                </FocusAdornerTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+                <Setter Property="RenderTransform" Value="translateX(3px)" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#Bar">
+                <Setter Property="Background" Value="{DynamicResource FireAccent}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccent}" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ─── The two LIT actions ──────────────────────────────────────────
+             `BoxShadow` lives on `Border`, not on `Control`, so a Button style
+             cannot set it (AVLN2000 at build time). A glowing button therefore
+             needs a template whose root IS a Border — which is the whole reason
+             these two own their TEMPLATE, where `FireGhost`/`FireQuiet`/`FireBack`
+             (no glow) are class-gated rules over Fluent's (every button family is
+             a ControlTheme since #240; those three live in Fire/FireActions.axaml).
+
+             THE SILHOUETTE IS A CHAMFER, NOT A RADIUS. The mockups cut 12-18 px
+             off the TOP-RIGHT and BOTTOM-LEFT corners with a `clip-path`
+             polygon; it is a brand signature and the spec says so in as many
+             words ("keep it"). The first port rounded those two corners hard
+             instead (`FireRadiusCut = 0,16,0,16`), which reads as a lozenge.
+             It is now a real `Clip`, produced from the button's live Bounds by
+             `FireChamferClipConverter` so the notch is a constant 16 px
+             whatever the button's size.
+
+             THE STRUCTURE THAT FOLLOWS FROM THAT: `Clip` cuts an element's own
+             rendering, INCLUDING its box shadow. So the glow lives on an outer
+             Border that is NOT clipped, and the clipped fill is its child. The
+             outer Border is `Transparent` on purpose — a fill there would show
+             through the two notches. (Avalonia draws a box shadow whenever one
+             is set, regardless of the background brush.) -->
+        <ControlTheme x:Key="FireCtaButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource FireAccentActionHero}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccent}" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Height" Value="{StaticResource FireCtaHeight}" />
+            <Setter Property="Padding" Value="28,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="RenderTransform" Value="translateY(0px)" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:CompileBindings="False"
+                            Background="Transparent"
+                            BoxShadow="{DynamicResource FireGlowAction}">
+                        <Border x:Name="Cut"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource FireRadiusControl}"
+                                fire:FireShape.CutSize="{StaticResource FireCutSize}">
+                            <Border.Clip>
+                                <!-- bounds AND the theme's cut: a converter parameter is a
+                                     plain value, so the token has to arrive as a binding. -->
+                                <MultiBinding Converter="{StaticResource FireChamferClip}">
+                                    <Binding ElementName="Cut" Path="Bounds" />
+                                    <Binding ElementName="Cut" Path="(fire:FireShape.CutSize)" />
+                                </MultiBinding>
+                            </Border.Clip>
+                            <Border x:Name="Sheen" Background="Transparent">
+                                <ContentPresenter x:Name="PART_ContentPresenter"
+                                                  Content="{TemplateBinding Content}"
+                                                  Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </Border>
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderBrush="{DynamicResource FireAccentPale}"
+                            BorderThickness="{StaticResource FireFocusRingThickness}"
+                            Margin="{StaticResource FireFocusRingOffset}" />
+                </FocusAdornerTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Sheen">
+                <Setter Property="Background" Value="{DynamicResource FireSheenHover}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#Sheen">
+                <Setter Property="Background" Value="{DynamicResource FireSheenPressed}" />
+            </Style>
+            <!-- Disabled is NEUTRAL, not a faded accent: 45 % blue with 45 %
+                 ink read as blue on blue. -->
+            <Style Selector="^:disabled">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+            <!-- The rules below were global class styles until #240. They are LAST
+                 so they still beat this theme's own setters, as a global style did. -->
+            <Style Selector="^.Danger">
+                <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+                <Setter Property="Padding" Value="18,10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="RenderTransform" Value="scale(1.0)" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BrushTransition Property="Background" Duration="0:0:0.15" />
+                        <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08" />
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.Danger:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerHoverBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <Style Selector="^.Danger:pressed">
+                <Setter Property="RenderTransform" Value="scale(0.97)" />
+            </Style>
+            <Style Selector="^.Danger:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerHoverBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerColor}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <Style Selector="^.Danger:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^.Danger:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource DangerBg}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBorder}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource DangerColor}" />
+            </Style>
+            <!-- #348: the shared Danger state rules above paint PART_ContentPresenter, which
+                 is the whole button in Fluent's template but only the padded content strip
+                 inside this one's lit fill, so hover and press drew a dark bar inside the
+                 CTA. In this template the Sheen is the hover; the strip stays clear. A
+                 separate rule, so the shared copies stay identical (ButtonControlThemeTests). -->
+            <Style Selector="^.Danger:pointerover /template/ ContentPresenter#PART_ContentPresenter, ^.Danger:pressed /template/ ContentPresenter#PART_ContentPresenter, ^.Danger:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+            <!-- The CTA at ROW scale. The hero spelling is sized for the front door's
+                 "PLAY NOW" and the launch screen's "START" — one short word across a
+                 wide button. In a 392 px rail or a modal footer, beside other actions,
+                 its 28 px padding and display tracking make a two-word localized label
+                 wider than the control that holds it. Same shape, same chamfer, same
+                 glow; just not shouting. -->
+            <Style Selector="^.FireCta.Compact">
+                <Setter Property="Height" Value="{StaticResource FireButtonHeight}" />
+                <Setter Property="Padding" Value="18,0" />
+            </Style>
+            <!-- The CTA that DESTROYS something (a confirmation's "Delete"): the same
+                 lit shape in the signal red, so it cannot read as the dialog's Save.
+                 The ink stays FireTextOnAccent — dark on the light red, as on the blue.
+                 A class style outranks the ControlTheme's own :disabled setter, so the
+                 disabled state is restated here, neutral like every other lit action. -->
+            <Style Selector="^.FireCta.Danger">
+                <Setter Property="Background" Value="{DynamicResource FireDanger}" />
+            </Style>
+            <Style Selector="^.FireCta.Danger:disabled">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FirePrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource FireAccentAction}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccent}" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Height" Value="{StaticResource FireActionHeight}" />
+            <Setter Property="Padding" Value="30,0" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+            <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+            <!-- .22em at 14 px. The port had 2.2 (.157em), below the spec's
+                 .20-.24em band — a primary caption that is not conspicuously
+                 tracked stops reading as a caption. -->
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackAction}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="RenderTransform" Value="translateY(0px)" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:CompileBindings="False"
+                            Background="Transparent"
+                            BoxShadow="{DynamicResource FireGlowAction}">
+                        <Border x:Name="Cut"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource FireRadiusControl}"
+                                fire:FireShape.CutSize="{StaticResource FireCutSize}">
+                            <Border.Clip>
+                                <!-- bounds AND the theme's cut: a converter parameter is a
+                                     plain value, so the token has to arrive as a binding. -->
+                                <MultiBinding Converter="{StaticResource FireChamferClip}">
+                                    <Binding ElementName="Cut" Path="Bounds" />
+                                    <Binding ElementName="Cut" Path="(fire:FireShape.CutSize)" />
+                                </MultiBinding>
+                            </Border.Clip>
+                            <Border x:Name="Sheen" Background="Transparent">
+                                <ContentPresenter x:Name="PART_ContentPresenter"
+                                                  Content="{TemplateBinding Content}"
+                                                  Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </Border>
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderBrush="{DynamicResource FireAccentPale}"
+                            BorderThickness="{StaticResource FireFocusRingThickness}"
+                            Margin="{StaticResource FireFocusRingOffset}" />
+                </FocusAdornerTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Sheen">
+                <Setter Property="Background" Value="{DynamicResource FireSheenHover}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#Sheen">
+                <Setter Property="Background" Value="{DynamicResource FireSheenPressed}" />
+            </Style>
+            <!-- Disabled is NEUTRAL, not a faded accent: 45 % blue with 45 %
+                 ink read as blue on blue. -->
+            <Style Selector="^:disabled">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+            </Style>
+            <!-- The rules below were global class styles until #240. They are LAST
+                 so they still beat this theme's own setters, as a global style did. -->
+            <Style Selector="^.Primary">
+                <Setter Property="Background" Value="{DynamicResource PrimaryGradient}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextOnAccent}" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+                <Setter Property="Padding" Value="20,10" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="RenderTransform" Value="scale(1.0)" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BrushTransition Property="Background" Duration="0:0:0.15" />
+                        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08" />
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.Primary /template/ ContentPresenter">
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+                <Setter Property="Transitions">
+                    <Transitions>
+                        <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                    </Transitions>
+                </Setter>
+            </Style>
+            <Style Selector="^.Primary:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource PrimaryGradientHover}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextOnAccent}" />
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+            </Style>
+            <Style Selector="^.Primary:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource PrimaryGradientHover}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextOnAccent}" />
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+            </Style>
+            <Style Selector="^.Primary:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Style>
+            <Style Selector="^.Primary:disabled /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+                <Setter Property="TextElement.Foreground" Value="{DynamicResource TextDim}" />
+                <Setter Property="BoxShadow" Value="0 0 0 0 Transparent" />
+            </Style>
+            <!-- #348: as in FireCtaButton, the copied Primary state rules paint the padded
+                 content strip inside this template's lit fill, a box behind the label on
+                 hover and press. The Sheen is the hover here; the strip stays clear. -->
+            <Style Selector="^.Primary:pointerover /template/ ContentPresenter#PART_ContentPresenter, ^.Primary:pressed /template/ ContentPresenter#PART_ContentPresenter, ^.Primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <!-- ══ THE PRIMARY ACTION'S CAPTION IS THE BODY FACE ════════════════════
+                 `FirePrimaryButton` is Chakra Petch at `FireTrackAction` (.22em) —
+                 the caption face — so "Design", "Match from audio", "Match all" and
+                 "Apply as tone set" read as HEADINGS rather than as things to press.
+                 `.Body` keeps the chamfer, the glow and the lift and swaps the face;
+                 a class Style beats a ControlTheme setter, so nothing about the
+                 template changes.
+
+                 THE CHAMFER IS THE RULE FOR PRIMARY ACTIONS AND NOTHING ELSE (W4).
+                 The rig used to mix four emphases — `FirePrimary` (chamfered),
+                 `FireGhost.Accent` (rounded card, display face), `FireOutlineButton`
+                 and `FireOutlineCta` — with no rule saying which was the primary. On
+                 the tone surfaces there is exactly one chamfered button per block and
+                 every other action is a framed `FireGhost`. -->
+            <Style Selector="^.FirePrimary.Body">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Padding" Value="20,0" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ─── Segmented control — BUILT ONCE ───────────────────────────────
+             One theme, reused by every segmented strip in the app: the
+             Progress tab bar, snapshots, snap, routing, mic models, count-in.
+             It had drifted into TWO implementations that restated the same
+             look — a static `Border.FireSegmentItem` and a `ToggleButton`
+             class style fighting Fluent's `:checked` setters through
+             `/template/ ContentPresenter` — and the two disagreed: the big
+             `.Tab` variant carried its own literal `#425E9FF2` (.26) fill and
+             an 8 px item radius against the spec's .28 and 5-6 px.
+
+             A `RadioButton` derives from `ToggleButton`, so the same theme
+             drives both. Reach for the RadioButton when the strip is genuinely
+             single-select (the spec's own note) and the ToggleButton when the
+             screen already owns the mutual exclusion. -->
+        <ControlTheme x:Key="FireSegmentItemToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+            <Setter Property="Padding" Value="{StaticResource FirePadSegmentItem}" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+            <Setter Property="LetterSpacing" Value="{StaticResource FireTrackStatus}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border x:Name="Fill" x:CompileBindings="False"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent}}"
+                                          HorizontalAlignment="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource TemplatedParent}}"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Setter Property="FocusAdorner">
+                <FocusAdornerTemplate>
+                    <Border BorderBrush="{DynamicResource FireAccentPale}"
+                            BorderThickness="{StaticResource FireFocusRingThickness}"
+                            Margin="-3"
+                            CornerRadius="{StaticResource FireRadiusSegment}" />
+                </FocusAdornerTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+            </Style>
+            <Style Selector="^:pressed">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+            <Style Selector="^:checked:pointerover">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+            <!-- The BIG variant: Chakra captions instead of mono, a roomier
+                 inset — but the SAME item radius and the same active fill. -->
+            <Style Selector="^.Tab">
+                <Setter Property="Padding" Value="18,8" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+                <Setter Property="LetterSpacing" Value="1" />
+            </Style>
+            <!-- …and the DENSE spelling, for a strip that is narrower than the shared
+                 `FirePadSegmentItem` (12,6) was drawn for. Get Ready's left rail is a
+                 FIXED 404 px holding a 92 px label plus the strip, so its six-up speed
+                 row gave each cell 17 px of content — "100" needs 22.8 and was sliced —
+                 and its three-up chord row gave 58 for a "Standard" that needs 60.8.
+                 Both were found by the UI sweep and sat on its `clipped-text` backlog.
+                 A LOCAL override rather than a smaller shared token: every other
+                 segmented strip in the app (the Progress tab bar, snapshots, snap,
+                 routing, mic models, count-in) has the room and should keep the
+                 breathing space. Vertical padding is untouched, so the strip's height
+                 still matches every other one.
+
+                 Spelled for BOTH element types, like `.Tab` above: the `:is(ToggleButton)`
+                 selector really does reach a RadioButton at runtime, but
+                 `FireClassReachabilityTests` reads the selectors LITERALLY, and without
+                 the RadioButton spelling `Classes="FireSegmentItem Dense"` on one is
+                 indistinguishable from a typo. -->
+            <Style Selector="^.FireSegmentItem.Dense">
+                <Setter Property="Padding" Value="{StaticResource FirePadSegmentItemDense}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         THE COMPONENT HALF, BY SECTION. Every `<Style>` this file used to
+         declare inline now lives in `Styles/Fire/`, sliced along the section
+         banners it already carried and moved byte for byte.
+
+         ORDER IS THE CONTRACT, NOT A PREFERENCE. Avalonia applies styles in
+         the order it walks this collection, so a later selector wins over an
+         earlier one of equal specificity. These includes stand in the exact
+         order the sections stood in the one file; a new section goes at the
+         END unless it MEANS to override something above it.
+
+         The `Styles.Resources` block above is deliberately NOT split.
+         `FireChamferClip` is consumed by `FireCtaButton` and
+         `FirePrimaryButton` through `{StaticResource}`, which resolves at
+         parse time against what is already declared ABOVE it in the SAME
+         dictionary — split those apart and the two chamfered buttons stop
+         building, or worse, resolve to nothing. Keep that cluster whole.
+         ══════════════════════════════════════════════════════════════════ -->
+
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireGroundAndType.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireMarksAndMeters.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireInputs.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireActions.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireSectionsAndOverlays.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireRigBoard.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireRigUnitsAndGear.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireRigRolesAndTones.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireRigStage.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireRigHardware.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FirePopoverBody.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FirePopoverButtons.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireRigEditors.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireShellRail.axaml" />
+    <StyleInclude Source="avares://DotCharter.Tone.UI/Styles/Fire/FireShellTitle.axaml" />
+
+</Styles>

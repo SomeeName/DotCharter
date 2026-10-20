@@ -1,0 +1,96 @@
+// File ▸ New project, the imports and Audio from YouTube: each verb hands its
+// source (a picker, a dropped file, a link) to its Presentation launcher, and a
+// launcher that is not registered is logged rather than silently doing nothing.
+using CommunityToolkit.Mvvm.Input;
+using DotCharter.Presentation.Screens.Dialogs;
+using DotCharter.Tone.UI.ViewModels.Shell;
+
+namespace DotCharter.UI.ViewModels.Shell;
+
+public sealed partial class ImportMenuViewModel : ViewModelBase
+{
+    private readonly IAppLogger _logger;
+    private readonly NewProjectLauncher? _newProject;
+    private readonly EofImportLauncher? _eofImport;
+    private readonly RsXmlImportLauncher? _rsXmlImport;
+    private readonly MidiImportLauncher? _midiImport;
+    private readonly GpImportLauncher? _gpImport;
+    private readonly YoutubeAudioLauncher? _youtubeAudio;
+    private readonly AlignToRecordingOffer _alignOffer;
+
+    public ImportMenuViewModel(
+        IAppLogger logger,
+        AlignToRecordingOffer alignOffer,
+        NewProjectLauncher? newProject = null,
+        EofImportLauncher? eofImport = null,
+        RsXmlImportLauncher? rsXmlImport = null,
+        MidiImportLauncher? midiImport = null,
+        GpImportLauncher? gpImport = null,
+        YoutubeAudioLauncher? youtubeAudio = null)
+    {
+        _logger = logger;
+        _alignOffer = alignOffer;
+        _newProject = newProject;
+        _eofImport = eofImport;
+        _rsXmlImport = rsXmlImport;
+        _midiImport = midiImport;
+        _gpImport = gpImport;
+        _youtubeAudio = youtubeAudio;
+    }
+
+    /// <summary>File ▸ New project, from the menu, the launch card, the palette and its keybind.</summary>
+    [RelayCommand]
+    private void OpenNewProject() => LaunchImport(_newProject, l => l.OpenAsync(), "new project");
+
+    /// <summary>File ▸ Import ▸ Editor on Fire: the picker, then the dialog.</summary>
+    [RelayCommand]
+    private void ImportEof() => LaunchImport(_eofImport, l => l.PickAsync(), "Editor on Fire import");
+
+    /// <summary>File ▸ Import ▸ Rocksmith XML: the picker, then the progress card.</summary>
+    [RelayCommand]
+    private void ImportRsXml() => LaunchImport(_rsXmlImport, l => l.PickAsync(), "Rocksmith XML import");
+
+    /// <summary>File ▸ Import ▸ MIDI: the picker, then the dialog.</summary>
+    [RelayCommand]
+    private void ImportMidi() => LaunchImport(_midiImport, async l => OfferAlignment(await l.PickAsync(), "MIDI import"), "MIDI import");
+
+    /// <summary>File ▸ Import ▸ Guitar Pro: the picker, the track list read off the UI thread, then the dialog.</summary>
+    [RelayCommand]
+    private void ImportGuitarPro() =>
+        LaunchImport(_gpImport, async l => OfferAlignment(await l.PickAsync(), "Guitar Pro import"), "Guitar Pro import");
+
+    /// <summary>A dropped or recent .eof, straight to its track list.</summary>
+    internal void OpenEofImport(string filePath) => LaunchImport(_eofImport, l => l.OpenAsync(filePath), "Editor on Fire import");
+
+    /// <summary>A dropped or recent .mid; the launcher refuses when no project is open.</summary>
+    internal void OpenMidiImport(string filePath) =>
+        LaunchImport(_midiImport, async l => OfferAlignment(await l.OpenAsync(filePath), "MIDI import"), "MIDI import");
+
+    /// <summary>A dropped or recent RS XML, merged into the open project.</summary>
+    internal void OpenRsXmlImport(string filePath) => LaunchImport(_rsXmlImport, l => l.OpenAsync(filePath), "Rocksmith XML import");
+
+    /// <summary>A dropped Guitar Pro score, straight to its track list — no picker.</summary>
+    internal void OpenGpImport(string filePath) =>
+        LaunchImport(_gpImport, async l => OfferAlignment(await l.OpenAsync(filePath), "Guitar Pro import"), "Guitar Pro import");
+
+    /// <summary>A tab import lands on the WRITTEN tempo: offer Align to recording next.</summary>
+    private void OfferAlignment(bool imported, string what)
+    {
+        if (imported) _alignOffer.Offer(what);
+    }
+
+    private void LaunchImport<T>(T? launcher, Func<T, Task> run, string what) where T : class
+    {
+        if (launcher == null)
+        {
+            _logger.Error(AppLogCategory.Import, $"The {what} cannot open: no launcher is registered.");
+            return;
+        }
+
+        DialogLaunch.Run(_logger, () => run(launcher), what);
+    }
+
+    /// <summary>File ▸ Audio from YouTube: the link dialog, then the attach. Absent from a build with the contested features off.</summary>
+    [RelayCommand]
+    private void AttachYoutubeAudio() => LaunchImport(_youtubeAudio, l => l.OpenAsync(), "Audio from YouTube");
+}

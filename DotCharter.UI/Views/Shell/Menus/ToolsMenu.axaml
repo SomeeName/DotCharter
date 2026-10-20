@@ -1,0 +1,286 @@
+<MenuItem xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:viewModels="using:DotCharter.UI.ViewModels.Shell"
+          xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+          xmlns:converters="using:DotCharter.UI.Converters"
+          x:Class="DotCharter.UI.Views.Shell.Menus.ToolsMenu"
+          x:DataType="viewModels:MainWindowViewModel"
+          Classes="FireMenuTop" Header="{localization:Loc Menu_Tools}">
+    <!-- Generation verbs, grouped by target. -->
+    <MenuItem Header="{localization:Loc Menu_GroupFhp}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M4,20V18H7V5H9V18H12V10H14V18H17V8H19V18H22V20H4Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_GenerateFhp}" Command="{Binding GenerateFhpCommand}" />
+        <MenuItem Header="{localization:Loc Menu_GenerateFhpForSelection}"
+                  Command="{Binding GenerateFhpForSelectionCommand}" />
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_GroupHandShapes}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M4,20V18H7V5H9V18H12V10H14V18H17V8H19V18H22V20H4Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_GenerateHandShape}"
+                  Command="{Binding GenerateHandShapeCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.GenerateHandShape, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_GenerateArpeggio}"
+                  Command="{Binding GenerateArpeggioCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.GenerateArpeggio, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_GenerateHandShapesArrangement}"
+                  Command="{Binding GenerateHandShapesForArrangementCommand}" />
+        <MenuItem Header="{localization:Loc Menu_AcceptSuggestedHandShapes}"
+                  Command="{Binding AcceptSuggestedHandShapesCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.AcceptSuggestedHandShapes, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}"
+                  ToolTip.Tip="{localization:Loc Menu_AcceptSuggestedHandShapes_Tip}"
+                  AutomationProperties.Name="{localization:Loc Menu_AcceptSuggestedHandShapes}" />
+        <MenuItem Header="{localization:Loc Menu_AcceptSuggestedArpeggios}"
+                  Command="{Binding AcceptSuggestedArpeggiosCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.AcceptSuggestedArpeggios, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}"
+                  ToolTip.Tip="{localization:Loc Menu_AcceptSuggestedArpeggios_Tip}"
+                  AutomationProperties.Name="{localization:Loc Menu_AcceptSuggestedArpeggios}" />
+        <MenuItem Header="{localization:Loc Menu_ApplyHandShapeTemplateToChords}"
+                  Command="{Binding ApplyHandShapeTemplateToChordsCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.ApplyHandShapeTemplateToChords, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_GroupChords}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconGuitar}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_ConvertToPowerChordSmall}"
+                  Command="{Binding ConvertToPowerChordSmallCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.ConvertToPowerChordSmall, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_ConvertToPowerChordBig}"
+                  Command="{Binding ConvertToPowerChordBigCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.ConvertToPowerChordBig, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_MergeNotesIntoChord}"
+                  Command="{Binding MergeNotesIntoChordCommand}" />
+        <MenuItem Header="{localization:Loc Menu_SplitChordsIntoNotes}"
+                  Command="{Binding SplitChordsIntoNotesCommand}" />
+        <MenuItem Header="{localization:Loc Menu_ToggleOctaveFingering}"
+                  Command="{Binding ToggleOctaveFingeringCommand}" />
+        <MenuItem Header="{localization:Loc Menu_TogglePowerChordFingering}"
+                  Command="{Binding TogglePowerChordFingeringCommand}" />
+        <MenuItem Header="{localization:Loc Menu_MutedStrumsToChord}"
+                  Command="{Binding MutedStrumsToChordCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.MutedStrumsToChord, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />
+        <MenuItem Header="{localization:Loc Menu_ToggleGhostGems}"
+                  Command="{Binding ToggleGhostGemsCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.ToggleGhostGems, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}"
+                  ToolTip.Tip="{localization:Loc Menu_ToggleGhostGems_Tip}"
+                  AutomationProperties.Name="{localization:Loc Menu_ToggleGhostGems}" />
+        <MenuItem Header="{localization:Loc Menu_TappedHarmonic}"
+                  Command="{Binding TappedHarmonicCommand}"
+                  InputGesture="{Binding ProjectState.Keybinds.TappedHarmonic, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}"
+                  ToolTip.Tip="{localization:Loc Menu_TappedHarmonic_Tip}"
+                  AutomationProperties.Name="{localization:Loc Menu_TappedHarmonic}" />
+    </MenuItem>
+    <Separator />
+
+    <!-- Grouped by what the tool does to the chart
+         (MainMenuLocalizationTests caps Tools at 10). -->
+
+    <!-- Repair and reshape what is already charted. -->
+    <MenuItem Header="{localization:Loc Menu_GroupFixChart}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M22.7,19L13.6,9.9C14.5,7.6 14,4.9 12.1,3C10.1,1 7.1,0.6 4.7,1.7L9,6L6,9L1.6,4.7C0.4,7.1 0.9,10.1 2.9,12.1C4.8,14 7.5,14.5 9.8,13.6L18.9,22.7C19.3,23.1 19.9,23.1 20.3,22.7L22.6,20.4C23.1,20 23.1,19.3 22.7,19Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_ImproveChart}" Command="{Binding ImproveChartCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_ImproveChart_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M12,2L14.09,8.26L20,6L17.74,11.91L24,14L17.74,16.09L20,22L14.09,19.74L12,26L9.91,19.74L4,22L6.26,16.09L0,14L6.26,11.91L4,6L9.91,8.26L12,2Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_AutoFixChart}" Command="{Binding AutoFixChartCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_AutoFixChart_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M22.7,19L13.6,9.9C14.5,7.6 14,4.9 12.1,3C10.1,1 7.1,0.6 4.7,1.7L9,6L6,9L1.6,4.7C0.4,7.1 0.9,10.1 2.9,12.1C4.8,14 7.5,14.5 9.8,13.6L18.9,22.7C19.3,23.1 19.9,23.1 20.3,22.7L22.6,20.4C23.1,20 23.1,19.3 22.7,19Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_RemoveDoubleStopNames}"
+                  Command="{Binding RemoveDoubleStopChordNamesCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_RemoveDoubleStopNames_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M3,5H21V7H3V5M3,11H15V13H3V11M3,17H9V19H3V17M17.6,14.2L19,12.8L20.4,14.2L21.8,12.8L23.2,14.2L21.8,15.6L23.2,17L21.8,18.4L20.4,17L19,18.4L17.6,17L19,15.6L17.6,14.2Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_Refret}" Command="{Binding RefretCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_Refret_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M17,3L22.25,7.5L17,12L22.25,16.5L17,21V18H14.26L11.44,15.18L13.56,13.06L15.5,15H17V12L17,9H15.5L8.5,16H2V13H7.26L14.26,6H17V3M2,6H8.5L10.75,8.25L8.63,10.38L7.26,9H2V6Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="{localization:Loc Menu_AiFixFhpFingering}">
+            <!-- #602: fingering only first, the measured default; the model's FHP is the opt-in below it. -->
+            <MenuItem Header="{localization:Loc Menu_AiFingeringOnly}" AutomationProperties.Name="{localization:Loc Menu_AiFixFingeringOnly}" Command="{Binding ShellDialogs.AiChart.FixFingeringOnlyCommand}" ToolTip.Tip="{localization:Loc Menu_AiFingeringOnly_Tip}" />
+            <MenuItem Header="{localization:Loc Menu_AiFhpAndFingering}" AutomationProperties.Name="{localization:Loc Menu_AiFixFhpFingering}" Command="{Binding ShellDialogs.AiChart.FixFhpAndFingeringCommand}" ToolTip.Tip="{localization:Loc Menu_AiFixFhpFingering_Tip}" />
+            <MenuItem Header="{localization:Loc Menu_AiFhpOnly}" AutomationProperties.Name="{localization:Loc Menu_AiFixFhpOnly}" Command="{Binding ShellDialogs.AiChart.FixFhpOnlyCommand}" ToolTip.Tip="{localization:Loc Menu_AiFhpOnly_Tip}" />
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_AiFixChordNames}" Command="{Binding ShellDialogs.AiChart.FixChordNamesCommand}" ToolTip.Tip="{localization:Loc Menu_AiFixChordNames_Tip}" />
+        <MenuItem Header="{localization:Loc Menu_AiFixChordNamesMusical}" Command="{Binding ShellDialogs.AiChart.FixChordNamesMusicalCommand}" />
+        <MenuItem Header="{localization:Loc Menu_AiSettings}" Command="{Binding ShellDialogs.AiChart.OpenAiSettingsCommand}" />
+    </MenuItem>
+
+    <!-- Song-wide structure: phrases, sections, difficulty levels. -->
+    <MenuItem Header="{localization:Loc Menu_GroupStructureLevels}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M3,3H21V5H3V3M3,7H15V9H3V7M3,11H21V13H3V11M3,15H15V17H3V15M3,19H21V21H3V19Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_GenerateStructure}" Command="{Binding GenerateStructureCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_GenerateStructure_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M3,3H21V5H3V3M3,7H15V9H3V7M3,11H21V13H3V11M3,15H15V17H3V15M3,19H21V21H3V19Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_PropagatePhrase}" Command="{Binding PropagatePhraseCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_PropagatePhrase_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M17,17H7V14L3,18L7,22V19H19V13H17M7,7H17V10L21,6L17,2V5H5V11H7V7Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="{localization:Loc Menu_GenerateLevels}"
+                  Command="{Binding ShellDialogs.OpenLevelGenerationCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_GenerateLevels_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M11,16H13V18H11V16M8,11H16V13H8V11M5,6H19V8H5V6M3,20V22H21V20H3Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_SquashLevels}" Command="{Binding SquashLevelsCommand}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M5,6H19V8H5V6M8,11H16V13H8V11M11,16H13V18H11V16Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+    </MenuItem>
+
+    <Separator />
+
+    <!-- Tools that touch SOUND rather than the chart. -->
+    <MenuItem Header="{localization:Loc Menu_GroupToneSound}">
+        <MenuItem.Icon>
+            <PathIcon Data="{DynamicResource IconAmp}"
+                      Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_Tuner}"
+                  Command="{Binding ShellDialogs.OpenTunerCommand}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M12,3V13.55C11.41,13.21 10.73,13 10,13A4,4 0 0,0 6,17A4,4 0 0,0 10,21A4,4 0 0,0 14,17V7H18V3H12Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_ToneDesigner}"
+                  Command="{Binding ShellDialogs.OpenToneDesignerCommand}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M7,2V4H8V18A4,4 0 0,0 12,22A4,4 0 0,0 16,18V4H17V2H7M11,16C10.4,16 10,15.6 10,15C10,14.4 10.4,14 11,14C11.6,14 12,14.4 12,15C12,15.6 11.6,16 11,16M13,12C12.4,12 12,11.6 12,11C12,10.4 12.4,10 13,10C13.6,10 14,10.4 14,11C14,11.6 13.6,12 13,12M14,7H10V4H14V7Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_Pedalboard}"
+                  Command="{Binding ToneRig.OpenPedalboardCommand}">
+            <MenuItem.Icon>
+                <PathIcon Data="{DynamicResource IconAmp}"
+                          Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_GenerateRocksmithTones}"
+                  ToolTip.Tip="{localization:Loc Menu_GenerateRocksmithTones_Tip}"
+                  Command="{Binding ToneRig.GenerateRocksmithTonesCommand}">
+            <MenuItem.Icon>
+                <PathIcon Data="{DynamicResource IconAmp}"
+                          Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="{localization:Loc Menu_SeparateStems}" Command="{Binding StemSeparation.SeparateStemsCommand}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M3,3H21V5H3V3M3,8H21V10H3V8M3,13H21V15H3V13M3,18H21V20H3V18Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+    </MenuItem>
+
+    <!-- What the chart LOOKS like, and getting a picture of it out.
+         These two sat under a "Visuals" submenu until the run-video
+         export was removed; two rows is below the grouping floor
+         MainMenuLocalizationTests enforces (one level for that few is an
+         extra click for nothing), so the group was folded rather than
+         kept alive with a single tenant. -->
+    <MenuItem Header="{localization:Loc Menu_ShowlightsEditor}"
+              Command="{Binding ShellDialogs.OpenShowlightsCommand}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M12,2L15,8L22,9L17,14L18,22L12,18L6,22L7,14L2,9L9,8L12,2Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+    <MenuItem Header="{localization:Loc Menu_Screenshot}" Command="{Binding Export.CaptureHighwayScreenshotCommand}"
+              InputGesture="F12"
+              ToolTip.Tip="{localization:Loc Menu_Screenshot_Tip}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M4,4H7L9,2H15L17,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M12,7A5,5 0 0,0 7,12A5,5 0 0,0 12,17A5,5 0 0,0 17,12A5,5 0 0,0 12,7M12,9A3,3 0 0,1 15,12A3,3 0 0,1 12,15A3,3 0 0,1 9,12A3,3 0 0,1 12,9Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+    </MenuItem>
+
+    <Separator />
+
+    <!-- Inspect charts without changing them. -->
+    <MenuItem Header="{localization:Loc Menu_GroupReview}">
+        <MenuItem.Icon>
+            <PathIcon
+                Data="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M10.94,18L7.4,14.46L8.81,13.05L10.94,15.17L15.19,10.92L16.6,12.33L10.94,18Z"
+                Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+        </MenuItem.Icon>
+        <MenuItem Header="{localization:Loc Menu_QualityReport}" Command="{Binding ShellDialogs.OpenQualityReportCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_QualityReport_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_ChartDiff}" Command="{Binding ShellDialogs.OpenChartDiffCommand}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M17,3H7A2,2 0 0,0 5,5V21L12,18L19,21V5A2,2 0 0,0 17,3M11,15H9V13H11V15M11,11H9V9H11V11M15,15H13V13H15V15M15,11H13V9H15V11Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_BatchLint}" Command="{Binding ShellDialogs.OpenBatchLintCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_BatchLint_Tip}">
+            <MenuItem.Icon>
+                <PathIcon
+                    Data="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M10.94,18L7.4,14.46L8.81,13.05L10.94,15.17L15.19,10.92L16.6,12.33L10.94,18Z"
+                    Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+    </MenuItem>
+</MenuItem>

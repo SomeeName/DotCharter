@@ -1,0 +1,152 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.HistoryDialogView"
+             x:DataType="contracts:IHistoryScreen"
+             x:CompileBindings="True">
+
+    <!-- The undo tree. Grammar: Views/Dialogs/DialogStyles.axaml.
+
+         The local <Style> block this view used to carry is GONE: it dressed the
+         node button out of the APP ladder (RadiusXs / PaddingRow / SurfaceHover /
+         AccentColor) while everything around it had moved onto the Fire one, which
+         is precisely what read as "an older build". A clickable full-width row is
+         the one shape the shared vocabulary genuinely lacks — `Border.DlgListRow`
+         is a Border selector and does not match a Button — so the row's chrome is
+         set INLINE, in Fire ladder tokens, on this view only. The hover fill comes
+         from the button's own ControlTheme through the presenter's
+         TemplateBinding, so the inline CornerRadius rounds it correctly.
+
+         The "current" state is drawn three ways at once because that is what the
+         mockup does and each one carries in a different situation: the dot (glance),
+         the wash + hairline (the row as a whole) and the CURRENT tag (unambiguous
+         in a screenshot). Every one of them reads the same `IsCurrent`. -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconHistory}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc History_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc History_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" RowDefinitions="*,Auto">
+                    <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="0" Classes="DlgListFrame">
+                        <Panel>
+                            <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty"
+                                    IsVisible="{Binding !HasNodes}">
+                                <TextBlock Text="{localization:Loc Dialog_List_Empty}" />
+                            </Border>
+                            <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding Nodes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IHistoryNode">
+                                            <DockPanel>
+                                                <Border DockPanel.Dock="Left" Width="{Binding Indent}" />
+                                                <Button AutomationProperties.Name="{Binding Description}" Background="Transparent" BorderThickness="0"
+                                                        Padding="{DynamicResource FirePadNone}"
+                                                        CornerRadius="{DynamicResource FireRadiusRow}"
+                                                        Margin="{DynamicResource FireGapNavRow}"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        Command="{Binding $parent[ItemsControl].((contracts:IHistoryScreen)DataContext).JumpToCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Panel>
+                                                        <!-- the current state's wash, behind the row -->
+                                                        <Border x:Name="CurrentWash" IsVisible="{Binding IsCurrent}"
+                                                                Background="{DynamicResource FireAccentTint}"
+                                                                BorderBrush="{DynamicResource FireAccentBorder}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="{DynamicResource FireRadiusRow}" />
+                                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                                                              ColumnSpacing="{DynamicResource FireSpaceMd}"
+                                                              Margin="{DynamicResource FirePadRow}">
+                                                            <Panel Grid.Column="0" Width="7" Height="7"
+                                                                   VerticalAlignment="Center">
+                                                                <Ellipse Fill="{DynamicResource FireBorderStrong}"
+                                                                         IsVisible="{Binding !IsCurrent}" />
+                                                                <Ellipse Fill="{DynamicResource FireAccentBright}"
+                                                                         IsVisible="{Binding IsCurrent}" />
+                                                            </Panel>
+                                                            <TextBlock Theme="{DynamicResource DlgLabelText}" Grid.Column="1" Classes="DlgLabel"
+                                                                       Text="{Binding Description}"
+                                                                       TextWrapping="NoWrap"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                                        Spacing="{DynamicResource FireSpaceXs}"
+                                                                        VerticalAlignment="Center">
+                                                                <Border x:Name="CurrentTag" IsVisible="{Binding IsCurrent}"
+                                                                        Background="{DynamicResource FireAccentTint}"
+                                                                        BorderBrush="{DynamicResource FireAccentBorder}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="{DynamicResource FireRadiusTag}"
+                                                                        Padding="{DynamicResource FirePadTag}">
+                                                                    <TextBlock Text="{localization:Loc History_Current}"
+                                                                               FontFamily="{DynamicResource FireFontMono}"
+                                                                               FontSize="{DynamicResource FireSizeEyebrow}"
+                                                                               LetterSpacing="{DynamicResource FireTrackMicro}"
+                                                                               Foreground="{DynamicResource FireAccentBright}" />
+                                                                </Border>
+                                                                <Border x:Name="BranchTag" IsVisible="{Binding IsBranch}"
+                                                                        Background="{DynamicResource FireSurfaceChip}"
+                                                                        BorderBrush="{DynamicResource FireBorder}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="{DynamicResource FireRadiusTag}"
+                                                                        Padding="{DynamicResource FirePadTag}">
+                                                                    <TextBlock Text="{localization:Loc History_Branch}"
+                                                                               FontFamily="{DynamicResource FireFontMono}"
+                                                                               FontSize="{DynamicResource FireSizeEyebrow}"
+                                                                               LetterSpacing="{DynamicResource FireTrackMicro}"
+                                                                               Foreground="{DynamicResource FireTextMuted}" />
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="3" Text="{Binding Time}"
+                                                                       VerticalAlignment="Center" TextAlignment="Right"
+                                                                       FontFamily="{DynamicResource FireFontMono}"
+                                                                       FontSize="{DynamicResource FireSizeMeta}"
+                                                                       Foreground="{DynamicResource FireTextMuted}" />
+                                                        </Grid>
+                                                    </Panel>
+                                                </Button>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Panel>
+                    </Border>
+
+                    <TextBlock Theme="{DynamicResource DlgHintText}" Grid.Row="1" Classes="DlgHint" TextWrapping="Wrap"
+                               Text="{localization:Loc History_Note}" />
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <!-- What the tree amounts to, in the footer's tertiary slot:
+                             both numbers come from the rebuilt node list, never from
+                             a literal. -->
+                        <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                            <TextBlock x:Name="HistorySummary" Text="{Binding Summary}"
+                                       FontFamily="{DynamicResource FireFontMono}"
+                                       FontSize="{DynamicResource FireSizeMicro}"
+                                       LetterSpacing="{DynamicResource FireTrackMicro}"
+                                       Foreground="{DynamicResource FireTextFaint}"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                            <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                    Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

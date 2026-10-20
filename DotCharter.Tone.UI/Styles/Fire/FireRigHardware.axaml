@@ -1,0 +1,547 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer: Styles/Fire.axaml merges this file
+         and its siblings IN ORDER. Section: the rig's HARDWARE editors from the
+         tone-rig design. The pedal enclosure, its title strip, LED and
+         footswitch row. The coat and accent are bound per unit
+         (RigDockUnit.Enclosure); everything here is colourless. -->
+
+    <Styles.Resources>
+        <ControlTheme x:Key="FireOutlineButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- ONE height for every control on the header and the routing strip
+                 (owner, 2026-09-08: the 40/35/34/28 mix read as "questionable"):
+                 FireHeaderControlHeight, 36. Text buttons, the tone pill, the mode
+                 strips, the zoom cluster and the framed icon buttons all take it. -->
+            <Style Selector="^.FireOutlineButton">
+                <Setter Property="MinHeight" Value="{StaticResource FireHeaderControlHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadField}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireOutlineButton /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusChip}" />
+            </Style>
+            <Style Selector="^.FireOutlineButton:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^.FireOutlineButton.Bold">
+                <Setter Property="MinWidth" Value="108" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireHeaderIconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- A framed icon button on the header (the cog), the same frame and
+                 size as the close beside it — it was a bare glyph between two framed
+                 controls. -->
+            <Style Selector="^.FireHeaderIconButton">
+                <Setter Property="Width" Value="{StaticResource FireHeaderControlHeight}" />
+                <Setter Property="Height" Value="{StaticResource FireHeaderControlHeight}" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireHeaderIconButton:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+            </Style>
+            <Style Selector="^.FireHeaderIconButton /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireTextButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.FireTextButton">
+                <Setter Property="MinHeight" Value="{StaticResource FireHeaderControlHeight}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadField}" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireTextButton /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+            </Style>
+            <Style Selector="^.FireTextButton:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireJunctionNodeButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Style Selector="^.FireJunctionNode">
+                <Setter Property="MinWidth" Value="66" />
+                <Setter Property="MinHeight" Value="88" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Background" Value="{DynamicResource FireHardwareChassis}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadChip}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireJunctionNode:pointerover /template/ ContentPresenter">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureBorder" TargetType="Border">
+            <!-- The enclosure body. Background and BorderBrush come from the unit's
+                 coat (bound in the view); the shape, edge and inset are fixed here. -->
+            <Style Selector="^.FireEnclosure">
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="CornerRadius" Value="19" />
+                <Setter Property="Padding" Value="22,18,22,14" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireShadowPanel}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureLedgeBorder" TargetType="Border">
+            <!-- The 7 px ledge under the enclosure, in the coat's shadow tone. -->
+            <Style Selector="^.FireEnclosureLedge">
+                <Setter Property="CornerRadius" Value="19" />
+                <Setter Property="Margin" Value="0,7,0,-7" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureGlossBorder" TargetType="Border">
+            <!-- A faint top-left light over the paint. -->
+            <Style Selector="^.FireEnclosureGloss">
+                <Setter Property="CornerRadius" Value="17" />
+                <Setter Property="Background" Value="{DynamicResource FireHardwareHighlight}" />
+                <Setter Property="Opacity" Value="0.06" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureBevelBorder" TargetType="Border">
+            <!-- The design's double bevel inside the edge (pedal-editors.css
+                 .pedal-instrument: inset 0 0 0 3px #ffffff16, inset 0 0 0 7px #0003):
+                 a pale 3 px lip, then a 4 px shadow step, which is what makes the
+                 paint read as a folded steel box rather than a flat rounded rect. Both
+                 are hit-test transparent and sit OVER the padding, so the margins
+                 below undo the enclosure's padding to reach its edge. -->
+            <Style Selector="^.FireEnclosureBevel">
+                <Setter Property="Margin" Value="-22,-18,-22,-14" />
+                <Setter Property="CornerRadius" Value="17" />
+                <Setter Property="BorderThickness" Value="3" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareBevelLip}" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
+            <Style Selector="^.FireEnclosureBevel.Step">
+                <Setter Property="Margin" Value="-19,-15,-19,-11" />
+                <Setter Property="CornerRadius" Value="14" />
+                <Setter Property="BorderThickness" Value="4" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareBevelStep}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureEyebrowText" TargetType="TextBlock">
+            <Style Selector="^.FireEnclosureEyebrow">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="LetterSpacing" Value="2.8" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRightLg}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureNameText" TargetType="TextBlock">
+            <Style Selector="^.FireEnclosureName">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizePanelTitle}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="TextAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureBrandText" TargetType="TextBlock">
+            <Style Selector="^.FireEnclosureBrand">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="LetterSpacing" Value="3" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureRuleBorder" TargetType="Border">
+            <Style Selector="^.FireEnclosureRule">
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Background" Value="{DynamicResource FireHardwareHighlight}" />
+                <Setter Property="Opacity" Value="0.35" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEnclosureLedBorder" TargetType="Border">
+            <Style Selector="^.FireEnclosureLed">
+                <Setter Property="Width" Value="13" />
+                <Setter Property="Height" Value="13" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.FireEnclosureLed.Lit">
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccentSoft}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireFootswitchLabelText" TargetType="TextBlock">
+            <!-- ENGAGED / BYPASS: a RESERVED width, left-aligned, so the two words
+                 cannot slide the switch (design 5.5). -->
+            <Style Selector="^.FireFootswitchLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="LetterSpacing" Value="2" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="Width" Value="64" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireAmpBrandText" TargetType="TextBlock">
+            <Style Selector="^.FireAmpBrand">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeStatLg}" />
+                <Setter Property="LetterSpacing" Value="4" />
+                <Setter Property="Foreground" Value="{DynamicResource FireUnitAmps}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireAmpBrandSubText" TargetType="TextBlock">
+            <Style Selector="^.FireAmpBrandSub">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="LetterSpacing" Value="2" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireAmpLampBorder" TargetType="Border">
+            <Style Selector="^.FireAmpLamp">
+                <Setter Property="Width" Value="17" />
+                <Setter Property="Height" Value="17" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+                <Setter Property="BorderThickness" Value="3" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireUnitCabinets}" />
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapLeftLg}" />
+            </Style>
+            <Style Selector="^.FireAmpLamp.Lit">
+                <Setter Property="Background" Value="{DynamicResource FireWarning}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccentSoft}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireAmpSecondaryCardBorder" TargetType="Border">
+            <!-- The secondary row's cards (redesign.css .amp-secondary
+                 .parameter-control): a 62 px dial beside its own caption and plate,
+                 on the design's violet plate. The cards share the row's width
+                 equally and the SIGNAL card takes the rest, so the row ends where
+                 the head ends. -->
+            <Style Selector="^.FireAmpSecondaryCard">
+                <Setter Property="Background" Value="{DynamicResource FireRigCardFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireRigCardEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusChip}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRightMd}" />
+                <!-- No MinWidth: three content-sized cards plus a 220 px SIGNAL card
+                     fit the 830 px dock a 1586 px window leaves beside the gear
+                     panel; at 180 they pushed the SIGNAL card off the right edge. -->
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ The cabinet (design 6.4) ════════════════════════════════════════
+             A tolex-wrapped shell with the cloth grille inside it; the mic pad is
+             drawn ON the grille. Subpanels hold the IR slots, the response guide
+             and the mic controls; the voicing knobs sit on small plates. -->
+
+        <ControlTheme x:Key="FireCabShellBorder" TargetType="Border">
+            <Style Selector="^.FireCabShell">
+                <Setter Property="BorderThickness" Value="8" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="CornerRadius" Value="13" />
+                <Setter Property="MinHeight" Value="250" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireShadowPanel}" />
+                <Setter Property="ClipToBounds" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireCabGrilleBorder" TargetType="Border">
+            <Style Selector="^.FireCabGrille">
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireUnitCabinets}" />
+                <Setter Property="CornerRadius" Value="5" />
+                <Setter Property="MinHeight" Value="170" />
+                <Setter Property="ClipToBounds" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireCabBadgeBorder" TargetType="Border">
+            <Style Selector="^.FireCabBadge">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="Padding" Value="{StaticResource FirePadChip}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowSm}" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireSubpanelBorder" TargetType="Border">
+            <Style Selector="^.FireSubpanel">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareChassis}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireSubpanelTitleText" TargetType="TextBlock">
+            <Style Selector="^.FireSubpanelTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireCabKnobCardBorder" TargetType="Border">
+            <Style Selector="^.FireCabKnobCard">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareChassis}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadChip}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireResponseKeyBorder" TargetType="Border">
+            <Style Selector="^.FireResponseKey">
+                <Setter Property="Width" Value="16" />
+                <Setter Property="Height" Value="2" />
+                <Setter Property="Background" Value="{DynamicResource FireUnitCabinets}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ The routing console ═════════════════════════════════════════════
+             One strip per lane: badge, level, pan, mute and solo on a dark plate. -->
+
+        <ControlTheme x:Key="FireLaneStripBorder" TargetType="Border">
+            <Style Selector="^.FireLaneStrip">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEditorRackBorder" TargetType="Border">
+            <!-- the editor's side rack: performance macros, assignments, MIDI beside
+                 the gear instead of stretched under it -->
+            <Style Selector="^.FireEditorRack">
+                <Setter Property="Width" Value="340" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderRow}" />
+                <Setter Property="BorderThickness" Value="1,0,0,0" />
+                <Setter Property="Padding" Value="{StaticResource FireGapLeftLg}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapLeftLg}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ The design's segmented strips ═══════════════════════════════════
+             Series/Dual/Triple and Scene A/B: one outlined group, mixed-case
+             buttons 85 px wide and 34 px tall, the active one filled violet. -->
+
+        <ControlTheme x:Key="FireModeStripBorder" TargetType="Border">
+            <Style Selector="^.FireModeStrip">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusChip}" />
+                <Setter Property="ClipToBounds" Value="True" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireModeToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <!-- Copied from CompactToggle, first: a ToggleButton has ONE theme, and the
+                 routing console's three are `Compact FireModeButton`. -->
+            <Style Selector="^.Compact">
+                <Setter Property="Padding" Value="10,5" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            </Style>
+            <Style Selector="^.FireModeButton">
+                <Setter Property="MinWidth" Value="85" />
+                <Setter Property="MinHeight" Value="34" />
+                <Setter Property="Padding" Value="{StaticResource FirePadField}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireModeButton /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="0,0,1,0" />
+                <Setter Property="CornerRadius" Value="0" />
+            </Style>
+            <Style Selector="^.FireModeButton:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+            <Style Selector="^.FireModeButton:checked">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextOnAccent}" />
+            </Style>
+            <Style Selector="^.FireModeButton:checked /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^.FireModeButton.Scene">
+                <Setter Property="MinWidth" Value="49" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+            </Style>
+            <!-- The routing console's copy of the strip sits in a 220 px subpanel:
+                 three 85 px buttons ran past it and the third lost its word. AFTER the
+                 base style: Avalonia applies styles in declaration order, not by
+                 specificity, so declared before it this setter lost to the 85. -->
+            <Style Selector="^.FireModeButton.Compact">
+                <Setter Property="MinWidth" Value="60" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ The routing graph ═══════════════════════════════════════════════
+             The design's lane chip ("Lane A", outlined in the lane colour) and the
+             Split / Merge junction nodes at the region's edges. -->
+
+        <ControlTheme x:Key="FireLaneChipBorder" TargetType="Border">
+            <Style Selector="^.FireLaneChip">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusInner}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadChip}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMixerNodeBorder" TargetType="Border">
+            <!-- The lane's "Mixer A" node: level slider with its dB, a pan knob, M/S. -->
+            <Style Selector="^.FireMixerNode">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareChassis}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadChip}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="MaxWidth" Value="200" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMixerLabelText" TargetType="TextBlock">
+            <Style Selector="^.FireMixerLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMixerReadoutText" TargetType="TextBlock">
+            <Style Selector="^.FireMixerReadout">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMixerNoteText" TargetType="TextBlock">
+            <Style Selector="^.FireMixerNote">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireMixerSwitchToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <Style Selector="^.FireMixerSwitch">
+                <Setter Property="Width" Value="22" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="MinWidth" Value="22" />
+                <Setter Property="MinHeight" Value="20" />
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireMixerSwitch /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareShadow}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+            </Style>
+            <Style Selector="^.FireMixerSwitch:checked /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^.FireMixerSwitch:checked">
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireJunctionLabelText" TargetType="TextBlock">
+            <Style Selector="^.FireJunctionLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireEditorFootnoteText" TargetType="TextBlock">
+            <!-- The one-line footnote under every editor: how a knob is driven. -->
+            <Style Selector="^.FireEditorFootnote">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+                <Setter Property="Margin" Value="{StaticResource FireGapTopSm}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+</Styles>

@@ -1,0 +1,509 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the dialog grammar — see `Views/Dialogs/DialogStyles.axaml`,
+         which merges this file and its siblings IN ORDER. §3 Body — the `DlgRow` rhythm, row typography, sections, list frames and
+         rows, row meta and inline tags — and §4 the honest states
+         (strip / empty / busy). -->
+
+    <!-- THE FAMILIES ARE CONTROLTHEMES (#428). A `Border.X` / `TextBlock.X` /
+         `Grid.X` / `StackPanel.X` rule here was attached to EVERY control of that
+         type under the dialog host (886 Borders, 663 TextBlocks, 526 Grids,
+         286 StackPanels, prewarmed), worn or not: ~32,000 value frames. A
+         dialog control wears the theme AND the class,
+         `Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"` (Dynamic:
+         a dialog view is built before it is parented under the host whose
+         Styles hold these). A theme ranks BELOW every style, so the
+         descendant rules in this grammar (`Border.DlgStrip TextBlock`,
+         `Border.DlgSection Grid.DlgRow:nth-last-child(1)`, …) beat a family
+         rule whatever their order: each was checked to be the one that won
+         before as well. The `SelectableTextBlock` halves stay styles: only
+         SelectableTextBlocks carry them. UI/StyleIncludeScopeTests. -->
+    <Styles.Resources>
+        <ControlTheme x:Key="DlgRowGrid" TargetType="Grid">
+            <!-- THE ROW. Declared as
+                     <Grid Classes="DlgRow" ColumnDefinitions="*,260">
+                 — the control column is a literal per dialog (a 380 px prompt and a
+                 640 px import picker cannot share one number) but must be the SAME
+                 literal for every row IN a dialog: that shared column is what gives a
+                 dialog one right edge, and DialogConstructionUiPerfSmokeTests measures
+                 exactly that. Rhythm lives here, never inline.
+                 MinHeight 34 is the SETTINGS row height: the two grammars are one
+                 product and a dialog row that is 2 px shorter than a settings row is
+                 the kind of drift nobody can see and everybody feels. -->
+            <Style Selector="^.DlgRow">
+                <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+                <Setter Property="ColumnSpacing" Value="{StaticResource FireSpaceXxl}" />
+                <Setter Property="MinHeight" Value="34" />
+            </Style>
+            <!-- "…and this is how": only reachable while the row above it is on. The
+                 26 px indent is the settings grammar's, for the same reason as the
+                 row height. -->
+            <Style Selector="^.DlgRow.Sub">
+                <Setter Property="Margin" Value="26,0,0,12" />
+            </Style>
+            <!-- The last row before a footer already has the footer's own top gap. -->
+            <Style Selector="^.DlgRow.Last">
+                <Setter Property="Margin" Value="{StaticResource FirePadNone}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgLabelText" TargetType="TextBlock">
+            <!-- ─── Row typography — the Fire row pair. A 13.5 px Bold title over an
+                 11.5 px muted description; every list, rail and form row in every
+                 mockup is this. The title reads BRIGHTER than its description; the old
+                 inline labels set only FontWeight and inherited a dim ambient
+                 foreground, so they came out LOWER contrast than the secondary text
+                 underneath them. -->
+            <Style Selector="^.DlgLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgDescText" TargetType="TextBlock">
+            <Style Selector="^.DlgDesc">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightXs}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,3,0,0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgChordText" TargetType="TextBlock">
+            <!-- A key chord beside the command it runs ("Ctrl+Shift+S"): the row label's
+                 size and weight, in the accent. It wore DlgKeyName until 2026-09-24 and
+                 read louder than the command it belongs to. -->
+            <Style Selector="^.DlgChord">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeRow}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgSectionLabelText" TargetType="TextBlock">
+            <!-- ─── Section: a titled cluster of rows inside a dialog body. Its label
+                 is THE FIRE EYEBROW — mono, uppercase, 9.5 px on .24em tracking, dim —
+                 which is the single most repeated mark in the mockups and the one
+                 place this grammar already had a string for it. The box is quieter
+                 than a settings group card (this one is already INSIDE a card, and two
+                 nested cards of the same weight read as a mistake). -->
+            <Style Selector="^.DlgSectionLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="LetterSpacing" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="Margin" Value="0,4,0,10" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgSectionBorder" TargetType="Border">
+            <Style Selector="^.DlgSection">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceRaised}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderHover}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgListRowBorder" TargetType="Border">
+            <!-- ─── A list of pickable things (import tracks, checkpoints, arrangements).
+                 One padded, rounded row with a real hover response, so a 20-track
+                 import list stops looking like loose checkboxes on a background. The
+                 radius and inset are the Fire data-row's. -->
+            <Style Selector="^.DlgListRow">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadRow}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapNavRow}" />
+            </Style>
+            <Style Selector="^.DlgListRow:pointerover">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgListFrameBorder" TargetType="Border">
+            <!-- The frame a list scrolls inside — gives the list a visible extent even
+                 while it is empty, which is what makes the empty state readable. -->
+            <Style Selector="^.DlgListFrame">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <!-- A literal Thickness, NOT `{StaticResource FireSpaceSm}`: the
+                     Space* scale is x:Double and a double cannot be coerced into a
+                     Thickness setter — it throws InvalidCastException while STYLING,
+                     i.e. inside OnAttachedToLogicalTree, which reads as the dialog
+                     failing to construct. Only the FirePad*/FireGap* tokens are
+                     Thicknesses. -->
+                <Setter Property="Padding" Value="6" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgTagBorder" TargetType="Border">
+            <!-- ─── An inline TAG beside a heading: what the thing next to it IS
+                 (an arrangement's type). A Border, not a Button — it reports, it is not
+                 pressable, which is the whole difference from `Button.DlgChip`. -->
+            <Style Selector="^.DlgTag">
+                <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusTag}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgEmptyBorder" TargetType="Border">
+            <!-- EMPTY: a list with nothing in it says so, centred and quiet, instead
+                 of collapsing to a 0 px void the user reads as a broken dialog. -->
+            <Style Selector="^.DlgEmpty">
+                <Setter Property="MinHeight" Value="88" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPanel}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgBusyPanel" TargetType="StackPanel">
+            <!-- BUSY: one shape for "this is working" — a 6 px indeterminate bar (the
+                 Fire track height) with a label under it. No style animation is
+                 involved (ProgressBar animates from its own control theme and stops
+                 when it is not visible). -->
+            <Style Selector="^.DlgBusy">
+                <Setter Property="Spacing" Value="{StaticResource FireSpaceSm}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgBusyCaptionText" TargetType="TextBlock">
+            <Style Selector="^.DlgBusyText">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgStripBorder" TargetType="Border">
+            <!-- STATUS STRIPS: a 3 px left bar + a faint tint of the same colour.
+                 One shape, four meanings; nothing else in a dialog may carry a
+                 saturated fill. The 3 px bar is the Fire layer's ONE emphasis mark,
+                 and SettingsStyles' `Border.NoticeStrip` is the same shape — the two
+                 grammars deliberately draw a notice identically. -->
+            <Style Selector="^.DlgStrip">
+                <Setter Property="BorderThickness" Value="3,0,0,0" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapRowMd}" />
+                <Setter Property="Background" Value="{DynamicResource DlgInfoFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DlgInfoStroke}" />
+            </Style>
+            <Style Selector="^.DlgStrip.Notice">
+                <Setter Property="Background" Value="{DynamicResource DlgNoticeFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DlgNoticeStroke}" />
+            </Style>
+            <Style Selector="^.DlgStrip.Error">
+                <Setter Property="Background" Value="{DynamicResource DlgErrorFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DlgErrorStroke}" />
+            </Style>
+            <Style Selector="^.DlgStrip.Ok">
+                <Setter Property="Background" Value="{DynamicResource DlgOkFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DlgOkStroke}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgValueText" TargetType="TextBlock" BasedOn="{StaticResource MonoText}">
+            <Style Selector="^.DlgValue">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgKeyNameText" TargetType="TextBlock">
+            <Style Selector="^.DlgKeyName">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgBodyText" TargetType="TextBlock">
+            <Style Selector="^.DlgBody">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+                <Setter Property="LineHeight" Value="{StaticResource FireLineHeightBase}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgHintText" TargetType="TextBlock">
+            <Style Selector="^.DlgHint">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgRowMetaText" TargetType="TextBlock">
+            <Style Selector="^.DlgRowMeta">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+                <Setter Property="LetterSpacing" Value="{StaticResource FireTrackMicro}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^.DlgRowMeta.Dim">
+                <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+
+    <!-- ═══ 3. Body ══════════════════════════════════════════════════════ -->
+
+    <!-- The scrolling middle row of the Auto,*,Auto layout. Horizontal
+         scrolling is disabled on purpose — a dialog that scrolls sideways has
+         a broken row, and hiding it makes that visible instead of survivable. -->
+    <Style Selector="ScrollViewer.DialogBody">
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <!-- A body that runs past the card shows its bar: an auto-hidden one left
+             a cut-off section reading as empty (Event dialog review, 2026-09-22). -->
+        <Setter Property="AllowAutoHide" Value="False" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+    </Style>
+
+
+    <!-- Vertical centring for everything a row can hold is a LOCAL
+         `VerticalAlignment="Center"` on each child of a `DlgRow` (#428): the
+         child rule it used to be (`Grid.DlgRow > TextBlock`, `> StackPanel`, …)
+         was attached to every child of every Grid in every dialog. -->
+    <!-- Fill the fixed control column so every field shares one width…
+         `Button` joined this list with the Fire conversion, and it was a real
+         defect rather than tidying: a bare Button in the control column sizes
+         to its caption and sits LEFT in the column, so the Guitar Pro import's
+         "pick the other file" action ended 78 px short of every other control
+         in the app's dialogs. It is the one thing
+         DialogConstructionUiPerfSmokeTests.EveryConvertedDialog_RowsShareOne-
+         RhythmAndOneRightEdge measures, and it was failing on main. -->
+    <Style Selector="Grid.DlgRow > ComboBox,
+                     Grid.DlgRow > TextBox,
+                     Grid.DlgRow > NumericUpDown,
+                     Grid.DlgRow > Slider,
+                     Grid.DlgRow > AutoCompleteBox,
+                     Grid.DlgRow > Button">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <!-- …and pin the switches/checkboxes to its right edge. -->
+    <Style Selector="Grid.DlgRow > ToggleSwitch,
+                     Grid.DlgRow > CheckBox">
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <!-- The boolean is the Fire 44×24 pill, reached through the SHARED
+         ControlTheme rather than restated: a TemplatedControl takes its
+         template from a ControlTheme, never from a Style with a Template
+         setter (the KeybindCaptureBox story in docs/agents/ui/layout-traps.md).
+         The three setters under it stay because they must survive a platform
+         with no Fire dictionary in scope: Fluent's ToggleSwitch ships
+         untranslated On/Off captions and a 154 px MinWidth, and because "On"
+         and "Off" are different widths they also leave every switch at a
+         slightly different x. The knob already says which way it is. -->
+    <Style Selector="Grid.DlgRow > ToggleSwitch">
+        <Setter Property="Theme" Value="{DynamicResource FireToggleSwitch}" />
+        <Setter Property="OnContent" Value="" />
+        <Setter Property="OffContent" Value="" />
+        <Setter Property="MinWidth" Value="0" />
+    </Style>
+
+    <!-- A read-only value a dialog REPORTS rather than edits. -->
+    <Style Selector="SelectableTextBlock.DlgValue">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- The one READOUT a dialog puts on the display face: a derived answer the
+         surface exists to show the user changing (the key a signature spells).
+         Accent-coloured because it is the consequence of the control beside it,
+         which is the layer's sanctioned use of accent as information. -->
+    <Style Selector="SelectableTextBlock.DlgKeyName">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Free-standing explanatory prose inside a body (not a row's second
+         line): the message of a prompt, the note under an option cluster. -->
+    <Style Selector="SelectableTextBlock.DlgBody">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeBase}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="LineHeight" Value="{StaticResource FireLineHeightBase}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="SelectableTextBlock.DlgHint">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMeta}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Typography's `TextBlock.Mono` is an EXACT type selector, so it never
+         reaches SelectableTextBlock — and every path, log tail and diff dump a
+         dialog shows is selectable by design. Mirrored, exactly as
+         SettingsStyles mirrors it. -->
+    <Style Selector="SelectableTextBlock.Mono">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- …and the same mono at the READING weight: a measured figure under its
+         caption, which is a value the surface is ABOUT rather than a path or a
+         dump it merely reports. Selectable for the same reason its parent is —
+         these end up pasted into bug reports. -->
+    <Style Selector="SelectableTextBlock.Mono.Value">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+
+    <!-- A section's LAST row must not add its 12 px under the section's own
+         padding, or a boxed cluster sits visibly lower than a bare one. -->
+    <Style Selector="Border.DlgSection Grid.DlgRow:nth-last-child(1)">
+        <Setter Property="Margin" Value="{StaticResource FirePadNone}" />
+    </Style>
+
+
+    <!-- ─── …and the same list when a row is PICKED rather than merely listed
+         (the Tone Designer's project tones and its 14 gear slots: choosing a row
+         is what fills the editor beside it). The rows ARE the design — the
+         ListBox exists so the list is arrow-key navigable — so its Fluent frame,
+         item padding and selection fill all have to get out of the way, exactly
+         the way `ListBox.FireList` does it one layer up. Without this the
+         theme's `AccentSelected` paints a rounded block UNDER the row and the
+         row's own selected look is invisible inside it.
+         Note there is no `Cursor` setter here and cannot be (see the header):
+         a ListBoxItem is generated, so it cannot be given one inline either. -->
+    <Style Selector="ListBox.DlgList">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+    </Style>
+    <Style Selector="ListBox.DlgList > ListBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+        <Setter Property="Margin" Value="{StaticResource FirePadNone}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="ListBox.DlgList > ListBoxItem /template/ ContentPresenter,
+                     ListBox.DlgList > ListBoxItem:pointerover /template/ ContentPresenter,
+                     ListBox.DlgList > ListBoxItem:selected /template/ ContentPresenter,
+                     ListBox.DlgList > ListBoxItem:selected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!-- SELECTION MUST NOT CHANGE THE ROW'S BOX. The hairline is there at rest
+         and merely transparent, so picking a row repaints it instead of growing
+         it by 2 px — the jitter `ListBox.FireList` was fixed for. Scoped to a
+         DlgList so the plain (unpickable) DlgListRow in seven other dialogs
+         keeps its borderless box. -->
+    <Style Selector="ListBox.DlgList Border.DlgListRow">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.DlgList > ListBoxItem:pointerover Border.DlgListRow">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <!-- Keyboard focus is NOT selection: arrowing moves both, Tab moves only
+         focus, and a row you cannot see is a row you cannot use. -->
+    <Style Selector="ListBox.DlgList > ListBoxItem:focus-visible Border.DlgListRow">
+        <Setter Property="Background" Value="{DynamicResource FireFocusRowFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireFocusRowBorder}" />
+    </Style>
+    <Style Selector="ListBox.DlgList > ListBoxItem:selected Border.DlgListRow">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+    </Style>
+
+    <!-- ─── The mono FACT at the end of a list row: what is loaded in this gear
+         slot, which key a tone answers to. It is the DialogContext mark one
+         level down — metadata is mono and tracked in this vocabulary — but
+         accent-coloured, because here it is the ANSWER the row is about rather
+         than the path the dialog merely reports.
+         `.Dim` is the honest empty: an unfilled slot still prints "(empty)",
+         quieter, instead of leaving the row's right half blank. -->
+    <Style Selector="SelectableTextBlock.DlgRowMeta">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMono}" />
+        <Setter Property="LetterSpacing" Value="{StaticResource FireTrackMicro}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireAccentBright}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="SelectableTextBlock.DlgRowMeta.Dim">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+    </Style>
+
+    <Style Selector="Border.DlgTag > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeTag}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+    </Style>
+
+    <!-- ═══ 4. The honest states ═════════════════════════════════════════ -->
+
+    <!-- CHILD selectors, not descendant ones: a descendant rule is attached to every
+         TextBlock under any Border in the dialog host (~700 frames, #707), a child rule
+         only to the ~70 whose parent can be the empty box. An empty state is one
+         line, or a StackPanel of lines (Checkpoints). -->
+    <Style Selector="Border.DlgEmpty > TextBlock, Border.DlgEmpty > SelectableTextBlock, Border.DlgEmpty > StackPanel > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeCaption}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="StackPanel.DlgBusy > ProgressBar">
+        <Setter Property="Height" Value="{StaticResource FireTrackHeight}" />
+        <Setter Property="IsIndeterminate" Value="True" />
+    </Style>
+
+    <!-- The strip's TEXT stays body-coloured — a whole paragraph in the
+         warning colour is unreadable, and the bar has already said it.
+         CHILD rules, one per shape a strip's text takes: a descendant rule is
+         attached to every TextBlock of every dialog, strip or not (#428's rule
+         frames). A templated line (an ItemsControl inside a strip) sets its own
+         FontFamily; the export dialogs' warning lines already set the rest. -->
+    <Style Selector="Border.DlgStrip > TextBlock, Border.DlgStrip > SelectableTextBlock,
+                     Border.DlgStrip > StackPanel > TextBlock, Border.DlgStrip > StackPanel > SelectableTextBlock,
+                     Border.DlgStrip > Grid > TextBlock, Border.DlgStrip > Grid > SelectableTextBlock,
+                     Border.DlgStrip > Grid > StackPanel > TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+</Styles>

@@ -1,0 +1,503 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:appVm="clr-namespace:DotCharter.UI.ViewModels.Application;assembly=DotCharter"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellVm="using:DotCharter.UI.ViewModels.Shell"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             x:Class="DotCharter.UI.Views.PlayMode.Screens.LaunchScreenView"
+             x:DataType="vm:PlayModeViewModel">
+    <!-- ══════════════════════════════════════════════════════════════
+         LAUNCH SCREEN — the app's very first surface. `CurrentScreen`
+         starts at `Start` and `AppConfig.StartInPlayMode` defaults to
+         true, so this is literally the first thing the product shows.
+
+         0.48: rebuilt to the owner's commissioned mockup
+         (`…/Downloads/fire/New Menu/Launch Screen.dc.html`) on the Fire
+         layer. What it replaced was a 420 px `VerticalAlignment=Center`
+         StackPanel: no floor, no footer, no status, and every figure
+         absent. The design is a FULL-HEIGHT frame — a scrollable body
+         holding the lockup column over a pinned footer rail — and that
+         frame is the load-bearing part, not the column inside it.
+
+         THE RULE THIS SCREEN IS BUILT AROUND: every value is wired to
+         something real, or it is not here.
+
+           song count + state  `ILaunchFacts.LibraryState` over the real
+                               library scan. The chip can say SCANNING and
+                               NOT SCANNED YET; it only says READY when a
+                               scan has finished and found songs.
+           guitar + latency    `IAudioPlaybackService.InputSampleRate` (an
+                               OPEN capture stream) and the MEASURED output
+                               latency. No device ⇒ the state, never a
+                               plausible "12 ms".
+           version             the running assembly's informational version.
+           profiles            the REAL `IPlayerProfileService`, through the
+                               same `StatusBarViewModel` that backs the
+                               shared switcher flyout — the same list, the
+                               same rename / picture / export / import / add
+                               commands, the same left-handed flag.
+
+         CUT, and why (do not add these back without the data):
+           • `LEVEL 14` — there is no XP, level or rank concept anywhere in
+             this app. A profile row prints what a profile actually has:
+             when it was last used, and whether it plays left-handed.
+           • `BUILD 2026.07` — the build carries no date or SHA
+             (`<Version>` is the only version input and the build is
+             deterministic), so there is nothing to print.
+           • `What's new` — there is no changelog in the app and no release
+             notes outside an update prompt. The real version surface is
+             About, so that is the link.
+
+         Keyboard: the footer's TWO hints are both REAL. Enter → START
+         (window tunnel, stands down for a focused Button so the screen
+         stays arrow-key navigable) and S → the gameplay settings modal;
+         see `GlobalChordGate.AllowsLaunchStart`/`AllowsLaunchShortcut`.
+         Esc closes an open panel and NOTHING else — it does not quit the
+         app, the "ESC QUIT" hint is gone with that behaviour, and
+         `LaunchScreenTests` fails if either comes back. Quitting is File ▸
+         Exit / the caption button (`MainWindowViewModel.ExitRequested`).
+         ══════════════════════════════════════════════════════════════ -->
+    <!-- Hosted by PlayModeView, which declares this view with the
+         IsStartScreen gate. The boot surface: it is constructed for the
+         app's first frame and may never be deferred
+         (PlayModeDeferredScreenTests.TheBootSurfaces_StayInline). Its two
+         gated panels are prewarmed by name (PlayModeView.LaunchPanelNames).
+         Lifted out of PlayModeView.axaml in #294, markup unchanged. -->
+    <Grid x:Name="StartScreenRoot"
+          RowDefinitions="*,Auto">
+
+        <!-- No ground: `MenuBackdropControl` renders behind every Play Mode
+             screen and the mockup's flat #07060c exists only because a web
+             page has nothing behind it. One wash, pulled to the centre where
+             the hero is. -->
+        <Border Grid.Row="0" Grid.RowSpan="2" Theme="{StaticResource FireWashBorder}" Classes="FireWash" />
+
+        <!-- The body scrolls rather than overflowing on a short window, and
+             it opens at its TOP — focus moving into the profiles panel must
+             not scroll the wordmark away. -->
+        <ScrollViewer x:Name="LaunchBodyScroll" Grid.Row="0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      BringIntoViewOnFocusChange="False">
+            <!-- The hero FILLS a share of the window instead of sitting as
+                 a fixed-pixel island in the middle of it (owner, 2026-09-12:
+                 ~350x300 px of a 2560x1440 window, "and it's even worse on
+                 1920x1080"). LayoutTransformControl, not Viewbox: layout
+                 really re-runs, so the text is rasterized at its final size
+                 and the CTA's chamfer is hit-tested where it is drawn.
+
+                 Viewport is the SCROLLVIEWER's bounds and has to be — a
+                 ScrollViewer offers infinite height, so a fill derived from
+                 the measure's availableSize would never engage vertically.
+                 Those bounds are also measured INSIDE MainWindow's
+                 RootScaler, which is what makes this compose with the global
+                 interface scale instead of multiplying against it.
+
+                 Only the BODY is inside this. LaunchFooter (the version
+                 stamp and the key hints) is Grid.Row=1, outside the scroll
+                 viewer, and stays anchored in its corners at the global
+                 scale alone. -->
+            <fire:HeroScaleToFit x:Name="LaunchHeroScaler"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Viewport="{Binding #LaunchBodyScroll.Bounds}">
+            <!-- A FIXED width, not a cap: the column is centred, so it sizes
+                 to its widest child, and that was the three status chips
+                 until the streak chip went (2026-09-19) — with two, the
+                 whole launch column shrank and the hero scaler blew it up. -->
+            <StackPanel x:Name="LaunchColumn" Width="520"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Margin="{StaticResource FirePadScreen}">
+
+                <!-- The SHIPPED logo. The mockup draws a 2x2 dot placeholder
+                     only because the page has no access to the asset; that
+                     placeholder shipped once and was rejected on sight. -->
+                <Border Theme="{StaticResource FireMarkBorder}" Classes="FireMark Hero" HorizontalAlignment="Center">
+                    <Image AutomationProperties.AccessibilityView="Raw" Source="avares://DotCharter/Assets/app-icon.png" RenderOptions.BitmapInterpolationMode="HighQuality" />
+                </Border>
+                <TextBlock Text="DotCharter" Theme="{StaticResource FireWordmarkText}" Classes="FireWordmark" TextOptions.TextRenderingMode="Antialias"
+                           HorizontalAlignment="Center"
+                           Margin="{StaticResource FireGapTopLg}" />
+                <Border Theme="{StaticResource FireKickerRuleBorder}" Classes="FireKickerRule" Width="120"
+                        HorizontalAlignment="Center"
+                        Margin="{StaticResource FireGapTopSm}" />
+                <TextBlock Theme="{StaticResource FireSubtitleText}" Classes="FireSubtitle Lead"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           Margin="{StaticResource FireGapTopMd}"
+                           Text="{localization:Loc PlayMode_Tagline}" />
+
+                <!-- START. The chamfer is the CTA theme's clip geometry; the
+                     ENTER chip rides the button's right edge because the key
+                     and the button are one affordance. -->
+                <Button AutomationProperties.Name="{localization:Loc PlayMode_Launch_Start}" x:Name="LaunchStartButton" Theme="{StaticResource FireCtaButton}" Classes="FireCta"
+                        Margin="0,34,0,0"
+                        Command="{Binding EnterHomeCommand}">
+                    <!-- ▶ START centred as ONE group; the ENTER badge keeps the
+                         right edge. The label used to sit against the icon at
+                         the left with a BOTTOM margin (FireGapRowLg is a row
+                         gap, not a side gap), so it read off-centre both ways
+                         (owner, 2026-09-08). -->
+                    <Panel>
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Spacing="{StaticResource FireSpaceLg}">
+                            <PathIcon Data="{DynamicResource IconPlay}"
+                                      Width="24" Height="24" VerticalAlignment="Center"
+                                      Foreground="{DynamicResource FireTextOnAccent}" />
+                            <TextBlock Classes="FireCtaLabel" VerticalAlignment="Center"
+                                       Text="{localization:Loc PlayMode_Launch_Start}" />
+                        </StackPanel>
+                        <Border Theme="{StaticResource FireBadgeBorder}" Classes="FireBadge" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock Text="{localization:Loc PlayMode_Launch_EnterChip}" />
+                        </Border>
+                    </Panel>
+                </Button>
+
+                <!-- ── Who is playing ─────────────────────────────────────
+                     One panel: the active player on top, and whichever of
+                     the two answers ("pick another profile" / "play as a
+                     guest") the segmented pair has open beneath it. Both
+                     panels are inline `IsVisible` regions — Play Mode never
+                     opens a Flyout or an overlay on its own menus. -->
+                <Border x:Name="LaunchWhoPanel" Theme="{StaticResource FirePanelBorder}" Classes="FirePanel"
+                        Padding="{StaticResource FirePadNone}"
+                        Margin="{StaticResource FireGapTopRow}">
+                    <StackPanel>
+                        <!-- The row stays on the PlayMode view model (the
+                             segmented pair is ITS state); only the "who"
+                             half re-points at the shared StatusBar view
+                             model, which is where the real active profile
+                             lives. -->
+                        <Grid x:Name="LaunchPlayingAsRow"
+                              ColumnDefinitions="*,Auto"
+                              ColumnSpacing="{StaticResource FireSpaceLg}"
+                              Margin="{StaticResource FirePadCard}">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                        Spacing="{StaticResource FireSpaceLg}"
+                                        VerticalAlignment="Center"
+                                        DataContext="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).StatusBar}"
+                                        x:DataType="appVm:StatusBarViewModel">
+                                <Panel Width="34" Height="34" VerticalAlignment="Center">
+                                    <Border Theme="{StaticResource FireAvatarBorder}" Classes="FireAvatar" Width="34" Height="34"
+                                            Background="{Binding ActiveProfileBrush}" />
+                                    <Ellipse Width="34" Height="34" IsVisible="{Binding HasActiveAvatar}">
+                                        <Ellipse.Fill>
+                                            <ImageBrush Source="{Binding ActiveProfileAvatar}"
+                                                        Stretch="UniformToFill" />
+                                        </Ellipse.Fill>
+                                    </Ellipse>
+                                </Panel>
+                                <StackPanel VerticalAlignment="Center"
+                                            Spacing="{StaticResource FireSpaceXxs}">
+                                    <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                               Text="{localization:Loc PlayMode_Start_WhoLabel}" />
+                                    <TextBlock x:Name="LaunchActiveProfileName" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="220"
+                                               Text="{Binding ActiveProfileName}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Grid.Column="1" Theme="{StaticResource FireSegmentBorder}" Classes="FireSegment" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="{StaticResource FireSpaceXxs}">
+                                    <ToggleButton x:Name="LaunchProfilesSegment"
+                                                  Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                                  ToolTip.Tip="{localization:Loc Profile_Switcher_Tip}"
+                                                  Content="{localization:Loc Profile_Title}"
+                                                  IsChecked="{Binding IsLaunchProfilesOpen, Mode=OneWay}"
+                                                  Command="{Binding ToggleLaunchProfilesCommand}" />
+                                    <ToggleButton x:Name="LaunchGuestSegment"
+                                                  Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                                  ToolTip.Tip="{localization:Loc PlayMode_Guest_Hint}"
+                                                  Content="{localization:Loc PlayMode_Launch_Guest}"
+                                                  IsChecked="{Binding IsGuestEntryOpen, Mode=OneWay}"
+                                                  Command="{Binding ToggleGuestEntryCommand}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- ── PLAYER PROFILES ────────────────────────────
+                             The real list and the real commands, off the
+                             SAME `StatusBarViewModel` the shared switcher
+                             flyout binds. Nothing here is a second profile
+                             model. -->
+                        <!-- The gate is on the OUTER panel and the StatusBar
+                             DataContext on the inner one, deliberately: an
+                             `x:DataType` also retypes the element's OWN
+                             bindings, so putting both on one element makes
+                             `IsLaunchProfilesOpen` resolve against the wrong
+                             view model and fails the AXAML compile. -->
+                        <StackPanel x:Name="LaunchProfilesPanel"
+                                    IsVisible="{Binding IsLaunchProfilesOpen}">
+                        <StackPanel Spacing="{StaticResource FireSpaceRow}"
+                                    Margin="{StaticResource FirePadCard}"
+                                    DataContext="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).StatusBar}"
+                                    x:DataType="appVm:StatusBarViewModel">
+                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" Margin="0,0,0,2" />
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                       Text="{localization:Loc PlayMode_Launch_ProfilesPanel}" />
+
+                            <ItemsControl ItemsSource="{Binding Profiles}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="appVm:ProfileOption">
+                                        <Button AutomationProperties.Name="{Binding Name}" Theme="{StaticResource FireListRowButton}" Classes="FireListRow"
+                                                Classes.selected="{Binding IsActive}"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch"
+                                                Margin="0,0,0,4"
+                                                Command="{Binding $parent[ItemsControl].((appVm:StatusBarViewModel)DataContext).SwitchProfileCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                                  ColumnSpacing="{StaticResource FireSpaceRow}">
+                                                <Panel Grid.Column="0" Width="26" Height="26"
+                                                       VerticalAlignment="Center">
+                                                    <Border Theme="{StaticResource FireAvatarBorder}" Classes="FireAvatar"
+                                                            Background="{Binding Accent}" />
+                                                    <Ellipse Width="26" Height="26"
+                                                             IsVisible="{Binding HasAvatar}">
+                                                        <Ellipse.Fill>
+                                                            <ImageBrush Source="{Binding Avatar}"
+                                                                        Stretch="UniformToFill" />
+                                                        </Ellipse.Fill>
+                                                    </Ellipse>
+                                                </Panel>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                                            Spacing="{StaticResource FireSpaceXxs}">
+                                                    <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding Name}" />
+                                                    <!-- Last used + left-handed: the only
+                                                         per-profile facts that exist. The
+                                                         mockup's LEVEL has no backing
+                                                         concept and was not invented. -->
+                                                    <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                                                               IsVisible="{Binding HasDetail}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding Detail}" />
+                                                </StackPanel>
+                                                <PathIcon Grid.Column="2" Width="13" Height="13"
+                                                          VerticalAlignment="Center"
+                                                          IsVisible="{Binding IsActive}"
+                                                          Data="{DynamicResource IconCheck}"
+                                                          Foreground="{DynamicResource FireAccent}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Rename · Picture… · Export… · Import…, all on
+                                 the active profile, all real commands. -->
+                            <Grid x:Name="LaunchProfileActions"
+                                  ColumnDefinitions="*,*" RowDefinitions="Auto,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceSm}"
+                                  RowSpacing="{StaticResource FireSpaceSm}">
+                                <Button Grid.Row="0" Grid.Column="0" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTip.Tip="{localization:Loc Profile_Rename_Tip}"
+                                        Content="{localization:Loc Profile_Rename}"
+                                        Command="{Binding BeginRenameProfileCommand}" />
+                                <Button Grid.Row="0" Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTip.Tip="{localization:Loc Profile_Picture_Tip}"
+                                        Content="{localization:Loc Profile_Picture}"
+                                        Command="{Binding ChooseProfilePictureCommand}" />
+                                <Button Grid.Row="1" Grid.Column="0" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTip.Tip="{localization:Loc Profile_Export_Tip}"
+                                        Content="{localization:Loc Profile_Export}"
+                                        Command="{Binding ExportProfileCommand}" />
+                                <Button Grid.Row="1" Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        ToolTip.Tip="{localization:Loc Profile_Import_Tip}"
+                                        Content="{localization:Loc Profile_Import}"
+                                        Command="{Binding ImportProfileCommand}" />
+                            </Grid>
+
+                            <!-- Rename is an inline edit, not a dialog — the
+                                 panel is already the surface for it. -->
+                            <Grid x:Name="LaunchRenameRow" ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceSm}"
+                                  IsVisible="{Binding IsRenamingProfile}">
+                                <Border Grid.Column="0" Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                                    <TextBox Classes="FireFieldInput" MaxLength="32"
+                                             AutomationProperties.Name="{localization:Loc Profile_Rename_Placeholder}"
+                                             Text="{Binding RenameProfileName, Mode=TwoWay}"
+                                             PlaceholderText="{localization:Loc Profile_Rename_Placeholder}" />
+                                </Border>
+                                <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact Accent"
+                                        Content="{localization:Loc Profile_Rename}"
+                                        Command="{Binding CommitRenameProfileCommand}" />
+                            </Grid>
+
+                            <!-- Left-handed, with the one line that says what
+                                 it does. Two-way onto the ACTIVE profile's
+                                 stored flag. -->
+                            <StackPanel x:Name="LaunchLeftyBlock"
+                                        Spacing="{StaticResource FireSpaceXxs}">
+                                <CheckBox x:Name="LaunchLeftyCheck" Classes="FireCheckBox"
+                                          ToolTip.Tip="{localization:Loc Profile_Lefty_Tip}"
+                                          Content="{localization:Loc PlayMode_Launch_Lefty}"
+                                          IsChecked="{Binding IsActiveLefty, Mode=TwoWay}" />
+                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc Wide" Margin="26,0,0,0"
+                                           Text="{localization:Loc PlayMode_Launch_LeftyHint}" />
+                            </StackPanel>
+
+                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" />
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                       Text="{localization:Loc Profile_Add_Eyebrow}" />
+                            <Grid x:Name="LaunchNewProfileRow" ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <Border Grid.Column="0" Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                                    <TextBox Classes="FireFieldInput" MaxLength="32"
+                                             AutomationProperties.Name="{localization:Loc Profile_New_Placeholder}"
+                                             Text="{Binding NewProfileName, Mode=TwoWay}"
+                                             PlaceholderText="{localization:Loc Profile_New_Placeholder}" />
+                                </Border>
+                                <Button x:Name="LaunchAddProfileButton" Grid.Column="1"
+                                        Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact Accent" MinWidth="76"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc Profile_Add}"
+                                        Command="{Binding CreateProfileCommand}" />
+                            </Grid>
+                        </StackPanel>
+                        </StackPanel>
+
+                        <!-- ── GUEST SESSION ──────────────────────────────
+                             The v0.31 fast path, unchanged and still real:
+                             name → calibrate → tune → play. -->
+                        <StackPanel x:Name="LaunchGuestPanel"
+                                    IsVisible="{Binding IsGuestEntryOpen}"
+                                    Spacing="{StaticResource FireSpaceRow}"
+                                    Margin="{StaticResource FirePadCard}">
+                            <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule" Margin="0,0,0,2" />
+                            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow"
+                                       Text="{localization:Loc PlayMode_Launch_GuestPanel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc Wide"
+                                       Text="{localization:Loc PlayMode_Guest_Hint}" />
+                            <Grid ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <Border Grid.Column="0" Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                                    <TextBox Classes="FireFieldInput" MaxLength="32"
+                                             AutomationProperties.Name="{localization:Loc PlayMode_Guest_NameWatermark}"
+                                             Text="{Binding GuestName, Mode=TwoWay}"
+                                             PlaceholderText="{localization:Loc PlayMode_Guest_NameWatermark}" />
+                                </Border>
+                                <Button x:Name="LaunchGuestStartButton" Grid.Column="1"
+                                        Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact Accent"
+                                        HorizontalContentAlignment="Center"
+                                        Content="{localization:Loc PlayMode_Guest_Start}"
+                                        Command="{Binding StartGuestSessionCommand}" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ── The two status chips ───────────────────────────────
+                     Each one binds a STATE as well as a figure, and each
+                     one's dot colour follows that state: green when the
+                     thing is genuinely good, amber when it needs attention.
+                     No chip can render a number it does not have.
+                     Graphite: a GOOD state is a quiet neutral chip with a
+                     green dot; only a state that needs attention tints the
+                     whole chip amber. -->
+                <Grid x:Name="LaunchStatusChips" ColumnDefinitions="*,*"
+                      ColumnSpacing="{StaticResource FireSpaceSm}"
+                      Margin="{StaticResource FireGapTopRow}">
+
+                    <!-- Every chip is dot + a READABLE title + an optional mono
+                         caption. When a chip has no figure (no songs yet, no
+                         streak yet) its state text IS the title — as the only
+                         line in the faint caption ink it could not be read at
+                         all (owner, 2026-09-08: "this text is really hard to
+                         read"). The caption ink is the muted mono, never Faint. -->
+                    <Border x:Name="LaunchLibraryChip" Grid.Column="0" Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill" VerticalAlignment="Stretch"
+                            Classes.Warn="{Binding Launch.IsLibraryPending}">
+                        <StackPanel Spacing="{StaticResource FireSpaceXxs}" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="{StaticResource FireSpaceMd}">
+                                <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot"
+                                        Classes.Success="{Binding Launch.IsLibraryReady}"
+                                        Classes.Warn="{Binding Launch.IsLibraryPending}" />
+                                <!-- The count only exists in the READY state;
+                                     every other state shows its label as the
+                                     title rather than a stale or zero figure. -->
+                                <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                           IsVisible="{Binding Launch.HasLibraryCount}"
+                                           Text="{Binding Launch.LibraryCount}" />
+                                <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextTrimming="CharacterEllipsis"
+                                           IsVisible="{Binding !Launch.HasLibraryCount}"
+                                           Text="{Binding Launch.LibraryStateLabel}" />
+                            </StackPanel>
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                       IsVisible="{Binding Launch.HasLibraryCount}"
+                                       Text="{Binding Launch.LibraryStateLabel}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="LaunchInputChip" Grid.Column="1" Theme="{StaticResource FireStatusPillBorder}" Classes="FireStatusPill" VerticalAlignment="Stretch"
+                            Classes.Warn="{Binding !Launch.IsInputConnected}">
+                        <StackPanel Spacing="{StaticResource FireSpaceXxs}" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="{StaticResource FireSpaceMd}">
+                                <Border Theme="{StaticResource FireDotBorder}" Classes="FireDot"
+                                        Classes.Success="{Binding Launch.IsInputConnected}"
+                                        Classes.Warn="{Binding !Launch.IsInputConnected}" />
+                                <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding Launch.InputLabel}" />
+                            </StackPanel>
+                            <!-- The MEASURED latency, or the word that says
+                                 there is none. Never an invented number. -->
+                            <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono"
+                                       IsVisible="{Binding Launch.HasLatency}"
+                                       Text="{Binding Launch.LatencyLabel}" />
+                            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc"
+                                       IsVisible="{Binding !Launch.HasLatency}"
+                                       Text="{localization:Loc PlayMode_Launch_NoLatency}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </StackPanel>
+            </fire:HeroScaleToFit>
+        </ScrollViewer>
+
+        <!-- ── Footer rail ────────────────────────────────────────────────
+             Version on the left with the app's real version surface beside
+             it, and the three key hints on the right. Every hint is wired
+             (see the header comment) — this rail is the reason those
+             shortcuts exist rather than the other way round. -->
+        <Border x:Name="LaunchFooter" Grid.Row="1" Theme="{StaticResource FireFooterBorder}" Classes="FireFooter">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                            Spacing="{StaticResource FireSpaceLg}"
+                            VerticalAlignment="Center">
+                    <TextBlock x:Name="LaunchVersionText" Theme="{StaticResource FireMonoText}" Classes="FireMono Faint"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding Launch.HasAppVersion}"
+                               Text="{Binding Launch.AppVersion}" />
+                    <Border Theme="{StaticResource FireRuleBorder}" Classes="FireRule Vertical" Height="12"
+                            IsVisible="{Binding Launch.HasAppVersion}" />
+                    <!-- The mockup's "What's new" has no backing surface —
+                         the app ships no changelog and release notes exist
+                         only inside an update prompt. About IS the real
+                         version surface, so that is what the link opens. -->
+                    <Button x:Name="LaunchAboutButton" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet Link"
+                            VerticalAlignment="Center"
+                            Content="{localization:Loc Menu_About}"
+                            Command="{Binding $parent[Window].((shellVm:MainWindowViewModel)DataContext).Help.ShowAboutCommand}" />
+                </StackPanel>
+
+                <StackPanel x:Name="LaunchKeyHints" Grid.Column="2" Orientation="Horizontal"
+                            Spacing="{StaticResource FireSpaceXl}"
+                            VerticalAlignment="Center">
+                    <TextBlock Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint"
+                               Text="{localization:Loc PlayMode_Launch_Hint_Start}" />
+                    <TextBlock Theme="{StaticResource FireKeyHintText}" Classes="FireKeyHint"
+                               Text="{localization:Loc PlayMode_Launch_Hint_Settings}" />
+                    <!-- "ESC QUIT" is gone with the behaviour it described:
+                         Esc no longer closes the application. -->
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

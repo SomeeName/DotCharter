@@ -1,0 +1,331 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      THE CHART EDITOR'S WORKSPACE GRAMMAR, on the Fire layer (0.51).
+
+      `Views/Shell/ShellChromeStyles.axaml` converted the editor's three RAILS
+      (menu bar / tool rail / status rail). This is the surface BETWEEN them —
+      everything the owner still reported as "old design" once those had moved:
+
+        · the left TRACK RAIL beside the timeline (`Border.TrackRail`), whose
+          five row toggles are now the shared Fire nav row rather than five
+          violet text links on a bare slab;
+        · the FIXED-PANE header strip (`Border.PaneHeader` + `PaneTitle` +
+          `PaneAction`), worn by the 3D-preview panel, the Riff Library pane and
+          the Stem Mixer pane — it moved here OUT of `Styles/Containers.axaml`,
+          which is an app-ladder file;
+        · the minimap's frame (`Border.MinimapFrame`);
+        · the 3D preview's own editor strip (`Border.HudBar` and the two text
+          steps on it), which is the `Live-Spiel / Monitor / Effekte` row.
+
+      ── WHY IT IS A FILE AND NOT FIVE INLINE `UserControl.Styles` BLOCKS ─────
+      `Border.PaneHeader` is worn by three views in two different windows: a
+      docked pane renders inside MainWindow, and the SAME view renders inside a
+      Dock.Avalonia `HostWindow` once it is floated (and `Preview3DView` inside
+      a plain `Window` once it is popped out). A window-scoped style reaches
+      neither. So every view that can leave the main window includes this file
+      itself, and MainWindow includes it for the surfaces it declares directly:
+      on the timeline column's DockPanel and on the 3D preview's pane header,
+      NEVER in Window.Styles (#412 — that scope is every screen and dialog, and
+      every rule here was attached to every Border/TextBlock in them).
+
+      ── WHY EVERY SELECTOR HERE IS A CLASS SELECTOR ─────────────────────────
+      Each pane's own include covers that WHOLE pane (and a floated pane's whole
+      window). A bare type selector (`MenuItem`, `ComboBox` — the shape
+      ShellChromeStyles can afford because it is included by three narrow views)
+      would restyle everything in them. A class selector is inert until worn.
+
+      ── THE SAME LINTS AS THE OTHER THREE CONVERTED GRAMMARS ────────────────
+      `UI/FireStyleClassTests.EachConvertedGrammar_*`: only `FireRadius*` /
+      `FireSize*` / `FirePad*` / `FireGap*` / `FireSpace*` may appear, the file
+      must really speak the layer, and it may carry no `Cursor` and no
+      `Transitions` setter. The `Transitions` half cost something real here —
+      `Button.PaneAction` used to carry a `BrushTransition`, on a header that
+      lives inside `IsVisible`-gated panes, i.e. a style clock ticking behind a
+      hidden surface forever. Hover is instant now, like the rest of the shell.
+    -->
+
+    <!-- ══ The gutter's frame ══════════════════════════════════════════════════
+         The 160 px column left of the timeline. Its width is NOT free: the
+         renderer sits in column 1 and `StackedTracksView` mirrors the same
+         160 so a stacked row's chart lines up with the main one time-for-time.
+
+         0.42.2/0.42.4 had already stripped this rail back once — the owner
+         reported it "sticks out like a sore thumb" and the cause was five
+         separate accents in one small block. That finding survives: it is a
+         QUIET surface (the sunken rail floor, a seam on its right edge), and
+         the one thing with colour on it is each string's own identity tick,
+         which is INFORMATION — it is what says which lane is which string. -->
+    <Style Selector="Border.TrackRail">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <!-- NO inset: the child is `TimelineGutterControl`, whose captions have
+             to land on the RENDERER's lane Y positions. A padding here would
+             shift every one of them off its lane. -->
+        <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+    </Style>
+
+    <!-- ══ The ROWS strip ══════════════════════════════════════════════════════
+         `ROWS  [SECTIONS] [PHRASES] [LYRICS] [TONES] [MEASURE INFO]`, across the
+         top of the timeline. These five toggles were a vertical list inside the
+         track rail until the owner's reference screenshot moved them here — and
+         the move is the point, not the styling: it frees the whole 160 px left
+         column to LABEL THE LANES, which is what the reference is about.
+
+         They are PILLS, not nav rows. A nav row's 3 px indicator bar is a
+         position in a vertical LIST; five of them side by side in a horizontal
+         strip read as five unrelated left edges. The pill is the segmented
+         control's item shape — filled violet when the row is shown, bare when
+         it is hidden, exactly as the reference draws it (TONES is off there). -->
+    <Style Selector="Border.RowsStrip">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+    </Style>
+    <Style Selector="ToggleButton.RibbonRow">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+    </Style>
+    <!-- Every state on the PRESENTER: Fluent's ToggleButton template root IS
+         the presenter and its own :checked rule writes that Background as a
+         local value, which beats anything set on the control. -->
+    <Style Selector="ToggleButton.RibbonRow /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+    </Style>
+    <Style Selector="ToggleButton.RibbonRow TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+        <Setter Property="LetterSpacing" Value="0" />
+    </Style>
+    <Style Selector="ToggleButton.RibbonRow:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+    </Style>
+    <Style Selector="ToggleButton.RibbonRow:checked">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="ToggleButton.RibbonRow:checked /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+    </Style>
+
+    <!-- The gutter's own frame. It is a Border wrapping the custom-drawn
+         `TimelineGutterControl`, so the fill and the seam stay in the grammar
+         and the control only draws text and ticks. -->
+    <Style Selector="Border.TrackRail > :is(Control)">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- ══ Fixed-pane header ═══════════════════════════════════════════════════
+         The strip a NON-dockable pane wears so it reads like its dockable
+         siblings: an eyebrow-cased title on the left, icon actions on the
+         right. It keeps its 22 px height, which is not decoration — it is the
+         compact Dock tool chrome's own header height (`DockFluentTheme
+         DensityStyle="Compact"`), and the 3D-preview panel sits directly
+         beside a docked pane whose header is exactly that tall.
+
+         The title is MONO CAPS, which is what a pane title is on this layer:
+         the strings ("3D-Vorschau", "Riff Library", "Stem Mixer") are names of
+         places, and mono caps is the layer's idiom for a label that names
+         rather than says. -->
+    <Style Selector="Border.PaneHeader">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChromeAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Padding" Value="{StaticResource FirePadBadge}" />
+    </Style>
+    <Style Selector="Border.PaneHeader TextBlock.PaneTitle">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeEyebrow}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="{StaticResource FireGapLeftSm}" />
+    </Style>
+    <!-- The float / pop-out / close affordances. Fluent's Button template ROOT
+         is the ContentPresenter, so a fill set on the Button itself is painted
+         straight over — every state has to be stated on the presenter. That is
+         the trap the 0.49 dialog conversion shipped and it is the same one
+         here. -->
+    <Style Selector="Border.PaneHeader Button.PaneAction">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadBadge}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.PaneHeader Button.PaneAction /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusMicro}" />
+    </Style>
+    <Style Selector="Border.PaneHeader Button.PaneAction:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Border.PaneHeader Button.PaneAction:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+    </Style>
+    <Style Selector="Border.PaneHeader Button.PaneAction:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+    </Style>
+
+    <!-- ══ The minimap ═════════════════════════════════════════════════════════
+         A 40 px strip under the timeline holding one custom-drawn control. Only
+         its FRAME is markup — the notes, the waveform and the viewport
+         rectangle inside it are drawn by `MinimapOverviewControl` and coloured
+         from `Theming/ChartTheme`, which is a separate, user-switchable palette
+         on purpose.
+
+         The seam is on the TOP edge only, and it is the frame's own border
+         rather than a ZIndex'd sibling Border: the old markup drew the
+         hairline as an extra full-size child stacked over the control, which
+         is one more element in the timeline's layout for one line of pixels. -->
+    <Style Selector="Border.MinimapFrame">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceChrome}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
+    <!-- The minimap's own gutter cell: `SONG MAP` over `4:12 · 84 BARS`. It is
+         the same 160 px, the same sunken floor and the same right-edge seam as
+         `Border.TrackRail` above it, because it IS that column continuing past
+         the ruler — the design draws one unbroken left edge down the whole
+         timeline, and a caption cell that agreed on the width but not on the
+         surface would read as a second, unrelated panel. -->
+    <!-- Padding: three short lines (eyebrow, length, bars) in a 52 px strip leave no room for the
+         nav row's 10 px top and bottom; FirePadMenuTop's 11,6 is the tightest inset the ladder has. -->
+    <Style Selector="Border.SongMapCaption">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceSunken}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadMenuTop}" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <!-- The facts: the song's length, then its bars, one per line. Mono, because
+         they are MEASUREMENTS sitting next to the map they measure. One line
+         never fit the 118 px cell ("3:03 · 156 bars" printed "3:03 · 156 …",
+         2026-09-23), so the view model breaks the line (SongMapCaption.Describe's
+         separator) and the size is the mono status size. Still trimmed, for a
+         very long German or Japanese count. -->
+    <Style Selector="Border.SongMapCaption TextBlock.SongMapFacts">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- ══ The 3D preview's editor strip ═══════════════════════════════════════
+         `Live-Spiel / Monitor / … / Effekte`. It is the practice bar, NOT the
+         in-game HUD: the HUD is a sibling Border in the same Grid cell with a
+         mutually-exclusive `IsVisible`, it is game chrome rather than editor
+         chrome, and it keeps its own vocabulary.
+
+         A LABEL here is mono (it names a read-out), a VALUE is mono at the
+         value step and brighter. That split is the layer's, and it is why the
+         two are separate classes rather than one size difference. -->
+    <Style Selector="Border.HudBar">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceBar}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorderSeam}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+    </Style>
+    <Style Selector="TextBlock.HudLabel">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeMicro}" />
+        <Setter Property="LetterSpacing" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.HudStat">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- One control on that strip. It is a Cursor-free restatement of
+         `Button.FireGhost` at the strip's own density — the same call
+         `SettingsStyles` makes for its group actions, and for the same two
+         reasons: the class itself sets a `Cursor` (banned in a shared grammar),
+         and `FireGhost` is 48 px tall (42 compact) against a bar whose whole
+         height is ~26. A dozen 42 px buttons would push the 3D viewport off the
+         bottom of the pane.
+
+         `:is(Button)` and not `Button`: an Avalonia type selector is EXACT, and
+         this strip's controls are `ToggleButton` and `DropDownButton`, both of
+         which derive from Button and neither of which a bare `Button` selector
+         matches. That is a silent no-op — the control renders in its default
+         look with no warning.
+
+         Every state goes on `/template/ ContentPresenter`. Fluent's Button
+         template root IS the presenter and Fluent's own `:pointerover` rule
+         writes the presenter's Background directly, which is a local value and
+         beats the template binding from the control — so a hover fill set on
+         the Button is simply painted over. (The dialog conversion shipped the
+         mirror image of this and every Cancel in the app rendered as bare
+         text.) -->
+    <Style Selector="Border.HudBar :is(Button).HudAction">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.HudBar :is(Button).HudAction /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBody}" />
+    </Style>
+    <Style Selector="Border.HudBar :is(Button).HudAction:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Border.HudBar :is(Button).HudAction:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTintSoft}" />
+    </Style>
+    <!-- Checked is an OUTLINE plus a tint, never a fill — the layer's rule for
+         a toggle, and the one the old rail broke by lighting five solid accent
+         blocks at once. -->
+    <Style Selector="Border.HudBar :is(ToggleButton).HudAction:checked /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireTextBright}" />
+    </Style>
+    <Style Selector="Border.HudBar :is(Button).HudAction:disabled">
+        <Setter Property="Opacity" Value="0.45" />
+    </Style>
+    <Style Selector="Border.HudBar ComboBox">
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource FirePadTag}" />
+        <Setter Property="CornerRadius" Value="{StaticResource FireRadiusSegment}" />
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+        <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+</Styles>

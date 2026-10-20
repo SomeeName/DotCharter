@@ -1,0 +1,221 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Part of the Fire component layer — see `Styles/Fire.axaml`, which
+         merges this file and its siblings IN ORDER. The rig's own marks (§6.8)
+         are four parts, merged one after another: FireRigBoard,
+         FireRigUnitsAndGear, FireRigRolesAndTones, FireRigStage.
+         Sections: the unit card's anatomy, the module editor's face, the
+         header's tone pill and the gear panel's row marks. -->
+
+    <Styles.Resources>
+        <ControlTheme x:Key="FireTonePillButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- ══ THE HEADER'S TONE PILL — an LCD strip since the v8 pass ═════════════
+                 The applied tone's name + its EDITED badge + a caret, in one control
+                 that opens the tone drawer. The v8 mockup draws this as the header's
+                 RECESSED LCD ("PRESET | name"): a near-black plate, a hairline ring,
+                 the eyebrow and a bright mono readout — adopted here because a lit
+                 accent pill read as an ACTION, and this is the rig's one piece of
+                 standing STATE. Hover keeps the accent edge so it still reads as the
+                 drawer's door. -->
+            <Style Selector="^.FireTonePill">
+                <Setter Property="Height" Value="{StaticResource FireHeaderControlHeight}" />
+                <!-- FIXED width: a long tone name trims with an ellipsis inside it
+                     instead of pushing Save and the stepper across the bar (owner,
+                     2026-09-08: "changes width based on text rather than fixed"). -->
+                <Setter Property="Width" Value="260" />
+                <Setter Property="Padding" Value="{StaticResource FirePadField}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <!-- The same field surface as Save, BYPASS and the mode strips beside it
+                 — on the near-black chrome fill it read as a hole in the header
+                 (owner, 2026-09-08: "why is it so dark, doesn't fit the rest"). The
+                 accent edge is what marks it as the drawer's door. -->
+            <Style Selector="^.FireTonePill /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceField}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorderSoft}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+            </Style>
+            <Style Selector="^.FireTonePill:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- Also carries the `FireGearTileAdd` rule (from FireRigStage.axaml):
+             that class is only ever worn WITH `FireGearAdd`, and a Button has ONE
+             theme. -->
+        <ControlTheme x:Key="FireGearAddButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- The boxed + at a gear row's right edge: the design's add button. The
+                 row itself SELECTS (and is the drag handle); this adds. -->
+            <Style Selector="^.FireGearAdd">
+                <Setter Property="Width" Value="29" />
+                <Setter Property="Height" Value="29" />
+                <Setter Property="MinWidth" Value="29" />
+                <Setter Property="MinHeight" Value="29" />
+                <Setter Property="Padding" Value="{StaticResource FirePadNone}" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextPrimary}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireGearAdd /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusChip}" />
+            </Style>
+            <Style Selector="^.FireGearAdd:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+            <Style Selector="^.FireGearTileAdd">
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Top" />
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="MinWidth" Value="24" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Margin" Value="2" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireOutlineCtaButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <!-- "Add to rig": the design's outlined call to action under the list -->
+            <Style Selector="^.FireOutlineCta">
+                <Setter Property="Height" Value="40" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireAccentPale}" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="^.FireOutlineCta /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccentBorder}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+            </Style>
+            <Style Selector="^.FireOutlineCta:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{DynamicResource FireAccentTint}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireAccent}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ THE UNIT CARD'S ANATOMY ═════════════════════════════════════════════ -->
+
+        <ControlTheme x:Key="FireCardTitleText" TargetType="TextBlock">
+            <!-- The card's own title, one step up from a row title (the card is the
+                 thing, not a line in a list). -->
+            <Style Selector="^.FireCardTitle">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightUi}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeCardTitle}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireTextBright}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireUnitLedBorder" TargetType="Border">
+            <!-- A unit's LED. Its lit Background is bound to the unit's identity; `.Dim`
+                 is the SAME lamp, out — which is the half of "bypassed" the spec's own
+                 behaviour rules say gets forgotten. Deliberately not a `FireDot`
+                 variant: that one is the status pill's signal light and is always lit
+                 and always glowing, so an unlit variant would have to unset a BoxShadow
+                 the token set has no null for. -->
+            <Style Selector="^.FireUnitLed">
+                <Setter Property="Width" Value="6" />
+                <Setter Property="Height" Value="6" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusPill}" />
+            </Style>
+            <Style Selector="^.FireUnitLed.Dim">
+                <Setter Property="Background" Value="{DynamicResource FireTextDim}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ══ THE MODULE EDITOR'S FACE ════════════════════════════════════════════ -->
+
+        <ControlTheme x:Key="FireFacePanelBorder" TargetType="Border">
+            <!-- The lit panel the dock's editor is built on: one raised surface holding
+                 the plate and the knob row, so the editor reads as the UNIT rather than
+                 as another region of the screen. -->
+            <Style Selector="^.FireFacePanel">
+                <Setter Property="Background" Value="{DynamicResource FireHardwareChassis}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireHardwareEdge}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusCard}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadPanel}" />
+            </Style>
+            <!-- A card in the side rack: the violet plate, a tighter inset than a
+                 face panel, and its eyebrow in the accent so the three sections read
+                 as a column of titled cards rather than one grey slab. -->
+            <Style Selector="^.FireFacePanel.Rack">
+                <Setter Property="Background" Value="{DynamicResource FireRigCardFill}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireRigCardEdge}" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusRow}" />
+                <Setter Property="Padding" Value="{StaticResource FirePadCard}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireLaneLabelText" TargetType="TextBlock">
+            <!-- the series board's "Lane A" caption over the run -->
+            <Style Selector="^.FireLaneLabel">
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeNano}" />
+                <Setter Property="LetterSpacing" Value="1" />
+                <Setter Property="Foreground" Value="{DynamicResource FireLaneA}" />
+                <Setter Property="Margin" Value="{StaticResource FireGapLeftLg}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireTunerStringBorder" TargetType="Border">
+            <!-- The footer tuner's STRING CHIPS: the chosen tuning's open strings, low
+                 first. The one the last note was judged against is lit amber; one heard
+                 in tune turns green, so a player walking the strings sees what is left. -->
+            <Style Selector="^.FireTunerString">
+                <Setter Property="Background" Value="{DynamicResource FireSurfaceChip}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource FireBorderStrong}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource FireRadiusField}" />
+                <Setter Property="Width" Value="16" />
+                <Setter Property="Height" Value="22" />
+            </Style>
+            <Style Selector="^.FireTunerString.tuned">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireSuccess}" />
+            </Style>
+            <Style Selector="^.FireTunerString.current">
+                <Setter Property="BorderBrush" Value="{DynamicResource FireWarning}" />
+                <Setter Property="BoxShadow" Value="{DynamicResource FireGlowAccentSoft}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="FireTunerNoteText" TargetType="TextBlock">
+            <!-- The footer tuner's note letter: a display figure, not a mono readout —
+                 it is the one thing on that bar you read at a glance while playing. -->
+            <Style Selector="^.FireTunerNote">
+                <Setter Property="MinWidth" Value="24" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontFamily" Value="{StaticResource FireFontDisplay}" />
+                <Setter Property="FontWeight" Value="{StaticResource FireWeightDisplay}" />
+                <Setter Property="FontSize" Value="{StaticResource FireSizeLg}" />
+                <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <Style Selector="Border.FireTag.Success > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource FireSuccess}" />
+    </Style>
+
+</Styles>

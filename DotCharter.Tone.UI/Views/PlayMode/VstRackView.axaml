@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:editor="using:DotCharter.Tone.UI.ViewModels.Editor"
+             xmlns:vst="clr-namespace:DotCharter.Tone.Audio.Vst;assembly=DotCharter.Tone"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.VstRackView"
+             x:DataType="editor:IVstRack">
+    <!-- THE plugin rack: the guitar VST3 chain, in signal order, over any
+         `IVstRack`. One piece of markup for every surface that shows the chain —
+         DotCharter's Tools popover and Amp/FX panel (over the transport, through
+         `TransportVstRack`) and RigLab's Plugins tab (over `VstRackViewModel`) —
+         so the rows, the reorder gesture and the add picker cannot drift apart.
+
+         It carries NO heading and NO rescan: each host already has a place for
+         those (the popover's kicker and footer, the panel's section title, the
+         tab's screen title), and a rack that brought its own would print the
+         chain's name twice inside the popover.
+
+         A slot is the Tools popover's row (`Play Menus.dc.html`): a drag GRIP
+         (the only drag handle — `VstChainDragController`), the 1-based index,
+         the name, "loading…" while the engine attaches it, the ON / BYPASS pill,
+         then the seat picker (only with more than one seat), GUI and a remove
+         revealed on hover (and on the row's context menu). -->
+    <StackPanel x:Name="VstRackRoot" Spacing="{StaticResource FirePopoverGap}">
+
+        <!-- Empty: a dashed well with one line and the hint that points at the
+             add button below it. -->
+        <Panel x:Name="VstRackEmpty" IsVisible="{Binding !Chain.Count}">
+            <Rectangle Classes="FirePopoverDash" />
+            <Border Theme="{StaticResource FirePopoverEmptyBorder}" Classes="FirePopoverEmpty">
+                <StackPanel>
+                    <TextBlock Theme="{StaticResource FirePopoverEmptyTitleText}" Classes="FirePopoverEmptyTitle"
+                               Text="{localization:Loc Toolbar_FxChain_Empty}" />
+                    <TextBlock Theme="{StaticResource FirePopoverNoteText}" Classes="FirePopoverNote"
+                               Text="{localization:Loc Toolbar_FxChain_EmptyHint}" />
+                </StackPanel>
+            </Border>
+        </Panel>
+
+        <!-- A shared-size scope: the pill and the control cluster take the
+             width of their widest row in EVERY row, so "On" / "Bypass", "Player 1"
+             / "Player 2" never shift the columns between rows. -->
+        <ItemsControl x:Name="VstRackSlots" ItemsSource="{Binding Chain}"
+                      IsVisible="{Binding Chain.Count}"
+                      Grid.IsSharedSizeScope="True">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="{StaticResource FirePopoverGapTight}" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="editor:VstChainSlotViewModel">
+                    <Border Theme="{StaticResource FirePopoverSlotBorder}" Classes="FirePopoverSlot">
+                        <Grid VerticalAlignment="Center" ColumnSpacing="{StaticResource FirePopoverGap}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="VstRackPill" />
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="VstRackSeat" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Theme="{StaticResource FirePopoverGripText}" Classes="FirePopoverGrip"
+                                       Text="&#x2807;"
+                                       ToolTip.Tip="{localization:Loc Toolbar_FxChain_DragTip}"
+                                       AutomationProperties.Name="{localization:Loc Toolbar_FxChain_DragTip}" />
+                            <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverIndexText}" Classes="FirePopoverIndex"
+                                       Text="{Binding DisplayIndex}" />
+                            <TextBlock Grid.Column="2" Theme="{StaticResource FirePopoverSlotNameText}" Classes="FirePopoverSlotName"
+                                       Classes.Bypassed="{Binding Bypass}"
+                                       Text="{Binding PluginName}"
+                                       ToolTip.Tip="{Binding PluginName}" />
+                            <TextBlock Grid.Column="3" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                       Text="{localization:Loc Toolbar_Loading}"
+                                       IsVisible="{Binding IsLoading}" />
+                            <!-- ON / BYPASS is a word, not a dot: it survives a
+                                 screenshot and a colour-blind reader. Clicking it
+                                 is the bypass toggle. Two TextBlocks rather than a
+                                 styled Content, so both words re-resolve on a
+                                 language change. -->
+                            <ToggleButton Grid.Column="4" Theme="{StaticResource FirePopoverStatePillToggle}" Classes="FirePopoverStatePill"
+                                          HorizontalAlignment="Right"
+                                          IsChecked="{Binding Bypass}"
+                                          IsEnabled="{Binding !IsLoading}"
+                                          ToolTip.Tip="{localization:Loc Toolbar_FxChain_Bypass}"
+                                          AutomationProperties.Name="{localization:Loc Toolbar_FxChain_Bypass}">
+                                <Panel>
+                                    <TextBlock Theme="{StaticResource FirePopoverSlotStateText}" Classes="FirePopoverSlotState"
+                                               IsVisible="{Binding !Bypass}"
+                                               Text="{localization:Loc Toolbar_FxChain_On}" />
+                                    <TextBlock Theme="{StaticResource FirePopoverSlotStateText}" Classes="FirePopoverSlotState Bypassed"
+                                               IsVisible="{Binding Bypass}"
+                                               Text="{localization:Loc Toolbar_FxChain_Bypass}" />
+                                </Panel>
+                            </ToggleButton>
+                            <!-- Which SEAT this plugin runs on. Hidden with one
+                                 seat: a dropdown over a single choice is a
+                                 live-looking control over nothing. The list is
+                                 the SAME RigSeatOption roster the rig's own
+                                 picker offers. -->
+                            <ComboBox Grid.Column="5" x:Name="VstRackSeatPicker"
+                                      HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding Seats}"
+                                      SelectedItem="{Binding SelectedSeat}"
+                                      IsVisible="{Binding HasMultipleSeats}"
+                                      ToolTip.Tip="{localization:Loc Toolbar_FxChain_SeatTip}"
+                                      AutomationProperties.Name="{localization:Loc Toolbar_FxChain_Seat}" />
+                            <!-- GUI and remove, both always shown: a remove that
+                                 appeared on hover pushed GUI aside and took its
+                                 place under the pointer. Remove is also on the
+                                 row's context menu. -->
+                            <StackPanel Grid.Column="6" Orientation="Horizontal"
+                                        Spacing="{StaticResource FirePopoverGapTight}"
+                                        VerticalAlignment="Center">
+                                <ToggleButton Theme="{StaticResource FirePopoverIconToggle}" Classes="FirePopoverIcon"
+                                              Content="{localization:Loc Toolbar_OpenGui}"
+                                              IsEnabled="{Binding !IsLoading}"
+                                              IsChecked="{Binding EditorOpen}"
+                                              AutomationProperties.Name="{localization:Loc Toolbar_OpenGui}" />
+                                <Button Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon FirePopoverRemove"
+                                        Command="{Binding RemoveCommand}"
+                                        ToolTip.Tip="{localization:Loc Toolbar_FxChain_RemoveTip}"
+                                        AutomationProperties.Name="{localization:Loc Toolbar_FxChain_RemoveTip}">
+                                    <PathIcon Data="{DynamicResource IconClose}" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                        <Border.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuItem Header="{localization:Loc Toolbar_FxChain_RemoveTip}"
+                                          Command="{Binding RemoveCommand}" />
+                            </MenuFlyout>
+                        </Border.ContextFlyout>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- "+  Add VST3…" — a DASHED accent outline (an Avalonia Border cannot
+             dash, so the edge is a sibling Rectangle over the Button's fill).
+             Picking in the flyout ADDS: that is the host's `AddSelection`
+             contract, and the flyout closes on the pick. -->
+        <Panel>
+            <Button x:Name="VstRackAddButton" Theme="{StaticResource FirePopoverAddButton}" Classes="FirePopoverAdd"
+                    Content="{localization:Loc Toolbar_FxChain_Add}"
+                    ToolTip.Tip="{localization:Loc Toolbar_FxChain_AddPlaceholder}"
+                    AutomationProperties.Name="{localization:Loc Toolbar_FxChain_AddPlaceholder}">
+                <Button.Flyout>
+                    <Flyout Placement="Bottom">
+                        <ListBox x:Name="VstRackAddList" MaxHeight="260" MinWidth="260"
+                                 SelectionChanged="OnAddPicked"
+                                 AutomationProperties.Name="{localization:Loc Toolbar_FxChain_Add}"
+                                 ItemsSource="{Binding AvailablePlugins}"
+                                 SelectedItem="{Binding AddSelection}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vst:VstPluginInfo">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource FirePopoverGap}">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                                   Text="{Binding Vendor}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <Rectangle Classes="FirePopoverAddDash" />
+        </Panel>
+    </StackPanel>
+</UserControl>

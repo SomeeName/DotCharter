@@ -1,0 +1,82 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>DotCharter.Services</RootNamespace>
+        <AssemblyName>DotCharter.Services</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DotCharter.Core\DotCharter.Core.csproj" />
+        <!-- The tone rig and the audio host (JuceAudioPlaybackService, Audio/Dsp,
+             Vst, Midi, TONE3000) live in DotCharter.Tone so the standalone rig
+             can ship without this project. Same namespaces. -->
+        <ProjectReference Include="..\DotCharter.Tone\DotCharter.Tone.csproj" />
+        <!-- v0.29 audio-verified lint: the offline chart-vs-audio analyzer
+             lives in Analysis (its charter); this service layer wraps it with
+             decode + chart projection. No cycle: Analysis references Core +
+             JuceSharp.Dsp only and must never reference Services back. -->
+        <ProjectReference Include="..\DotCharter.Analysis\DotCharter.Analysis.csproj" />
+        <ProjectReference Include="..\DotCharter.Localization\DotCharter.Localization.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp\JuceSharp.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp.AudioIo\JuceSharp.AudioIo.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp.Dsp\JuceSharp.Dsp.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp.StemSeparation\JuceSharp.StemSeparation.csproj" />
+        <ProjectReference Include="..\JuceSharp\src\JuceSharp.StemSeparation.Onnx\JuceSharp.StemSeparation.Onnx.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- GP7 (.gp) export and the sheet-music exporters (Export/Sheet:
+             alphaTex, the AlphaSkia renderer, the PDF writer) via the alphaTab
+             score model. The UI's SheetMusicView consumes them through this
+             project; the AlphaSkia native binaries flow to the exe from here. -->
+        <PackageReference Include="AlphaSkia.Native.Windows" />
+        <PackageReference Include="AlphaTab" />
+        <PackageReference Include="Anthropic" />
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <!-- 0.12.0 library index (library-index.db). The explicit SQLitePCLRaw
+             bundle overrides Microsoft.Data.Sqlite's 2.1.11 transitive pin,
+             whose bundled native sqlite3 has a known vulnerability
+             (GHSA-2m69-gcr7-jv3q / NU1903). -->
+        <PackageReference Include="Microsoft.Data.Sqlite" />
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <!--
+            ONNX Runtime is owned by JuceSharp.StemSeparation.Onnx (referenced
+            above); DotCharter.Services consumes it transitively. MathNet went
+            with the JuceSharp 0.8.x audit — the htdemucs spectra are float
+            re/im planes now, not System.Numerics.Complex — so nothing here
+            depends on it, transitively or otherwise.
+        -->
+        <!-- DPAPI (CurrentUser) encryption of the persisted TONE3000 and GitHub
+             sessions (Services/Online/Tone3000, Services/Update). -->
+        <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Serilog.Sinks.Async" />
+        <PackageReference Include="Serilog.Sinks.Console" />
+        <PackageReference Include="Serilog.Sinks.File" />
+        <PackageReference Include="SkiaSharp" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="DotCharter.Tests" />
+    </ItemGroup>
+    <!-- Optional plugins (Directory.Build.props): every project at the top of a git-ignored
+         plugins/<name>/ folder, or one level below it (its tests), sees the internals. -->
+    <ItemGroup Condition="'$(DotCharterPlugins)' != 'false'">
+        <DotCharterPluginInternalsProject Include="..\plugins\*\*.csproj;..\plugins\*\*\*.csproj" />
+        <InternalsVisibleTo Include="@(DotCharterPluginInternalsProject->'%(Filename)')" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- DLC Builder's ML.NET level-count model (Rocksmith2014.NET, MIT): its FastTree
+             ensemble re-encoded for DdLevelCountModel, so no ML.NET ships. -->
+        <EmbeddedResource Include="Export\DynamicDifficulty\dd-level-count-model.gz"
+                          LogicalName="DotCharter.Services.Export.DynamicDifficulty.dd-level-count-model.gz" />
+    </ItemGroup>
+
+</Project>

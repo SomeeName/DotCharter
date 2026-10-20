@@ -1,0 +1,239 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.UI.ViewModels.PlayMode"
+             xmlns:vmRig="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:playModeViews="using:DotCharter.UI.Views.PlayMode"
+             xmlns:playModeViewsRig="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:screens="using:DotCharter.UI.Views.PlayMode.Screens"
+             x:Class="DotCharter.UI.Views.PlayMode.PlayModeView"
+             x:DataType="vm:PlayModeViewModel">
+
+    <!-- Play Mode shell surface (0.11.0): Start → Menu → Song select →
+         Tuning check → Countdown → (gameplay in editor surface) → Results.
+         Stats page hangs off the menu. -->
+    <!-- Every screen is its own view (Views/PlayMode/Screens/, #294); this
+         view is the surface they share: the backdrop, each screen declared
+         under its gate, the frozen-frame backdrops of the pause and fail-out
+         cards, the rig overlay and the deferred hosts. The screens' resources
+         (PlayModeThemes.axaml, the facet templates) are merged by the views
+         that use them; the selector grammar below reaches them through the
+         style cascade, included ONCE, here. -->
+    <UserControl.Styles>
+        <!-- The ColumnSort / FacetFunnel caption-row button looks are SHARED
+             with the editor's SongBrowserView (the unified browser) and live
+             in Styles/SongListHeaderStyles.axaml — edit there, never inline. -->
+        <StyleInclude Source="avares://DotCharter/Styles/SongListHeaderStyles.axaml" />
+        <!-- The screens' own look (PlayMenu, MenuTile, the stat tiles, the
+             Results columns): Views/PlayMode/PlayModeStyles.axaml. -->
+        <StyleInclude Source="avares://DotCharter/Views/PlayMode/PlayModeStyles.axaml" />
+    </UserControl.Styles>
+
+    <!-- XYFocus (inherited): arrow keys move focus between buttons on every
+         Play Mode screen (game-style menu navigation). Controls that consume
+         arrows themselves (ListBox, ComboBox, TextBox) keep their native
+         handling — XY navigation only sees unhandled arrow keys. -->
+    <Panel Background="{DynamicResource AppBackground}"
+           XYFocus.NavigationModes="Keyboard">
+
+        <!-- Animated backdrop (0.16 5.2/5.3, whole-surface since the 0.16
+             visual pass): ONE custom-drawn control replaces the previous ~29
+             style-animated elements (3 glows, 6 string lines, 20 EQ bars).
+             It renders a single throttled pass (~30 fps max) and parks its
+             timer entirely when not effectively visible — the Wave-1
+             backdropLive gating semantics live INSIDE the control. It now
+             renders behind EVERY Play Mode screen (hidden only under the
+             pause menu's frozen-highway capture); Intensity picks the
+             per-screen profile — Full on the Start/Menu front door, dimmed
+             Ambient (softer glows, fewer/slower particles, no EQ bars, a
+             readability dim) behind the content screens. Palette resolves
+             from theme tokens (Accent*/AppBackgroundColor + the ChartTheme
+             string colours) at attach and on ChartTheme.ThemeChanged. The EQ
+             bars go audio-reactive off the live input peak (the code-behind
+             wires InputPeakProvider); silence decays back to the idle
+             pattern. Don't add style animations to this surface — extend the
+             control's render pass. -->
+        <!-- ONE control behind every screen: a second MenuBackdropControl
+             would mean a second repaint timer. -->
+        <!-- Screen-reader live region (#859): the highway is a Vulkan surface UIA
+             cannot see, so the run's state is announced here. Polite, so it
+             never interrupts speech; invisible but still in the automation tree. -->
+        <TextBlock x:Name="PlayAnnouncement" Text="{Binding ScreenAnnouncement}"
+                   AutomationProperties.LiveSetting="Polite"
+                   Opacity="0" IsHitTestVisible="False" Focusable="False"
+                   HorizontalAlignment="Left" VerticalAlignment="Top" />
+        <Border x:Name="MenuBackdropClip" Theme="{StaticResource FireBackdropClipBorder}" Classes="FireBackdropClip">
+            <controls:MenuBackdropControl x:Name="MenuBackdrop"
+                                          IsVisible="{Binding IsBackdropVisible}"
+                                          Intensity="{Binding BackdropIntensity}" />
+        </Border>
+
+        <!-- LAUNCH SCREEN — the app's very first surface: its own view,
+             Screens/LaunchScreenView.axaml (#294), with the screen's design
+             notes. Constructed for the first frame; never deferred. -->
+        <screens:LaunchScreenView IsVisible="{Binding IsStartScreen}" />
+
+        <!-- SONG LIBRARY (Home → Play): its own view, Screens/SongSelectView.axaml
+             (#294), with the screen's design notes. The code-behind routes the
+             screen's keys into it through PlayModeView.SongSelect, which builds
+             the body on demand (#648). -->
+        <!-- DEFERRED BODY (cold start): everything below is a
+             ContentTemplate, so it is not BUILT until a layout pass reaches
+             the presenter — and a hidden host never runs one. See
+             PlayModeView.DeferredScreenHostNames. -->
+        <ContentControl x:Name="SongSelectScreenRootHost" IsVisible="{Binding IsSongSelectScreen}"
+                        Content="{Binding}"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch">
+            <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:PlayModeViewModel">
+                    <screens:SongSelectView />
+                </DataTemplate>
+            </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <!-- GET READY (§6.6): its own view, Screens/GetReadyView.axaml (#294),
+             with the screen's design notes. -->
+        <!-- DEFERRED BODY (cold start): everything below is a
+             ContentTemplate, so it is not BUILT until a layout pass reaches
+             the presenter — and a hidden host never runs one. See
+             PlayModeView.DeferredScreenHostNames. -->
+        <ContentControl x:Name="TuningCheckScreenRootHost" IsVisible="{Binding IsTuningCheckScreen}"
+                        Content="{Binding}"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch">
+            <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:PlayModeViewModel">
+                    <screens:GetReadyView />
+                </DataTemplate>
+            </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <!-- Countdown: the last thing you see before a run. Its own view,
+             Screens/CountdownView.axaml (#294), with the screen's design notes. -->
+        <screens:CountdownView IsVisible="{Binding IsCountdownScreen}" />
+
+        <!-- Playing (visible only if the user navigates back mid-run) -->
+        <screens:PlayingView IsVisible="{Binding IsPlayingScreen}" />
+
+        <!-- Pause menu (Esc during a run) — Rocksmith-style: the menu floats
+             over a frozen frame of the highway (captured at pause time; a
+             live overlay is impossible over the native swapchain, but a
+             paused game IS a still image) under a dark scrim. -->
+        <Image AutomationProperties.AccessibilityView="Raw" IsVisible="{Binding IsPausedScreen}"
+               Source="{Binding PauseBackdrop}"
+               Stretch="UniformToFill" />
+        <Border IsVisible="{Binding IsPausedScreen}"
+                Background="{DynamicResource OverlayScrim}" />
+        <!-- The pause menu itself: its own view, Screens/PauseMenuView.axaml (#294). -->
+        <!-- DEFERRED BODY (cold start): everything below is a
+             ContentTemplate, so it is not BUILT until a layout pass reaches
+             the presenter — and a hidden host never runs one. See
+             PlayModeView.DeferredScreenHostNames. -->
+        <ContentControl x:Name="PauseScreenRootHost" IsVisible="{Binding IsPausedScreen}"
+                        Content="{Binding}"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch">
+            <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:PlayModeViewModel">
+                    <screens:PauseMenuView />
+                </DataTemplate>
+            </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <!-- Rock-meter fail-out (0.24 performance stakes) — the run is already
+             ended when this shows. Same airspace pattern as the pause menu: a
+             centered card over a frozen frame of the highway under a scrim
+             (never a Flyout). Esc routes to the quit path. -->
+        <Image AutomationProperties.AccessibilityView="Raw" IsVisible="{Binding IsFailedScreen}"
+               Source="{Binding PauseBackdrop}"
+               Stretch="UniformToFill" />
+        <Border IsVisible="{Binding IsFailedScreen}"
+                Background="{DynamicResource OverlayScrim}" />
+        <!-- The card itself: its own view, Screens/FailedView.axaml (#294). -->
+        <screens:FailedView IsVisible="{Binding IsFailedScreen}" />
+
+        <!-- Results: its own view, Screens/ResultsView.axaml (#294), with the
+             screen's design notes. The code-behind drives the reveal through
+             PlayModeView.Results, which builds the body on demand (#648). -->
+        <!-- DEFERRED BODY (cold start): everything below is a
+             ContentTemplate, so it is not BUILT until a layout pass reaches
+             the presenter — and a hidden host never runs one. See
+             PlayModeView.DeferredScreenHostNames. -->
+        <ContentControl x:Name="ResultsScreenRootHost" IsVisible="{Binding IsResultsScreen}"
+                        Content="{Binding}"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch">
+            <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:PlayModeViewModel">
+                    <screens:ResultsView />
+                </DataTemplate>
+            </ContentControl.ContentTemplate>
+        </ContentControl>
+
+        <!-- Amp / FX overlay ("VST plugins…"): its own view since 2026-09-27
+             (Views/PlayMode/AmpFxOverlayView) — the shared AmpFxPanel in a Fire
+             modal card. A root child gated on IsVisible, so the shell's prewarm
+             realizes it with the other hidden screens. -->
+        <playModeViews:AmpFxOverlayView x:Name="AmpFxOverlay" IsVisible="{Binding IsAmpFxOpen}" />
+
+        <!-- ══ AMP & FX RIG (§6.8, Amp and FX Rig.dc.html) ══════════════════
+             The tone rig, on the Fire layer. It is its OWN view now
+             (Views/PlayMode/AmpFxRigView.axaml) rather than 1,259 lines inline
+             here, and that is what let the CHART EDITOR go on opening a second,
+             older pedalboard for so long: markup nested in this screen is not
+             addressable, so the editor's overlay had nothing it could host and
+             the ViewLocator resolved the retired PedalboardView instead. Both
+             hosts are the one line below now, over the one AmpFxRigViewModel.
+
+             It stays an OVERLAY on `IsPedalboardOpen` rather than becoming a
+             PlayModeScreen: the rig opens from the front door, the Get Ready
+             footer AND the pause menu, and "back" from the pause menu has to
+             return to a paused game, not to a screen. Keeping the trigger also
+             keeps the Esc walk-up working unchanged. -->
+        <Grid x:Name="RigScreenRoot" RowDefinitions="Auto,*" IsVisible="{Binding ToneRig.IsPedalboardOpen}"
+              Background="{DynamicResource FireOverlayFill}">
+            <!-- The gate is on the PANEL, not on the rig: `DataContext` on an
+                 element re-roots every other binding on that SAME element, so
+                 `IsVisible` next to it would be read against the rig's model and
+                 resolve against nothing. The bar shows only while a SONG tone is
+                 on the rig (the Get Ready tone chips). -->
+            <playModeViews:SongToneEditBar x:Name="RigSongToneEditBar" DataContext="{Binding SongToneEdit}" />
+            <!-- The rig VIEW is a ContentTemplate body (#194), like the deferred
+                 screens: built when a layout pass reaches the presenter, so the
+                 ~450 elements of the rig are no longer constructed and styled in
+                 the bind= startup phase. The content is the rig SCREEN, which
+                 DeferredRigScreen keeps null until the overlay opens or the
+                 prewarm asks — and a null content builds nothing.
+                 PlayModeView.HiddenSurfaces() builds the body after
+                 EnsureRigScreen(); the drain lays it out after first paint. -->
+            <ContentControl x:Name="RigScreenHost" Grid.Row="1" Content="{Binding ToneRig.AmpFxRig}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vmRig:AmpFxRigViewModel">
+                        <playModeViewsRig:AmpFxRigView />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+        </Grid>
+
+        <!-- ══ SETTINGS MODAL (§6.5, Settings.dc.html): its own view,
+             Screens/GameplaySettingsView.axaml (#294), with the design notes. -->
+        <!-- DEFERRED BODY (cold start): everything below is a
+             ContentTemplate, so it is not BUILT until a layout pass reaches
+             the presenter — and a hidden host never runs one. See
+             PlayModeView.DeferredScreenHostNames. -->
+        <ContentControl x:Name="GameplaySettingsOverlayHost" IsVisible="{Binding Settings.IsGameplaySettingsOpen}"
+                        Content="{Binding}"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch">
+            <ContentControl.ContentTemplate>
+                <DataTemplate x:DataType="vm:PlayModeViewModel">
+                    <screens:GameplaySettingsView />
+                </DataTemplate>
+            </ContentControl.ContentTemplate>
+        </ContentControl>
+
+    </Panel>
+</UserControl>

@@ -1,0 +1,9 @@
+<Project>
+  <!--
+    A solution build installs the prebuilt native runtime ONCE, before any
+    project builds, when juce_sharp.dll is missing (#832,
+    tools/setup/NativeRuntime.targets).
+  -->
+  <Import Project="tools/setup/NativeRuntime.targets" />
+  <Target Name="DotCharterEnsureNativeRuntimeBeforeSolution" BeforeTargets="Build;Rebuild" DependsOnTargets="DotCharterEnsureNativeRuntime" />
+</Project>

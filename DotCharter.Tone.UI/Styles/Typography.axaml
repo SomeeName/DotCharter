@@ -1,0 +1,239 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Styles.Resources>
+        <!-- Font-size scale tokens. Use these instead of literal FontSize
+             values so non-TextBlock elements and templates join the same
+             unified scale as the TextBlock classes below (and a future
+             UI-scale setting only has to touch this table). -->
+        <x:Double x:Key="FontSizeMicro">10</x:Double>
+        <x:Double x:Key="FontSizeXs">11</x:Double>
+        <x:Double x:Key="FontSizeSm">12</x:Double>
+        <x:Double x:Key="FontSizeMd">13</x:Double>
+        <x:Double x:Key="FontSizeBase">14</x:Double>
+        <x:Double x:Key="FontSizeLg">15</x:Double>
+        <x:Double x:Key="FontSizeXl">16</x:Double>
+        <x:Double x:Key="FontSizeTitle">18</x:Double>
+        <x:Double x:Key="FontSizeHeading">20</x:Double>
+        <x:Double x:Key="FontSizeDisplay">24</x:Double>
+        <x:Double x:Key="FontSizeHero">28</x:Double>
+        <!-- Game-surface display sizes: grade stamps / tuner note readout,
+             and the pre-run countdown numeral. -->
+        <x:Double x:Key="FontSizeStamp">44</x:Double>
+        <x:Double x:Key="FontSizeCountdown">120</x:Double>
+        <!-- The WIDE rungs of those two display steps, added 2026-09-13 for the
+             resolution audit's §4 P0.2 (results). They are ordinary ladder
+             entries with fixed values — only the SELECTOR that reaches them is
+             breakpointed (`:is(Window).Wide` in `Views/PlayMode/PlayModeView.axaml`).
+             They deliberately do NOT live in `Styles/FireTokens/Ladders.Wide.axaml`:
+             that file is layout constants only, because a font token ramped
+             there compounds with `MainWindow`'s `RootScaler` app-wide. -->
+        <x:Double x:Key="FontSizeStampLg">66</x:Double>     <!-- FontSizeStamp 44, one shape up -->
+        <x:Double x:Key="FontSizeHeroLg">40</x:Double>      <!-- FontSizeHero 28, one shape up -->
+
+        <!-- ─── LINE-HEIGHT scale (x:Double, pairs with the table above) ──────
+             `LineHeight` is the second half of a type step and it was the ONLY
+             half still written as a literal: 33 setters across 16 files carried
+             a bare number while the `FontSize` beside them went through a token
+             (the 2026-09-12 resolution audit, §3 / §5 item 2). That is harmless
+             only while the whole shell is scaled by `MainWindow`'s `RootScaler`
+             transform, because the transform scales both. The moment anything
+             ramps the FONT tokens — a breakpoint ladder, a per-surface scale —
+             a frozen line box CLIPS: `FontSizeHero` 28 -> 42 against a literal
+             `LineHeight="34"` cuts every descender app-wide.
+
+             Every value here is TODAY'S value, so adopting them is a visual
+             no-op; `UI/LineHeightTokenTests` pins the whole 33-setter multiset
+             and fails if one moves. Pair a new step with the size it serves and
+             add it here rather than typing a number into a style.
+
+             The Fire layer has its OWN `FireLineHeight*` copy of this ladder in
+             `Styles/FireTokens/Ladders.axaml` — same rule as `FireSize*` vs
+             `FontSize*`: mixing the two ladders is how a screen ends up half
+             converted. -->
+        <x:Double x:Key="LineHeightXs">14</x:Double>        <!-- FontSizeXs 11 · TextBlock.Caption -->
+        <x:Double x:Key="LineHeightSm">16</x:Double>        <!-- FontSizeSm 12 · TextBlock.Mono -->
+        <x:Double x:Key="LineHeightMd">18</x:Double>        <!-- FontSizeMd 13 · TextBlock.Body -->
+        <x:Double x:Key="LineHeightBase">20</x:Double>      <!-- FontSizeBase 14 · TextBlock.Subtitle; the Markdown body shares it at FontSizeMd, where prose wants the looser leading -->
+        <x:Double x:Key="LineHeightLg">22</x:Double>        <!-- FontSizeLg 15 · MdH3 -->
+        <x:Double x:Key="LineHeightXl">24</x:Double>        <!-- FontSizeXl 16 · MdH2 -->
+        <x:Double x:Key="LineHeightHeading">26</x:Double>   <!-- FontSizeHeading 20 · TextBlock.Title; MdH1 shares it at FontSizeTitle 18 -->
+        <x:Double x:Key="LineHeightHudFigure">30</x:Double> <!-- FontSizeHero 28, mono · the in-game score, deliberately tighter than the display figure -->
+        <x:Double x:Key="LineHeightHero">34</x:Double>      <!-- FontSizeHero 28 · TextBlock.Display and the stat figures -->
+        <x:Double x:Key="LineHeightHeroLg">48</x:Double>    <!-- FontSizeHeroLg 40 · the results stat figures at Window.Wide -->
+
+        <!-- TextBlock classes for inspector labels, section headers, and page/group titles.
+             Each family is a ControlTheme (#240): a TextBlock wears
+             Theme="{StaticResource <Family>Text}" AND its class (`HelpText` keeps
+             its name), and every rule is gated on that class, exactly as the
+             global `TextBlock.X` style was. A global class style is attached to
+             EVERY TextBlock in the app; a theme's rules only to the TextBlocks
+             that wear it. UI/TextBlockToggleButtonControlThemeTests. -->
+        <ControlTheme x:Key="LabelText" TargetType="TextBlock">
+            <Style Selector="^.Label">
+                <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+                <Setter Property="FontWeight" Value="Medium" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SectionHeaderText" TargetType="TextBlock">
+            <Style Selector="^.SectionHeader">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+                <Setter Property="Margin" Value="0,4,0,10" />
+                <Setter Property="LetterSpacing" Value="1.5" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SectionIconText" TargetType="TextBlock">
+            <Style Selector="^.SectionIcon">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="Margin" Value="0,0,6,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ControlTheme>
+
+
+
+        <ControlTheme x:Key="HelpText" TargetType="TextBlock">
+            <Style Selector="^.HelpText">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextDim}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,4,0,0" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="PageTitleText" TargetType="TextBlock">
+            <Style Selector="^.PageTitle">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeDisplay}" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                <Setter Property="Margin" Value="0,0,0,4" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="PageSubtitleText" TargetType="TextBlock">
+            <Style Selector="^.PageSubtitle">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+                <Setter Property="Margin" Value="0,0,0,20" />
+            </Style>
+        </ControlTheme>
+
+        <!-- ─────────────────────────────────────────────────────────────────
+             Modern type scale (additive — existing classes above are kept for
+             backwards compatibility). Apply via Classes="Display"/"Title"/…
+             with the matching theme (`DisplayText`, `TitleText`, …) to lock
+             views to the unified scale instead of ad-hoc FontSize= literals.
+                Display  → 28 / Bold        — large hero headers
+                Title    → 20 / SemiBold    — dialog and view titles
+                Subtitle → 14 / SemiBold    — section / card titles
+                Body     → 13 / Normal      — default reading text
+                Caption  → 11 / Medium      — meta / helper text
+                Mono     → 12 / monospace   — values, paths, ids
+             ───────────────────────────────────────────────────────────────── -->
+        <ControlTheme x:Key="DisplayText" TargetType="TextBlock">
+            <Style Selector="^.Display">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeHero}" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                <Setter Property="LineHeight" Value="{StaticResource LineHeightHero}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="TitleText" TargetType="TextBlock">
+            <Style Selector="^.Title">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeHeading}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                <Setter Property="LineHeight" Value="{StaticResource LineHeightHeading}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SubtitleText" TargetType="TextBlock">
+            <Style Selector="^.Subtitle">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeBase}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                <Setter Property="LineHeight" Value="{StaticResource LineHeightBase}" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="BodyText" TargetType="TextBlock">
+            <Style Selector="^.Body">
+                <!-- Default reading text → must use the highest-emphasis foreground
+                     so it satisfies WCAG AA (≥4.5:1) on every surface. Reserve
+                     TextSecondary / TextMuted / TextDim for supporting text. -->
+                <Setter Property="FontSize" Value="{StaticResource FontSizeMd}" />
+                <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                <Setter Property="LineHeight" Value="{StaticResource LineHeightMd}" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="CaptionText" TargetType="TextBlock">
+            <Style Selector="^.Caption">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeXs}" />
+                <Setter Property="FontWeight" Value="Medium" />
+                <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+                <Setter Property="LineHeight" Value="{StaticResource LineHeightXs}" />
+                <Setter Property="LetterSpacing" Value="0.2" />
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="MonoText" TargetType="TextBlock">
+            <Style Selector="^.Mono">
+                <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+                <!-- The bundled face, with the old system stack kept behind it as the
+                     fallback chain for any glyph IBM Plex Mono does not carry. -->
+                <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+                <Setter Property="LineHeight" Value="{StaticResource LineHeightSm}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <!-- ==================================================================
+         The APP-WIDE default typeface.
+
+         The Fire screens ship three bundled faces (`Assets/Fonts`, nothing is
+         fetched at runtime) while every other surface fell back to the system
+         UI font, so the editor and the dialogs read as a different product
+         next to the game shell even after the palette was aligned. This is
+         the typographic half of the same fix: Space Grotesk becomes the
+         inherited default, and a Fire surface that wants the display or mono
+         face still opts into it by class.
+
+         `TextElement.FontFamily` INHERITS, so one setter on the top level
+         reaches the whole tree — and it must be `:is(TopLevel)`, not
+         `Window`: every ComboBox dropdown, flyout, tooltip and menu is its
+         own `PopupRoot` (see the airspace rule in `AGENTS.md`, which is why
+         `OverlayPopups` is off), and a `Window` selector would leave all of
+         them on the system font. `HostWindow` — the docking float window —
+         is the third top-level kind and is covered by the same selector.
+
+         Custom-drawn controls build their own `Typeface` and are NOT covered
+         here; they read `FireFontUi`/`FireFontMono` from the token table.
+         ================================================================== -->
+    <Style Selector=":is(TopLevel)">
+        <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+    </Style>
+
+    <!-- Vector counterpart of TextBlock.SectionIcon for PathIcon glyphs in
+         expander/section headers (geometry lives in Styles/Icons.axaml). -->
+    <Style Selector="PathIcon.SectionIcon">
+        <Setter Property="Width" Value="13" />
+        <Setter Property="Height" Value="13" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+    </Style>
+
+</Styles>

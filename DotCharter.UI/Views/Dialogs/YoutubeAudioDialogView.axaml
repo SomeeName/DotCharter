@@ -1,0 +1,84 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.YoutubeAudioDialogView"
+             x:DataType="contracts:IYoutubeAudioScreen"
+             x:CompileBindings="True">
+
+    <!-- File ▸ Audio from YouTube (#820): a link → the project's song audio.
+         Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md">
+            <Grid RowDefinitions="Auto,Auto,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconDownload}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_YoutubeAudio_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_YoutubeAudio_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel x:Name="YoutubeBody" Grid.Row="1" Classes="DialogBody">
+                    <!-- Enter in the box commits the footer's Download (IsDefault). -->
+                    <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="Auto,*" ColumnSpacing="12"
+                          IsEnabled="{Binding !IsBusy}">
+                        <TextBlock Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" VerticalAlignment="Center"
+                                   Text="{localization:Loc Dialog_YoutubeAudio_UrlLabel}" />
+                        <TextBox x:Name="YoutubeUrlBox" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True" Text="{Binding Url}"
+                                 AutomationProperties.Name="{localization:Loc Dialog_YoutubeAudio_UrlLabel}"
+                                 PlaceholderText="{localization:Loc Dialog_YoutubeAudio_UrlWatermark}" />
+                    </Grid>
+
+                    <Border x:Name="YoutubeToolsMissing" Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice"
+                            Margin="{DynamicResource FireGapTopLg}" IsVisible="{Binding ShowToolsMissing}">
+                        <TextBlock TextWrapping="Wrap" Text="{localization:Loc Dialog_YoutubeAudio_ToolsMissing}" />
+                    </Border>
+
+                    <!-- #821: the one-time rights notice. Until it is accepted nothing is downloaded. -->
+                    <Border x:Name="YoutubeRightsNotice" Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice"
+                            Margin="{DynamicResource FireGapTopLg}" IsVisible="{Binding ShowRightsNotice}">
+                        <StackPanel>
+                            <TextBlock TextWrapping="Wrap" Text="{localization:Loc Dialog_YoutubeAudio_Rights}" />
+                            <Button x:Name="AcceptYoutubeRightsButton" HorizontalAlignment="Left" Margin="{DynamicResource FireGapTopLg}"
+                                    Command="{Binding AcceptRightsCommand}"
+                                    AutomationProperties.Name="{localization:Loc Dialog_YoutubeAudio_RightsAccept}"
+                                    Content="{localization:Loc Dialog_YoutubeAudio_RightsAccept}" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" Margin="{DynamicResource FireGapTopLg}"
+                                IsVisible="{Binding IsBusy}">
+                        <ProgressBar x:Name="YoutubeProgress" Minimum="0" Maximum="1"
+                                     AutomationProperties.Name="{Binding ProgressText}"
+                                     Value="{Binding Progress}"
+                                     IsIndeterminate="{Binding !IsProgressDeterminate}" />
+                        <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" x:Name="YoutubeProgressText" Classes="DlgBusyText"
+                                   TextWrapping="Wrap" Text="{Binding ProgressText}" />
+                    </StackPanel>
+
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Error" Margin="{DynamicResource FireGapTopLg}"
+                            IsVisible="{Binding ErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock x:Name="YoutubeError" TextWrapping="Wrap" Text="{Binding ErrorText}" />
+                    </Border>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button x:Name="YoutubeCancelButton" Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                Content="{localization:Loc Action_Cancel}"
+                                AutomationProperties.Name="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button x:Name="YoutubeDownloadButton" Classes="DlgAction Primary" Content="{localization:Loc Action_Download}"
+                                AutomationProperties.Name="{localization:Loc Action_Download}"
+                                Command="{Binding DownloadCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

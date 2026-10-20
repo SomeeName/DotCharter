@@ -1,0 +1,207 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             x:Class="DotCharter.UI.Views.Dialogs.LatencyCalibrationWizardView"
+             x:DataType="contracts:ILatencyWizardScreen"
+             x:CompileBindings="True">
+
+    <!-- A WIZARD, so it is the one dialog with more than one footer: each step
+         is its own page and carries its own Border.DialogFooter, and exactly one
+         step is visible at a time. Everything else — scrim, card, head, body
+         typography — is the shared grammar (Views/Dialogs/DialogStyles.axaml).
+         The local styles that survive are the two the wizard genuinely owns:
+         the step title and the 88 px tap target. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.WizardStepTitle">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeLg}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.WizardResult">
+            <Setter Property="Foreground" Value="{DynamicResource AccentColor}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeLg}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.Tap">
+            <Setter Property="MinHeight" Value="88" />
+            <Setter Property="MinWidth" Value="220" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeXl}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- The frame itself is the focus target: the tap step listens for
+         Space/Enter on it, so it must hold the keyboard when the wizard opens.
+         The host owns the scrim, the stacking and the visibility. -->
+    <Grid x:Name="DialogGrid" Classes="DialogFrame"
+          Focusable="True" KeyDown="DialogGrid_OnKeyDown"
+          dlgv:FocusOnOpen.IsTarget="True">
+        <!-- One steady card: the steps differ in height, and a card that resized
+             per step moved its title and footer on every Next. Each step docks its
+             footer to the bottom of the fixed body. -->
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Md" MinHeight="600">
+            <Grid RowDefinitions="Auto,*">
+
+                <!-- Title + the always-on reminder of what this does NOT compensate. -->
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconClock}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc LatencyWizard_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc LatencyWizard_NotCompensated}" />
+                    </StackPanel>
+                </Grid>
+
+                <Panel Grid.Row="1">
+
+                <!-- ============ Intro ============ -->
+                <DockPanel IsVisible="{Binding IsIntro}">
+                    <Border Theme="{DynamicResource DialogFooterBorder}" DockPanel.Dock="Bottom" Classes="DialogFooter">
+                        <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                            <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                    Command="{Binding CancelCommand}" IsCancel="True" />
+                            <Button Classes="DlgAction Primary"
+                                    Content="{localization:Loc LatencyWizard_Intro_Start}"
+                                    Command="{Binding GoToJudgingCommand}" IsDefault="True" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc LatencyWizard_Intro_Body}" />
+                </DockPanel>
+
+                <!-- ============ Step 1: judging offset (loopback) ============ -->
+                <DockPanel IsVisible="{Binding IsJudging}">
+                    <Border Theme="{DynamicResource DialogFooterBorder}" DockPanel.Dock="Bottom" Classes="DialogFooter">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                                <Button Classes="DlgLink" Content="{localization:Loc Action_Cancel}"
+                                        Command="{Binding CancelCommand}" />
+                            </StackPanel>
+                            <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                                <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc LatencyWizard_Back}"
+                                        Command="{Binding BackCommand}" />
+                                <Button Classes="DlgAction Primary" Content="{localization:Loc LatencyWizard_Next}"
+                                        Command="{Binding GoToVisualTapCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <StackPanel Spacing="{DynamicResource SpaceLg}">
+                        <TextBlock Classes="WizardStepTitle"
+                                   Text="{localization:Loc LatencyWizard_Judging_Title}" />
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc LatencyWizard_Judging_Body}" />
+                        <!-- WHICH CHANNEL the loopback analyses: the guitar's (seat 0)
+                             open channel by default. Locked while a run is measuring. -->
+                        <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceSm}"
+                                    IsVisible="{Binding HasListeningChannels}">
+                            <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" VerticalAlignment="Center"
+                                       Text="{localization:Loc LatencyWizard_Judging_ListenOn}" />
+                            <ComboBox x:Name="LatencyListeningChannel" MinWidth="200"
+                                      IsEnabled="{Binding !IsMeasuringJudging}"
+                                      ItemsSource="{Binding ListeningChannels}"
+                                      SelectedIndex="{Binding SelectedListeningChannelIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc LatencyWizard_Judging_ListenOn}" />
+                        </StackPanel>
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" TextWrapping="Wrap" Text="{Binding JudgingStatus}"
+                                   IsVisible="{Binding JudgingStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <Button Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Left" MinWidth="140"
+                                HorizontalContentAlignment="Center"
+                                Content="{Binding JudgingButtonLabel}" Command="{Binding MeasureJudgingCommand}" />
+                        <TextBlock Classes="WizardResult" TextWrapping="Wrap" IsVisible="{Binding JudgingMeasured}"
+                                   Text="{Binding JudgingResult}" />
+                    </StackPanel>
+                </DockPanel>
+
+                <!-- ============ Steps 2a / 2b: the two-tap A-V metronome ============ -->
+                <DockPanel IsVisible="{Binding IsTapStep}">
+                    <Border Theme="{DynamicResource DialogFooterBorder}" DockPanel.Dock="Bottom" Classes="DialogFooter">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                                <Button Classes="DlgLink" Content="{localization:Loc LatencyWizard_Redo}"
+                                        Command="{Binding RedoTapsCommand}" />
+                            </StackPanel>
+                            <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                                <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                        Content="{localization:Loc LatencyWizard_Back}"
+                                        Command="{Binding BackCommand}" />
+                                <Button Classes="DlgAction Primary"
+                                        IsVisible="{Binding IsVisualTap}" IsEnabled="{Binding CanContinueTaps}"
+                                        Content="{localization:Loc LatencyWizard_Next}"
+                                        Command="{Binding GoToAudioTapCommand}" />
+                                <Button Classes="DlgAction Primary"
+                                        IsVisible="{Binding IsAudioTap}" IsEnabled="{Binding CanContinueTaps}"
+                                        Content="{localization:Loc LatencyWizard_Results}"
+                                        Command="{Binding ComputeResultsCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <StackPanel Spacing="{DynamicResource SpaceLg}">
+                        <TextBlock Classes="WizardStepTitle" IsVisible="{Binding IsVisualTap}"
+                                   Text="{localization:Loc LatencyWizard_Visual_Title}" />
+                        <TextBlock Classes="WizardStepTitle" IsVisible="{Binding IsAudioTap}"
+                                   Text="{localization:Loc LatencyWizard_Audio_Title}" />
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" IsVisible="{Binding IsVisualTap}"
+                                   Text="{localization:Loc LatencyWizard_Visual_Body}" />
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" IsVisible="{Binding IsAudioTap}"
+                                   Text="{localization:Loc LatencyWizard_Audio_Body}" />
+
+                        <!-- Beat area (fixed size so the layout never jumps between steps). -->
+                        <Panel Width="170" Height="170" HorizontalAlignment="Center"
+                               Margin="{DynamicResource GapTopMd}">
+                            <Ellipse Width="170" Height="170" Stroke="{DynamicResource BorderDefault}"
+                                     StrokeThickness="2" />
+                            <!-- Visual: a flash that peaks on the beat (Opacity bound to the timer-driven pulse). -->
+                            <Ellipse Width="150" Height="150" Fill="{DynamicResource AccentColor}"
+                                     IsVisible="{Binding IsVisualTap}" Opacity="{Binding VisualPulse}" />
+                            <!-- Audio: a dim, static disc so it is obvious there is nothing to watch. -->
+                            <Ellipse Width="150" Height="150" Fill="{DynamicResource TextMuted}" Opacity="0.12"
+                                     IsVisible="{Binding IsAudioTap}" />
+                            <TextBlock Theme="{DynamicResource DlgDescText}" IsVisible="{Binding IsAudioTap}" Classes="DlgDesc"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center"
+                                       Text="{localization:Loc LatencyWizard_Audio_ListenHint}" />
+                        </Panel>
+
+                        <!-- Outlined, so the footer's primary stays the one filled action. -->
+                        <Button Theme="{DynamicResource SecondaryButton}" Classes="Secondary Tap" Content="{localization:Loc LatencyWizard_Tap}"
+                                Command="{Binding TapCommand}" />
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" HorizontalAlignment="Center" Text="{Binding TapReadout}" />
+                    </StackPanel>
+                </DockPanel>
+
+                <!-- ============ Results ============ -->
+                <DockPanel IsVisible="{Binding IsResults}">
+                    <Border Theme="{DynamicResource DialogFooterBorder}" DockPanel.Dock="Bottom" Classes="DialogFooter">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                                <Button Classes="DlgLink" Content="{localization:Loc Action_Cancel}"
+                                        Command="{Binding CancelCommand}" />
+                            </StackPanel>
+                            <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="2" Classes="DlgActions">
+                                <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc LatencyWizard_Redo}"
+                                        Command="{Binding BackCommand}" />
+                                <Button Classes="DlgAction Primary" IsVisible="{Binding ResultsTrusted}"
+                                        Content="{localization:Loc LatencyWizard_Results_Apply}"
+                                        Command="{Binding ApplyResultsCommand}" IsDefault="True" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <StackPanel Spacing="{DynamicResource SpaceLg}">
+                        <TextBlock Classes="WizardStepTitle"
+                                   Text="{localization:Loc LatencyWizard_Results_Title}" />
+                        <TextBlock Classes="WizardResult" Text="{Binding ResultsSummary}" />
+                        <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{Binding ResultsDetail}"
+                                   IsVisible="{Binding ResultsTrusted}" />
+                    </StackPanel>
+                </DockPanel>
+
+                </Panel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

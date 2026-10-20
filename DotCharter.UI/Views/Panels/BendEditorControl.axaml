@@ -1,0 +1,124 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:panels="clr-namespace:DotCharter.UI.ViewModels.Panels;assembly=DotCharter"
+             xmlns:panels1="clr-namespace:DotCharter.UI.Views.Panels;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Panels.BendEditorControl"
+             x:DataType="panels:BendEditorViewModel">
+    <UserControl.Resources>
+        <panels1:BendPresetActiveConverter x:Key="PresetActive" />
+    </UserControl.Resources>
+    <UserControl.Styles>
+        <Style Selector="Button.Preset">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.Preset /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="Button.Preset:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimary}" />
+        </Style>
+        <Style Selector="Button.Preset:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceActive}" />
+        </Style>
+        <Style Selector="Button.Preset.Active /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentColor}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource TextOnAccent}" />
+        </Style>
+        <Style Selector="Button.Preset.Disabled">
+            <Setter Property="Foreground" Value="{DynamicResource SurfaceStrong}" />
+        </Style>
+        <Style Selector="Button.Reset">
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceElevated}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.Reset:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverStrong}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="Transparent" BorderBrush="Transparent" BorderThickness="0" CornerRadius="0" Padding="0">
+        <Grid RowDefinitions="Auto,*,Auto" MinHeight="240">
+
+            <!-- The seven shapes Guitar Pro offers, as ONE row of glyphs over the graph (#601),
+                 each named and tipped with its full label, and Clear bend at the row's end - so
+                 the graph takes the pane's whole width. The active preset (matching the current
+                 shape) is lit via the Active class, driven by a converter over
+                 BendEditorViewModel.ActivePreset. -->
+            <Grid x:Name="BendPresetRow" Grid.Row="0" ColumnDefinitions="*,Auto" Margin="{StaticResource GapBottomSm}">
+                <WrapPanel Grid.Column="0" Orientation="Horizontal" ItemSpacing="2" LineSpacing="2">
+                <Button Classes="Preset" Padding="{StaticResource FirePadSegmentItemDense}" FontSize="{StaticResource FontSizeBase}"
+                        Content="↗" Command="{Binding PresetBendCommand}"
+                        AutomationProperties.Name="{localization:Loc Panel_Bend_Bend}" ToolTip.Tip="{localization:Loc Panel_Bend_Bend}"
+                        Classes.Active="{Binding ActivePreset, Converter={StaticResource PresetActive}, ConverterParameter=Bend}" />
+                <Button Classes="Preset" Padding="{StaticResource FirePadSegmentItemDense}" FontSize="{StaticResource FontSizeBase}"
+                        Content="↘" Command="{Binding PresetReleaseCommand}"
+                        AutomationProperties.Name="{localization:Loc Panel_Bend_Release}" ToolTip.Tip="{localization:Loc Panel_Bend_Release}"
+                        Classes.Active="{Binding ActivePreset, Converter={StaticResource PresetActive}, ConverterParameter=Release}" />
+                <Button Classes="Preset" Padding="{StaticResource FirePadSegmentItemDense}" FontSize="{StaticResource FontSizeBase}"
+                        Content="↗↘" Command="{Binding PresetBendReleaseCommand}"
+                        AutomationProperties.Name="{localization:Loc Panel_Bend_BendRelease}" ToolTip.Tip="{localization:Loc Panel_Bend_BendRelease}"
+                        Classes.Active="{Binding ActivePreset, Converter={StaticResource PresetActive}, ConverterParameter=BendRelease}" />
+                <Button Classes="Preset" Padding="{StaticResource FirePadSegmentItemDense}" FontSize="{StaticResource FontSizeBase}"
+                        Content="⋯" Command="{Binding PresetHoldCommand}"
+                        AutomationProperties.Name="{localization:Loc Panel_Bend_Hold}" ToolTip.Tip="{localization:Loc Panel_Bend_Hold}"
+                        Classes.Active="{Binding ActivePreset, Converter={StaticResource PresetActive}, ConverterParameter=Hold}" />
+                <Button Classes="Preset" Padding="{StaticResource FirePadSegmentItemDense}" FontSize="{StaticResource FontSizeBase}"
+                        Content="↑" Command="{Binding PresetPrebendCommand}"
+                        AutomationProperties.Name="{localization:Loc Panel_Bend_Prebend}" ToolTip.Tip="{localization:Loc Panel_Bend_Prebend}"
+                        Classes.Active="{Binding ActivePreset, Converter={StaticResource PresetActive}, ConverterParameter=Prebend}" />
+                <Button Classes="Preset" Padding="{StaticResource FirePadSegmentItemDense}" FontSize="{StaticResource FontSizeBase}"
+                        Content="↑↗" Command="{Binding PresetPrebendBendCommand}"
+                        AutomationProperties.Name="{localization:Loc Panel_Bend_PrebendBend}" ToolTip.Tip="{localization:Loc Panel_Bend_PrebendBend}"
+                        Classes.Active="{Binding ActivePreset, Converter={StaticResource PresetActive}, ConverterParameter=PrebendBend}" />
+                <Button Classes="Preset" Padding="{StaticResource FirePadSegmentItemDense}" FontSize="{StaticResource FontSizeBase}"
+                        Content="↑↘" Command="{Binding PresetPrebendReleaseCommand}"
+                        AutomationProperties.Name="{localization:Loc Panel_Bend_PrebendRelease}" ToolTip.Tip="{localization:Loc Panel_Bend_PrebendRelease}"
+                        Classes.Active="{Binding ActivePreset, Converter={StaticResource PresetActive}, ConverterParameter=PrebendRelease}" />
+                </WrapPanel>
+                <Button Grid.Column="1" Classes="Reset" Content="{localization:Loc Panel_Bend_Clear}"
+                        VerticalAlignment="Center" Command="{Binding ResetCommand}" />
+            </Grid>
+
+            <!-- Graph surface. The actual drawing + mouse handling happens
+                 in the code-behind so we can render points, quantize drags
+                 against the 12-slot × quarter-step grid, and hit-test
+                 individual control points. -->
+            <Border Grid.Row="1"
+                    Name="GraphBorder"
+                    Background="{DynamicResource SurfaceElevated}"
+                    BorderBrush="{DynamicResource BorderDefault}" BorderThickness="1" CornerRadius="4"
+                    ClipToBounds="True"
+                    MinHeight="220">
+                <Canvas Name="GraphCanvas" Background="Transparent" Focusable="True" />
+            </Border>
+
+            <!-- Usage hints under the graph so the advanced interactions are
+                 discoverable. Kept muted so the graph stays the focus. -->
+            <TextBlock Grid.Row="2"
+                       Text="{localization:Loc Panel_Bend_Hints}"
+                       Foreground="{DynamicResource TextDim}" FontSize="{StaticResource FontSizeMicro}" TextWrapping="Wrap"
+                       Margin="0,6,0,0" />
+        </Grid>
+    </Border>
+</UserControl>

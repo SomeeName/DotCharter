@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigCompareLevelView"
+             x:DataType="vm:RigCompareLevelViewModel">
+    <!-- Level-matched A/B (#299): the switch, and the trim it put on the chain's
+         trailing gain while B plays ("−3.2 dB"). Its own view so the header's
+         markup stays inside AmpFxRigView's size budget. -->
+    <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}" VerticalAlignment="Center">
+        <Border Theme="{StaticResource FireModeStripBorder}" Classes="FireModeStrip">
+            <ToggleButton Theme="{StaticResource FireModeToggle}" Classes="FireModeButton" x:Name="RigMatchLevelToggle"
+                          IsChecked="{Binding IsMatched}"
+                          ToolTip.Tip="{localization:Loc Rig_MatchLevel_Tip}"
+                          AutomationProperties.Name="{localization:Loc Rig_MatchLevel}">
+                <TextBlock Text="{localization:Loc Rig_MatchLevel}" />
+            </ToggleButton>
+        </Border>
+        <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" x:Name="RigCompareTrim" VerticalAlignment="Center"
+                   Text="{Binding TrimLabel}" IsVisible="{Binding HasTrim}"
+                   ToolTip.Tip="{localization:Loc Rig_CompareTrim_Tip}" />
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,205 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:views="using:DotCharter.Tone.UI.Views.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigEditors.RigAmpFaceView"
+             x:DataType="vm:RigDockUnit">
+    <UserControl.DataTemplates>
+        <!-- A face knob: the design's 64 px dial with the caption above and the
+             plate below, the unit beside the plate, on the amp's own accent. -->
+        <DataTemplate DataType="{x:Type vm:PedalParamViewModel}">
+            <fire:FireKnob HardwareStyle="True" Margin="{StaticResource FireGapTag}"
+                           IsEnabled="{Binding IsControlActive}" ToolTip.Tip="{Binding InactiveHint}"
+                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}"
+                           Maximum="{Binding Maximum}" DefaultValue="{Binding Default}"
+                           Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}" ValueText="{Binding DisplayText}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PedalModelSelectorViewModel}">
+            <StackPanel Classes="FireEnclosureChoice" MinWidth="220">
+                <TextBlock Text="{Binding DisplayName}" HorizontalAlignment="Left" />
+                <ComboBox Classes="FireCombo" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                          HorizontalAlignment="Stretch"
+                          AutomationProperties.Name="{Binding DisplayName}">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:PedalModelOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+    <!-- The AMP FACE family (design 6.3): the model bar, the hardware head on
+         the texture pack's shell with its six face knobs and panel lamp, then
+         the secondary row (resonance, input, output) with the SIGNAL meters
+         filling the rest of the head's width.
+
+         WIDTH: the gear column fills the dock up to the design's 1180 px and
+         no further (the column definition's MaxWidth), so on a wide window the
+         head, the secondary row and the model bar all end on ONE right edge
+         and the capture library takes the room beside them instead of
+         hanging under a stretched head. -->
+    <!-- The editor's own scroller RESTS VISIBLE (AllowAutoHide=False), the same
+         treatment ScrollViewer.FireBoardScroll gets: the dock row is routinely
+         shorter than a family face, and an auto-hidden bar made the cut edge
+         read as the editor being drawn UNDER the footer strip (owner,
+         2026-09-12). Named so RigFooterStabilityUiPerfSmokeTests can find it. -->
+    <ScrollViewer x:Name="RigEditorScroll" VerticalScrollBarVisibility="Visible" AllowAutoHide="False" HorizontalScrollBarVisibility="Disabled">
+        <!-- SCALE TO FIT THE DOCK ROW (lane E, 2026-09-13). The face is laid
+             out at its NATURAL size and the whole thing is scaled once, the way
+             RigPedalEditorView's enclosure already was — so at 1920x1080 it is
+             shrunk into the row instead of being cut by it, and at 3840x2160 it
+             GROWS to use a row that has ~5x the area. `TargetHeight` has to be
+             the scroller's viewport because a ScrollViewer offers its content
+             infinite height and the vertical fit would otherwise never engage;
+             the WIDTH binds on its own now that the horizontal bar is Disabled.
+             Stretch, not Left: the scale comes from the face's NATURAL size, but
+             a face with a star column has to be ARRANGED at the slot the
+             transform leaves it or its sliders collapse to their content.
+             `MaxScale` is the breakpointed `FireRigFaceMaxScale` token. -->
+        <fire:RigScaleToFit x:Name="RigFaceFit"
+                            TargetHeight="{Binding #RigEditorScroll.Viewport.Height}"
+                            MaxScale="{DynamicResource FireRigFaceMaxScale}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+            <Grid x:Name="RigAmpColumns" SizeChanged="OnColumnsSizeChanged">
+                <!-- the gear takes up to 1180; the capture library takes the REST of
+                     the width (a 300 px floor, set in code-behind from the host's
+                     width so the gear keeps priority — two star columns would split
+                     a narrow dock evenly and shrink the head) and the gear column's
+                     exact height, so the dock reads as two blocks that end together,
+                     not a head, a floating card and a gap (owner, 2026-09-08). -->
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MaxWidth="1180" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel x:Name="RigAmpGearColumn" Spacing="{StaticResource FireSpaceLg}" VerticalAlignment="Top">
+
+                    <!-- model bar: the capture file (neural) or the voicing picker
+                         (legacy) on the left, the drive hint on the right -->
+                    <Grid ColumnDefinitions="*,Auto" x:Name="RigAmpModelBar">
+                        <WrapPanel VerticalAlignment="Bottom">
+                            <ContentControl Content="{Binding ModelRail}" IsVisible="{Binding HasModelRail}" Margin="{StaticResource FireGapRightLg}" />
+                            <StackPanel x:Name="RigCaptureColumn" Width="440" Spacing="{StaticResource FireSpaceXs}"
+                                        IsVisible="{Binding ShowFileHeader}" Margin="{StaticResource FireGapRightLg}">
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{Binding FileColumnTitle}" />
+                                <TextBlock Theme="{StaticResource FireRackTitleText}" Classes="FireRackTitle" Text="{Binding FileParam.CapturePlateText}" TextTrimming="CharacterEllipsis" />
+                                <!-- the load strip: the library picker, the file picker and
+                                     the clear, all on one row so the three ways to change
+                                     the capture sit together -->
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}" Margin="{StaticResource FireGapTopSm}">
+                                    <ComboBox Classes="FireCombo" Width="300" ItemsSource="{Binding FileParam.LibraryChoices}"
+                                              SelectedItem="{Binding FileParam.SelectedLibraryChoice}" IsVisible="{Binding ShowsLibraryCombo}"
+                                              PlaceholderText="{localization:Loc Rig_FromLibrary}" AutomationProperties.Name="{localization:Loc Rig_FromLibrary}">
+                                        <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:NamCaptureChoice"><TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" /></DataTemplate></ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" VerticalAlignment="Center" Command="{Binding FileParam.PickFileCommand}" Content="{localization:Loc Rig_LoadCaptureShort}" />
+                                    <Button x:Name="RigAmpFileClear" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" Content="×" VerticalAlignment="Center"
+                                            IsVisible="{Binding FileParam.HasValue}" Command="{Binding FileParam.ClearCommand}"
+                                            ToolTip.Tip="{localization:Loc Rig_ClearFile}" AutomationProperties.Name="{localization:Loc Rig_ClearFile}" />
+                                </StackPanel>
+                                <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong Warn" Text="{Binding Node.NamStatusText}" IsVisible="{Binding Node.NamHasWarning}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding ExtraSelectors}" IsVisible="{Binding HasExtraSelectors}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </WrapPanel>
+                        <TextBlock Grid.Column="1" Theme="{StaticResource FireEditorFootnoteText}" Classes="FireEditorFootnote" Text="{localization:Loc Rig_Editor_Hint}" />
+                    </Grid>
+
+                    <!-- the head: the shell picture stretched to the panel, the brand
+                         plate on the left, the face knobs across, the lamp at the right -->
+                    <Panel Classes="FireAmpFace" x:Name="RigAmpFace" MinHeight="218">
+                        <fire:RigArtworkImage File="{Binding AmpShellFile}" Fill="True" CornerRadius="15" />
+                        <Grid ColumnDefinitions="170,*,Auto" Margin="72,36,72,31">
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Theme="{StaticResource FireAmpBrandText}" Classes="FireAmpBrand" Text="{Binding AmpBrandTitle}" />
+                                <TextBlock Theme="{StaticResource FireAmpBrandSubText}" Classes="FireAmpBrandSub" Text="{Binding AmpBrandSubtitle}" />
+                            </StackPanel>
+                            <ItemsControl Grid.Column="1" x:Name="RigAmpFaceKnobs" ItemsSource="{Binding PrimaryKnobs}"
+                                          HorizontalAlignment="Stretch" VerticalAlignment="Center" Margin="{StaticResource FireGapLeftLg}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="{Binding AmpFaceColumns}" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <Border Grid.Column="2" Theme="{StaticResource FireAmpLampBorder}" Classes="FireAmpLamp" Classes.Lit="{Binding IsEngaged}" VerticalAlignment="Top"
+                                    ToolTip.Tip="{Binding FootswitchLabel}" />
+                        </Grid>
+                    </Panel>
+
+                    <!-- secondary row: the head's remaining knobs as cards, and the
+                         real SIGNAL meters filling the rest of the head's width -->
+                    <Grid x:Name="RigAmpSecondary" ColumnDefinitions="Auto,*">
+                        <ItemsControl ItemsSource="{Binding SecondaryKnobs}" IsVisible="{Binding HasAmpSecondaryRow}" VerticalAlignment="Stretch">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PedalParamViewModel">
+                                    <!-- the design's card: a bare 62 px dial on the left, the
+                                         caption, the plate and the unit beside it -->
+                                    <Border Theme="{StaticResource FireAmpSecondaryCardBorder}" Classes="FireAmpSecondaryCard">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <fire:FireKnob Dense="True" DialSize="62" HardwareStyle="True" VerticalAlignment="Center"
+                                                           IsEnabled="{Binding IsControlActive}" ToolTip.Tip="{Binding InactiveHint}"
+                                                           Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                                           DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding Caption}" ValueText="{Binding DisplayText}" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="{StaticResource FireGapLeftMd}"
+                                                        Spacing="{StaticResource FireSpaceXs}">
+                                                <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" Text="{Binding Caption}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceXs}">
+                                                    <Border Theme="{StaticResource FireEqValuePlateBorder}" Classes="FireEqValuePlate" HorizontalAlignment="Left" Margin="{StaticResource FirePadNone}">
+                                                        <TextBlock Theme="{StaticResource FireEqValueText}" Classes="FireEqValue" Text="{Binding DisplayText}" />
+                                                    </Border>
+                                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding Unit}" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Grid.Column="1" Theme="{StaticResource FireAmpSecondaryCardBorder}" Classes="FireAmpSecondaryCard" MinWidth="220" Margin="{StaticResource FirePadNone}">
+                            <StackPanel Spacing="{StaticResource FireSpaceSm}" VerticalAlignment="Center">
+                                <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" Text="{localization:Loc Rig_Editor_Signal}" />
+                                <views:RigNodeMetersView DataContext="{Binding Meters}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Theme="{StaticResource FireEmptyBodyText}" Classes="FireEmptyBody" IsVisible="{Binding ShowsEmptyCaptureNote}" Text="{localization:Loc Rig_Capture_Empty}" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!-- the capture library, beside the gear where a wide dock has the
+                     room, instead of an expander hanging under the head. It is a
+                     CARD the height of the head that scrolls its own rows — as a
+                     bare list it stood 700 px tall and scrolled the whole editor. -->
+                <Border Grid.Column="1" x:Name="RigCapturePanel" Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack" Width="300" VerticalAlignment="Top"
+                        MinHeight="{Binding #RigAmpGearColumn.Bounds.Height}"
+                        Margin="{StaticResource FireGapLeftLg}" IsVisible="{Binding HasCaptures}">
+                    <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="{StaticResource FireSpaceSm}">
+                        <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" Text="{Binding FileColumnTitle}" />
+                        <!-- searchable (owner: "why not have this searchable"): the
+                             rows are FilteredCaptures, the library through this box -->
+                        <Border Grid.Row="1" Theme="{StaticResource FireFieldBorder}" Classes="FireField">
+                            <TextBox x:Name="RigCaptureSearch" Classes="FireFieldInput Search" Text="{Binding CaptureFilter, Mode=TwoWay}"
+                                     PlaceholderText="{localization:Loc Rig_CaptureSearch}"
+                                     AutomationProperties.Name="{localization:Loc Rig_CaptureSearch}" />
+                        </Border>
+                        <!-- NOT A SCROLL REGION (W4). This was one of the two
+                             exemptions RigScrollRegionSourceTests carried, and
+                             both are gone: a scroller inside the family view's
+                             own RigEditorScroll means the wheel lands on
+                             whichever one the pointer is over and the outer
+                             extent lies about how much library there is. The
+                             list grows and RigEditorScroll carries it. -->
+                        <Panel Grid.Row="2">
+                            <ItemsControl x:Name="RigCaptureList" ItemsSource="{Binding FilteredCaptures}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:RigCaptureRow">
+                                        <Button Theme="{StaticResource FireListRowButton}" Classes="FireListRow" Classes.Record="{Binding IsActive}" Command="{Binding LoadCommand}" HorizontalAlignment="Stretch">
+                                            <TextBlock Text="{Binding Title}" Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" TextTrimming="CharacterEllipsis" />
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Panel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </fire:RigScaleToFit>
+    </ScrollViewer>
+</UserControl>

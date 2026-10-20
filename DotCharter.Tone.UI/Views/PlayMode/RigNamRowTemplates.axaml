@@ -1,0 +1,120 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+                    xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI">
+    <!-- The rows of RigTonesView's NAM capture browser: a TONE3000 search result
+         (download, its tags, the licence) and a capture in the local library
+         (attribution, load into the rig, delete). Merged by RigTonesView. -->
+    <DataTemplate x:Key="RigNamToneRowTemplate" x:DataType="vm:NamToneRowViewModel">
+        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+            <Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="{StaticResource FireSpaceSm}">
+                <StackPanel Grid.Column="0"
+                            Spacing="{StaticResource FireSpaceXxs}">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong"
+                                   Text="{Binding Title}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                   Text="{Binding Author}"
+                                   IsVisible="{Binding HasAuthor}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag" IsVisible="{Binding HasGear}">
+                            <TextBlock Text="{Binding GearLabel}" />
+                        </Border>
+                        <!-- Which architectures this tone ships, so
+                             "where are the A2 captures" is answerable
+                             from the results. -->
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag" IsVisible="{Binding HasArchitecture}">
+                            <TextBlock Text="{Binding ArchitectureLabel}" />
+                        </Border>
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag" IsVisible="{Binding HasFormatSize}">
+                            <TextBlock Text="{Binding FormatSizeLabel}" />
+                        </Border>
+                        <!-- Attribution policy, not decoration: keep it. -->
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent" IsVisible="{Binding HasLicense}">
+                            <TextBlock Text="{Binding LicenseLabel}" />
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            Spacing="{StaticResource FireSpaceXs}"
+                            VerticalAlignment="Center">
+                    <ProgressBar Classes="FireMeter Thin" Width="90"
+                                 Minimum="0" Maximum="1"
+                                 Value="{Binding Progress}"
+                                 IsVisible="{Binding IsDownloading}" />
+                    <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary"
+                            Content="{localization:Loc Nam_Download}"
+                            IsVisible="{Binding CanDownload}"
+                            Command="{Binding $parent[ItemsControl].((vm:NamCaptureBrowserViewModel)DataContext).DownloadCommand}"
+                            CommandParameter="{Binding}" />
+                    <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Success"
+                            IsVisible="{Binding IsDownloaded}"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{localization:Loc Nam_Downloaded}" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="RigNamLibraryRowTemplate" x:DataType="vm:NamLibraryRowViewModel">
+        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+            <Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="{StaticResource FireSpaceSm}">
+                <StackPanel Grid.Column="0"
+                            Spacing="{StaticResource FireSpaceXxs}">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceXs}">
+                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong"
+                                   Text="{Binding Title}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody"
+                                   Text="{Binding Author}"
+                                   IsVisible="{Binding HasAuthor}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{StaticResource FireSpaceXxs}">
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag" IsVisible="{Binding HasGear}">
+                            <TextBlock Text="{Binding GearLabel}" />
+                        </Border>
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag" IsVisible="{Binding HasFormatSize}">
+                            <TextBlock Text="{Binding FormatSizeLabel}" />
+                        </Border>
+                        <Border Theme="{StaticResource FireTagBorder}" Classes="FireTag Accent" IsVisible="{Binding HasLicense}">
+                            <TextBlock Text="{Binding LicenseLabel}" />
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            Spacing="{StaticResource FireSpaceXs}"
+                            VerticalAlignment="Center">
+                    <Button Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact"
+                            Content="{localization:Loc Nam_Attribution}"
+                            IsVisible="{Binding HasAttribution}"
+                            Command="{Binding $parent[ItemsControl].((vm:NamCaptureBrowserViewModel)DataContext).OpenAttributionCommand}"
+                            CommandParameter="{Binding}" />
+                    <!-- Wrapped so the tooltip explaining WHY still
+                         shows while the button is disabled. -->
+                    <Border ToolTip.Tip="{Binding $parent[ItemsControl].((vm:NamCaptureBrowserViewModel)DataContext).LoadIntoRigTooltip}">
+                        <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary"
+                                Content="{localization:Loc Nam_LoadIntoRig}"
+                                IsEnabled="{Binding $parent[ItemsControl].((vm:NamCaptureBrowserViewModel)DataContext).CanLoadIntoRig}"
+                                Command="{Binding $parent[ItemsControl].((vm:NamCaptureBrowserViewModel)DataContext).LoadIntoRigCommand}"
+                                CommandParameter="{Binding}" />
+                    </Border>
+                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet"
+                            Content="{localization:Loc Nam_Delete}"
+                            Command="{Binding $parent[ItemsControl].((vm:NamCaptureBrowserViewModel)DataContext).DeleteCommand}"
+                            CommandParameter="{Binding}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </DataTemplate>
+</ResourceDictionary>

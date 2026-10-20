@@ -1,0 +1,32 @@
+<Project>
+  <!--
+    The prebuilt native runtime (#832). When juce_sharp.dll is MISSING from
+    JuceSharp/src/JuceSharp/runtimes/win-x64/native/, the build runs
+    tools/setup/Get-NativeRuntime.ps1, which downloads the pair pinned for the
+    JuceSharp gitlink in tools/setup/native-runtime.json and verifies its SHA-256
+    and dca_abi_version() before installing it. A present DLL is never touched
+    and nothing is downloaded.
+
+    Off when:
+      DotCharterSkipNativeFetch=true   you build the native engine yourself
+      CI=true / GITHUB_ACTIONS=true    CI builds native; DotCharterFetchNative=true opts in
+      a design-time (IDE) build, or not Windows
+
+    Imported by Directory.Solution.targets (a solution build fetches ONCE, before
+    any project is evaluated, so JuceSharp's runtimes glob sees the files) and by
+    Directory.Build.targets (a single-project build: dotnet run / dotnet test
+    - -project). Linted by DotCharter.Tests/Infrastructure/NativeRuntimeFetchTests.
+  -->
+  <PropertyGroup>
+    <DotCharterNativeRuntimeDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..\..\JuceSharp\src\JuceSharp\runtimes\win-x64\native'))</DotCharterNativeRuntimeDir>
+    <_DotCharterNativeFetchOn>false</_DotCharterNativeFetchOn>
+    <_DotCharterNativeFetchOn Condition="'$(DotCharterSkipNativeFetch)' != 'true' And '$(OS)' == 'Windows_NT' And '$(DesignTimeBuild)' != 'true' And (('$(CI)' != 'true' And '$(GITHUB_ACTIONS)' != 'true') Or '$(DotCharterFetchNative)' == 'true')">true</_DotCharterNativeFetchOn>
+  </PropertyGroup>
+
+  <Target Name="DotCharterEnsureNativeRuntime" Condition="!Exists('$(DotCharterNativeRuntimeDir)juce_sharp.dll')">
+    <Message Importance="normal" Condition="'$(_DotCharterNativeFetchOn)' != 'true'"
+             Text="juce_sharp.dll is missing and the prebuilt download is off (DotCharterSkipNativeFetch or CI); build the native engine or see docs/dev/GETTING-STARTED.md." />
+    <Exec Condition="'$(_DotCharterNativeFetchOn)' == 'true'"
+          Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)Get-NativeRuntime.ps1&quot;" />
+  </Target>
+</Project>

@@ -1,0 +1,30 @@
+<Project>
+  <!--
+    A single-project build (dotnet run / dotnet test - -project) installs the
+    prebuilt native runtime before it resolves its project references when
+    juce_sharp.dll is missing (#832, tools/setup/NativeRuntime.targets).
+    JuceSharp's projects have their own Directory.Build.targets and never see this.
+  -->
+  <Import Project="tools/setup/NativeRuntime.targets" Condition="$(MSBuildProjectName.StartsWith('DotCharter'))" />
+  <Target Name="DotCharterEnsureNativeRuntimeBeforeReferences" BeforeTargets="ResolveProjectReferences"
+          DependsOnTargets="DotCharterEnsureNativeRuntime" Condition="$(MSBuildProjectName.StartsWith('DotCharter'))" />
+
+  <!--
+    Optional plugins (Directory.Build.props). A project that sets DotCharterDeclarePlugins
+    (DotCharter.UI, DotCharter.Tests, a plugin's own tests) carries one
+    [assembly: PluginAssembly("<name>")] per project at the top of a plugins/<name>/
+    folder, so PluginLoader.Declared finds them without naming any. A public build
+    (DotCharterPlugins=false) declares none.
+  -->
+  <ItemGroup Condition="'$(DotCharterDeclarePlugins)' == 'true' And '$(DotCharterPlugins)' != 'false'">
+    <DotCharterDeclaredPlugin Include="$(MSBuildThisFileDirectory)plugins\*\*.csproj" />
+  </ItemGroup>
+  <Target Name="DotCharterDeclarePlugins" BeforeTargets="GetAssemblyAttributes"
+          Condition="'@(DotCharterDeclaredPlugin)' != ''">
+    <ItemGroup>
+      <AssemblyAttribute Include="DotCharter.Services.Plugins.PluginAssemblyAttribute">
+        <_Parameter1>%(DotCharterDeclaredPlugin.Filename)</_Parameter1>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+</Project>

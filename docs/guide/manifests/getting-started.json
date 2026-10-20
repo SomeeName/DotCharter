@@ -1,0 +1,116 @@
+{
+  "page": "getting-started.md",
+  "shots": [
+    {
+      "id": "start-screen",
+      "scene": "playmode",
+      "args": {
+        "screen": "Start"
+      },
+      "width": 1280,
+      "height": 800,
+      "callouts": [
+        {
+          "title": "Start",
+          "text": "Opens the song library of Play Mode. Enter does the same.",
+          "name": "LaunchStartButton"
+        },
+        {
+          "title": "Playing as",
+          "text": "The profile your scores and settings are saved under. Switch or add profiles here, or play as a guest.",
+          "name": "LaunchWhoPanel"
+        },
+        {
+          "title": "Library status",
+          "text": "How many songs DotCharter found in your library folder.",
+          "name": "LaunchLibraryChip"
+        },
+        {
+          "title": "Guitar input",
+          "text": "Whether an instrument input is set up and its latency is known. Play Mode needs it to score you.",
+          "name": "LaunchInputChip"
+        },
+        {
+          "title": "About",
+          "text": "Version, licence and credits.",
+          "name": "LaunchAboutButton"
+        },
+        {
+          "title": "Keys",
+          "text": "Keyboard shortcuts for this screen.",
+          "name": "LaunchKeyHints"
+        }
+      ]
+    },
+    {
+      "id": "shell-overview",
+      "scene": "editor",
+      "callouts": [
+        {
+          "title": "Navigation rail",
+          "text": "The app's destinations: Home (recent projects and what to do next), Library (your songs), Chart (the editor), Rig (your tone) and Settings.",
+          "side": "inside",
+          "name": "ActivityRail"
+        },
+        {
+          "title": "Menu bar",
+          "text": "All editor commands, grouped by menu. Each menu is shown in Charting a song.",
+          "name": "EditorMenuBar"
+        },
+        {
+          "title": "Go to anything",
+          "text": "A command palette: type part of a command, setting or song and press Enter.",
+          "name": "TitleGoToAnything"
+        },
+        {
+          "title": "Toolbar",
+          "text": "Transport, grid snap, undo, zoom and the most used tools.",
+          "name": "EditorToolbar"
+        },
+        {
+          "title": "Status bar",
+          "text": "Messages, running tasks, the playhead position and the chart's issue count.",
+          "name": "StatusBarView"
+        }
+      ]
+    },
+    {
+      "id": "library",
+      "scene": "library",
+      "callouts": [
+        {
+          "title": "Library folder",
+          "text": "The folder DotCharter scans for songs. Browse picks another one, Refresh scans again.",
+          "name": "LibraryFolderBar"
+        },
+        {
+          "title": "Search",
+          "text": "Filters by title, artist or album as you type.",
+          "side": "left",
+          "name": "LibrarySearchField"
+        },
+        {
+          "title": "Columns",
+          "text": "Click a column to sort by it; the funnel icons filter by paths, tuning, year, difficulty and length.",
+          "side": "left",
+          "name": "LibraryColumnHeader"
+        },
+        {
+          "title": "Songs",
+          "text": "Grouped by artist. The letters L, R and B show which paths (lead, rhythm, bass) a song has.",
+          "name": "LibraryRows"
+        },
+        {
+          "title": "Song details",
+          "text": "The selected song, with each path and its note count. Pick the path to load.",
+          "name": "LibraryDetail"
+        },
+        {
+          "title": "Load chart",
+          "text": "Opens the chosen path in the editor. It replaces the open project, so save first.",
+          "name": "LibraryLoad"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,269 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:inspector="using:DotCharter.UI.ViewModels.Editor.Inspector"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundChordTechniqueView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Sound tab's TECHNIQUE section for a chord (#601): Playback FOLDED IN, as two labelled
+         groups on the dense "label | value" rhythm.
+         PER STRING - the techniques behind the string mask. The group's header IS the mask: one
+         chip per string the selected chords play (StringMaskViewModel.Chips; lit = in the mask;
+         the SAME mask the Shape section's chord-box pips and Ctrl+1..9 set), then the scope
+         sentence naming the strings the way the chips and the lane gutter do ("A (5)"), Clear
+         mask while one is set, and "Apply techniques to all strings" at its end.
+         WHOLE CHORD - Accent and the four playback flags (Ignore / Pass other / Split notes /
+         No notes) ignore the mask, so they are their own group, with the export's repeat verdict
+         under them and "Clear techniques" at the header's end: ResetChordFlags clears exactly
+         these five flags, never a per-string technique. -->
+    <StackPanel Spacing="{StaticResource SpaceSm}">
+        <!-- PER STRING -->
+        <!-- The label keeps its width; the chips take the rest and wrap under each other. -->
+        <Grid x:Name="ChordPerStringHeader" ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_PerString}" Classes="TechniqueGroupLabel" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+            <ItemsControl x:Name="ChordStringChips" Grid.Column="1" ItemsSource="{Binding StringMask.Chips}" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXxs}" LineSpacing="{StaticResource SpaceXxs}" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="inspector:StringMaskChip">
+                        <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini"
+                                      IsChecked="{Binding IsInMask, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((viewModels:InspectorViewModel)DataContext).StringMask.ToggleStringMaskCommand}"
+                                      CommandParameter="{Binding StringIndex}"
+                                      AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{localization:Loc Inspector_StringChipTip}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceXxs}">
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                         Fill="{Binding ColorSlot, Converter={x:Static conv:StringColorSlotBrushConverter.Instance}}" />
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
+        <Grid x:Name="ChordPerStringScope" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock x:Name="SoundStringScopeLine" Grid.Column="0" Text="{Binding ChordStringScopeLabel}"
+                       FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource TextDim}"
+                       VerticalAlignment="Center" TextWrapping="Wrap" />
+            <PathIcon Grid.Column="1" Data="{DynamicResource IconInfo}"
+                      Width="11" Height="11" VerticalAlignment="Center"
+                      Foreground="{DynamicResource TextMuted}"
+                      ToolTip.Tip="{localization:Loc Inspector_TechniqueHelpTip}"
+                      ToolTip.ShowDelay="150" />
+            <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                    Content="{localization:Loc Inspector_Scope_ClearMask}"
+                    Command="{Binding StringMask.ClearStringMaskCommand}"
+                    IsVisible="{Binding !ProjectState.StringEditMask.IsEmpty}"
+                    ToolTip.Tip="{localization:Loc Inspector_Scope_ClearMaskTip}" />
+            <!-- Copies the active string's WHOLE technique set, which clearing the mask does
+                 not do, so the verb stays. -->
+            <Button Grid.Column="3" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                    Command="{Binding ApplyTechniquesToAllStringsCommand}"
+                    AutomationProperties.Name="{localization:Loc Inspector_ApplyTechToAll}"
+                    ToolTip.Tip="{localization:Loc Inspector_ApplyTechToAllTip}">
+                <PathIcon Data="{DynamicResource IconContentCopy}" Width="11" Height="11" />
+            </Button>
+        </Grid>
+        <Grid x:Name="ChordPerStringRows" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnSpacing="{StaticResource SpaceMd}" RowSpacing="{StaticResource SpaceXs}">
+            <TextBlock Grid.Row="0" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Mute}" />
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton x:Name="ChordMuteNone" Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding ChordNoteMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton x:Name="ChordFullMute" Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_FullMute}"
+                              ToolTip.Tip="{localization:Loc Inspector_FullMute}"
+                              IsChecked="{Binding ChordNoteMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechMute}" />
+                </ToggleButton>
+                <ToggleButton x:Name="ChordPalmMute" Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_PalmMute}"
+                              ToolTip.Tip="{localization:Loc Inspector_PalmMute}"
+                              IsChecked="{Binding ChordNoteMute, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechPalmMute}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Sustain}" />
+            <WrapPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton x:Name="ChordVibratoChip" Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Vibrato}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Vibrato}"
+                              IsChecked="{Binding ChordNoteVibrato}"
+                              ToolTip.Tip="{localization:Loc Inspector_Chord_VibratoTip}" />
+                <ToggleButton x:Name="ChordSlideChip" Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Slide}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Slide}"
+                              IsChecked="{Binding ChordNoteUnpitchedSlide}"
+                              ToolTip.Tip="{localization:Loc Inspector_Chord_SlideTip}" />
+                <ToggleButton x:Name="ChordLinkNextChip" Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_LinkNext}"
+                              AutomationProperties.Name="{localization:Loc Inspector_LinkNext}"
+                              IsChecked="{Binding ChordNoteLinkNext}"
+                              ToolTip.Tip="{localization:Loc Inspector_Chord_LinkNextTip}" />
+            </WrapPanel>
+            <TextBlock Grid.Row="2" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Articulation}" />
+            <WrapPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXxs}">
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Tremolo}"
+                              AutomationProperties.Name="{localization:Loc Inspector_Tremolo}"
+                              IsChecked="{Binding ChordNoteTremolo}"
+                              ToolTip.Tip="{localization:Loc Inspector_Chord_TremoloTip}" />
+                <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_StringIgnore}"
+                              AutomationProperties.Name="{localization:Loc Inspector_StringIgnore}"
+                              IsChecked="{Binding ChordNoteIgnore}"
+                              ToolTip.Tip="{localization:Loc Inspector_StringIgnoreTip}" />
+            </WrapPanel>
+            <TextBlock Grid.Row="3" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Hopo}" />
+            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding ChordNoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_HammerOn}"
+                              ToolTip.Tip="{localization:Loc Inspector_HammerOn}"
+                              IsChecked="{Binding ChordNoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechHammerOn}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_PullOff}"
+                              ToolTip.Tip="{localization:Loc Inspector_PullOff}"
+                              IsChecked="{Binding ChordNoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechPullOff}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Tap}"
+                              ToolTip.Tip="{localization:Loc Inspector_Tap}"
+                              IsChecked="{Binding ChordNoteHopo, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=3}">
+                    <PathIcon Data="{DynamicResource IconTechTap}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="4" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Harmonic}" />
+            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding ChordNoteHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Normal}"
+                              ToolTip.Tip="{localization:Loc Inspector_Normal}"
+                              IsChecked="{Binding ChordNoteHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechHarmonic}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Pinch}"
+                              ToolTip.Tip="{localization:Loc Inspector_Pinch}"
+                              IsChecked="{Binding ChordNoteHarmonic, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechHarmonicPinch}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="5" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_Picking}" />
+            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding ChordNoteBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Pop}"
+                              ToolTip.Tip="{localization:Loc Inspector_Pop}"
+                              IsChecked="{Binding ChordNoteBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}">
+                    <PathIcon Data="{DynamicResource IconTechPop}" />
+                </ToggleButton>
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg"
+                              AutomationProperties.Name="{localization:Loc Inspector_Slap}"
+                              ToolTip.Tip="{localization:Loc Inspector_Slap}"
+                              IsChecked="{Binding ChordNoteBassPicking, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}">
+                    <PathIcon Data="{DynamicResource IconTechSlap}" />
+                </ToggleButton>
+            </StackPanel>
+            <TextBlock Grid.Row="6" Grid.Column="0" Theme="{StaticResource LabelText}" Classes="Label"
+                       VerticalAlignment="Center" Text="{localization:Loc Inspector_SlideTo}" />
+            <NumericUpDown x:Name="ChordSlideToField" Grid.Row="6" Grid.Column="1" Value="{Binding ChordNoteSlideTo}"
+                           AutomationProperties.Name="{localization:Loc Inspector_SlideTo}"
+                           Minimum="0" Maximum="24" ShowButtonSpinner="True"
+                           HorizontalAlignment="Left" MinWidth="110"
+                           ToolTip.Tip="{localization:Loc Inspector_Chord_SlideToTip}" />
+        </Grid>
+        <!-- #530: the masked strings slide differently, so the field above is blank and each
+             string is spelled out. -->
+        <TextBlock x:Name="ChordSlideMixedSummary" Text="{Binding ChordSlideSummary}"
+                   IsVisible="{Binding ChordSlideIsMixed}"
+                   FontSize="{StaticResource FontSizeXs}"
+                   Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+        <Border x:Name="ChordSlideRefusalBar" Classes="FieldIssue Warn" IsVisible="{Binding HasChordSlideRefusal}">
+            <Grid ColumnDefinitions="Auto,*">
+                <PathIcon Grid.Column="0" Data="{DynamicResource IconInfo}"
+                          Margin="{StaticResource GapRightSm}" />
+                <TextBlock Grid.Column="1" Text="{Binding ChordSlideRefusal}" TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+
+        <!-- WHOLE CHORD (what the Playback section held, plus Accent) -->
+        <Border Height="1" Background="{DynamicResource FireBorderSeam}" Margin="{StaticResource GapTopXs}" />
+        <Grid x:Name="ChordWholeChordHeader" ColumnDefinitions="*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+            <TextBlock Grid.Column="0" Text="{localization:Loc Inspector_WholeChord}" Classes="TechniqueGroupLabel" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                    Content="{localization:Loc Inspector_Chord_ResetFlags}"
+                    Command="{Binding ResetChordFlagsCommand}"
+                    ToolTip.Tip="{localization:Loc Inspector_Chord_ResetFlagsTip}" />
+        </Grid>
+        <WrapPanel x:Name="ChordWholeChordGroup" Orientation="Horizontal"
+                   ItemSpacing="{StaticResource SpaceXs}" LineSpacing="{StaticResource SpaceXxs}">
+            <ToggleButton x:Name="ChordAccentChip" Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Accent}"
+                          AutomationProperties.Name="{localization:Loc Inspector_Accent}"
+                          IsChecked="{Binding ChordAccent}"
+                          ToolTip.Tip="{localization:Loc Inspector_Chord_AccentTip}" />
+            <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_Ignore}"
+                          AutomationProperties.Name="{localization:Loc Inspector_Ignore}"
+                          IsChecked="{Binding ChordIgnore}"
+                          ToolTip.Tip="{localization:Loc Inspector_ChordIgnoreTip}" />
+            <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_PassOther}"
+                          AutomationProperties.Name="{localization:Loc Inspector_PassOther}"
+                          IsChecked="{Binding ChordPassOtherNotes}"
+                          ToolTip.Tip="{localization:Loc Inspector_Chord_PassOtherTip}" />
+            <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_SplitNotes}"
+                          AutomationProperties.Name="{localization:Loc Inspector_SplitNotes}"
+                          IsChecked="{Binding ChordSplitIntoNotes}"
+                          ToolTip.Tip="{localization:Loc Inspector_SplitNotesTip}" />
+            <ToggleButton Theme="{StaticResource ChipToggle}" Classes="Chip Mini" Content="{localization:Loc Inspector_NoNotes}"
+                          AutomationProperties.Name="{localization:Loc Inspector_NoNotes}"
+                          IsChecked="{Binding ChordForceNoNotes}"
+                          ToolTip.Tip="{localization:Loc Inspector_NoNotesTip}" />
+        </WrapPanel>
+        <!-- Strum direction (RS XML strum): not a flag, so it is a small segment of its own. -->
+        <StackPanel x:Name="ChordStrumRow" Orientation="Horizontal" Spacing="{StaticResource SpaceMd}">
+            <TextBlock Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
+                       Text="{localization:Loc Inspector_Strum}" />
+            <StackPanel Orientation="Horizontal">
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="—"
+                              AutomationProperties.Name="{localization:Loc Inspector_None}"
+                              ToolTip.Tip="{localization:Loc Inspector_None}"
+                              IsChecked="{Binding ChordStrum, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="↓"
+                              AutomationProperties.Name="{localization:Loc Inspector_PickDown}"
+                              ToolTip.Tip="{localization:Loc Inspector_PickDown}"
+                              IsChecked="{Binding ChordStrum, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=1}" />
+                <ToggleButton Theme="{StaticResource SegToggle}" Classes="Seg" Content="↑"
+                              AutomationProperties.Name="{localization:Loc Inspector_PickUp}"
+                              ToolTip.Tip="{localization:Loc Inspector_PickUp}"
+                              IsChecked="{Binding ChordStrum, Converter={x:Static conv:IntEqualsConverter.Instance}, ConverterParameter=2}" />
+            </StackPanel>
+        </StackPanel>
+        <!-- #564: does this strum ship as the repeat box, and if not, why. -->
+        <TextBlock x:Name="ChordRepeatVerdictLine"
+                   Text="{Binding ChordRepeatVerdict}"
+                   IsVisible="{Binding HasChordRepeatVerdict}"
+                   ToolTip.Tip="{localization:Loc Inspector_RepeatVerdictTip}"
+                   FontSize="{StaticResource FontSizeXs}"
+                   Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

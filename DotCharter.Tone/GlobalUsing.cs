@@ -1,0 +1,9 @@
+global using DotCharter.Core.Domain.Events;
+global using DotCharter.Core.Domain.Guitar;
+global using DotCharter.Core.Domain.Project;
+global using DotCharter.Core.Utilities;
+global using DotCharter.Tone.Infrastructure.Configuration;
+global using DotCharter.Tone.Audio.Abstractions;
+global using DotCharter.Tone.Audio.Vst;
+global using DotCharter.Tone.Logging;
+global using DotCharter.Tone.Infrastructure.Storage;

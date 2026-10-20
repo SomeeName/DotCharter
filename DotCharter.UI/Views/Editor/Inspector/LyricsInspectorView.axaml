@@ -1,0 +1,171 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.LyricsInspectorView"
+             x:DataType="viewModels:LyricsInspectorViewModel">
+    <!-- #601: the Inspector's dense language. Raw lyrics, the selected syllable and import /
+         export sit behind the same icon-only rail as the Sound tab, ONE section at a time
+         (InspectorSectionRail; each body binds its IsVisible to its entry). The selected
+         syllable's entry is there only while a syllable is selected. The tap status is the ONE
+         slim row pinned over every section: while a charter taps syllables it must stay in view,
+         whichever section is open. No header repeats the tab's name and no card frames a section. -->
+    <Grid ColumnDefinitions="38,*">
+        <!-- ── the section rail: icons only, the name is the tooltip and the accessible name (#601) ── -->
+        <Border x:Name="LyricsRail" Grid.Column="0"
+                Background="{DynamicResource FireSurfaceSunken}"
+                BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,1,0">
+            <StackPanel x:Name="LyricsRailEntries" Spacing="{StaticResource SpaceXxs}" Margin="{StaticResource GapTopXs}"
+                        HorizontalAlignment="Center">
+                <Panel x:Name="LyricsRailRaw">
+                    <ToggleButton x:Name="LyricsRailRawEntry" Tag="LyricsRawBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Lyrics_RawSection}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Lyrics_RawSection}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconPencil}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #LyricsRailRawEntry.IsChecked}" />
+                </Panel>
+                <Panel x:Name="LyricsRailSyllable" IsVisible="{Binding HasSelectedLyric}">
+                    <ToggleButton x:Name="LyricsRailSyllableEntry" Tag="LyricsSyllableBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Lyrics_Selected}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Lyrics_Selected}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconMusicNote}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #LyricsRailSyllableEntry.IsChecked}" />
+                </Panel>
+                <Panel x:Name="LyricsRailTransfer">
+                    <ToggleButton x:Name="LyricsRailTransferEntry" Tag="LyricsTransferBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
+                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                  AutomationProperties.Name="{localization:Loc Inspector_Lyrics_TransferSection}"
+                                  ToolTip.Tip="{localization:Loc Inspector_Lyrics_TransferSection}" ToolTip.Placement="Right">
+                        <PathIcon Data="{DynamicResource IconDownload}" Width="13" Height="13" />
+                    </ToggleButton>
+                    <!-- the open section's accent bar -->
+                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
+                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
+                            IsVisible="{Binding #LyricsRailTransferEntry.IsChecked}" />
+                </Panel>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Column="1" RowDefinitions="Auto,*">
+            <!-- ── the tap status, pinned ── -->
+            <Border x:Name="LyricsStatusRow" Grid.Row="0" MinHeight="28" Padding="{StaticResource FirePadTag}"
+                    BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
+                <StackPanel Spacing="{StaticResource SpaceXxs}" VerticalAlignment="Center">
+                    <TextBlock x:Name="LyricsStatusText" Text="{Binding StatusText}" FontSize="{StaticResource FireSizeXs}"
+                               Foreground="{DynamicResource FireTextSecondary}" TextWrapping="Wrap" />
+                    <TextBlock IsVisible="{Binding IsArmed}"
+                               FontFamily="{StaticResource FireFontMono}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               Foreground="{DynamicResource AccentColor}">
+                        <Run Text="▶ " />
+                        <Run Text="{Binding NextPreview}" />
+                    </TextBlock>
+                    <TextBlock IsVisible="{Binding IsArmed}" TextWrapping="Wrap"
+                               FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource FireTextMuted}"
+                               Text="{localization:Loc Inspector_Lyrics_TapHint}" />
+                </StackPanel>
+            </Border>
+
+            <ScrollViewer x:Name="LyricsSectionScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="{StaticResource PaddingRow}">
+                <Panel>
+                    <!-- RAW LYRICS: the text the tap queue and auto-sync both read. -->
+                    <StackPanel x:Name="LyricsRawBody" IsVisible="{Binding #LyricsRailRawEntry.IsChecked}" Spacing="{StaticResource SpaceSm}">
+                        <TextBlock Text="{localization:Loc Inspector_Lyrics_RawHelp}" TextWrapping="Wrap"
+                                   Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0" />
+                        <TextBox Text="{Binding RawLyrics, Mode=TwoWay}"
+                                 AutomationProperties.Name="{localization:Loc Inspector_Lyrics_RawSection}"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MinHeight="160"
+                                 MaxHeight="320"
+                                 VerticalContentAlignment="Top"
+                                 FontFamily="{StaticResource FireFontMono}" />
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource SpaceSm}" LineSpacing="{StaticResource SpaceXs}">
+                            <Button Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
+                                    Content="{localization:Loc Inspector_Lyrics_Apply}"
+                                    Command="{Binding ApplyCommand}" />
+                            <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                    Content="{localization:Loc Inspector_Lyrics_Reset}"
+                                    Command="{Binding ResetCommand}" />
+                            <!-- Same box, same format as Apply — this places every syllable by
+                                 listening to the song instead of arming the Ctrl+Space tap queue. -->
+                            <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                                    Content="{localization:Loc Inspector_Lyrics_AutoSync}"
+                                    Command="{Binding AutoSyncCommand}"
+                                    ToolTip.Tip="{localization:Loc Inspector_Lyrics_AutoSyncHelp}" />
+                            <ProgressBar IsIndeterminate="True" Width="60" Height="4"
+                                         VerticalAlignment="Center"
+                                         IsVisible="{Binding IsAutoSyncing}" />
+                        </WrapPanel>
+                        <TextBlock Text="{localization:Loc Inspector_Lyrics_AutoSyncHelp}"
+                                   Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- THE SELECTED SYLLABLE: dense label / value rows. -->
+                    <StackPanel x:Name="LyricsSyllableBody" IsVisible="{Binding #LyricsRailSyllableEntry.IsChecked}" Spacing="{StaticResource SpaceSm}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto"
+                              ColumnSpacing="{StaticResource SpaceMd}" RowSpacing="{StaticResource SpaceSm}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{localization:Loc Inspector_Lyrics_Selected}"
+                                       Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding SelectedLyricText, Mode=TwoWay}"
+                                     AutomationProperties.Name="{localization:Loc Inspector_Lyrics_Selected}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{localization:Loc Inspector_Lyrics_Pitch}"
+                                       Theme="{StaticResource LabelText}" Classes="Label" VerticalAlignment="Center"
+                                       IsEnabled="{Binding SelectedLyricHasPitch}" />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding SelectedLyricNote, Mode=TwoWay}"
+                                           AutomationProperties.Name="{localization:Loc Inspector_Lyrics_Pitch}"
+                                           IsEnabled="{Binding SelectedLyricHasPitch}"
+                                           Minimum="0" Maximum="127" Increment="1"
+                                           FormatString="0" HorizontalAlignment="Stretch" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding SelectedLyricNoteName}"
+                                       VerticalAlignment="Center" MinWidth="40"
+                                       TextAlignment="Right"
+                                       FontFamily="{StaticResource FireFontMono}"
+                                       Foreground="{DynamicResource AccentColor}" />
+                        </Grid>
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="{StaticResource SpaceMd}" LineSpacing="{StaticResource SpaceXs}">
+                            <CheckBox Content="{localization:Loc Inspector_Lyrics_WordPart}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Lyrics_WordPart}"
+                                      IsChecked="{Binding SelectedLyricIsWordPart, Mode=TwoWay}" />
+                            <CheckBox Content="{localization:Loc Inspector_PhraseEnd}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_PhraseEnd}"
+                                      IsChecked="{Binding SelectedLyricIsPhraseEnd, Mode=TwoWay}"
+                                      ToolTip.Tip="{localization:Loc Inspector_Lyrics_PhraseEndTip}" />
+                            <CheckBox Content="{localization:Loc Inspector_Lyrics_HasPitch}"
+                                      AutomationProperties.Name="{localization:Loc Inspector_Lyrics_HasPitch}"
+                                      IsChecked="{Binding SelectedLyricHasPitch, Mode=TwoWay}" />
+                        </WrapPanel>
+                        <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" HorizontalAlignment="Left"
+                                Content="{localization:Loc Action_Delete}"
+                                Command="{Binding DeleteSelectedLyricCommand}" />
+                    </StackPanel>
+
+                    <!-- IMPORT / EXPORT -->
+                    <WrapPanel x:Name="LyricsTransferBody" IsVisible="{Binding #LyricsRailTransferEntry.IsChecked}" Orientation="Horizontal"
+                               ItemSpacing="{StaticResource SpaceSm}" LineSpacing="{StaticResource SpaceXs}">
+                        <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc Inspector_Lyrics_ImportLrc}"
+                                Command="{Binding ImportLrcCommand}" />
+                        <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc Inspector_Lyrics_ExportLrc}"
+                                Command="{Binding ExportLrcCommand}" />
+                        <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc Inspector_Lyrics_ImportUltraStar}"
+                                Command="{Binding ImportUltraStarCommand}" />
+                        <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="{localization:Loc Inspector_Lyrics_ExportUltraStar}"
+                                Command="{Binding ExportUltraStarCommand}" />
+                    </WrapPanel>
+                </Panel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

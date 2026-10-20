@@ -1,0 +1,159 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigSetlistPanel"
+             x:DataType="vm:PresetBrowserViewModel">
+
+    <!-- THE SETLISTS (2026-09-27), in the Tones mode's card column when the rail's
+         "Setlists" row is picked. The host hooks it in with ONE element over the
+         BROWSER (whose IsSetlistsSelected gates it); everything inside binds the
+         rig's RigSetlistsViewModel. Left: the setlists, the live one tagged.
+         Right: the selected one — its name, "Use live", its songs in order (each
+         with its starting scene, ▶ ▲ ▼ ✕) and "Add current tone". -->
+    <UserControl.Styles>
+        <Style Selector="Border.FireListRow.SetlistSong">
+            <Setter Property="Padding" Value="{StaticResource FirePadListRowDense}" />
+        </Style>
+        <!-- the song that is playing in the live setlist -->
+        <Style Selector="Border.FireListRow.SetlistSong.current">
+            <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
+        </Style>
+        <Style Selector="Border.FireListRow.SetlistSong.missing TextBlock.SongName">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextDim}" />
+        </Style>
+        <Style Selector="TextBlock.SongName">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid x:Name="RigSetlistsRoot"
+          DataContext="{Binding Setlists}" x:DataType="vm:RigSetlistsViewModel"
+          ColumnDefinitions="240,*" ColumnSpacing="{StaticResource FireSpaceXl}">
+
+        <!-- ── the setlists ─────────────────────────────────────────────── -->
+        <StackPanel Grid.Column="0" Spacing="{StaticResource FireSpaceSm}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Theme="{StaticResource RigRoleLabelText}" Classes="RigRoleLabel" VerticalAlignment="Center"
+                           Text="{localization:Loc Rig_Setlists}" />
+                <Button Grid.Column="1" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" x:Name="RigSetlistNew"
+                        Command="{Binding NewSetlistCommand}"
+                        Content="{localization:Loc Rig_Setlist_New}" />
+            </Grid>
+            <ListBox x:Name="RigSetlistList" Classes="FireList DenseRows"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ItemsSource="{Binding Setlists}"
+                     SelectedItem="{Binding SelectedSetlist}"
+                     AutomationProperties.Name="{localization:Loc Rig_Setlists}">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RigSetlistViewModel">
+                        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel>
+                                    <TextBlock Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong SongName" Text="{Binding Name}" />
+                                    <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding CountLabel}" />
+                                </StackPanel>
+                                <Border Grid.Column="1" Theme="{StaticResource FireTagBorder}" Classes="FireTag Success" VerticalAlignment="Center"
+                                        IsVisible="{Binding IsActive}">
+                                    <TextBlock Text="{localization:Loc Rig_Setlist_LiveTag}" />
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                       IsVisible="{Binding !HasSetlists}"
+                       Text="{localization:Loc Rig_Setlist_EmptyLists}" />
+        </StackPanel>
+
+        <!-- ── the selected setlist ─────────────────────────────────────── -->
+        <StackPanel Grid.Column="1" x:Name="RigSetlistEditor" Spacing="{StaticResource FireSpaceMd}"
+                    IsVisible="{Binding HasSelected}">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                <Border Theme="{StaticResource FireFieldBorder}" Classes="FireField" MaxWidth="320" HorizontalAlignment="Left" MinWidth="200">
+                    <TextBox Classes="FireFieldInput" x:Name="RigSetlistName"
+                             Text="{Binding SelectedSetlist.Name, UpdateSourceTrigger=LostFocus}"
+                             MaxLength="48"
+                             AutomationProperties.Name="{localization:Loc Rig_Setlist_NameLabel}" />
+                </Border>
+                <Button Grid.Column="1" Theme="{StaticResource FireOutlineButton}" Classes="FireOutlineButton" x:Name="RigSetlistToggleLive"
+                        Command="{Binding ToggleActiveCommand}"
+                        Content="{Binding ActivateLabel}"
+                        ToolTip.Tip="{localization:Loc Rig_Setlist_Activate_Tip}" />
+                <Button Grid.Column="2" Theme="{StaticResource FireGhostButton}" Classes="FireGhost Compact" x:Name="RigSetlistDelete"
+                        Command="{Binding DeleteSetlistCommand}"
+                        Content="{localization:Loc Rig_Setlist_Delete}" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource FireSpaceSm}">
+                <Button Theme="{StaticResource FirePrimaryButton}" Classes="FirePrimary Body" x:Name="RigSetlistAdd"
+                        Command="{Binding AddCurrentToneCommand}"
+                        Content="{localization:Loc Rig_Setlist_AddCurrent}" />
+                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center"
+                           Text="{localization:Loc Rig_Setlist_AddHint}" />
+            </StackPanel>
+
+            <ItemsControl x:Name="RigSetlistSongs" ItemsSource="{Binding SelectedSetlist.Entries}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RigSetlistEntryViewModel">
+                        <Border Theme="{StaticResource FireListRowBorder}" Classes="FireListRow SetlistSong"
+                                Classes.current="{Binding IsCurrent}"
+                                Classes.missing="{Binding IsMissing}">
+                            <Grid ColumnDefinitions="36,*,180,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                                <TextBlock Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center" Text="{Binding Position}" />
+                                <TextBlock Grid.Column="1" Theme="{StaticResource RigRoleBodyText}" Classes="RigRoleBody Strong SongName" Text="{Binding PresetName}"
+                                           ToolTip.Tip="{Binding PresetName}" />
+                                <ComboBox Grid.Column="2" Classes="FireCombo" HorizontalAlignment="Stretch"
+                                          ItemsSource="{Binding SceneChoices}"
+                                          SelectedItem="{Binding SelectedScene, Mode=TwoWay}"
+                                          ToolTip.Tip="{localization:Loc Rig_Setlist_Scene_Tip}"
+                                          AutomationProperties.Name="{localization:Loc Rig_Setlist_Scene}" />
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"
+                                            Spacing="{StaticResource FireSpaceXs}">
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep"
+                                            Command="{Binding $parent[ItemsControl].((vm:RigSetlistsViewModel)DataContext).PlayEntryCommand}"
+                                            CommandParameter="{Binding}"
+                                            Content="▶"
+                                            ToolTip.Tip="{localization:Loc Rig_Setlist_Play}"
+                                            AutomationProperties.Name="{localization:Loc Rig_Setlist_Play}" />
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep"
+                                            Command="{Binding $parent[ItemsControl].((vm:RigSetlistsViewModel)DataContext).MoveEntryUpCommand}"
+                                            CommandParameter="{Binding}"
+                                            Content="▲"
+                                            ToolTip.Tip="{localization:Loc Rig_Setlist_MoveUp}"
+                                            AutomationProperties.Name="{localization:Loc Rig_Setlist_MoveUp}" />
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep"
+                                            Command="{Binding $parent[ItemsControl].((vm:RigSetlistsViewModel)DataContext).MoveEntryDownCommand}"
+                                            CommandParameter="{Binding}"
+                                            Content="▼"
+                                            ToolTip.Tip="{localization:Loc Rig_Setlist_MoveDown}"
+                                            AutomationProperties.Name="{localization:Loc Rig_Setlist_MoveDown}" />
+                                    <Button Theme="{StaticResource FireQuietButton}" Classes="FireQuiet FireGearStep"
+                                            Command="{Binding $parent[ItemsControl].((vm:RigSetlistsViewModel)DataContext).RemoveEntryCommand}"
+                                            CommandParameter="{Binding}"
+                                            Content="✕"
+                                            ToolTip.Tip="{localization:Loc Rig_Setlist_Remove}"
+                                            AutomationProperties.Name="{localization:Loc Rig_Setlist_Remove}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap"
+                       IsVisible="{Binding !SelectedSetlist.HasEntries}"
+                       Text="{localization:Loc Rig_Setlist_EmptySongs}" />
+            <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" TextWrapping="Wrap" x:Name="RigSetlistStatus"
+                       IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       Text="{Binding Status}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

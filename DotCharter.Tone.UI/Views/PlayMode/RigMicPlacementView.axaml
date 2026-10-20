@@ -1,0 +1,102 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotCharter.Tone.UI.ViewModels.PlayMode"
+             xmlns:fire="clr-namespace:DotCharter.Tone.UI.Controls.Fire;assembly=DotCharter.Tone.UI"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.Tone.UI.Views.PlayMode.RigMicPlacementView"
+             x:DataType="vm:RigMicPlacementViewModel">
+    <!-- THE MIC PLACEMENT, the way amp sims show it: the speaker from the front
+         with the microphone on it (drag it across the cone; the wheel moves it in
+         and out), the same mic from the side on a centimetre ruler, the
+         microphones as cards (one per mic the model offers), and the model's
+         angle off the speaker axis, room, second (ribbon) mic and level.
+         Everything writes the native mic model's own params. -->
+    <Grid x:Name="RigMicLayout" RowDefinitions="Auto,*,Auto" ColumnDefinitions="*,Auto"
+          RowSpacing="{StaticResource FireSpaceSm}" ColumnSpacing="{StaticResource FireSpaceLg}">
+
+        <!-- the header: what the placement sounds like, and the way back to the default -->
+        <Grid Grid.ColumnSpan="2" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceMd}">
+            <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center" Text="{localization:Loc Rig_Editor_MicPlacement}" />
+            <TextBlock Grid.Column="1" Theme="{StaticResource FireEditorFootnoteText}" Classes="FireEditorFootnote" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       Text="{localization:Loc Rig_Mic_Hint}" />
+            <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center" x:Name="RigMicPositionReadout"
+                       Text="{Binding PositionReadout}" />
+            <Button Grid.Column="3" Theme="{StaticResource FireQuietButton}" Classes="FireQuiet" x:Name="RigMicReset" Command="{Binding ResetPlacementCommand}"
+                    Content="{localization:Loc Rig_Editor_MicReset}" ToolTip.Tip="{localization:Loc Rig_Editor_MicResetTip}" />
+        </Grid>
+
+        <!-- ══ THE SPEAKER, FROM THE FRONT ════════════════════════════════════ -->
+        <Border Grid.Row="1" x:Name="RigMicFront" Theme="{StaticResource FireMicWellBorder}" Classes="FireMicWell" MinHeight="260">
+            <fire:RigMicStage x:Name="RigMicStage" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Position="{Binding Position, Mode=TwoWay}" DistanceCm="{Binding DistanceCm, Mode=TwoWay}"
+                              BearingDegrees="{Binding BearingDegrees, Mode=TwoWay}" MicType="{Binding MicIndex}"
+                              SecondMicBlend="{Binding SecondMic.Value, FallbackValue=0}"
+                              AutomationProperties.Name="{localization:Loc Rig_Editor_MicPlacement}" />
+        </Border>
+
+        <!-- ══ DISTANCE AND THE MODEL'S KNOBS ═════════════════════════════════ -->
+        <StackPanel Grid.Row="1" Grid.Column="1" x:Name="RigMicControls" Width="420" Spacing="{StaticResource FireSpaceMd}">
+            <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack">
+                <StackPanel Spacing="{StaticResource FireSpaceXs}">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="{StaticResource FireSpaceSm}">
+                        <TextBlock Theme="{StaticResource FireEyebrowText}" Classes="FireEyebrow" VerticalAlignment="Center" Text="{localization:Loc Rig_Editor_MicDistance}" />
+                        <TextBlock Grid.Column="1" Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" VerticalAlignment="Center" Text="{Binding DistanceReadout}" />
+                        <TextBlock Grid.Column="2" Theme="{StaticResource FireMonoText}" Classes="FireMono" VerticalAlignment="Center" x:Name="RigMicDistanceText"
+                                   Text="{Binding DistanceText}" />
+                    </Grid>
+                    <!-- 96, not 120: the controls column is taller than the speaker
+                         well at the editor's 440 px minimum, and a grid row does not
+                         clip what overflows it into the mic cards below
+                         (RigCabinetEditorUiPerfSmokeTests measures the gap). -->
+                    <fire:RigMicSideView x:Name="RigMicSide" Height="96"
+                                         DistanceCm="{Binding DistanceCm, Mode=TwoWay}" MicType="{Binding MicIndex}"
+                                         AutomationProperties.Name="{localization:Loc Rig_Editor_MicDistance}" />
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource FireFacePanelBorder}" Classes="FireFacePanel Rack" x:Name="RigMicKnobPanel">
+                <UniformGrid x:Name="RigMicKnobs" Columns="4">
+                    <fire:FireKnob HardwareStyle="True" x:Name="RigMicAngleKnob" DataContext="{Binding Angle}" IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                   Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                   DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}"
+                                   ValueText="{Binding DisplayText}" ToolTip.Tip="{localization:Loc Rig_Mic_AngleTip}" ToolTip.ShowDelay="0" />
+                    <fire:FireKnob HardwareStyle="True" DataContext="{Binding Room}" IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                   Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                   DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}"
+                                   ValueText="{Binding DisplayText}" />
+                    <fire:FireKnob HardwareStyle="True" DataContext="{Binding SecondMic}" IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                   Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                   DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}"
+                                   ValueText="{Binding DisplayText}" ToolTip.Tip="{localization:Loc Rig_Mic_SecondTip}" ToolTip.ShowDelay="0" />
+                    <fire:FireKnob HardwareStyle="True" DataContext="{Binding Level}" IsVisible="{Binding $self.DataContext, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                   Value="{Binding Value, Mode=TwoWay}" Taper="{Binding Taper}" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}"
+                                   DefaultValue="{Binding Default}" Step="{Binding Step}" Label="{Binding Caption}" Unit="{Binding Unit}"
+                                   ValueText="{Binding DisplayText}" />
+                </UniformGrid>
+            </Border>
+        </StackPanel>
+
+        <!-- ══ THE MICROPHONE: one card per mic, in a row ═════════════════════ -->
+        <ItemsControl Grid.Row="2" Grid.ColumnSpan="2" x:Name="RigMicChoices" ItemsSource="{Binding Mics}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:RigMicChoice">
+                    <ToggleButton Theme="{StaticResource FireMicCardToggle}" Classes="FireMicCard" IsChecked="{Binding IsActive, Mode=OneWay}"
+                                  Command="{Binding SelectCommand}" AutomationProperties.Name="{Binding Name}">
+                        <Grid ColumnDefinitions="110,*" ColumnSpacing="{StaticResource FireSpaceSm}">
+                            <fire:RigMicGlyph Height="30" MicType="{Binding Index}" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Theme="{StaticResource FireRowTitleText}" Classes="FireRowTitle" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Theme="{StaticResource FireRowDescText}" Classes="FireRowDesc" Text="{Binding Sound}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </ToggleButton>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

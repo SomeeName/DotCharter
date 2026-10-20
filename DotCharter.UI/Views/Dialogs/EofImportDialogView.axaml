@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.EofImportDialogView"
+             x:DataType="contracts:IEofImportScreen"
+             x:CompileBindings="True">
+
+    <!-- EOF (.eof) import. Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconFileDocument}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc Dialog_EofImport_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc Dialog_EofImport_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1">
+                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{localization:Loc Dialog_Section_Tracks}"
+                               IsEnabled="{Binding !IsBusy}" />
+                    <Border Theme="{DynamicResource DlgListFrameBorder}" Classes="DlgListFrame" IsEnabled="{Binding !IsBusy}">
+                        <Panel>
+                            <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding HasNoTracks}">
+                                <TextBlock Text="{localization:Loc Dialog_Tracks_None}" />
+                            </Border>
+                            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding AvailableTracks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IEofTrackOption">
+                                            <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Panel>
+                    </Border>
+
+                    <!-- The .eof parse and the project write both run off the UI
+                         thread; these two are the only things that say so. An
+                         import failure used to reach the status bar ONLY —
+                         behind this still-open modal. -->
+                    <StackPanel Theme="{DynamicResource DlgBusyPanel}" Classes="DlgBusy" Margin="{DynamicResource GapTopLg}"
+                                IsVisible="{Binding IsBusy}">
+                        <ProgressBar />
+                        <TextBlock Theme="{DynamicResource DlgBusyCaptionText}" Classes="DlgBusyText" Text="{localization:Loc Dialog_EofImport_Busy}" />
+                    </StackPanel>
+                    <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Error" Margin="{DynamicResource GapTopLg}"
+                            IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Import}"
+                                Command="{Binding ImportCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

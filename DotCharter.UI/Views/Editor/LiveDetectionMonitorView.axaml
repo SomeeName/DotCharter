@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:editorVms="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:conv="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.LiveDetectionMonitorView"
+             x:DataType="editorVms:LivePlayViewModel">
+
+    <!-- The live analysis monitor: everything the analyzer hears, newest first,
+         under a strip that says how SURE the detector has been on each string
+         (#314). Hosted by Preview3DView's monitor row; its own view so a smoke
+         test can build it without the Vulkan viewport. -->
+    <DockPanel>
+        <Grid x:Name="StringConfidenceStrip"
+              DockPanel.Dock="Top"
+              ColumnDefinitions="Auto,*"
+              Margin="{StaticResource GapBottomSm}">
+            <TextBlock Text="{localization:Loc LivePlay_Monitor_Confidence}"
+                       ToolTip.Tip="{localization:Loc LivePlay_Monitor_ConfidenceTip}"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="{StaticResource FontSizeXs}"
+                       VerticalAlignment="Center"
+                       Margin="{StaticResource GapRightLg}" />
+            <ItemsControl Grid.Column="1" ItemsSource="{Binding StringConfidence.Strings}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="editorVms:LiveStringConfidenceItem">
+                        <!-- One string: its tuning name in its highway colour, and a
+                             meter as wide as the detector's certainty on it — amber
+                             when that is low. The number is in the tooltip. -->
+                        <StackPanel x:Name="StringConfidenceCell"
+                                    Orientation="Horizontal"
+                                    Spacing="{StaticResource SpaceXs}"
+                                    Margin="{StaticResource GapRightLg}"
+                                    Background="Transparent"
+                                    Opacity="{Binding CellOpacity}"
+                                    ToolTip.Tip="{Binding ToolTip}">
+                            <TextBlock Text="{Binding Label}"
+                                       Foreground="{Binding ColorSlot, Converter={x:Static conv:StringColorSlotBrushConverter.Instance}}"
+                                       FontSize="{StaticResource FontSizeXs}"
+                                       FontWeight="SemiBold"
+                                       MinWidth="10"
+                                       VerticalAlignment="Center" />
+                            <Panel Width="{x:Static editorVms:LiveStringConfidenceItem.MeterWidth}"
+                                   Height="4"
+                                   VerticalAlignment="Center">
+                                <Rectangle Fill="{DynamicResource BorderSubtle}" RadiusX="2" RadiusY="2" />
+                                <Rectangle x:Name="ConfidenceFillSure"
+                                           HorizontalAlignment="Left"
+                                           Width="{Binding FillWidth}"
+                                           RadiusX="2" RadiusY="2"
+                                           Fill="{DynamicResource SuccessColor}"
+                                           IsVisible="{Binding IsSure}" />
+                                <Rectangle x:Name="ConfidenceFillUnsure"
+                                           HorizontalAlignment="Left"
+                                           Width="{Binding FillWidth}"
+                                           RadiusX="2" RadiusY="2"
+                                           Fill="{DynamicResource WarningColor}"
+                                           IsVisible="{Binding IsUnsure}" />
+                            </Panel>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
+
+        <Panel>
+            <TextBlock Text="{localization:Loc LivePlay_Monitor_Empty}"
+                       IsVisible="{Binding !DetectionLog.Count}"
+                       Foreground="{DynamicResource TextMuted}"
+                       FontSize="{StaticResource FontSizeXs}"
+                       VerticalAlignment="Center" HorizontalAlignment="Center" />
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding DetectionLog}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="editorVms:LiveDetectionEntry">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpaceMd}">
+                                <TextBlock Text="{Binding Text}"
+                                           Theme="{StaticResource MonoText}" Classes="Mono"
+                                           FontSize="{StaticResource FontSizeXs}"
+                                           Classes.hit="{Binding IsHit}"
+                                           Classes.miss="{Binding IsMiss}">
+                                    <TextBlock.Styles>
+                                        <Style Selector="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+                                        </Style>
+                                        <Style Selector="TextBlock.hit">
+                                            <Setter Property="Foreground" Value="{DynamicResource SuccessColor}" />
+                                        </Style>
+                                        <Style Selector="TextBlock.miss">
+                                            <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+                                        </Style>
+                                    </TextBlock.Styles>
+                                </TextBlock>
+                                <!-- A miss the detector found evidence for and still
+                                     called a miss: it may be the detector, not the
+                                     player (LiveDetectionCertainty.IsUnsureMiss). -->
+                                <TextBlock x:Name="LowConfidenceBadge"
+                                           Text="{localization:Loc LivePlay_Monitor_LowConfidence}"
+                                           ToolTip.Tip="{localization:Loc LivePlay_Monitor_LowConfidenceTip}"
+                                           IsVisible="{Binding IsUnsure}"
+                                           Foreground="{DynamicResource WarningColor}"
+                                           FontSize="{StaticResource FontSizeXs}"
+                                           FontWeight="SemiBold" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Panel>
+    </DockPanel>
+</UserControl>

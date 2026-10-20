@@ -1,0 +1,153 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="clr-namespace:DotCharter.UI.Views.Settings;assembly=DotCharter"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:controls="using:DotCharter.Tone.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Settings.AppearanceSettingsView"
+             x:DataType="contracts:IAppearanceSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > Appearance: the colour-blind string palette, the interface
+        scale and the per-colour customiser of the app's one theme. Every row
+        previews live. The colours are a token LIST under their headings, one
+        mono hex readout beside each swatch; the pickers bind the contract's
+        hex strings through HexColorConverter.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+        <Style Selector="ItemsControl.ThemeTokens Border.ThemeToken">
+            <Setter Property="Padding" Value="0,8" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireBorder}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+        <Style Selector="ItemsControl.ThemeTokens Border.ThemeToken TextBlock.SettingTitle">
+            <Setter Property="Margin" Value="0" />
+        </Style>
+        <Style Selector="TextBlock.ThemeGroupTitle">
+            <Setter Property="FontSize" Value="{StaticResource FireSizeSm}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextSecondary}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style Selector="TextBlock.ThemeHex">
+            <Setter Property="FontFamily" Value="{StaticResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{StaticResource FireSizeXs}" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextMuted}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- A swatch on a raised, ringed button, so a near-ground colour
+             (the surfaces) still reads as a swatch rather than an empty box. -->
+        <Style Selector="ItemsControl.ThemeTokens ColorPicker /template/ DropDownButton">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource FireTextDim}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <!-- A plain StackPanel, not the SettingsFlow masonry: the colour list is one wide control. -->
+        <StackPanel Margin="0,0,0,72">
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=appearance.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Appearance_InterfaceTitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=appearance.stringPalette}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Appearance_StringColorsTitle}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Appearance_StringColorsSubtitle}" />
+                        </StackPanel>
+                        <ComboBox VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_Appearance_StringColorsTitle}"
+                                  ItemsSource="{Binding StringPaletteChoices}"
+                                  SelectedIndex="{Binding SelectedStringPaletteIndex, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=appearance.uiScale}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_UiScale}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_UiScaleSubtitle}" />
+                        </StackPanel>
+                        <!-- Auto first, then five fixed percentages. The readout is
+                             the APPLIED factor, so under Auto it says what Auto chose. -->
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
+                                      AutomationProperties.Name="{localization:Loc Settings_UiScale}"
+                                      ItemsSource="{Binding UiScaleChoices}"
+                                      SelectedIndex="{Binding UiScaleChoiceIndex, Mode=TwoWay}" />
+                            <!-- Only under Auto, where it says what Auto chose; beside a fixed pick it
+                                 printed the same "200 %" the picker shows. -->
+                            <TextBlock Theme="{StaticResource ValueReadoutText}" Grid.Column="1" Classes="ValueReadout" Text="{Binding UiScaleReadout}"
+                                       IsVisible="{Binding UiScaleChoiceIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=0}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=appearance.group.1}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*,Auto">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Appearance_CustomizeTitle}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Appearance_CustomizeSubtitle}" />
+                        </StackPanel>
+                        <Button Grid.Column="2" Classes="RowAction" VerticalAlignment="Top"
+                                Content="{localization:Loc Settings_Appearance_ResetToPreset}"
+                                Command="{Binding ResetColorsCommand}" />
+                    </Grid>
+
+                    <!-- Each heading flows its colours into as many 320 px columns
+                         as the reading column holds, so a heading never shares a
+                         line with the next one. -->
+                    <ItemsControl x:Name="AppearanceColorGroups" ItemsSource="{Binding ColorGroups}">
+                        <!-- A plain stack, laid out a heading per prewarm turn while
+                             the tab is hidden (#253): the tab was one ~400 ms turn. -->
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <controls:ChunkedStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:IAppearanceColorGroup">
+                                <StackPanel Margin="0,4,0,20" IsVisible="{Binding IsVisible}">
+                                    <TextBlock Classes="ThemeGroupTitle" Text="{Binding Title}" />
+                                    <ItemsControl Classes="ThemeTokens" ItemsSource="{Binding Items}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal" ItemSpacing="32" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="contracts:IAppearanceColorItem">
+                                                <Border Classes="ThemeToken" Width="320" IsVisible="{Binding IsVisible}">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                                                        <TextBlock Theme="{StaticResource SettingTitleText}" Grid.Column="0" Classes="SettingTitle"
+                                                                   VerticalAlignment="Center"
+                                                                   Text="{Binding Name}" />
+                                                        <TextBlock Grid.Column="1" Classes="ThemeHex"
+                                                                   Text="{Binding Hex}" />
+                                                        <ColorPicker Grid.Column="2" VerticalAlignment="Center"
+                                                                     Color="{Binding Hex, Mode=TwoWay, Converter={x:Static converters:HexColorConverter.Instance}}"
+                                                                     AutomationProperties.Name="{Binding Name}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,571 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DotCharter.UI.Controls"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:dlgv="clr-namespace:DotCharter.UI.Views.Dialogs;assembly=DotCharter"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.PatternBuilderDialogView"
+             x:DataType="contracts:IPatternBuilderScreen"
+             x:CompileBindings="True">
+
+    <!-- The Pattern Builder: "alike" as editable data instead of three compiled
+         matchers.
+
+         The layout answers the question the dialog exists for — "which of these
+         definitions is useful?" — which is a COMPARISON, so:
+           · the rail shows every pattern's one-line summary AND its live match
+             count, so definitions can be read against each other without being
+             opened one at a time;
+           · the try-bar sits at the TOP of the facet pane, next to the facets it
+             reacts to, rather than in the footer where a scrolled-away number is
+             no feedback at all;
+           · sections that cannot apply (anchor facets with no anchors in scope,
+             rhythm outside a run) are hidden rather than shown dead.
+
+         Grammar: Views/Dialogs/DialogStyles.axaml. Every DlgRow shares
+         ColumnDefinitions="*,240" — DialogConstructionUiPerfSmokeTests measures
+         that they all land on one right edge.
+         Editing dialog: the scrim deliberately does NOT dismiss (scrim-click discards work; Esc cancels via IsCancel - see docs/agents/ui/dialogs.md, the scrim rule). -->
+    <Grid Classes="DialogFrame">
+        <!-- Pinned tall: with no pattern the right pane is empty, and the card
+             jumped to a third of its height. -->
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Xl" MinHeight="640">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconScript}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle"
+                                   Text="{localization:Loc Dialog_PatternBuilder_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc Dialog_PatternBuilder_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="262,*">
+
+                    <!-- the pattern rail -->
+                    <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto,Auto"
+                          Margin="{DynamicResource FireGapRightLg}">
+                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Grid.Row="0" Classes="DlgSectionLabel"
+                                   Text="{localization:Loc Pattern_Section_Patterns}" />
+
+                        <Border Theme="{DynamicResource DlgListFrameBorder}" Grid.Row="1" Classes="DlgListFrame">
+                            <Panel>
+                            <!-- The ListBox scrolls ITSELF — wrapping it in an outer
+                                 ScrollViewer measured it at full content height, which
+                                 turns off row virtualization and leaves the inner
+                                 scroll viewer permanently inert. The bar stays drawn:
+                                 nine patterns overflow the rail with no other cue. -->
+                            <ListBox ItemsSource="{Binding Patterns}"
+                                     AutomationProperties.Name="{localization:Loc Pattern_Section_Patterns}"
+                                     SelectedItem="{Binding SelectedPattern}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ScrollViewer.AllowAutoHide="False"
+                                     VerticalAlignment="Top">
+                                <ListBox.Styles>
+                                    <!-- A row is announced by its own words, not its CLR type name (#311). -->
+                                    <Style Selector="ListBoxItem" x:DataType="contracts:IMatchPatternRow">
+                                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                    </Style>
+                                </ListBox.Styles>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IMatchPatternRow">
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Name}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <!-- The live match count for THIS pattern against the
+                                                 current seed — the number the comparison is made on.
+                                                 A figure, so the mono face, on the name's line. -->
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Theme="{DynamicResource MonoText}" Classes="Mono"
+                                                       VerticalAlignment="Center"
+                                                       Margin="{DynamicResource FireGapLeftSm}"
+                                                       Text="{Binding MatchCountLabel}"
+                                                       IsVisible="{Binding MatchCountLabel,
+                                                           Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                            <TextBlock Theme="{DynamicResource DlgDescText}" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                       Classes="DlgDesc" Text="{Binding Summary}"
+                                                       TextWrapping="Wrap" MaxLines="2"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Theme="{DynamicResource DlgValueText}" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                                       Classes="DlgValue" Text="{Binding KeyLabel}"
+                                                       IsVisible="{Binding HasKeys}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <!-- Every pattern deleted: say so inside the list, where
+                                 an empty frame otherwise reads as a broken box. -->
+                            <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="RailEmptyHint" Classes="DlgHint" TextWrapping="Wrap"
+                                       Margin="{DynamicResource FirePadCard}" VerticalAlignment="Top"
+                                       Text="{localization:Loc Pattern_EmptyRail}"
+                                       IsVisible="{Binding !Patterns.Count}" />
+                            </Panel>
+                        </Border>
+
+                        <!-- Three outlined actions under the rail: they act on the
+                             list above, so they need a visible box — as bare
+                             DlgLinks they read as three unrelated words.
+
+                             They are NOT equal-width, and that is the fix. A
+                             UniformGrid Columns="3" sizes every column to the
+                             SAME width, which the narrowest label ("Add") sets,
+                             so "Duplicate" wanted 59.6 px in a 47 px slot and was
+                             sliced — in ENGLISH, before translation is even in
+                             the picture. German makes the arithmetic hopeless
+                             ("Hinzufügen"/"Duplizieren"/"Löschen" is 28
+                             characters against 18), so no fixed division of this
+                             rail fits three of these words on one line. Each
+                             button sizes to its own content now and the cluster
+                             WRAPS when the line runs out. -->
+                        <WrapPanel Grid.Row="2" Orientation="Horizontal"
+                                   Margin="{DynamicResource FireGapTopSm}"
+                                   ItemSpacing="{DynamicResource FireSpaceSm}"
+                                   LineSpacing="{DynamicResource FireSpaceSm}">
+                            <Button x:Name="RailAdd" Theme="{DynamicResource SubtleButton}" Classes="Subtle" MinWidth="0"
+                                    HorizontalContentAlignment="Center"
+                                    Content="{localization:Loc Pattern_Add}"
+                                    Command="{Binding AddPatternCommand}" />
+                            <Button x:Name="RailDuplicate" Theme="{DynamicResource SubtleButton}" Classes="Subtle" MinWidth="0"
+                                    HorizontalContentAlignment="Center"
+                                    Content="{localization:Loc Pattern_Duplicate}"
+                                    Command="{Binding DuplicatePatternCommand}" />
+                            <Button x:Name="RailDelete" Theme="{DynamicResource SubtleButton}" Classes="Subtle Danger" MinWidth="0"
+                                    HorizontalContentAlignment="Center"
+                                    Content="{localization:Loc Pattern_Delete}"
+                                    Command="{Binding DeletePatternCommand}" />
+                        </WrapPanel>
+
+                        <!-- Duplicate, Delete and the three try-bar verbs all need
+                             a picked pattern. They used to be enabled on an empty
+                             rail and no-op in silence; the reason binds to the
+                             INVERSE of the very predicate that greys them, so it
+                             can never show beside a live control. -->
+                        <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="RailNoSelectionHint" Grid.Row="3" Classes="DlgHint"
+                                   Margin="{DynamicResource FireGapTopSm}" TextWrapping="Wrap"
+                                   Text="{Binding NoPatternSelectedReason}"
+                                   IsVisible="{Binding !HasSelectedPattern}" />
+                    </Grid>
+
+                    <!-- the facets of the selected pattern -->
+                    <Grid Grid.Column="1" RowDefinitions="Auto,*">
+
+                        <!-- Try-bar: what the pattern finds RIGHT NOW, and the three
+                             ways to run it without binding a key first. -->
+                        <Border Theme="{DynamicResource DlgStripBorder}" Grid.Row="0" Classes="DlgStrip"
+                                Classes.Ok="{Binding SeedIsUsable}"
+                                Classes.Notice="{Binding !HasSeed}"
+                                Classes.Error="{Binding SeedIsFromAnotherArrangement}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding MatchSummary}" TextWrapping="Wrap" />
+                                    <TextBlock Theme="{DynamicResource DlgHintText}" Classes="DlgHint" Text="{Binding SeedSummary}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                            Spacing="{DynamicResource FireSpaceXs}"
+                                            VerticalAlignment="Center">
+                                    <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                            Content="{localization:Loc Pattern_Run_Previous}"
+                                            ToolTip.Tip="{localization:Loc Pattern_Verb_Previous}"
+                                            AutomationProperties.Name="{localization:Loc Pattern_Verb_Previous}"
+                                            Command="{Binding RunPreviousCommand}" />
+                                    <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                            Content="{localization:Loc Pattern_Run_Next}"
+                                            ToolTip.Tip="{localization:Loc Pattern_Verb_Next}"
+                                            AutomationProperties.Name="{localization:Loc Pattern_Verb_Next}"
+                                            Command="{Binding RunNextCommand}" />
+                                    <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                            Content="{localization:Loc Pattern_Run_Select}"
+                                            ToolTip.Tip="{localization:Loc Pattern_Verb_Select}"
+                                            AutomationProperties.Name="{localization:Loc Pattern_Verb_Select}"
+                                            Command="{Binding RunSelectCommand}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="1" Classes="DialogBody">
+                            <!-- The gate and the facet form are two panels on purpose:
+                                 IsVisible has to be evaluated against the DIALOG, while
+                                 everything below it binds to the selected ROW. One panel
+                                 carrying both would compile the gate against the row. -->
+                            <StackPanel x:Name="PatternEditorBody" IsVisible="{Binding SelectedPattern,
+                                            Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <StackPanel DataContext="{Binding $parent[UserControl].((contracts:IPatternBuilderScreen)DataContext).SelectedPattern}"
+                                            x:DataType="contracts:IMatchPatternRow">
+
+                                    <!-- In a section card like every other row, so its field
+                                         ends on the same right edge as the pickers below. -->
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                       Text="{localization:Loc Pattern_Name}" />
+                                            <TextBox VerticalAlignment="Center" Grid.Column="1" dlgv:FocusOnOpen.IsTarget="True"
+                                                     Text="{Binding Name}"
+                                                     AutomationProperties.Name="{localization:Loc Pattern_Name}" />
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- what it looks at -->
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                               Text="{localization:Loc Pattern_Section_Scope}" />
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <StackPanel>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_Scope}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_Scope_Desc}" />
+                                                </StackPanel>
+                                                <UniformGrid Grid.Column="1" Columns="2" Rows="2"
+                                                             VerticalAlignment="Center">
+                                                    <CheckBox IsChecked="{Binding ScopeNotes}"
+                                                              Content="{localization:Loc Pattern_Scope_Notes}" />
+                                                    <CheckBox IsChecked="{Binding ScopeChords}"
+                                                              Content="{localization:Loc Pattern_Scope_Chords}" />
+                                                    <CheckBox IsChecked="{Binding ScopeHandShapes}"
+                                                              Content="{localization:Loc Pattern_Scope_HandShapes}" />
+                                                    <CheckBox IsChecked="{Binding ScopeAnchors}"
+                                                              Content="{localization:Loc Pattern_Scope_Anchors}" />
+                                                </UniformGrid>
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_Grouping}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_Grouping_Desc}" />
+                                                </StackPanel>
+                                                <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding Choices.Grouping}"
+                                                          AutomationProperties.Name="{localization:Loc Pattern_Grouping}"
+                                                          SelectedItem="{Binding SelectedGrouping}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IPatternChoice">
+                                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_Range}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_Range_Desc}" />
+                                                </StackPanel>
+                                                <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding Choices.Range}"
+                                                          AutomationProperties.Name="{localization:Loc Pattern_Range}"
+                                                          SelectedItem="{Binding SelectedRange}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IPatternChoice">
+                                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- the shape -->
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                               Text="{localization:Loc Pattern_Section_Shape}" />
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <StackPanel>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_FretRule}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_FretRule_Desc}" />
+                                                </StackPanel>
+                                                <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding Choices.Frets}"
+                                                          AutomationProperties.Name="{localization:Loc Pattern_FretRule}"
+                                                          SelectedItem="{Binding SelectedFretRule}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IPatternChoice">
+                                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_StringRule}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_StringRule_Desc}" />
+                                                </StackPanel>
+                                                <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding Choices.Strings}"
+                                                          AutomationProperties.Name="{localization:Loc Pattern_StringRule}"
+                                                          SelectedItem="{Binding SelectedStringRule}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IPatternChoice">
+                                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Sub" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_MaxFretDistance}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_MaxFretDistance_Desc}" />
+                                                </StackPanel>
+                                                <NumericUpDown VerticalAlignment="Center" Grid.Column="1" Minimum="0" Maximum="24"
+                                                               AutomationProperties.Name="{localization:Loc Pattern_MaxFretDistance}"
+                                                               Increment="1" FormatString="0"
+                                                               Value="{Binding MaxFretDistance}" />
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                           Text="{localization:Loc Pattern_MatchSize}" />
+                                                <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                              AutomationProperties.Name="{localization:Loc Pattern_MatchSize}"
+                                                              IsChecked="{Binding MatchSize}" />
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_MatchSoundKind}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_MatchSoundKind_Desc}" />
+                                                </StackPanel>
+                                                <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                              AutomationProperties.Name="{localization:Loc Pattern_MatchSoundKind}"
+                                                              IsChecked="{Binding MatchSoundKind}" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- timing -->
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                               Text="{localization:Loc Pattern_Section_Timing}" />
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <StackPanel>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240"
+                                                  IsVisible="{Binding IsRun}">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_Rhythm}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_Rhythm_Desc}" />
+                                                </StackPanel>
+                                                <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding Choices.Rhythm}"
+                                                          AutomationProperties.Name="{localization:Loc Pattern_Rhythm}"
+                                                          SelectedItem="{Binding SelectedRhythm}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IPatternChoice">
+                                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                           Text="{localization:Loc Pattern_Sustain}" />
+                                                <ComboBox VerticalAlignment="Center" Grid.Column="1" ItemsSource="{Binding Choices.Sustain}"
+                                                          AutomationProperties.Name="{localization:Loc Pattern_Sustain}"
+                                                          SelectedItem="{Binding SelectedSustain}">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="contracts:IPatternChoice">
+                                                            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_MatchBeatOffset}" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                               Text="{localization:Loc Pattern_MatchBeatOffset_Desc}" />
+                                                </StackPanel>
+                                                <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                              AutomationProperties.Name="{localization:Loc Pattern_MatchBeatOffset}"
+                                                              IsChecked="{Binding MatchBeatOffset}" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- techniques -->
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                               Text="{localization:Loc Pattern_Section_Techniques}" />
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <StackPanel>
+                                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                       Text="{localization:Loc Pattern_Techniques_Desc}" />
+                                            <ItemsControl ItemsSource="{Binding Techniques}"
+                                                          Margin="{DynamicResource FireGapTopSm}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <UniformGrid Columns="3" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="contracts:IPatternToggle">
+                                                        <CheckBox IsChecked="{Binding IsSelected}"
+                                                                  Content="{Binding Label}" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- chord templates -->
+                                    <StackPanel IsVisible="{Binding ShowsTemplateFacets}">
+                                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                                   Text="{localization:Loc Pattern_Section_Templates}" />
+                                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                            <StackPanel>
+                                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                    <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                                   Text="{localization:Loc Pattern_MatchFingering}" />
+                                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                                   Text="{localization:Loc Pattern_MatchFingering_Desc}" />
+                                                    </StackPanel>
+                                                    <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                                  AutomationProperties.Name="{localization:Loc Pattern_MatchFingering}"
+                                                                  IsChecked="{Binding MatchFingering}" />
+                                                </Grid>
+                                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_MatchChordName}" />
+                                                    <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                                  AutomationProperties.Name="{localization:Loc Pattern_MatchChordName}"
+                                                                  IsChecked="{Binding MatchChordName}" />
+                                                </Grid>
+                                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                                    <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                                   Text="{localization:Loc Pattern_MatchArpeggio}" />
+                                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                                   Text="{localization:Loc Pattern_MatchArpeggio_Desc}" />
+                                                    </StackPanel>
+                                                    <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                                  AutomationProperties.Name="{localization:Loc Pattern_MatchArpeggio}"
+                                                                  IsChecked="{Binding MatchArpeggio}" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- fret-hand positions -->
+                                    <StackPanel IsVisible="{Binding ShowsAnchorFacets}">
+                                        <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                                   Text="{localization:Loc Pattern_Section_Anchors}" />
+                                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                            <StackPanel>
+                                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                    <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                               Text="{localization:Loc Pattern_MatchAnchorWidth}" />
+                                                    <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                                  AutomationProperties.Name="{localization:Loc Pattern_MatchAnchorWidth}"
+                                                                  IsChecked="{Binding MatchAnchorWidth}" />
+                                                </Grid>
+                                                <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                                    <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                                   Text="{localization:Loc Pattern_MatchAnchorSpan}" />
+                                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                                   Text="{localization:Loc Pattern_MatchAnchorSpan_Desc}" />
+                                                    </StackPanel>
+                                                    <ToggleSwitch VerticalAlignment="Center" Grid.Column="1"
+                                                                  AutomationProperties.Name="{localization:Loc Pattern_MatchAnchorSpan}"
+                                                                  IsChecked="{Binding MatchAnchorSpan}" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- companions -->
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                               Text="{localization:Loc Pattern_Section_Companions}" />
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <StackPanel>
+                                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                       Text="{localization:Loc Pattern_Companions_Desc}" />
+                                            <ItemsControl ItemsSource="{Binding Companions}"
+                                                          Margin="{DynamicResource FireGapTopSm}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="contracts:IPatternToggle">
+                                                        <CheckBox AutomationProperties.Name="{Binding Label}" IsChecked="{Binding IsSelected}"
+                                                                  Margin="{DynamicResource FireGapRowSm}">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Label}" />
+                                                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                                           Text="{Binding Description}"
+                                                                           TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- keys -->
+                                    <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                               Text="{localization:Loc Pattern_Section_Keys}" />
+                                    <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                                        <StackPanel>
+                                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                       Text="{localization:Loc Pattern_Keys_Desc}" />
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                           Text="{localization:Loc Pattern_Verb_Select}" />
+                                                <controls:KeybindCaptureBox Grid.Column="1"
+                                                                            Chord="{Binding SelectKey, Mode=TwoWay}" />
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,240">
+                                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                           Text="{localization:Loc Pattern_Verb_Next}" />
+                                                <controls:KeybindCaptureBox Grid.Column="1"
+                                                                            Chord="{Binding NextKey, Mode=TwoWay}" />
+                                            </Grid>
+                                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,240">
+                                                <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                                           Text="{localization:Loc Pattern_Verb_Previous}" />
+                                                <controls:KeybindCaptureBox Grid.Column="1"
+                                                                            Chord="{Binding PreviousKey, Mode=TwoWay}" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel>
+                        <!-- A silently overridden keybind's ONLY warning. Full width
+                             above the actions so a long chord list wraps instead of
+                             squeezing the buttons. -->
+                        <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" IsVisible="{Binding HasConflict}">
+                            <TextBlock Text="{Binding ConflictSummary}" TextWrapping="Wrap" />
+                        </Border>
+                        <Grid ColumnDefinitions="Auto,*">
+                            <StackPanel Theme="{DynamicResource DlgActionsLeftPanel}" Grid.Column="0" Classes="DlgActionsLeft">
+                                <Button Classes="DlgLink"
+                                        Content="{localization:Loc Pattern_RestoreBuiltIns}"
+                                        Command="{Binding RestoreBuiltInsCommand}" />
+                            </StackPanel>
+                            <StackPanel Theme="{DynamicResource DlgActionsPanel}" Grid.Column="1" Classes="DlgActions">
+                                <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                        Content="{localization:Loc Action_Cancel}"
+                                        Command="{Binding CancelCommand}" IsCancel="True" />
+                                <Button Classes="DlgAction Primary"
+                                        Content="{localization:Loc Action_Save}"
+                                        Command="{Binding SaveCommand}" IsDefault="True" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,151 @@
+{
+  "page": "tone-rig.md",
+  "shots": [
+    {
+      "id": "rig-overview",
+      "scene": "rig",
+      "args": {
+        "select": "overdrive"
+      },
+      "callouts": [
+        {
+          "title": "Preset",
+          "text": "The tone's name; click it to browse your tones. Save keeps it, the arrows step through your presets.",
+          "name": "RigBrowseButton"
+        },
+        {
+          "title": "Compare",
+          "text": "Two versions of the tone, A and B, to switch between while you play.",
+          "name": "RigSceneStrip"
+        },
+        {
+          "title": "Bypass",
+          "text": "Your dry guitar, to hear what the rig adds.",
+          "name": "RigMasterBypass"
+        },
+        {
+          "title": "Scenes",
+          "text": "Up to eight variations of the tone, switched by click or MIDI.",
+          "side": "bottom",
+          "name": "RigSceneSlots"
+        },
+        {
+          "title": "Editor",
+          "text": "The selected unit, with all its controls.",
+          "name": "RigDockBody"
+        },
+        {
+          "title": "Signal chain",
+          "text": "The units in the order your signal passes them. Drag to reorder, click to edit.",
+          "name": "RigBoard"
+        },
+        {
+          "title": "Routing",
+          "text": "Series, two lanes or three lanes in parallel.",
+          "name": "RigRoutingRail"
+        },
+        {
+          "title": "Gear",
+          "text": "Every amp, cabinet and effect. Add one with + or drag it onto the chain.",
+          "name": "RigGearPanel"
+        },
+        {
+          "title": "Tuner",
+          "text": "A tuner that is always on.",
+          "name": "RigTunerStrip"
+        },
+        {
+          "title": "Meters",
+          "text": "Tempo for time-based effects, and input and output levels.",
+          "name": "RigFooter"
+        }
+      ]
+    },
+    {
+      "id": "rig-tones",
+      "scene": "rig",
+      "args": {
+        "state": "tones"
+      },
+      "callouts": [
+        {
+          "title": "Tones",
+          "text": "Your saved tones and the song's tones. Pick one to load it.",
+          "name": "RigToneBrowser"
+        },
+        {
+          "title": "Search",
+          "text": "Finds a tone by name.",
+          "name": "RigBrowserSearch"
+        },
+        {
+          "title": "Collections",
+          "text": "Your tones, the song's tones and the presets, by group.",
+          "name": "RigBrowserRail"
+        },
+        {
+          "title": "Save",
+          "text": "Saves the current rig as a tone.",
+          "name": "RigBrowserSave"
+        }
+      ]
+    },
+    {
+      "id": "riglab-audio",
+      "scene": "riglab",
+      "args": {
+        "tab": "Audio"
+      },
+      "callouts": [
+        {
+          "title": "Tabs",
+          "text": "RigLab is the rig on its own, without the editor: Rig, Plugins, Audio and AI.",
+          "name": "RigLabTabs"
+        },
+        {
+          "title": "Audio",
+          "text": "Driver, devices, input channels, sample rate and buffer size.",
+          "name": "AudioSettingsRows"
+        }
+      ]
+    },
+    {
+      "id": "riglab-plugins",
+      "scene": "riglab",
+      "args": {
+        "tab": "Plugins"
+      },
+      "callouts": [
+        {
+          "title": "Plugins",
+          "text": "VST3 plugins in the rig's chain.",
+          "name": "RigLabVstRack"
+        },
+        {
+          "title": "Add plugin",
+          "text": "Picks a VST3 plugin to add.",
+          "name": "VstRackAddButton"
+        }
+      ]
+    },
+    {
+      "id": "riglab-ai",
+      "scene": "riglab",
+      "args": {
+        "tab": "Ai"
+      },
+      "callouts": [
+        {
+          "title": "AI provider",
+          "text": "Which AI model designs tones for you.",
+          "name": "AiProviderCard"
+        },
+        {
+          "title": "Tone3000",
+          "text": "Signs in to download community amp captures.",
+          "name": "AiTone3000Card"
+        }
+      ]
+    }
+  ]
+}

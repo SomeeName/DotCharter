@@ -1,0 +1,117 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.SoundTaskView"
+             x:DataType="viewModels:InspectorViewModel">
+    <!-- The Sound tab with nothing selected, TASK section (#601). Nothing selected is most of a
+         charting session, so it leads with the NEXT thing that needs work ("7 chords need
+         fingerings · Fix the next one", SoundNextTaskViewModel), then the other open tasks one
+         line each, then where the pen writes. "Fix the next one" and every line are the queue's
+         own triage (set the filter, jump to its first match). The two verbs the empty state's
+         footer carried stay here: auto-fill and the way to the export check. -->
+    <StackPanel Spacing="{StaticResource SpaceMd}">
+        <Border x:Name="SoundTaskCard" Classes="InspectorCard" BorderBrush="{DynamicResource FireAccentBorderSoft}">
+            <StackPanel Spacing="{StaticResource SpaceSm}">
+                <TextBlock Text="{Binding NextTask.Kicker}" FontSize="{StaticResource FireSizeNano}"
+                           Foreground="{DynamicResource FireTextMuted}" />
+                <TextBlock x:Name="SoundTaskTitle" Text="{Binding NextTask.Title}" FontSize="{StaticResource FireSizeLg}"
+                           FontFamily="{StaticResource FireFontDisplay}" FontWeight="{StaticResource FireWeightDisplay}"
+                           Foreground="{DynamicResource FireTextBright}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding NextTask.Detail}" FontSize="{StaticResource FireSizeXs}"
+                           Foreground="{DynamicResource FireTextSecondary}" TextWrapping="Wrap" />
+                <WrapPanel ItemSpacing="{StaticResource SpaceSm}" LineSpacing="{StaticResource SpaceXs}">
+                    <Button x:Name="SoundTaskFixNext" Theme="{StaticResource PrimaryButton}" Classes="Primary Compact"
+                            Content="{localization:Loc Inspector_Task_FixNext}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Task_FixNext}"
+                            ToolTip.Tip="{localization:Loc Inspector_Task_FixNextTip}"
+                            Command="{Binding NextTask.FixNextCommand}"
+                            IsVisible="{Binding NextTask.HasTask}" />
+                    <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                            Content="{localization:Loc ChordTemplate_GenerateAllFingerings}"
+                            AutomationProperties.Name="{localization:Loc ChordTemplate_GenerateAllFingerings}"
+                            Command="{Binding ChordTemplateEditor.GenerateAllFingeringsCommand}"
+                            ToolTip.Tip="{localization:Loc ChordTemplate_GenerateAllFingeringsTip}" />
+                    <!-- Opens the Issues tab, the ONE home of Check export (#119). -->
+                    <Button Theme="{StaticResource SecondaryButton}" Classes="Secondary Compact"
+                            Content="{localization:Loc Inspector_Export_Open}"
+                            AutomationProperties.Name="{localization:Loc Inspector_Export_Open}"
+                            Command="{Binding ShowExportReadinessCommand}"
+                            ToolTip.Tip="{localization:Loc Inspector_Export_OpenTip}" />
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- THEN: the other open tasks, one line each, the same triage. -->
+        <StackPanel x:Name="SoundTaskOthers" Spacing="{StaticResource SpaceXxs}">
+            <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    AutomationProperties.Name="{localization:Loc Inspector_Empty_Tile_Fingerings}"
+                    ToolTip.Tip="{localization:Loc Inspector_Queue_Filter_MissingFingering}"
+                    Command="{Binding NextTask.TriageCommand}"
+                    CommandParameter="{x:Static viewModels:SoundQueueFilter.MissingFingering}"
+                    IsVisible="{Binding NextTask.ShowFingeringRow}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+                    <TextBlock Grid.Column="0" Text="{Binding Queue.MissingFingeringCount}" FontFamily="{StaticResource FireFontMono}"
+                               Foreground="{DynamicResource FireWarning}" />
+                    <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Empty_Tile_Fingerings}" TextTrimming="CharacterEllipsis" />
+                    <PathIcon Grid.Column="2" Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                </Grid>
+            </Button>
+            <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    AutomationProperties.Name="{localization:Loc Inspector_Empty_Tile_Unnamed}"
+                    ToolTip.Tip="{localization:Loc Inspector_Queue_Filter_UnnamedChord}"
+                    Command="{Binding NextTask.TriageCommand}"
+                    CommandParameter="{x:Static viewModels:SoundQueueFilter.UnnamedChord}"
+                    IsVisible="{Binding NextTask.ShowUnnamedRow}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+                    <TextBlock Grid.Column="0" Text="{Binding Queue.UnnamedChordCount}" FontFamily="{StaticResource FireFontMono}"
+                               Foreground="{DynamicResource FireWarning}" />
+                    <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Empty_Tile_Unnamed}" TextTrimming="CharacterEllipsis" />
+                    <PathIcon Grid.Column="2" Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                </Grid>
+            </Button>
+            <!-- Lint-based, in SOUNDS; the verdict is the Issues tab's (#119). -->
+            <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    AutomationProperties.Name="{localization:Loc Inspector_Empty_Tile_Blockers}"
+                    ToolTip.Tip="{Binding Queue.BlocksExportTileTip}"
+                    Command="{Binding NextTask.TriageCommand}"
+                    CommandParameter="{x:Static viewModels:SoundQueueFilter.BlocksExport}"
+                    IsVisible="{Binding NextTask.ShowBlockingRow}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="{StaticResource SpaceSm}">
+                    <TextBlock Grid.Column="0" Text="{Binding Queue.BlocksExportCount}" FontFamily="{StaticResource FireFontMono}"
+                               Foreground="{DynamicResource FireDanger}" />
+                    <TextBlock Grid.Column="1" Text="{localization:Loc Inspector_Empty_Tile_Blockers}" TextTrimming="CharacterEllipsis" />
+                    <PathIcon Grid.Column="2" Data="{DynamicResource IconChevronRight}" Width="9" Height="9" />
+                </Grid>
+            </Button>
+        </StackPanel>
+
+        <!-- AT THE PLAYHEAD: where the pen writes, and the step into the next sound. The keyboard
+             line is a READOUT of what the keyboard already owns (the pen's fret and the string
+             mask), never a second place to change them. -->
+        <Border x:Name="SoundTaskPlayhead" Classes="InspectorCard">
+            <StackPanel Spacing="{StaticResource SpaceXs}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource IconClock}" Classes="SectionIcon" Margin="0" />
+                    <TextBlock Grid.Column="1" Classes="InspectorCardTitle" Text="{localization:Loc Inspector_Empty_AtPlayhead}" />
+                </Grid>
+                <TextBlock Text="{Binding PlayheadLabel}" FontFamily="{StaticResource FireFontMono}"
+                           FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource TextPrimary}" TextWrapping="Wrap" />
+                <WrapPanel x:Name="SoundTaskKeyboardReadout" Orientation="Horizontal" ItemSpacing="{StaticResource SpaceXs}"
+                           ToolTip.Tip="{localization:Loc Inspector_Queue_KeyboardTip}">
+                    <TextBlock FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource TextDim}" Text="⌨" />
+                    <TextBlock FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource TextDim}" Text="{Binding StringMask.PenFretReadout}" />
+                    <TextBlock FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource TextDim}" Text="·" />
+                    <TextBlock FontFamily="{StaticResource FireFontMono}" FontSize="{StaticResource FontSizeXs}" Foreground="{DynamicResource TextDim}" Text="{Binding StringMask.MaskReadout}" />
+                </WrapPanel>
+                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" HorizontalAlignment="Left"
+                        Content="{localization:Loc Inspector_Empty_SelectNext}"
+                        Command="{Binding Queue.NextMatchCommand}"
+                        IsEnabled="{Binding Queue.HasMatches}" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>
