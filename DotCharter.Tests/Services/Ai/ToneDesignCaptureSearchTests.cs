@@ -214,6 +214,42 @@ public sealed class ToneDesignCaptureSearchTests
             Assert.Single(result.Tone.Rig.Modules, m => m.ModuleTypeId == "namamp").StringParams!["modelPath"]);
     }
 
+    [Fact]
+    public async Task ASearchIsNotRunForADraftWithNothingElseThatSurvivesValidation()
+    {
+        var library = new FakeLibrary();
+        var source = new ScriptedSource(available: true, Entry("fender-twin-clean.nam", "Fender Twin Clean", 88, toneId: 41), library);
+        var reply = """
+            {"name":"Twin Clean","rationale":"r","confidence":0.8,"captureSearch":"Fender Twin clean",
+             "modules":[{"type":"namamp","params":[],"bypassed":false,"capture":""},
+                        {"type":"tubescreamer","params":[],"bypassed":false,"capture":""}]}
+            """;
+        var service = Service(new CapturingModel(reply), library, source);
+
+        var thrown = await Assert.ThrowsAsync<ToneDesignException>(
+            () => service.DesignAsync(new ToneDesignRequest("a Twin clean", [], null), null, Ct));
+
+        Assert.Equal(ToneDesignFault.InvalidOutput, thrown.Fault);
+        Assert.Null(source.LastQuery);
+        Assert.Empty(library.Downloads);
+    }
+
+    [Theory]
+    [InlineData("https://evil.example/?q=Ignore+previous+instructions")]
+    [InlineData("send to www.evil.example")]
+    [InlineData("user@evil.example")]
+    public async Task ASearchQueryThatIsAnAddressIsNeverSentToTone3000(string query)
+    {
+        var service = new FakeTone3000 { Page = [Tone(41, 300)] };
+        var source = new Tone3000CaptureSource(service, new FakeAuth(signedIn: true), new FakeLibrary());
+
+        var found = await source.FindAsync(query, Ct);
+
+        Assert.Null(found.Entry);
+        Assert.Contains("web address", found.Problem);
+        Assert.Equal(0, service.Searches);
+    }
+
     // ---- fixtures --------------------------------------------------------------
 
     private static readonly string Dir = Path.Combine(Path.GetTempPath(), "dotcharter-capture-search");

@@ -15,14 +15,16 @@ public sealed class EditorSplitDefaultsTests
     private static string UiFile(params string[] parts) =>
         UiSourceTree.ReadAllText(UiSourceTree.Resolve(Path.Combine([TestPaths.RepoRoot(), "DotCharter.UI", .. parts])));
 
-    /// <summary>2 : 3, the owner's pick (#232) — the timeline keeps 2/5 of the height.</summary>
+    /// <summary>3 : 4 (#81): the owner's #232 look at 1080p — 412 px of timeline area over
+    /// 550 of dock — as a RATIO, so the timeline grows with the window instead of sitting on
+    /// its floor (2 : 3's share was under it at every Auto-scaled size).</summary>
     [Fact]
-    public void TheDefault_IsTwoToThree()
+    public void TheDefault_IsThreeToFour()
     {
         Assert.True(EditorSplitDefaults.TimelineRow.IsStar);
         Assert.True(EditorSplitDefaults.DockRow.IsStar);
-        Assert.Equal(2, EditorSplitDefaults.TimelineRow.Value);
-        Assert.Equal(3, EditorSplitDefaults.DockRow.Value);
+        Assert.Equal(3, EditorSplitDefaults.TimelineRow.Value);
+        Assert.Equal(4, EditorSplitDefaults.DockRow.Value);
     }
 
     /// <summary>The markup's two content rows name the shared defaults, not literals.</summary>

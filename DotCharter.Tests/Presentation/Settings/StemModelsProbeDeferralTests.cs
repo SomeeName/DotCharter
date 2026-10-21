@@ -1,6 +1,7 @@
 using DotCharter.Presentation.Navigation;
 using DotCharter.Presentation.Screens.Settings;
 using DotCharter.Services.Audio.StemSeparation;
+using DotCharter.Tests.Presentation.Dialogs;
 using DotCharter.Tone.Diagnostics;
 using DotCharter.Tone.Infrastructure.Storage;
 
@@ -153,9 +154,11 @@ public sealed class StemModelsProbeDeferralTests : IDisposable
         var localization = FakeLocalization.English();
         return new StemModelsSettingsViewModel(
             manager, localization, ui,
-            new StemBackendViewModel(manager, new FakeConfigurationService(), localization, separation),
-            new GpuRuntimeViewModel(localization, ui),
-            new StemCacheViewModel(localization, ui));
+            new StemModelsBlocks(
+                new StemBackendViewModel(manager, new FakeConfigurationService(), localization, separation),
+                new GpuRuntimeViewModel(localization, ui),
+                new StemCacheViewModel(localization, ui)),
+            new ScriptedDialogs(_ => throw new InvalidOperationException("no dialog expected")));
     }
 
     private static string Read(params string[] parts)

@@ -117,6 +117,11 @@ public static class GpExporter
             .Select(v => BuildEventList(v.Notes, v.Chords))
             .ToList();
 
+        // A sound written past its bar's end continues into the next bar as tied beats
+        // (one carry per voice), as Guitar Pro itself writes a note across a bar line.
+        var chartCarry = new BarCarry(Legato.Of(events));
+        var sidecarCarries = sidecars.Select(e => new BarCarry(Legato.Of(e))).ToList();
+
         var startBeat = 0;
         while (startBeat < beats.Count)
         {
@@ -137,13 +142,13 @@ public static class GpExporter
 
             var chartVoice = new AT.Voice();
             bar.AddVoice(chartVoice);
-            FillBar(chartVoice, events, startBeat, beatsInBar, denominator, capo);
+            FillBar(chartVoice, events, startBeat, beatsInBar, denominator, capo, chartCarry);
 
-            foreach (var sidecarEvents in sidecars)
+            for (var v = 0; v < sidecars.Count; v++)
             {
                 var sidecarVoice = new AT.Voice();
                 bar.AddVoice(sidecarVoice);
-                FillBar(sidecarVoice, sidecarEvents, startBeat, beatsInBar, denominator, capo);
+                FillBar(sidecarVoice, sidecars[v], startBeat, beatsInBar, denominator, capo, sidecarCarries[v]);
             }
 
             startBeat += beatsInBar;
@@ -161,7 +166,8 @@ public static class GpExporter
         var standard = arrangement.StringCount switch
         {
             4 => [28, 33, 38, 43],
-            5 => [23, 28, 33, 38, 43],
+            // 5 is E A D G B, an octave down for a bass: the importers subtract the same row.
+            5 => TuningUtilities.GetStandardMidiPitchesFor(5, arrangement.ArrangementType),
             7 or 8 => TuningUtilities.GetStandardMidiPitches(arrangement.StringCount),
             _ => [40, 45, 50, 55, 59, 64]
         };
@@ -256,11 +262,65 @@ public static class GpExporter
         }
     }
 
+    /// <summary>
+    ///     The part of a voice's last sound that runs past its bar's end, in QUARTER notes,
+    ///     still to be written into the next bar as tie destinations. Cut at the bar line, a
+    ///     note tied across a bar would come back as a shorter note followed by a rest — and
+    ///     the re-import reads that rest as staccato and accents the note.
+    /// </summary>
+    private sealed class BarCarry(Legato legato)
+    {
+        public EventSlot? Slot { get; set; }
+        public double Quarters { get; set; }
+
+        /// <summary>The voice's legato marks (<see cref="Legato.Of" />).</summary>
+        public Legato Legato { get; } = legato;
+    }
+
+    /// <summary>
+    ///     How a voice's legato is spelled in Guitar Pro, which marks the ORIGIN of a
+    ///     hammer-on or pull-off and finds the destination itself, on the same string.
+    /// </summary>
+    /// <param name="Origins">For every sound flagged <see cref="HopoType.HammerOn" /> /
+    /// <see cref="HopoType.PullOff" /> (the chart flags the DESTINATION), the previous sound on
+    /// its string. Marking only an origin whose destination is the very next event of the same
+    /// bar would lose every legato note after another string's note, or at the start of a bar.</param>
+    /// <param name="LeftHandTaps">Hammer-ons with NO previous sound on their string: a note the
+    /// fretting hand sounds on its own, which is exactly Guitar Pro's left-hand tapping
+    /// (<c>LeftHandTapped</c>). The importer reads that back as a hammer-on
+    /// (<c>GpNoteParser.ApplyHopo</c>); with no origin to mark, a plain hammer-on came back
+    /// as an ordinary picked note.</param>
+    private sealed record Legato(IReadOnlySet<IGuitarSound> Origins, IReadOnlySet<IGuitarSound> LeftHandTaps)
+    {
+        public static readonly Legato None = new(new HashSet<IGuitarSound>(), new HashSet<IGuitarSound>());
+
+        public static Legato Of(List<TimedEvent> events)
+        {
+            var origins = new HashSet<IGuitarSound>(ReferenceEqualityComparer.Instance);
+            var leftHandTaps = new HashSet<IGuitarSound>(ReferenceEqualityComparer.Instance);
+            var last = new Dictionary<int, IGuitarSound>();
+            foreach (var ev in events)
+            {
+                IEnumerable<IGuitarSound> sounds = ev.Note is { } note ? [note] : ev.Chord!.ChordNotes;
+                foreach (var sound in sounds)
+                {
+                    if (sound.Hopo is not (HopoType.HammerOn or HopoType.PullOff)) continue;
+                    if (last.TryGetValue(sound.StringIndex, out var origin)) origins.Add(origin);
+                    else if (sound.Hopo == HopoType.HammerOn) leftHandTaps.Add(sound);
+                }
+
+                foreach (var sound in sounds) last[sound.StringIndex] = sound;
+            }
+
+            return new Legato(origins, leftHandTaps);
+        }
+    }
+
     private static void FillBar(AT.Voice voice, List<TimedEvent> events, int startBeat, int beatsInBar,
-        int denominator, int capo)
+        int denominator, int capo, BarCarry carry)
     {
         var totalTicks = beatsInBar * TicksPerBeat;
-        var chunks = BuildDurationChunks(denominator);
+        var chunks = new Durations(BuildDurationChunks(denominator));
 
         var slots = new List<EventSlot>();
         foreach (var ev in events)
@@ -282,6 +342,21 @@ public static class GpExporter
         }
 
         var cursor = 0;
+        if (carry.Slot is { } carried)
+        {
+            var carriedTicks = (int)Math.Round(carry.Quarters * TicksPerBeat * denominator / 4);
+            var tied = Math.Min(carriedTicks, slots.Count > 0 ? slots[0].Tick : totalTicks);
+            EmitTied(voice, carried, tied, chunks, capo);
+            cursor = tied;
+            // Only a bar with nothing else in it passes the rest of the carry on.
+            carry.Quarters = slots.Count == 0 ? carry.Quarters - tied * 4.0 / (TicksPerBeat * denominator) : 0;
+            if (carry.Quarters * TicksPerBeat * denominator / 4 < 1) carry.Slot = null;
+        }
+
+        // Whether anything sounds after this bar: only then does a carry make sense.
+        var barEndBeat = startBeat + beatsInBar;
+        var following = events.FirstOrDefault(e => e.Position.BeatId >= barEndBeat);
+
         for (var s = 0; s < slots.Count; s++)
         {
             var slot = slots[s];
@@ -296,26 +371,56 @@ public static class GpExporter
             // AUTHORED notation wins: a stored NotationDuration sets the written
             // rhythm (clamped so it never overruns the next onset). Otherwise fall
             // back to the sustain/onset-gap derivation the exporter always used.
-            var authoredTicks = AuthoredTicks(slot.Primary);
-            int noteTicks;
+            var authoredTicks = AuthoredTicks(slot.Primary, denominator);
+            int wantedTicks;
             if (authoredTicks > 0)
             {
-                noteTicks = Math.Min(gap, authoredTicks);
+                wantedTicks = authoredTicks;
             }
             else
             {
                 var sustainTicks = (int)Math.Round(slot.MaxSustain.DoubleValue * TicksPerBeat);
-                noteTicks = sustainTicks > 0 ? Math.Min(gap, Math.Max(1, sustainTicks)) : gap;
+                wantedTicks = sustainTicks > 0 ? Math.Max(1, sustainTicks) : gap;
             }
 
-            var nextEvent = s + 1 < slots.Count ? slots[s + 1].Primary : null;
+            // The nearest length a tied chain of note values writes EXACTLY, with a writable
+            // rest after it: a tick no value spells would otherwise be dropped and shorten the bar.
+            var noteTicks = chunks.Chain.Fit(wantedTicks, gap);
+            if (wantedTicks <= gap && ReadsBackAsStaccato(slot, noteTicks, gap, denominator))
+                noteTicks = chunks.Chain.Fit(gap, gap);
+            var isLast = s + 1 == slots.Count;
+            if (isLast && wantedTicks > gap && following != null)
+            {
+                carry.Slot = slot;
+                carry.Quarters = (wantedTicks - gap) * 4.0 / (TicksPerBeat * denominator);
+            }
+
 
             EmitGrace(voice, slot, capo);
-            EmitEvent(voice, slot, nextEvent, noteTicks, chunks, capo);
+            EmitEvent(voice, slot, carry.Legato, noteTicks, chunks, denominator, capo);
             cursor += noteTicks;
         }
 
         if (cursor < totalTicks) EmitRests(voice, totalTicks - cursor, chunks);
+    }
+
+    /// <summary>
+    ///     Whether the re-import would ACCENT this slot's note although the chart has no accent
+    ///     on it. The importer's SHORT-REST rule (<c>GpBeatCarry.ObserveStaccatoBeat</c>)
+    ///     accents a single note followed by a rest of at most its own value and at most a
+    ///     quarter: the way a tab spells staccato. A note written at its authored value with the
+    ///     next onset a little later (the shape two merged voices leave) is exactly that, so such
+    ///     a note is written up to the next onset instead. Only a note whose chart sustain is
+    ///     zero and whose new length stays under a beat qualifies: the re-import then trims the
+    ///     sub-beat sustain back to zero, so the sounds are unchanged. A note the chart accents
+    ///     keeps its rest — that IS staccato, and the rule hands the accent back.
+    /// </summary>
+    private static bool ReadsBackAsStaccato(EventSlot slot, int noteTicks, int gap, int denominator)
+    {
+        if (slot.Events.Count != 1 || slot.Primary.Note is not { Accent: false } note) return false;
+        if (note.Sustain > FractionalPosition.Zero || gap >= TicksPerBeat) return false;
+        var rest = gap - noteTicks;
+        return rest > 0 && rest <= noteTicks && rest <= TicksPerBeat * denominator / 4;
     }
 
     // -------------------------------------------------------- durations
@@ -364,17 +469,30 @@ public static class GpExporter
         static int SimplicityRank(DurationChunk chunk) => chunk.Triplet ? 2 : chunk.Dots;
     }
 
-    private static bool TryLargestChunk(List<DurationChunk> chunks, int ticks, out DurationChunk chunk)
+    /// <summary>A bar's note values and the chains (<see cref="GpTickChain" />) they spell.</summary>
+    private sealed class Durations(List<DurationChunk> chunks)
     {
-        foreach (var candidate in chunks)
-        {
-            if (candidate.Ticks > ticks) continue;
-            chunk = candidate;
-            return true;
-        }
+        public GpTickChain Chain { get; } = new([.. chunks.Select(c => c.Ticks)]);
 
-        chunk = default;
-        return false;
+        /// <summary>The tied values writing <paramref name="ticks" />, longest first: exact when
+        /// any chain is, else the longest-first values that fit (the remainder is lost).</summary>
+        public IEnumerable<DurationChunk> Spell(int ticks)
+        {
+            if (Chain.TrySpell(ticks, out var exact))
+            {
+                foreach (var i in exact) yield return chunks[i];
+                yield break;
+            }
+
+            foreach (var chunk in chunks)
+            {
+                while (chunk.Ticks <= ticks)
+                {
+                    yield return chunk;
+                    ticks -= chunk.Ticks;
+                }
+            }
+        }
     }
 
     private static AT.Beat NewBeat(DurationChunk chunk)
@@ -389,19 +507,28 @@ public static class GpExporter
         return beat;
     }
 
-    private static void EmitRests(AT.Voice voice, int ticks, List<DurationChunk> chunks)
+    private static void EmitRests(AT.Voice voice, int ticks, Durations chunks)
     {
-        while (ticks > 0 && TryLargestChunk(chunks, ticks, out var chunk))
-        {
+        foreach (var chunk in chunks.Spell(ticks))
             voice.AddBeat(NewBeat(chunk)); // a beat without notes is a rest
-            ticks -= chunk.Ticks;
-        }
     }
 
     // ------------------------------------------------------------ notes
 
-    private static void EmitEvent(AT.Voice voice, EventSlot slot, TimedEvent? next, int ticks,
-        List<DurationChunk> chunks, int capo)
+    /// <summary>Writes <paramref name="ticks" /> of a carried sound as tie destinations.</summary>
+    private static void EmitTied(AT.Voice voice, EventSlot slot, int ticks, Durations chunks, int capo)
+    {
+        foreach (var chunk in chunks.Spell(ticks))
+        {
+            var beat = NewBeat(chunk);
+            AddSounds(beat, slot, Legato.None, ticks, first: false, capo);
+            voice.AddBeat(beat);
+            ticks -= chunk.Ticks;
+        }
+    }
+
+    private static void EmitEvent(AT.Voice voice, EventSlot slot, Legato legato, int ticks,
+        Durations chunks, int denominator, int capo)
     {
         // AUTHORED spelling wins: when the event carries a NotationDuration that
         // (a) has a clean base/dots/tuplet spelling and (b) exactly fills the
@@ -411,7 +538,7 @@ public static class GpExporter
         var primary = slot.Primary;
         var nd = primary.Note?.NotationDuration ?? primary.Chord?.NotationDuration;
         if (nd is { } d &&
-            (int)Math.Round(d.DoubleValue * TicksPerBeat) == ticks &&
+            QuarterTicks(d, denominator) == ticks &&
             GpRhythmFraction.TryUnfold(d, out var spelling) &&
             TryMapDuration(spelling.BaseValue, out var authoredDuration))
         {
@@ -422,16 +549,16 @@ public static class GpExporter
                 beat.TupletDenominator = spelling.TupletDen;
             }
 
-            AddSounds(beat, slot, next, ticks, first: true, capo);
+            AddSounds(beat, slot, legato, ticks, first: true, capo);
             voice.AddBeat(beat);
             return;
         }
 
         var first = true;
-        while (ticks > 0 && TryLargestChunk(chunks, ticks, out var chunk))
+        foreach (var chunk in chunks.Spell(ticks))
         {
             var beat = NewBeat(chunk);
-            AddSounds(beat, slot, next, ticks, first, capo);
+            AddSounds(beat, slot, legato, ticks, first, capo);
             voice.AddBeat(beat);
             ticks -= chunk.Ticks;
             first = false;
@@ -444,12 +571,19 @@ public static class GpExporter
     ///     can legitimately overlap a string (a chord plus a loose note the
     ///     charter left on top of it) — the first one written wins, exactly as
     ///     <see cref="EmitGrace" /> already resolves the same collision.
+    ///     <para>
+    ///     Tremolo, right-hand tapping, slap and pop are BEAT techniques in Guitar Pro
+    ///     (alphaTab writes <c>Tapped</c> on every note of the beat, <c>Slapped</c> /
+    ///     <c>Popped</c> on the beat), so any sound of the slot carrying one marks the beat.
+    ///     </para>
     /// </summary>
-    private static void AddSounds(AT.Beat beat, EventSlot slot, TimedEvent? next, int ticks, bool first,
+    private static void AddSounds(AT.Beat beat, EventSlot slot, Legato legato, int ticks, bool first,
         int capo)
     {
         var tremolo = false;
         var accent = false;
+        var tap = false;
+        var picking = BassPickingType.None;
         var written = new HashSet<int>();
 
         foreach (var ev in slot.Events)
@@ -457,20 +591,29 @@ public static class GpExporter
             if (ev.Note is { } note)
             {
                 if (!written.Add(note.StringIndex)) continue;
-                beat.AddNote(BuildNote(note, note, next, ticks, isTieDestination: !first, capo));
-                tremolo |= note.Tremolo && !GpPickScrape.IsChartedScrape(note);
+                beat.AddNote(BuildNote(note, note, legato, ticks, isTieDestination: !first, capo));
+                Observe(note);
             }
             else if (ev.Chord is { } chord)
             {
                 foreach (var chordNote in chord.ChordNotes)
                 {
                     if (!written.Add(chordNote.StringIndex)) continue;
-                    beat.AddNote(BuildNote(chordNote, chord, next, ticks, isTieDestination: !first, capo));
-                    tremolo |= chordNote.Tremolo && !GpPickScrape.IsChartedScrape(chordNote);
+                    beat.AddNote(BuildNote(chordNote, chord, legato, ticks, isTieDestination: !first, capo));
+                    Observe(chordNote);
                 }
 
-                accent |= chord.Accent;
+                // A chord's accent rides on the notes that carry it (a Guitar Pro import keeps
+                // it per note); only a chord accented as a whole accents every note.
+                accent |= chord.Accent && !chord.ChordNotes.Any(cn => cn.Accent);
             }
+        }
+
+        if (first)
+        {
+            beat.Tap = tap;
+            beat.Slap = picking == BassPickingType.Slap;
+            beat.Pop = picking == BassPickingType.Pop;
         }
 
         if (tremolo && first) beat.TremoloSpeed = AT.Duration.Eighth;
@@ -479,15 +622,33 @@ public static class GpExporter
             foreach (var n in beat.Notes)
                 n.Accentuated = AT.AccentuationType.Normal;
         }
+
+        void Observe(IGuitarSound sound)
+        {
+            // A charted pick scrape implies its own tap and tremolo (see BuildNote).
+            var scrape = GpPickScrape.IsChartedScrape(sound);
+            tremolo |= sound.Tremolo && !scrape;
+            tap |= sound.Hopo == HopoType.Tap && !scrape;
+            if (picking == BassPickingType.None) picking = sound.BassPicking;
+        }
     }
 
     /// <summary>Written length of an event's authored notation duration in the
     /// 48-ticks-per-beat grid, or 0 when the event has no NotationDuration.</summary>
-    private static int AuthoredTicks(TimedEvent ev)
+    private static int AuthoredTicks(TimedEvent ev, int denominator)
     {
         var nd = ev.Note?.NotationDuration ?? ev.Chord?.NotationDuration;
-        return nd is { } d ? (int)Math.Round(d.DoubleValue * TicksPerBeat) : 0;
+        return nd is { } d ? QuarterTicks(d, denominator) : 0;
     }
+
+    /// <summary>
+    ///     A length in QUARTER notes (a <c>NotationDuration</c>) on the bar's tick grid,
+    ///     whose beat is one <paramref name="denominator" /> note: an eighth (1/2) is
+    ///     48 ticks in 6/8, not 24. Counting the quarter as a beat wrote every authored
+    ///     rhythm of an x/8 bar at half its length and filled the rest with rests.
+    /// </summary>
+    private static int QuarterTicks(Fraction quarters, int denominator) =>
+        (int)Math.Round(quarters.DoubleValue * TicksPerBeat * denominator / 4);
 
     /// <summary>Maps an unfolded base note value (quarter-note units) to the
     /// alphaTab duration enum; false for anything outside whole..128th.</summary>
@@ -563,7 +724,8 @@ public static class GpExporter
         voice.AddBeat(beat);
     }
 
-    private static AT.Note BuildNote(IGuitarSound sound, object owner, TimedEvent? next, int remainingTicks,
+    private static AT.Note BuildNote(IGuitarSound sound, object owner, Legato legato,
+        int remainingTicks,
         bool isTieDestination, int capo)
     {
         var note = new AT.Note
@@ -606,7 +768,8 @@ public static class GpExporter
         };
 
         if (sound.Vibrato) note.Vibrato = AT.VibratoType.Slight;
-        if (owner is GuitarNote { Accent: true }) note.Accentuated = AT.AccentuationType.Normal;
+        if (owner is GuitarNote { Accent: true } || (owner is Chord && sound.Accent))
+            note.Accentuated = AT.AccentuationType.Normal;
 
         if (scrape)
         {
@@ -627,27 +790,11 @@ public static class GpExporter
 
         // Domain flags the hammer-on/pull-off DESTINATION; alphaTab marks the
         // origin and resolves the destination during Score.Finish.
-        if (NextHasHopoOnString(next, sound.StringIndex)) note.IsHammerPullOrigin = true;
+        if (legato.Origins.Contains(sound)) note.IsHammerPullOrigin = true;
+        if (legato.LeftHandTaps.Contains(sound)) note.IsLeftHandTapped = true;
 
         AddBends(sound, owner, note, remainingTicks);
         return note;
-    }
-
-    private static bool NextHasHopoOnString(TimedEvent? next, int stringIndex)
-    {
-        if (next?.Note is { } n)
-            return n.StringIndex == stringIndex && n.Hopo is HopoType.HammerOn or HopoType.PullOff;
-
-        if (next?.Chord is { } c)
-        {
-            foreach (var cn in c.ChordNotes)
-            {
-                if (cn.StringIndex == stringIndex && cn.Hopo is HopoType.HammerOn or HopoType.PullOff)
-                    return true;
-            }
-        }
-
-        return false;
     }
 
     private static void AddBends(IGuitarSound sound, object owner, AT.Note note, int remainingTicks)

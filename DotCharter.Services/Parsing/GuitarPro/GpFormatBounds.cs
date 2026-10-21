@@ -50,4 +50,18 @@ public static class GpFormatBounds
     ///     <c>new Fraction(x, 0)</c>; the ceiling keeps the bar span finite.
     /// </summary>
     public const int MaxNoteDenominator = 64;
+
+    /// <summary>
+    ///     Bars a score may unfold to once its repeats are expanded. A real
+    ///     song is a few hundred bars, a long one with every repeat written out
+    ///     a few thousand; the unfold is an emit loop driven by repeat counts
+    ///     and bar counts the file supplies, so it is bounded on its OUTPUT.
+    /// </summary>
+    public const int MaxUnfoldedBars = 20_000;
+
+    /// <summary>
+    ///     Notes plus chords one voice of one track may hold after repeats and
+    ///     trills are expanded. A dense ten-minute metal track is under 20,000.
+    /// </summary>
+    public const int MaxNotesPerTrack = 250_000;
 }

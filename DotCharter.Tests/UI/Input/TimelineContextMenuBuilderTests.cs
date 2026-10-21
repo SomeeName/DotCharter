@@ -28,11 +28,12 @@ public sealed class TimelineContextMenuBuilderTests
             Paste: () => Invoked.Add("paste"),
             SelectAllInView: () => Invoked.Add("selectview"),
             AddEventAtTime: () => Invoked.Add("event"),
-            ApplyDlcBuilderFixes: () => Invoked.Add("dlcbuilder"));
+            ApplyDlcBuilderFixes: () => Invoked.Add("dlcbuilder"),
+            LinkIdentical: () => Invoked.Add("link"));
     }
 
     [Fact]
-    public void TheSoundMenu_CarriesTheSevenVerbsInOrder()
+    public void TheSoundMenu_CarriesTheEightVerbsInOrder()
     {
         var items = TimelineContextMenuBuilder.ForSound(new Recorder().Actions);
 
@@ -40,7 +41,7 @@ public sealed class TimelineContextMenuBuilderTests
         [
             "Timeline_Ctx_Delete", "Timeline_Ctx_Duplicate", "Timeline_Ctx_OpenInspector",
             "Timeline_Ctx_SetFret", "(separator)",
-            "Timeline_Ctx_AddHandShape", "Timeline_Ctx_AddFhpAnchor"
+            "Timeline_Ctx_AddHandShape", "Timeline_Ctx_AddFhpAnchor", "(separator)", "LinkIdentical_Title"
         ], items.Select(i => i.LocKey ?? "(separator)").ToArray());
         Assert.True(items[4].IsSeparator);
     }
@@ -70,7 +71,7 @@ public sealed class TimelineContextMenuBuilderTests
         }
 
         Assert.Equal(
-            ["delete", "duplicate", "inspector", "handshape", "fhp", "addnote", "paste", "selectview", "event", "dlcbuilder"],
+            ["delete", "duplicate", "inspector", "handshape", "fhp", "link", "addnote", "paste", "selectview", "event", "dlcbuilder"],
             recorder.Invoked);
     }
 

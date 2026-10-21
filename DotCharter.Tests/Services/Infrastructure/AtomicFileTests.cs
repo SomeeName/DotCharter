@@ -85,6 +85,42 @@ public sealed class AtomicFileTests : IDisposable
     }
 
     /// <summary>
+    ///     The stage is staged under a name nobody can know in advance and is created
+    ///     exclusively. A file (or link) another process planted at the old predictable
+    ///     <c>&lt;target&gt;.tmp</c> was truncated and written THROUGH, and then renamed
+    ///     over the target; now it is neither opened nor touched.
+    /// </summary>
+    [Fact]
+    public void ASquatterOnThePredictableTempName_IsNeitherWrittenThroughNorMoved()
+    {
+        var p = Path_("a.json");
+        Directory.CreateDirectory(_dir);
+        var squatter = p + AtomicFile.TempSuffix;
+        File.WriteAllText(squatter, "SQUATTER");
+
+        AtomicFile.WriteAllText(p, "real");
+
+        Assert.Equal("real", File.ReadAllText(p));
+        Assert.Equal("SQUATTER", File.ReadAllText(squatter));
+        Assert.Equal(2, Directory.GetFiles(_dir).Length);
+    }
+
+    [Fact]
+    public void ASquatterOnThePredictableTempName_IsLeftAloneByTheBytesWriterToo()
+    {
+        var p = Path_("a.bin");
+        Directory.CreateDirectory(_dir);
+        var squatter = p + AtomicFile.TempSuffix;
+        File.WriteAllText(squatter, "SQUATTER");
+
+        AtomicFile.WriteAllBytes(p, [1, 2, 3]);
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(p));
+        Assert.Equal("SQUATTER", File.ReadAllText(squatter));
+        Assert.Equal(2, Directory.GetFiles(_dir).Length);
+    }
+
+    /// <summary>
     ///     …and none is left behind on the SAD path either, which is the half
     ///     that was missing. A rename that exhausts the retry budget — an
     ///     antivirus or indexer holding the destination without sharing delete —

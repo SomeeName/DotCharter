@@ -93,6 +93,49 @@ public sealed class AmpFxRackUiPerfSmokeTests
             }
         }, TestContext.Current.CancellationToken);
 
+    /// <summary>
+    ///     A saved chain entry the VST3 scan did not find is kept but never
+    ///     loaded: its row prints the reason in place of "loading…", and the controls
+    ///     that act on a loaded plug-in are disabled while Remove stays live.
+    /// </summary>
+    [Fact]
+    public Task AnUnavailableSlot_PrintsWhyItIsNotLoaded_AndDisablesWhatNeedsAPlugin() =>
+        HeadlessSessionFixture.Dispatch(() =>
+        {
+            var transport = new TransportViewModel(new FakeAudioPlaybackService(), NewState(),
+                new FakeConfigurationService(), FakeLocalization.KeysOnly(), null, new FakeAppLogger());
+            using var _ = Seed(transport);
+            const string label = "not loaded: plug-in not found";
+            transport.GuitarVstChain[0].MarkUnavailable(label, "reason text");
+
+            var panel = new AmpFxPanel { DataContext = transport };
+            var window = Show(panel, 600, 1000);
+            try
+            {
+                var row = Find(panel, "AmpFxVstRack").GetVisualDescendants().OfType<Border>()
+                    .First(b => b.Classes.Contains("FirePopoverSlot"));
+
+                var reason = row.GetVisualDescendants().OfType<TextBlock>()
+                    .Single(t => t.Text == label && t.IsEffectivelyVisible);
+                AssertMeasured(reason, "the unavailable slot's reason");
+                AssertInside(reason, row, "the unavailable slot's reason");
+                Assert.False(row.GetVisualDescendants().OfType<TextBlock>()
+                    .Any(t => t.Classes.Contains("FirePopoverMeta") && t.IsEffectivelyVisible && t.Text != label),
+                    "an unavailable slot also says 'loading…'");
+
+                var pill = row.GetVisualDescendants().OfType<ToggleButton>().First(t => t.Classes.Contains("FirePopoverStatePill"));
+                var gui = row.GetVisualDescendants().OfType<ToggleButton>().First(t => t.Classes.Contains("FirePopoverIcon"));
+                var remove = row.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("FirePopoverRemove"));
+                Assert.False(pill.IsEnabled, "the bypass pill is live over a plug-in that is not loaded");
+                Assert.False(gui.IsEnabled, "the GUI button is live over a plug-in that is not loaded");
+                Assert.True(remove.IsEnabled, "the user cannot remove a slot that is not loaded");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }, TestContext.Current.CancellationToken);
+
     [Fact]
     public Task PlayModesOverlay_HostsThePanel_InAFireModal() =>
         HeadlessSessionFixture.Dispatch(() =>

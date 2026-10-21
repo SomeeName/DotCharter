@@ -162,6 +162,19 @@ public sealed partial class ShellDialogsViewModel : ViewModelBase
     [RelayCommand]
     private void OpenHistory() => Launch(() => _hostedDialogs.ShowAsync<IHistoryScreen, bool>(), "history");
 
+    /// <summary>Tools ▸ Linked measures; says so instead when no chart is loaded.</summary>
+    [RelayCommand]
+    private void OpenLinkGroups()
+    {
+        if (_projectState.ActiveProject == null)
+        {
+            _projectState.SetMessage(_localization["Status_NoChartLoaded"]);
+            return;
+        }
+
+        Launch(() => _hostedDialogs.ShowAsync<ILinkGroupsScreen, bool>(), "linked measures");
+    }
+
     /// <summary>Edit ▸ Checkpoints.</summary>
     [RelayCommand]
     private void OpenCheckpoints() => Launch(() => _hostedDialogs.ShowAsync<ICheckpointsScreen, bool>(), "checkpoints");

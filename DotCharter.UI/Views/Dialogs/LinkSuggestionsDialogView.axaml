@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.LinkSuggestionsDialogView"
+             x:DataType="contracts:ILinkSuggestionsScreen"
+             x:CompileBindings="True">
+
+    <!-- After a Guitar Pro import: what repeats and what the parts share.
+         Link all is the primary (one undo step), Review opens the linked-measures
+         manager, Skip (and Esc) links nothing. Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Sm">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconLink}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle"
+                                   Text="{localization:Loc LinkSuggest_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc LinkSuggest_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel x:Name="LinkSuggestBody" Grid.Row="1" Spacing="{DynamicResource FireSpaceXs}">
+                    <TextBlock x:Name="LinkSuggestHeadline" Theme="{DynamicResource DlgBodyText}" Classes="DlgBody"
+                               Text="{Binding Headline}" />
+                    <ItemsControl ItemsSource="{Binding Details}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle"
+                                Content="{localization:Loc LinkSuggest_Skip}"
+                                Command="{Binding SkipCommand}" IsCancel="True" />
+                        <Button Theme="{DynamicResource SecondaryButton}" Classes="DlgAction Secondary"
+                                Content="{localization:Loc LinkSuggest_Review}"
+                                Command="{Binding ReviewCommand}" />
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc LinkSuggest_LinkAll}"
+                                Command="{Binding LinkAllCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

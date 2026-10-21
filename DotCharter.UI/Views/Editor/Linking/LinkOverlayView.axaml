@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:linking="clr-namespace:DotCharter.UI.ViewModels.Editor.Linking"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:shellViews="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
+             xmlns:linkViews="using:DotCharter.UI.Views.Editor.Linking"
+             x:Class="DotCharter.UI.Views.Editor.Linking.LinkOverlayView"
+             x:CompileBindings="True"
+             x:DataType="linking:LinkedMeasuresViewModel">
+    <!-- Over the main timeline: the hover card that follows a LINKS chip
+         (mockup 04_links_row_hover) and the "Linked · changed N places
+         [Only here]" toast (mockup 05_edit_toast). The Canvas has no
+         background, so the timeline under it still gets every pointer event;
+         only the toast itself takes clicks. The link panel is this control's
+         attached flyout (so the popover prewarm finds it), opened at the pointer
+         of whichever timeline's chip was clicked. -->
+    <FlyoutBase.AttachedFlyout>
+        <shellViews:PrewarmableFlyout Placement="BottomEdgeAlignedLeft">
+            <linkViews:LinkPanelView x:Name="LinkPanel" DataContext="{x:Null}" />
+        </shellViews:PrewarmableFlyout>
+    </FlyoutBase.AttachedFlyout>
+    <Canvas x:Name="LinkOverlayCanvas">
+        <Border x:Name="LinkHoverCard"
+                IsVisible="{Binding IsHoverCardVisible}"
+                IsHitTestVisible="False"
+                Background="{DynamicResource FireSurfaceMenu}"
+                BorderBrush="{DynamicResource FireBorder}"
+                BorderThickness="1" CornerRadius="6" Padding="10,8" MaxWidth="320">
+            <StackPanel Spacing="3">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Border Width="10" Height="10" CornerRadius="2" Background="{Binding HoverBrush}"
+                            VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding HoverTitle}" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource FireTextBody}" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding HoverLines}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource FireTextFaint}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <Border x:Name="LinkToast"
+                IsVisible="{Binding IsToastVisible}"
+                Background="{DynamicResource FireSurfaceMenu}"
+                BorderBrush="{Binding ToastBrush}"
+                BorderThickness="2,1,1,1" CornerRadius="6" Padding="10,6"
+                AutomationProperties.Name="{localization:Loc LinkToast_Name}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Border MinWidth="18" Height="18" CornerRadius="3" Background="{Binding ToastBrush}"
+                        IsVisible="{Binding ToastLetter, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ToastLetter}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource FireTextOnAccentInk}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Margin="4,0" />
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ToastTitle}" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{DynamicResource FireTextBody}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding ToastText}" FontSize="12" Foreground="{DynamicResource FireTextFaint}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <Button x:Name="LinkToastOnlyHere" IsVisible="{Binding CanOnlyHere}"
+                        Command="{Binding OnlyHereCommand}" Content="{localization:Loc LinkToast_OnlyHere}"
+                        FontSize="12" Padding="10,3" VerticalAlignment="Center" />
+                <Button x:Name="LinkToastClose" Command="{Binding DismissToastCommand}" Content="×"
+                        Background="Transparent" BorderThickness="0" FontSize="14" Padding="4,0" VerticalAlignment="Center"
+                        AutomationProperties.Name="{localization:Loc LinkToast_Dismiss}" />
+            </StackPanel>
+        </Border>
+    </Canvas>
+</UserControl>

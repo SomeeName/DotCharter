@@ -1,7 +1,9 @@
 using System.Reflection;
+using DotCharter.Services.Ai.Chart;
 using DotCharter.Services.Ai.Generate;
 using DotCharter.Services.Editing.Maintenance;
 using DotCharter.Tests.Presentation.Dialogs;
+using DotCharter.Tone.Ai;
 using DotCharter.Tone.Audio.Dsp.Tones;
 
 namespace DotCharter.Tests.Ai.Generate;
@@ -186,27 +188,92 @@ public sealed class AiToneGenerationRunTests : IDisposable
         await Run(generator).RunAsync();
         await Run(generator).RunAsync("  The chorus is a   cranked Marshall.\n");
 
-        Assert.Equal("band: Sakasma, song: Untitled Song, arrangement: Lead", contexts[0]);
-        Assert.Equal("band: Sakasma, song: Untitled Song, arrangement: Lead, the charter's notes: The chorus is a cranked Marshall.", contexts[1]);
+        var metadata = AiUntrustedText.Block("band: Sakasma, song: Untitled Song, arrangement: Lead");
+        Assert.Equal(metadata, contexts[0]);
+        Assert.Equal(metadata + "\nthe charter's notes: The chorus is a cranked Marshall.", contexts[1]);
     }
 
-    private AiToneGenerationRun Run(IRsToneGenerator generator) =>
-        new(_state, _maintenanceProxy, _rail, _loc, _logger, () => generator);
+
+    [Fact]
+    public async Task The_generated_tones_are_shown_before_anything_is_written_and_declining_writes_nothing()
+    {
+        var shown = new List<(string Title, string Body, int DefinitionsAtThatPoint)>();
+        var generator = new FakeGenerator((request, _, _, _) => Generated(request, "verse", "chorus"));
+
+        await Run(generator, (title, body) =>
+        {
+            shown.Add((title, body, _project.ToneDefinitions.Count));
+            return Task.FromResult(false);
+        }).RunAsync();
+
+        var (shownTitle, shownBody, written) = Assert.Single(shown);
+        Assert.Equal(_loc["ToneGenerate_ConfirmTitle"], shownTitle);
+        Assert.Equal(0, written);
+        Assert.StartsWith(_loc.PluralWith("ToneGenerate_ConfirmOne", "ToneGenerate_Confirm", 2, 2, "Lead"), shownBody, StringComparison.Ordinal);
+        Assert.Contains("verse", shownBody, StringComparison.Ordinal);
+        Assert.Contains("chorus", shownBody, StringComparison.Ordinal);
+        Assert.Contains(AiToneText.Summary(ToneOf("verse")), shownBody, StringComparison.Ordinal);
+
+        Assert.Empty(_project.ToneDefinitions);
+        Assert.Equal(["Verse", "Chorus"], _arrangement.ToneChanges.Select(c => c.ToneName).ToArray());
+        Assert.Equal(0, _maintenance.UndoSteps);
+        Assert.Equal(_loc["ToneGenerate_Declined"], _state.MainDisplayMessage);
+        Assert.Equal(StatusSeverity.Warning, _state.MainDisplaySeverity);
+    }
+
+    [Fact]
+    public async Task Confirming_writes_the_set_as_one_undo_step()
+    {
+        var generator = new FakeGenerator((request, _, _, _) => Generated(request, "verse", "chorus"));
+        var asked = 0;
+
+        await Run(generator, (_, _) =>
+        {
+            asked++;
+            return Task.FromResult(true);
+        }).RunAsync();
+
+        Assert.Equal(1, asked);
+        Assert.Equal(["verse", "chorus"], _project.ToneDefinitions.Select(d => d.Key).ToArray());
+        Assert.Equal(1, _maintenance.UndoSteps);
+    }
+
+    [Fact]
+    public async Task Nothing_generated_asks_nothing()
+    {
+        var generator = new FakeGenerator((request, _, _, _) => new ToneSetGenerationResult(
+            request.Windows.Select(w => new GeneratedTone(w, null, null, "no AI provider is set up")).ToList(),
+            TimeSpan.Zero, []));
+        var asked = 0;
+
+        await Run(generator, (_, _) =>
+        {
+            asked++;
+            return Task.FromResult(true);
+        }).RunAsync();
+
+        Assert.Equal(0, asked);
+    }
+
+    private AiToneGenerationRun Run(IRsToneGenerator generator, Func<string, string, Task<bool>>? confirm = null) =>
+        new(_state, _maintenanceProxy, _rail, _loc, _logger, () => generator, confirm ?? ((_, _) => Task.FromResult(true)));
+
+    private static RsTone ToneOf(string key)
+    {
+        var (amp, cab) = GenerateFakes.RealGuitarGear();
+        return new RsTone(
+            key, key, RsToneAuthoring.DefaultVolumeDb, [RsToneAuthoring.CleanDescriptorUIName],
+            new RsAmp(amp, RsGearCatalog.Shared.GetCategory(amp), new Dictionary<string, float>(StringComparer.Ordinal)),
+            new RsCab(cab, RsGearCatalog.Shared.GetCategory(cab), new Dictionary<string, float>(StringComparer.Ordinal)),
+            [], [], []);
+    }
 
     private static ToneSetGenerationResult Generated(ToneGenerateRequest request, params string[] keys)
     {
-        var (amp, cab) = GenerateFakes.RealGuitarGear();
-        var tones = request.Windows.Select((window, i) =>
-        {
-            var key = keys[i];
-            var tone = new RsTone(
-                key, key, RsToneAuthoring.DefaultVolumeDb, [RsToneAuthoring.CleanDescriptorUIName],
-                new RsAmp(amp, RsGearCatalog.Shared.GetCategory(amp), new Dictionary<string, float>(StringComparer.Ordinal)),
-                new RsCab(cab, RsGearCatalog.Shared.GetCategory(cab), new Dictionary<string, float>(StringComparer.Ordinal)),
-                [], [], []);
-            return new GeneratedTone(window, tone, new ToneGenerationProvenance(
-                window, request.Instrument, [ToneGenerationSources.Audio], "fake-model", "", null, "no-renderer", null), null);
-        }).ToList();
+        var tones = request.Windows.Select((window, i) => new GeneratedTone(window, ToneOf(keys[i]),
+            new ToneGenerationProvenance(
+                window, request.Instrument, [ToneGenerationSources.Audio], "fake-model", "", null, "no-renderer", null),
+            null)).ToList();
         return new ToneSetGenerationResult(tones, TimeSpan.Zero, []);
     }
 

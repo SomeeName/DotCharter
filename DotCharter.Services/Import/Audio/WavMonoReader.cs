@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using DotCharter.Services.Infrastructure;
 
 namespace DotCharter.Services.Import.Audio;
 
@@ -10,7 +11,20 @@ namespace DotCharter.Services.Import.Audio;
 /// </summary>
 public static class WavMonoReader
 {
-    public static (float[] Samples, int SampleRate) Read(string filePath) => Read(File.ReadAllBytes(filePath));
+    public static (float[] Samples, int SampleRate) Read(string filePath)
+        => Read(filePath, ImportSizeLimits.WavFileBytes);
+
+    /// <summary>
+    ///     Reads a WAV file, refusing one longer than <paramref name="maxBytes" />
+    ///     BEFORE it is read: the whole file is held, then a float per frame is
+    ///     allocated on top, so the length the file system reports is the only
+    ///     number that can bound the cost. Throws <see cref="ImportFileTooLargeException" />.
+    /// </summary>
+    internal static (float[] Samples, int SampleRate) Read(string filePath, long maxBytes)
+    {
+        ImportSizeLimits.RequireWithin(new FileInfo(filePath).Length, maxBytes, "The WAV file");
+        return Read(File.ReadAllBytes(filePath));
+    }
 
     public static (float[] Samples, int SampleRate) Read(ReadOnlySpan<byte> bytes)
     {

@@ -1,5 +1,6 @@
 ﻿using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Settings;
+using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Shared;
 using DotCharter.Tone.Ai;
 using DotCharter.Services.Ai.Match;
@@ -92,9 +93,11 @@ public static class SettingsModule
                 sp.GetRequiredService<StemModelManager>(),
                 sp.GetRequiredService<ILocalizationService>(),
                 sp.GetRequiredService<IUiDispatcher>(),
-                sp.GetRequiredService<StemBackendViewModel>(),
-                sp.GetRequiredService<GpuRuntimeViewModel>(),
-                sp.GetRequiredService<StemCacheViewModel>(),
+                new StemModelsBlocks(
+                    sp.GetRequiredService<StemBackendViewModel>(),
+                    sp.GetRequiredService<GpuRuntimeViewModel>(),
+                    sp.GetRequiredService<StemCacheViewModel>()),
+                sp.GetRequiredService<IDialogs>(),
                 sp.GetService<IAppLogger>()));
         RegisterTab<IAiSettingsScreen, AiSettingsViewModel>(services, sp => new AiSettingsViewModel(
             sp.GetRequiredService<IConfigurationService>(),

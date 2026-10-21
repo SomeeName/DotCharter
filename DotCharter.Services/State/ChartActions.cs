@@ -2,7 +2,7 @@
 
 namespace DotCharter.Services.State;
 
-public class CompositeAction(IEnumerable<IChartAction> actions) : IChartAction, IMergeableAction
+public class CompositeAction(IEnumerable<IChartAction> actions) : IChartAction, IMergeableAction, ILinkPolicyAction
 {
     private readonly List<IChartAction> _actions = actions.Where(a => a.HasEffect).ToList();
 
@@ -27,6 +27,15 @@ public class CompositeAction(IEnumerable<IChartAction> actions) : IChartAction, 
     ///     the same kind of edit.
     /// </summary>
     public string? LabelKey { get; init; }
+
+    /// <summary>
+    ///     The link policy of the WHOLE composite, set by a tool whose children are ordinary
+    ///     edits but whose result is outside truth (an AI pass: <see cref="LinkPolicy.UnlinkOnDivergence" />).
+    ///     Null: the children's strictest policy (<see cref="LinkPolicies.Of" />).
+    /// </summary>
+    public LinkPolicy? LinkPolicyOverride { get; init; }
+
+    public LinkPolicy LinkPolicy => LinkPolicies.Of(this);
 
     public bool HasEffect => _actions.Count > 0;
 
@@ -199,9 +208,12 @@ public abstract class CollectionActionBase<T>(
     ObservableCollection<T> collection,
     Func<T, FractionalPosition> getPosition,
     Action? onPostExecute)
-    : IChartAction, ICollectionChartAction
+    : IChartAction, ICollectionChartAction, ILinkPolicyAction
     where T : class
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     protected readonly ObservableCollection<T> Collection = collection;
     protected readonly Func<T, FractionalPosition> GetPosition = getPosition;
     protected readonly Action? OnPostExecute = onPostExecute;
@@ -737,8 +749,11 @@ public class MutateElementsAction<T>(
 // (EditTemplateGlobalAction, and CreateAndSwitchTemplateAction for its
 // "edit selected only" isolation path).
 
-public class AddChordTemplatesAction : IChartAction
+public class AddChordTemplatesAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly ObservableCollection<ChordTemplate> _collection;
     private readonly List<ChordTemplate> _templates;
 
@@ -891,8 +906,11 @@ public class MutateEventPointsAction(
 ///     </para>
 ///     The old value is captured at construction, like every other mutate action here.
 /// </summary>
-public class SetPhraseSoloAction : IChartAction
+public class SetPhraseSoloAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly Arrangement _arrangement;
     private readonly bool _hadEntry;
     private readonly bool _oldSolo;
@@ -941,8 +959,11 @@ public class MutateBeatsAction(
     IEnumerable<BeatMarker> oldBeats,
     IEnumerable<BeatMarker> newBeats,
     Action? onPostExecute = null)
-    : IChartAction
+    : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly IList<BeatMarker> _beats = beats;
     private readonly List<BeatMarker> _newBeats = newBeats.Select(beat => beat.Clone()).ToList();
     private readonly List<BeatMarker> _oldBeats = oldBeats.Select(beat => beat.Clone()).ToList();
@@ -1003,8 +1024,11 @@ public class MutateAnchorsAction(
     : MutateElementsAction<FretAnchor>(collection, targets, oldStates, newStates, (t, s) => t.CopyFrom(s),
         ChartActionStateComparer.AnchorsEqual, a => a.Position, onPostExecute, mergeVerb);
 
-public class RenameStringFieldAction<T> : IChartAction where T : class
+public class RenameStringFieldAction<T> : IChartAction, ILinkPolicyAction where T : class
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly List<T> _items;
     private readonly string _newValue;
     private readonly string _oldValue;
@@ -1031,8 +1055,11 @@ public class RenameStringFieldAction<T> : IChartAction where T : class
     }
 }
 
-public class SetKeySignatureAction(ChartData chart, int newAccidentals, bool newIsMinor) : IChartAction
+public class SetKeySignatureAction(ChartData chart, int newAccidentals, bool newIsMinor) : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly int _oldAccidentals = chart.KeyAccidentals;
     private readonly bool _oldIsMinor = chart.KeyIsMinor;
 

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using DotCharter.Services.Infrastructure;
 using SkiaSharp;
 
 namespace DotCharter.Services.Parsing.Images;
@@ -11,7 +12,7 @@ internal static class DdsImageConverter
     /// <summary>Largest edge we will decode. Rocksmith album art tops out at
     /// 512; 8192 is generous headroom while still bounding the decode buffer
     /// (8192² × 4 B = 256 MiB) for a file we did not create.</summary>
-    private const int MaxDimension = 8192;
+    private const int MaxDimension = ImageHeaderProbe.MaxDecodeDimension;
 
     private const int HeaderSize = 128;
     private const int Dx10HeaderSize = 20;

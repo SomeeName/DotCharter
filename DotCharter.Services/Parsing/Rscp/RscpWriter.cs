@@ -37,6 +37,7 @@ public class RscpWriter
         BuildArrangementsNode(root, arrangements);
         BuildBookmarksNode(root, project);
         BuildNotationVoicesNode(root, arrangements);
+        RscpLinkGroups.Write(root, project);
 
         root.Add(new XElement("text", project.TextContent));
 

@@ -198,6 +198,11 @@ internal static class EofLossCharts
         level.Anchors.Add(new FretAnchor(Pos(1), 2));
         level.Anchors.Add(new FretAnchor(Pos(2), 7, 3));
         level.HandShapes.Add(new HandShape { Position = Pos(30), EndPosition = Pos(31), TemplateId = 0 });
+
+        // A phrase on a note between two beats: written as moveR1 on beat 20.
+        var betweenBeats = new FractionalPosition(20, new Fraction(1, 2));
+        level.Notes.Add(new GuitarNote { Position = betweenBeats, StringIndex = 1, Fret = 5 });
+        lead.EventPoints.Add(new EventPoint { Position = betweenBeats, Phrase = "bridge" });
         // A grip holding a ghost gem over no sound: nothing in EOF can carry it (#795).
         lead.ChordTemplates.Add(new ChordTemplate { Id = 1, Frets = { [2] = 5 }, GhostMask = ChordTemplate.GhostBit(2) });
         level.HandShapes.Add(new HandShape { Position = Pos(32), EndPosition = Pos(33), TemplateId = 1 });

@@ -1,0 +1,139 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Dialogs"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.LinkGroupsDialogView"
+             x:DataType="contracts:ILinkGroupsScreen"
+             x:CompileBindings="True">
+
+    <!-- Tools ▸ Linked measures. Suggestions (only after an import's Review) sit
+         above the groups: they are what the user came to decide. Each group row
+         names its letter, an editable name with Rename, its per-arrangement count
+         and Unlink all; under it one Go to button per placement. The whole body
+         scrolls, with its bar in the card gutter. Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconLink}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle"
+                                   Text="{localization:Loc LinkGroups_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle"
+                                   Text="{localization:Loc LinkGroups_Subtitle}" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody" Padding="0,0,16,0" Margin="0,0,-16,0"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="{DynamicResource FireSpaceMd}">
+
+                        <Border x:Name="LinkSuggestionsSection" Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection"
+                                IsVisible="{Binding HasSuggestions}">
+                            <StackPanel Spacing="{DynamicResource FireSpaceXs}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                               VerticalAlignment="Center"
+                                               Text="{localization:Loc LinkGroups_SuggestionsHeader}" />
+                                    <Button x:Name="LinkSelectedButton" Grid.Column="1" Theme="{DynamicResource PrimaryButton}" Classes="Primary"
+                                            MinWidth="128" HorizontalContentAlignment="Center"
+                                            Content="{localization:Loc LinkGroups_LinkSelected}"
+                                            Command="{Binding LinkSelectedCommand}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Suggestions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:ILinkSuggestionRow">
+                                            <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                    <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsSelected}"
+                                                              AutomationProperties.Name="{Binding Title}" />
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding Title}"
+                                                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Detail}"
+                                                                   TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding !HasGroups}">
+                            <StackPanel Spacing="{DynamicResource FireSpaceXs}">
+                                <TextBlock Text="{localization:Loc LinkGroups_Empty}" />
+                                <TextBlock Text="{localization:Loc LinkGroups_EmptyHint}" TextWrapping="Wrap"
+                                           FontSize="{DynamicResource FireSizeMeta}"
+                                           Foreground="{DynamicResource FireTextDim}" />
+                            </StackPanel>
+                        </Border>
+
+                        <ItemsControl x:Name="LinkGroupList" ItemsSource="{Binding Groups}" IsVisible="{Binding HasGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:ILinkGroupRow">
+                                    <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                        <StackPanel Spacing="{DynamicResource FireSpaceXs}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                                                <Border Grid.Column="0" MinWidth="28" Padding="6,2" CornerRadius="3"
+                                                        VerticalAlignment="Center"
+                                                        Background="{DynamicResource FireSurfaceRaised}">
+                                                    <TextBlock Text="{Binding Letter}" HorizontalAlignment="Center"
+                                                               FontFamily="{DynamicResource FireFontMono}"
+                                                               Foreground="{DynamicResource FireTextPrimary}" />
+                                                </Border>
+                                                <TextBox Grid.Column="1" Text="{Binding Name}" VerticalContentAlignment="Center"
+                                                         PlaceholderText="{localization:Loc LinkGroups_NamePlaceholder}"
+                                                         AutomationProperties.Name="{localization:Loc LinkGroups_NamePlaceholder}" />
+                                                <Button Grid.Column="2" Theme="{DynamicResource SecondaryButton}" Classes="Secondary"
+                                                        VerticalAlignment="Center" HorizontalContentAlignment="Center" MinWidth="90"
+                                                        Content="{localization:Loc LinkGroups_Rename}"
+                                                        Command="{Binding $parent[ItemsControl].((contracts:ILinkGroupsScreen)DataContext).RenameCommand}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Grid.Column="3" Theme="{DynamicResource SubtleButton}" Classes="Subtle Danger"
+                                                        VerticalAlignment="Center" HorizontalContentAlignment="Center" MinWidth="90"
+                                                        Content="{localization:Loc LinkGroups_Delete}"
+                                                        Command="{Binding $parent[ItemsControl].((contracts:ILinkGroupsScreen)DataContext).DeleteCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                            <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Summary}"
+                                                       TextWrapping="Wrap" />
+                                            <ItemsControl ItemsSource="{Binding Placements}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="contracts:ILinkPlacementRow">
+                                                        <Button Theme="{DynamicResource SubtleButton}" Classes="Subtle" Margin="0,0,6,4"
+                                                                Content="{Binding Label}"
+                                                                ToolTip.Tip="{localization:Loc LinkGroups_GoTo}"
+                                                                AutomationProperties.Name="{Binding Label}"
+                                                                Command="{Binding $parent[UserControl].((contracts:ILinkGroupsScreen)DataContext).GoToCommand}"
+                                                                CommandParameter="{Binding}" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Classes="DlgAction Primary" Content="{localization:Loc Action_Close}"
+                                Command="{Binding CloseCommand}" IsCancel="True" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

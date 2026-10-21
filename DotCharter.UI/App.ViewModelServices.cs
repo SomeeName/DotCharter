@@ -155,6 +155,7 @@ public partial class App
         });
         services.AddSingleton<ChartEditorViewModel>();
         services.AddSingleton<IChartEditorSurface>(sp => sp.GetRequiredService<ChartEditorViewModel>());
+        services.AddSingleton<DotCharter.UI.ViewModels.Editor.Linking.LinkedMeasuresViewModel>();
         services.AddSingleton<SheetMusicPaneViewModel>();
         services.AddSingleton<MultiTrackOverlayViewModel>();
         services.AddSingleton<ChordTemplateEditorViewModel>();
@@ -171,8 +172,7 @@ public partial class App
         // File > New project: the hosted dialog's tag + name sources, the silence bake
         // (a delegate so tests fake it without the CLI tools), the creator that runs on
         // the dialog's answer, and the launcher that chains the two.
-        services.AddSingleton<DotCharter.Services.Session.INewProjectSources,
-            DotCharter.Services.Session.NewProjectSources>();
+        services.AddSingleton<DotCharter.Services.Session.INewProjectSources, DotCharter.Services.Session.NewProjectSources>();
         services.AddSingleton<DotCharter.Services.Import.Audio.PrepareImportAudio>(sp =>
         {
             var config = sp.GetRequiredService<IConfigurationService>();

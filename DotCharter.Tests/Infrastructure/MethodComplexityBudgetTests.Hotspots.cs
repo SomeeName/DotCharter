@@ -21,7 +21,6 @@ public sealed partial class MethodComplexityBudgetTests
         new("DotCharter.Services/Audio/Coordination/AudioPlaybackCoordinator.cs::AudioPlaybackCoordinator.ScheduleClicks(1)", 26, 150),
         new("DotCharter.Services/Audio/StemSeparation/Cache/StemCacheCoordinator.cs::StemCacheCoordinator.TryLoadCachedAsync(4)", 27, 174),
         new("DotCharter.Services/Editing/Catalog/PhrasePasteCompatibility.cs::PhrasePasteCompatibility.Evaluate(3)", 29, 150),
-        new("DotCharter.Services/Editing/HandShapes/ChordHandShapePlanner.cs::ChordHandShapePlanner.Plan(4)", 37, 150),
         new("DotCharter.Services/Editing/HandShapes/HandShapeSuggester.cs::HandShapeSuggester.Suggest(3)", 26, 150),
         new("DotCharter.Services/Editing/Highway/HighwayCommands/CommitHighwayDragDropCommand.cs::CommitHighwayDragDropCommand.NormalizeDroppedSounds(0)", 26, 150),
         new("DotCharter.Services/Editing/Quality/ChartQualityReporter.cs::ChartQualityReporter.Build(3)", 26, 150),

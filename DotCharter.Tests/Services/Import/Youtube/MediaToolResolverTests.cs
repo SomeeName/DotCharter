@@ -4,7 +4,7 @@ namespace DotCharter.Tests.Services.Import.Youtube;
 
 /// <summary>
 ///     Resolution order for a bundled/installed media tool: configured path →
-///     exe dir → exe dir/<c>tools</c> → PATH, with the Windows ".exe" variant
+///     exe dir → exe dir/<c>tools</c> → dev packer cache → PATH (opt-in only), with the Windows ".exe" variant
 ///     tried first. The filesystem probe is injected so these stay pure.
 /// </summary>
 public sealed class MediaToolResolverTests
@@ -59,8 +59,10 @@ public sealed class MediaToolResolverTests
     }
 
     [Fact]
-    public void Path_WinsOver_RepoRedistCache()
+    public void RepoRedistCache_WinsOver_Path()
     {
+        // PATH is the last resort of all: a tool the repo's own packer cache holds
+        // is the one the app means, an ambient PATH entry is whatever else is there.
         var existing = new HashSet<string>
         {
             @"C:\bin\ffmpeg.exe",
@@ -68,8 +70,29 @@ public sealed class MediaToolResolverTests
         };
         var result = Resolve("ffmpeg",
             @"C:\repo\DotCharter.UI\bin\Debug\net10.0", null, [@"C:\bin"], existing);
-        Assert.Equal(@"C:\bin\ffmpeg.exe", result);
+        Assert.Equal(@"C:\repo\tools\redist\win-x64\ffmpeg.exe", result);
     }
+
+    /// <summary>
+    ///     An executable found by walking the process PATH is whatever any earlier
+    ///     directory on it contains, so PATH is not consulted unless the user opted in
+    ///     (<c>DOTCHARTER_TOOLS_FROM_PATH=1</c>). The release bundles every tool in
+    ///     <c>tools/</c>, and a tool installed elsewhere is named in the
+    ///     <c>FfmpegPath</c> / <c>YtDlpPath</c> settings.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("0")]
+    [InlineData("true")]
+    [InlineData("yes")]
+    public void PathDirs_AreEmpty_UnlessTheUserOptedIn(string? optIn)
+        => Assert.Empty(MediaToolResolver.PathDirsFrom(@"C:\a" + Path.PathSeparator + @"C:\b", optIn));
+
+    [Fact]
+    public void PathDirs_AreTheProcessPath_WhenTheUserOptedIn()
+        => Assert.Equal(new[] { @"C:\a", @"C:\b" },
+            MediaToolResolver.PathDirsFrom(Path.PathSeparator + @"C:\a" + Path.PathSeparator + @" C:\b ", "1").ToArray());
 
     [Fact]
     public void ToolsSubfolder_Resolves_WhenNotDirectlyInExeDir()

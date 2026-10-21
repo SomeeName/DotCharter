@@ -19,7 +19,7 @@ public sealed class ClaudeCliToneModelTests
         => ToneDesignPromptBuilder.Build(new ToneDesignRequest("a clean tone", [], null));
 
     private static AiProviderSettings Settings(string model = "")
-        => new(AiProviderKind.ClaudeCli, model, null);
+        => new(AiProviderKind.ClaudeCli, model, null, WebResearch: true);
 
     private static ClaudeCliToneModel Model(FakeRunner runner, string model = "")
         => new(Settings(model), FakeExe, runner, workingDirectory: Path.GetTempPath());
@@ -71,7 +71,7 @@ public sealed class ClaudeCliToneModelTests
             "--model", ClaudeCliToneModel.DefaultModelId,
             "--json-schema", prompt.JsonSchema,
             "--system-prompt", ClaudeCliToneModel.FramingPrompt,
-            // research is on by default: the web tools, pre-approved, and nothing else
+            // research on: the web tools, pre-approved, and nothing else
             "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch",
             "--strict-mcp-config",
             "--disable-slash-commands",

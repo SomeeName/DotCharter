@@ -145,7 +145,7 @@ public static class PhraseCatalogFragment
         ArgumentNullException.ThrowIfNull(project);
 
         var arrangement = project.Arrangements.FirstOrDefault();
-        var level = arrangement?.Levels.FirstOrDefault();
+        var level = ChartLevels.Hardest(arrangement);
         if (arrangement == null || level == null) return null;
         if (level.Notes.Count == 0 && level.Chords.Count == 0 &&
             level.HandShapes.Count == 0 && level.Anchors.Count == 0)

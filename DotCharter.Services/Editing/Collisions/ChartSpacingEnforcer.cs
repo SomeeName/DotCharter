@@ -1,3 +1,4 @@
+using DotCharter.Core.Linking;
 using DotCharter.Services.State;
 
 namespace DotCharter.Services.Editing.Collisions;
@@ -1188,40 +1189,21 @@ public static class ChartSpacingEnforcer
     }
 
     public static FractionalPosition GetMinDistance(FractionalPosition position, IList<BeatMarker> beats,
-        AppConfig config)
-    {
-        var denominator = config.MinNoteDistanceDivisor > 0 ? config.MinNoteDistanceDivisor : 64;
+        AppConfig config) => SpacingGapOf(config).At(position, beats);
 
-        return config.MinNoteDistanceMode switch
+    /// <summary>The configured minimum note distance as the Core <see cref="SpacingGap" /> — the
+    /// one implementation of the gap, shared with the linked-measure comparison
+    /// (<see cref="MeasureContentOptions.Spacing" />), so the two cannot disagree.</summary>
+    public static SpacingGap SpacingGapOf(AppConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        var mode = config.MinNoteDistanceMode switch
         {
-            MinNoteDistanceMode.Milliseconds => GetMillisecondsDistance(position, beats, config.MinNoteDistanceMs),
-            MinNoteDistanceMode.BeatFraction => new FractionalPosition(new Fraction(1, denominator)),
-            _ => new FractionalPosition(new Fraction(GetBeatsInMeasure(position, beats), denominator))
+            MinNoteDistanceMode.Milliseconds => SpacingGapMode.Milliseconds,
+            MinNoteDistanceMode.BeatFraction => SpacingGapMode.BeatFraction,
+            _ => SpacingGapMode.MeasureFraction
         };
-    }
-
-    private static FractionalPosition GetMillisecondsDistance(FractionalPosition position, IList<BeatMarker> beats,
-        double milliseconds)
-    {
-        if (milliseconds <= 0 || beats.Count == 0) return FractionalPosition.Zero;
-
-        var startMs = position.GetPositionMs(beats);
-        var endPosition = TimelineMath.PositionFromMs(startMs + milliseconds, beats);
-        return FractionalPosition.Max(FractionalPosition.Zero, endPosition - position);
-    }
-
-    private static int GetBeatsInMeasure(FractionalPosition position, IList<BeatMarker> beats)
-    {
-        if (beats.Count == 0) return 4;
-
-        var beatIndex = Math.Clamp(position.BeatId, 0, beats.Count - 1);
-        for (var i = beatIndex; i >= 0; i--)
-        {
-            if (beats[i].IsMeasure)
-                return Math.Max(1, beats[i].BeatsInMeasure);
-        }
-
-        return Math.Max(1, beats[beatIndex].BeatsInMeasure);
+        return new SpacingGap(mode, config.MinNoteDistanceDivisor, config.MinNoteDistanceMs);
     }
 
     private readonly record struct SoundTime(FractionalPosition Position, double TimeMs);

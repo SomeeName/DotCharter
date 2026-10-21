@@ -59,6 +59,9 @@ from the JuceSharp release `native-prebuilt`, checks the SHA-256 of
 `juce_sharp.dll` and `juce_vst_host.exe` against `tools/setup/native-runtime.json`
 and the DLL's `dca_abi_version()` against `DCA_ABI_VERSION` in the header, and
 only then installs the pair. Any mismatch fails the build and installs nothing.
+The manifest may only name `SomeeName/JuceSharp` or `SomeeName/JuceSharp`,
+and the DLL is loaded for its ABI check only after both hashes matched, in a
+child PowerShell.
 You can run the script by hand too:
 
 ```powershell

@@ -51,7 +51,7 @@ public sealed class CustomStemModelStore
                 var json = AtomicFile.ReadAllText(_path);
                 var dtos = JsonSerializer.Deserialize<List<Dto>>(json) ?? [];
                 _storeUnreadable = false;
-                return dtos.Select(d => d.ToDescriptor()).ToList();
+                return dtos.Where(IsUsable).Select(d => d.ToDescriptor()).ToList();
             }
             catch (JsonException ex)
             {
@@ -69,6 +69,15 @@ public sealed class CustomStemModelStore
                 return Array.Empty<StemModelDescriptor>();
             }
         }
+    }
+
+    /// <summary>A model whose file name is not a bare file name is dropped (and logged): the name is joined onto the models folder.</summary>
+    private bool IsUsable(Dto dto)
+    {
+        if (StemModelFileName.IsBare(dto.FileName)) return true;
+        _logger?.Warning(AppLogCategory.Audio,
+            $"Ignoring custom stem model '{dto.Id}' in '{_path}': its file name is not a plain file name.");
+        return false;
     }
 
     public void Save(IEnumerable<StemModelDescriptor> descriptors)

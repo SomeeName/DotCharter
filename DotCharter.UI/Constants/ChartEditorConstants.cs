@@ -168,7 +168,6 @@ public static class ChartEditorConstants
 
         // BackgroundLayer
         public const double ZoomThresholdDetailed = 0.05;
-        public const double ZoomThresholdFractions = 0.02;
 
         /// <summary>Slack in MILLISECONDS around the visible time range —
         /// compared against times, never against screen X. See
@@ -176,8 +175,6 @@ public static class ChartEditorConstants
         public const double CullingBufferMs = 100.0;
         public const float GuideLineSpacing = 24.0f;
         public const int MaxGuideLines = 4;
-        public const double RulerStepFractionsMs = 1000.0;
-        public const double RulerStepStandardMs = 5000.0;
         public const float MeasureLineWidth = 2.0f;
         public const float StandardLineWidth = 1.0f;
         public const float DashLength = 4.0f;

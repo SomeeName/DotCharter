@@ -48,7 +48,7 @@ public sealed class GeneralSplitInventoryTests
         "PasteIncludeNotes", "PasteIncludeTones", "LibraryAudioCacheDetail", "LibraryAudioCacheHasEntries",
         "LibraryAudioCacheUsage", "PsarcOpenHardestLevelOnly", "RefreshLibraryAudioCacheCommand", "RotateLogFiles", "RunSetupAgainCommand",
         "SaveCompanionEof",
-        "SaveCompanionEofAudio", "SaveCompanionPsarc", "SaveCompanionPsarcCodecIndex", "SaveCompanionRs2Dlc", "RsXmlSixStringProjection",
+        "SaveCompanionEofAudio", "SaveCompanionPsarc", "SaveCompanionPsarcCodecIndex", "SaveCompanionRs2Dlc", "RsXmlSixStringProjection", "RsXmlMoverPhrases",
         "ExportGenerateDynamicDifficulty", "ExportDdUseMlModel", "ExportApplyDlcBuilderFixes",
         "SelectedLanguageIndex", "SelectedStartupScreenIndex", "SuppressDoubleStopChordNames",
         "SyncAnchorToChordFingering", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset", "TrailingSilenceSeconds",
@@ -68,14 +68,15 @@ public sealed class GeneralSplitInventoryTests
     ///     Rows per view. 57 against the old 54: the log's two checkbox rows
     ///     ("Outputs", "Console") became four switches of their own, and Files gained
     ///     the auto-backup Keep row (#318). Editor's "Musical chord names" (#493)
-    ///     makes 58. Files' three DLC Builder rows (#952) make 61.
+    ///     makes 58. Files' three DLC Builder rows (#952) make 61, and its moveR
+    ///     row makes 62.
     /// </summary>
     private static readonly Dictionary<string, int> ExpectedRows = new(StringComparer.Ordinal)
     {
         ["GeneralSettingsView.axaml"] = 17,
         ["EditorSettingsView.axaml"] = 26,
         ["PlaySettingsView.axaml"] = 4,
-        ["FilesSettingsView.axaml"] = 15
+        ["FilesSettingsView.axaml"] = 16
     };
 
     [Fact]

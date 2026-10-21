@@ -123,13 +123,16 @@ public sealed class Tone3000AuthServiceTests
     {
         private readonly Func<Task<string?>> _query;
         public string? Prefix;
+        public Func<string, bool>? Accept;
         public CancellationToken LastToken;
 
         public FakeListener(Func<Task<string?>> query) => _query = query;
 
-        public Task<string?> WaitForCallbackAsync(string prefix, TimeSpan timeout, CancellationToken ct)
+        public Task<string?> WaitForCallbackAsync(
+            string prefix, Func<string, bool> accept, TimeSpan timeout, CancellationToken ct)
         {
             Prefix = prefix;
+            Accept = accept;
             LastToken = ct;
             return _query();
         }
@@ -194,6 +197,43 @@ public sealed class Tone3000AuthServiceTests
         Assert.Equal(OnlineError.NotConfigured, result.Error);
         Assert.False(service.IsConfigured);
     }
+
+    /// <summary>
+    ///     The loopback listener must not end the wait on a stray request: the
+    ///     sign-in hands it a gate that admits only a query carrying THIS flow's
+    ///     state (the one in the authorize URL), so any page that knocks on the
+    ///     port can neither complete nor abort the sign-in.
+    /// </summary>
+    [Fact]
+    public async Task SignIn_GatesTheListenerOnItsOwnState()
+    {
+        var urls = new List<string>();
+        FakeListener? listener = null;
+        using var service = NewService(new ScriptedHandler((_, _) => Json("{}")),
+            new InMemoryTone3000TokenStore(), openedUrls: urls, browserOpens: false, listenerOut: l => listener = l);
+
+        await service.SignInAsync(Ct);
+
+        var state = System.Web.HttpUtility.ParseQueryString(new Uri(urls.Single()).Query).Get("state")!;
+        Assert.NotNull(listener?.Accept);
+        Assert.True(listener.Accept($"?code=c&state={Uri.EscapeDataString(state)}"));
+        Assert.True(listener.Accept($"?error=access_denied&state={Uri.EscapeDataString(state)}"));
+        Assert.False(listener.Accept("?code=c&state=someone-elses"));
+        Assert.False(listener.Accept("?error=access_denied"));
+        Assert.False(listener.Accept(""));
+    }
+
+    [Theory]
+    [InlineData("?code=c&state=abc", "abc", true)]
+    [InlineData("code=c&state=abc", "abc", true)]
+    [InlineData("?state=abc", "abc", true)]
+    [InlineData("?code=c&state=abd", "abc", false)]
+    [InlineData("?code=c&state=ABC", "abc", false)]
+    [InlineData("?code=c", "abc", false)]
+    [InlineData("", "abc", false)]
+    [InlineData(null, "abc", false)]
+    public void CarriesState_AdmitsOnlyTheExpectedState(string? query, string expected, bool carries)
+        => Assert.Equal(carries, Tone3000OAuth.CarriesState(query, expected));
 
     /// <summary>
     ///     Network audit P2-12: when the browser could not be opened, the

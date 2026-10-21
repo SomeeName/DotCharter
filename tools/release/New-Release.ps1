@@ -1,18 +1,19 @@
 ﻿#Requires -Version 7.0
 <#
 .SYNOPSIS
-    One-command DotCharter release pipeline: builds all 4 GitHub release assets
+    One-command DotCharter release pipeline: builds all 5 GitHub release assets
     locally and prints the exact `gh release create` command (never runs it).
 
 .DESCRIPTION
     CI cannot upload release artifacts (artifact storage quota), so releases are
-    built and shipped locally. A release has exactly 4 assets — count them off
+    built and shipped locally. A release has exactly 5 assets — count them off
     the printed `gh release create` line, which uploads every member of $assets:
 
       1. DotCharter-v<ver>-win-x64.zip        UI, self-contained, folder-wrapped, SPLIT
       2. DotCharter-RigLab-v<rigver>.zip      the standalone rig, folder-wrapped
       3. payload-manifest.json                SHA-256 per payload file
-      4. SHA256SUMS.txt                       digests of assets 1-3
+      4. SHA256SUMS.txt                       digests of assets 1-3, bound to the tag
+      5. SHA256SUMS.txt.sig                   Ed25519 signature over asset 4
 
     No voice pack with a non-free licence is built or shipped (#767): the
     release's voices/ holds only the CC0 / CC BY recordings.
@@ -24,6 +25,13 @@
     the charting app. GitHubUpdateService also excludes "RigLab" by name now.
     -Tone3000ClientId bakes the publishable TONE3000 key into it (never commit
     the key); -SkipRigLab leaves it out.
+
+    Asset 5 is what the updater trusts: from v1.1.0 on an install
+    REFUSES any update whose SHA256SUMS.txt is not signed with the release key
+    pinned in DotCharter.Services/Update/ReleaseSignature.cs. The private key
+    lives OUTSIDE the repository (-SigningKeyPath); without it this script stops
+    in preflight, before anything is built. See tools/release/README.md
+    § Release signing.
 
     Asset 3 is NOT a convenience either: the in-app updater fetches it and
     refuses a downloaded asset whose digest disagrees (see the Checksum manifest
@@ -151,6 +159,12 @@
     (tools/ci/HeadlessShards.psm1 — whole classes, balanced by measured class
     time). Default 4. Retries and isolated re-runs stay one fresh process.
 
+.PARAMETER SigningKeyPath
+    The release-signing Ed25519 PRIVATE key (base64, 32 bytes) that signs
+    SHA256SUMS.txt. Default: $env:DOTCHARTER_RELEASE_SIGNING_KEY, else
+    ..\DotCharter-local\release-signing\dotcharter-release-ed25519.key beside the
+    repository. A missing key, or one whose public half is not the pinned one,
+    FAILS preflight: an unsigned release is one no install will take.
 .PARAMETER SkipRigLab
     Do not build the standalone rig (asset 2).
 .PARAMETER Tone3000ClientId
@@ -217,7 +231,11 @@ param(
     # <owner>/<name> for the printed `gh release create`; default by mode (Resolve-ReleaseFeed).
     [string]$Repo,
     # The checkout whose HEAD the printed `gh release create` tags; default this one.
-    [string]$TagCheckout
+    [string]$TagCheckout,
+    # Skip the public -> dev sync check (Find-UnimportedPublicCommits.ps1), e.g. offline.
+    [switch]$SkipPublicSyncCheck,
+    # The release-signing private key. NEVER inside the repository.
+    [string]$SigningKeyPath = $env:DOTCHARTER_RELEASE_SIGNING_KEY
 )
 
 $ErrorActionPreference = 'Stop'
@@ -236,6 +254,11 @@ $PluginAssemblies = @(Get-PluginAssemblyNames $RepoRoot)
 # still holds a plugin's assembly (a folder before zipping, the zip after). -WithPlugins
 # flips both: the plugins are built in, and a payload WITHOUT one of them is refused.
 $UiPluginPublishArgs = @(Get-UiPluginPublishArgs -WithPlugins:$WithPlugins)
+# The committed packages.lock.json files pin the PUBLIC graph (version + content
+# hash of every package), so a public publish restores in locked mode and fails
+# on anything else. A plugin build restores another graph, whose lock lives
+# uncommitted under obj/ (Directory.Build.props), so it cannot be held to them.
+$LockedRestoreArgs = @(if (-not $WithPlugins) { '-p:RestoreLockedMode=true' })
 $PluginList = if ($PluginAssemblies.Count -gt 0) { $PluginAssemblies -join ', ' } else { 'none checked out' }
 $PluginModeText = if ($WithPlugins) { "WITH the plugins ($PluginList; DotCharterPlugins=true)" } else { "no plugin in the payload (checked out: $PluginList; DotCharterPlugins=false)" }
 Import-Module (Join-Path $RepoRoot 'tools/ci/HeadlessShards.psm1') -Force
@@ -243,6 +266,10 @@ $Validator = Join-Path $PSScriptRoot 'ValidateReleaseZip.cs'
 $ManifestTool = Join-Path $PSScriptRoot 'BuildPayloadManifest.cs'
 $PruneTool = Join-Path $PSScriptRoot 'PrunePayload.cs'
 $BinaryCheckTool = Join-Path $PSScriptRoot 'CheckPayloadBinaries.cs'
+$SignTool = Join-Path $PSScriptRoot 'SignReleaseManifest.cs'
+if (-not $SigningKeyPath) {
+    $SigningKeyPath = Join-Path (Split-Path $RepoRoot -Parent) 'DotCharter-local/release-signing/dotcharter-release-ed25519.key'
+}
 
 # --- Bundled media tools (ffmpeg / yt-dlp) -----------------------------------
 # The UI payload ships these in its tools/ subfolder so stem Opus encoding and
@@ -253,8 +280,11 @@ $BinaryCheckTool = Join-Path $PSScriptRoot 'CheckPayloadBinaries.cs'
 # and, for ffmpeg, still lists every component the app uses.
 #
 # Pinned versions (update deliberately):
-#   yt-dlp : every release is retained upstream forever, so a dated tag is a
-#            true reproducible pin. Single ~18 MB exe. Unlicense (public domain).
+#   yt-dlp : tools/release/yt-dlp.json pins the dated tag, its URL and the
+#            exe's SHA-256 (the release's own SHA2-256SUMS line). The exe is
+#            fetched through Save-PinnedFile, so a cached or downloaded file that
+#            does not hash to the pin is deleted and NEVER run; only then is it
+#            run for its --version. Single ~18 MB exe. Unlicense (public domain).
 #            https://github.com/yt-dlp/yt-dlp/releases
 #   ffmpeg : OUR minimal LGPL static build (#409), made by Build-MinimalFfmpeg.ps1
 #            from pinned, hash-checked sources with exactly the components in
@@ -262,11 +292,12 @@ $BinaryCheckTool = Join-Path $PSScriptRoot 'CheckPayloadBinaries.cs'
 #            -extra-version tag come from that file, so moving either rebuilds.
 #            No ffprobe: AudioMetadataExtractor reads tags through ffmpeg alone.
 Import-Module (Join-Path $PSScriptRoot 'FfmpegInventory.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'PinnedDownload.psm1') -Force
 # Start-HiddenDesktopProcess: the launch smoke runs the app on a never-shown
 # desktop so it cannot take the foreground (#419).
 Import-Module (Join-Path $PSScriptRoot 'HiddenDesktop.psm1') -Force
-$YtDlpVersion   = '2026.07.04'
-$YtDlpUrl       = "https://github.com/yt-dlp/yt-dlp/releases/download/$YtDlpVersion/yt-dlp.exe"
+$YtDlpPin       = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'yt-dlp.json') -Raw | ConvertFrom-Json
+$YtDlpVersion   = $YtDlpPin.version
 $FfmpegInventory = Get-FfmpegInventory
 $FfmpegBuildScript = Join-Path $PSScriptRoot 'Build-MinimalFfmpeg.ps1'
 # `ffmpeg -version`'s first line reads "ffmpeg version 8.1.3-dotcharter-min1
@@ -304,7 +335,7 @@ function Get-AppVersion {
 # and all of -PayloadOnly. $UiPluginPublishArgs is never optional.
 function Publish-UiPayload([string]$AppDir, [switch]$NoLayoutCheck) {
     & dotnet publish (Join-Path $RepoRoot 'DotCharter.UI/DotCharter.UI.csproj') `
-        -c Release -r win-x64 --self-contained true -o $AppDir "-p:Version=$Version" @ContestedPublishArgs @UiPluginPublishArgs
+        -c Release -r win-x64 --self-contained true -o $AppDir "-p:Version=$Version" @ContestedPublishArgs @UiPluginPublishArgs @LockedRestoreArgs
     if ($LASTEXITCODE -ne 0) { throw 'dotnet publish (UI) failed.' }
     Assert-ReleasePayloadPlugins $AppDir $PluginAssemblies -WithPlugins:$WithPlugins
     Write-Ok $PluginModeText
@@ -350,7 +381,7 @@ function Publish-Launcher([string]$Destination, [string]$AppVersion) {
     $out = Join-Path $OutputDir 'staging-launcher'
     if (Test-Path $out) { Remove-Item $out -Recurse -Force }
     & dotnet publish (Join-Path $RepoRoot 'DotCharter.Launcher/DotCharter.Launcher.csproj') `
-        -c Release -r win-x64 -o $out "-p:Version=$AppVersion" | Out-Host   # never into the return value
+        -c Release -r win-x64 -o $out "-p:Version=$AppVersion" -p:DotCharterPlugins=false -p:RestoreLockedMode=true | Out-Host   # never into the return value
     if ($LASTEXITCODE -ne 0) { throw 'dotnet publish (launcher, NativeAOT) failed.' }
     $exe = Join-Path $out 'DotCharter.Launcher.exe'
     if (-not (Test-Path $exe)) { throw "The launcher publish wrote no $exe." }
@@ -550,30 +581,10 @@ function Remove-DeadPayloadWeight([string]$PublishDir) {
 # Media-tool bundling (ffmpeg / yt-dlp)
 # ---------------------------------------------------------------------------
 
-# Download a file to $Dest, atomically, verifying it is at least $MinBytes.
-# Throws loudly on a 404 (Invoke-WebRequest throws) or a truncated body.
-function Get-RemoteFile([string]$Url, [string]$Dest, [long]$MinBytes) {
-    $tmp = "$Dest.partial"
-    if (Test-Path $tmp) { Remove-Item $tmp -Force }
-    $prevProgress = $ProgressPreference
-    $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest progress bar is very slow for big files
-    try {
-        Invoke-WebRequest -Uri $Url -OutFile $tmp -UseBasicParsing
-    }
-    catch {
-        throw "download failed for $Url : $($_.Exception.Message)"
-    }
-    finally {
-        $ProgressPreference = $prevProgress
-    }
-    if (-not (Test-Path $tmp)) { throw "download produced no file: $Url" }
-    $len = (Get-Item $tmp).Length
-    if ($len -lt $MinBytes) {
-        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
-        throw "download truncated: $Url produced $len bytes (< $MinBytes required)."
-    }
-    Move-Item $tmp $Dest -Force
-    return $len
+# Throws unless $Path hashes to the yt-dlp pin (tools/release/yt-dlp.json).
+function Assert-YtDlpPin([string]$Path) {
+    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $YtDlpPin.sha256) { throw "$Path has SHA-256 $actual, but tools/release/yt-dlp.json pins $($YtDlpPin.sha256)." }
 }
 
 # The first line a tool prints for its version flag, or $null when it does not
@@ -616,18 +627,13 @@ function Ensure-RedistTools {
     }
     else {
     try {
-        $cached = Get-ToolVersionLine $ytDlp @('--version')
-        if ($cached -eq $YtDlpVersion) {
-            Write-Ok ("yt-dlp $cached cached ({0:N1} MB)" -f ((Get-Item $ytDlp).Length / 1MB))
-        }
-        else {
-            if (Test-Path $ytDlp) { Write-Warn2 "cached yt-dlp reports '$cached', not the pinned $YtDlpVersion - re-fetching." }
-            Write-Step "Downloading yt-dlp $YtDlpVersion"
-            $n = Get-RemoteFile -Url $YtDlpUrl -Dest $ytDlp -MinBytes 1MB
-            $fetched = Get-ToolVersionLine $ytDlp @('--version')
-            if ($fetched -ne $YtDlpVersion) { throw "downloaded yt-dlp.exe reports '$fetched', not $YtDlpVersion." }
-            Write-Ok ("yt-dlp.exe $fetched ({0:N1} MB)" -f ($n / 1MB))
-        }
+        # The hash first: a cached or downloaded exe that is not the pinned one
+        # is deleted by Save-PinnedFile and never reaches the line that runs it.
+        $source = Save-PinnedFile -Urls @($YtDlpPin.url) -Dest $ytDlp -Sha256 $YtDlpPin.sha256
+        $reported = Get-ToolVersionLine $ytDlp @('--version')
+        if ($reported -ne $YtDlpVersion) { throw "yt-dlp.exe matches its pinned SHA-256 but reports '$reported', not $YtDlpVersion; fix tools/release/yt-dlp.json." }
+        $how = if ($source -eq 'cache') { 'cached' } else { 'downloaded' }
+        Write-Ok ("yt-dlp $reported $how, SHA-256 verified ({0:N1} MB)" -f ((Get-Item $ytDlp).Length / 1MB))
         $result.YtDlp = $ytDlp
     }
     catch {
@@ -709,7 +715,11 @@ function Add-BundledTools([string]$PublishDir, $Redist) {
     # yt-dlp probes through ffmpeg when ffprobe is absent.
     $bundled = [pscustomobject]@{ Ffmpeg = $false; YtDlp = $false }
     if ($Redist.Ffmpeg  -and (Test-Path $Redist.Ffmpeg))  { Copy-Item $Redist.Ffmpeg  (Join-Path $toolsDir 'ffmpeg.exe')  -Force; $bundled.Ffmpeg  = $true }
-    if ($ContestedFeatures -and $Redist.YtDlp -and (Test-Path $Redist.YtDlp)) { Copy-Item $Redist.YtDlp   (Join-Path $toolsDir 'yt-dlp.exe')  -Force; $bundled.YtDlp   = $true }
+    if ($ContestedFeatures -and $Redist.YtDlp -and (Test-Path $Redist.YtDlp)) {
+        Assert-YtDlpPin $Redist.YtDlp
+        Copy-Item $Redist.YtDlp (Join-Path $toolsDir 'yt-dlp.exe') -Force
+        $bundled.YtDlp = $true
+    }
 
     # The LGPL text and the build record (exact sources + configure line) that
     # Build-MinimalFfmpeg.ps1 wrote beside the exe.
@@ -1420,9 +1430,12 @@ $HeadlessLayoutFilter = @(
     '--filter-class', '*UiSweepUiPerfSmokeTests',
     '--filter-class', '*AlignToRecordingDialogUiPerfSmokeTests',
     '--filter-class', '*SettingsConstructionUiPerfSmokeTests',
+    '--filter-class', '*LinkedMeasuresConstructionUiPerfSmokeTests',
+    '--filter-class', '*LinkDialogsUiPerfSmokeTests',
     '--filter-class', '*StatusRailNarrowWidthUiPerfSmokeTests',
     '--filter-class', '*InspectorNarrowWidthUiPerfSmokeTests',
     '--filter-class', '*EditorShortWindowUiPerfSmokeTests',
+    '--filter-class', '*TimelineLaneMenuUiPerfSmokeTests',
     '--filter-class', '*LibraryDetailRailUiPerfSmokeTests',
     '--filter-class', '*LibraryTuningPopoverUiPerfSmokeTests',
     '--filter-class', '*SongTableColumnsUiPerfSmokeTests',
@@ -1890,6 +1903,20 @@ if (-not (Test-Path $nativeDll)) {
           '  cmake -S JuceSharp/src/JuceSharp.Native -B JuceSharp/src/JuceSharp.Native/build -G "Visual Studio 17 2022" -A x64' + "`n" +
           '  cmake --build JuceSharp/src/JuceSharp.Native/build --config Release'
 }
+# The release-signing key is checked FIRST: an unsigned release is one
+# every install from v1.1.0 on refuses, so a missing key must stop the release
+# before an hour of building, not after it. `pubkey` prints only the PUBLIC half.
+Write-Step 'Release-signing key present and matching the pinned public key'
+if (-not (Test-Path -LiteralPath $SigningKeyPath)) {
+    throw "The release-signing key is missing ($SigningKeyPath). Every release must be signed: restore the key " +
+          'from its backup, or pass -SigningKeyPath / set DOTCHARTER_RELEASE_SIGNING_KEY. See tools/release/README.md § Release signing.'
+}
+$signingPublicKey = (& dotnet run $SignTool pubkey $SigningKeyPath | Select-Object -Last 1)
+if ($LASTEXITCODE -ne 0) { throw "The release-signing key at $SigningKeyPath could not be read (see above)." }
+$pinnedLine = Select-String -Path (Join-Path $RepoRoot 'DotCharter.Services/Update/ReleaseSignature.cs') -Pattern 'PinnedPublicKeyBase64 = "([^"]+)"'
+if (-not $pinnedLine -or $pinnedLine.Matches[0].Groups[1].Value -ne "$signingPublicKey".Trim()) {
+    throw "The release-signing key at $SigningKeyPath is not the one pinned in ReleaseSignature.PinnedPublicKeyBase64: every install would refuse this release."
+}
 Initialize-VoicePacks
 Assert-NoSeparatelyLicensedVoice (Join-Path $RepoRoot 'artifacts/voice-pack')
 $dirty = git -C $RepoRoot status --porcelain
@@ -1899,6 +1926,19 @@ if ($ReleaseFeed.IsOtherCheckout -and (git -C $ReleaseFeed.TargetCheckout status
 }
 $existingTag = git -C $RepoRoot tag --list "v$Version"
 if ($existingTag) { Write-Warn2 "Tag v$Version already exists locally." }
+
+# The public -> dev sync check (#83). Actions is off on the dev repos, so the scheduled
+# public-sync-watch never runs: the release preflight is where a public commit that dev
+# has not imported (a contributor's merged PR) is caught, before the next public snapshot
+# would overwrite it. The export (Export-PublicSnapshot.ps1) stays the hard stop too.
+if ($SkipPublicSyncCheck) {
+    Write-Warn2 'SKIPPING the public sync check (-SkipPublicSyncCheck): run tools/release/Find-UnimportedPublicCommits.ps1 before the next export.'
+}
+else {
+    Write-Step 'Every public commit since the last snapshot is imported into dev (Find-UnimportedPublicCommits.ps1)'
+    & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Find-UnimportedPublicCommits.ps1') -DevRepo $RepoRoot -DevRef HEAD -FailOnMissing
+    if ($LASTEXITCODE -ne 0) { throw 'Public commits are not imported into dev (listed above): import each with tools/release/Import-PublicCommit.ps1, or pass -SkipPublicSyncCheck.' }
+}
 
 # Dependency licences (#828): the committed inventory must match the packages
 # the projects resolve (offline), and DependencyLicenceTests (in the gate)
@@ -2152,15 +2192,33 @@ Write-Ok "$(Split-Path $notesPath -Leaf) ($($subjects.Count) commits since $(if 
 # comment says so — FullAssetChecksumTests is what actually proves it.
 #
 # Standard `sha256sum` format ("<hex>  <filename>"), which
-# ReleaseChecksums.Parse reads. Keep the two in step.
+# ReleaseChecksums.Parse reads, plus ONE `# release: v<ver>` comment line that
+# binds the file to this tag (ReleaseSignature.ReleaseLinePrefix): a signed
+# manifest of an older release must not verify under a newer tag. Keep the
+# three in step.
 $checksumPath = Join-Path $OutputDir 'SHA256SUMS.txt'
 $checksumLines = foreach ($asset in $assets) {
     $hash = (Get-FileHash -Path $asset -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $(Split-Path $asset -Leaf)"
 }
+$checksumLines = @($checksumLines) + "# release: v$Version"
 Set-Content -Path $checksumPath -Value ($checksumLines -join "`n") -Encoding ascii
 $assets = @($assets) + $checksumPath
-Write-Ok "SHA256SUMS.txt ($($checksumLines.Count) assets digested)"
+Write-Ok "SHA256SUMS.txt ($($checksumLines.Count - 1) assets digested)"
+
+# --- Asset 5: the publisher signature over SHA256SUMS.txt -------------
+# The updater REFUSES a release without it: the digests above come from the same
+# release page as the zip, so on their own they prove nothing about who
+# published it. SignReleaseManifest.cs signs with the key outside the repo,
+# refuses a key that is not the pinned one, and verifies the result exactly as
+# the app will before writing it. Fails closed: no signature, no release.
+$signaturePath = Join-Path $OutputDir 'SHA256SUMS.txt.sig'
+& dotnet run $SignTool sign $checksumPath $SigningKeyPath $signaturePath "v$Version"
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $signaturePath)) {
+    throw 'Signing SHA256SUMS.txt failed (see above): the release is NOT publishable unsigned.'
+}
+$assets = @($assets) + $signaturePath
+Write-Ok 'SHA256SUMS.txt.sig (Ed25519, verified against the pinned key)'
 
 # --- Print the publish command (NEVER run it from here) ----------------------
 # The tag goes on the commit of the repo it is created in (Resolve-ReleaseFeed).

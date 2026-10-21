@@ -10,8 +10,11 @@ namespace DotCharter.Services.State;
 /// session dirty. The ordered insert lives in <see cref="Execute" /> so a redo
 /// re-derives the slot against whatever the list holds by then.
 /// </summary>
-public sealed class AddAnnotationAction : IChartAction
+public sealed class AddAnnotationAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly ObservableCollection<ChartAnnotation> _annotations;
     private readonly ChartAnnotation _annotation;
 
@@ -37,8 +40,11 @@ public sealed class AddAnnotationAction : IChartAction
 /// Same shape as <see cref="AddAnnotationAction" /> — see its remarks for why
 /// these exist.
 /// </summary>
-public sealed class RemoveAnnotationAction : IChartAction
+public sealed class RemoveAnnotationAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly ObservableCollection<ChartAnnotation> _annotations;
     private readonly ChartAnnotation _annotation;
     private readonly bool _hasEffect;

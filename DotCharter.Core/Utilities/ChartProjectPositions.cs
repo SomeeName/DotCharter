@@ -103,6 +103,17 @@ public static class ChartProjectPositions
                 iteration.Position = map(iteration.Position);
         }
 
+        // Linked runs: both barlines move with the grid, so a beat inserted INSIDE a run
+        // widens it (and the history unlinks it), while one inserted before it shifts it whole.
+        foreach (var group in project.LinkGroups)
+        {
+            foreach (var placement in group.Placements)
+            {
+                placement.Position = map(placement.Position);
+                placement.EndPosition = map(placement.EndPosition);
+            }
+        }
+
         foreach (var vocalTrack in project.VocalTracks)
         {
             foreach (var phrase in vocalTrack.Phrases)

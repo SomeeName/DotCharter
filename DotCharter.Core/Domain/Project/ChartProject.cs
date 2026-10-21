@@ -79,6 +79,10 @@ public class ChartProject
     /// differs from the defaults.</summary>
     public ChartSynthPlayStyle SynthPlayStyle { get; set; } = new();
 
+    /// <summary>Linked measures: groups of runs kept equal across their copies. Saved as
+    /// <c>dcLinkGroups</c> only when non-empty. See <see cref="LinkGroup" />.</summary>
+    public ObservableCollection<LinkGroup> LinkGroups { get; set; } = [];
+
     /// <summary>
     ///     Top-level project nodes a NEWER build wrote that this build does not
     ///     understand, each as one normalized XML fragment, in the order they

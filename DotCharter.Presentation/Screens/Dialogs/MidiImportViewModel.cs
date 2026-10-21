@@ -283,25 +283,18 @@ public sealed class MidiImportViewModel : DialogViewModel<bool>, IMidiImportScre
         return open;
     }
 
+    /// <summary>
+    ///     The standard open strings the arrangement's offsets are measured against, as the
+    ///     app sounds them (<see cref="SoundingPitch.OpenStringMidi" />): the guitar row an
+    ///     octave down for a bass. A 5-string bass is therefore E A D G B and a 6-string
+    ///     E A D G B E — a B E A D G bass carries <c>-5 -5 -5 -5 -4</c>.
+    /// </summary>
     private static int[] BaseOpenStringMidi(ArrangementType type, int stringCount)
     {
-        if (type == ArrangementType.Bass)
-        {
-            return stringCount switch
-            {
-                5 => [23, 28, 33, 38, 43],
-                >= 6 => [23, 28, 33, 38, 43, 48],
-                _ => [28, 33, 38, 43]
-            };
-        }
-
-        return stringCount switch
-        {
-            >= 7 => TuningUtilities.GetStandardMidiPitches(stringCount), // B1 …, F#1 B1 …
-            <= 4 => [40, 45, 50, 55],
-            5 => [40, 45, 50, 55, 59],
-            _ => [40, 45, 50, 55, 59, 64]
-        };
+        var open = StandardOpenStrings.SemitonesAboveLowE(stringCount);
+        var lowE = StandardOpenStrings.GuitarLowEMidi - (type == ArrangementType.Bass ? 12 : 0);
+        for (var i = 0; i < open.Length; i++) open[i] += lowE;
+        return open;
     }
 
     /// <summary>Replacing the grid moves every placed note, so it is pre-ticked only on an uncharted, unlocked grid.</summary>

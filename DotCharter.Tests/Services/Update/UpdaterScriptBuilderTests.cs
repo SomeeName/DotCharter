@@ -346,7 +346,7 @@ public sealed class UpdaterScriptBuilderTests
     [Fact]
     public void ThePathHelpers_AgreeWithTheScriptTheyAreEmbeddedIn()
     {
-        Assert.Equal(@"C:\Games\DotCharter\dotcharter-update.cmd", UpdaterScriptBuilder.ScriptPathFor(Install + "\\"));
+        Assert.Equal(@"C:\Games\DotCharter\dotcharter-update.cmd", UpdaterScriptBuilder.LegacyScriptPathFor(Install + "\\"));
         Assert.Equal(@"C:\Games\DotCharter\dotcharter-update.log", UpdaterScriptBuilder.LogPathFor(Install + "\\"));
         Assert.Equal(@"C:\Games\DotCharter\update-staging", UpdaterScriptBuilder.StagingRootFor(Install));
         Assert.Equal(@"C:\Games\DotCharter\dotcharter-update-pending.json",

@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace DotCharter.Services.Update;
 
 /// <summary>
@@ -33,7 +36,13 @@ namespace DotCharter.Services.Update;
 /// </summary>
 public static class UpdaterScriptBuilder
 {
+    /// <summary>The FIXED script name older versions wrote beside the
+    /// install. Never written any more; still removed when found, and still refused
+    /// inside a payload (<see cref="PayloadReceiptFilter" />).</summary>
     public const string ScriptFileName = "dotcharter-update.cmd";
+
+    /// <summary>Prefix of the randomly named script in <see cref="DefaultScriptDirectory" />.</summary>
+    public const string ScriptFilePrefix = "dotcharter-update-";
     public const string StagingDirName = "update-staging";
 
     /// <summary>Human-readable transcript of the last update attempt, written
@@ -63,7 +72,36 @@ public static class UpdaterScriptBuilder
     /// nothing was deleted.</summary>
     public const int ExitWaitTimedOut = 2;
 
-    public static string ScriptPathFor(string installDir) => Path.Combine(TrimDir(installDir), ScriptFileName);
+    /// <summary>Where older versions wrote the script; only ever deleted now.</summary>
+    public static string LegacyScriptPathFor(string installDir) => Path.Combine(TrimDir(installDir), ScriptFileName);
+
+    /// <summary>The per-user folder the script is written to: under the user's
+    /// own temp folder, which only that user can write.</summary>
+    public static string DefaultScriptDirectory() => Path.Combine(Path.GetTempPath(), "DotCharter-updater");
+
+    /// <summary>
+    ///     Writes <paramref name="script" /> to a NEW file with an unpredictable
+    ///     name in <paramref name="scriptDir" /> and returns its path. CreateNew, so
+    ///     a file somebody planted under that name is never reused or overwritten.
+    ///     Plain ASCII content — safe with cmd.exe's default codepage.
+    /// </summary>
+    public static string CreateScriptFile(string scriptDir, string script)
+    {
+        Directory.CreateDirectory(scriptDir);
+        var path = Path.Combine(scriptDir, ScriptFilePrefix + RandomNumberGenerator.GetHexString(32, lowercase: true) + ".cmd");
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        stream.Write(Encoding.ASCII.GetBytes(script));
+        return path;
+    }
+
+    /// <summary>Removes scripts an earlier run left in <paramref name="scriptDir" />
+    /// (a successful run deletes its own).</summary>
+    public static void DeleteStaleScripts(string scriptDir)
+    {
+        if (!Directory.Exists(scriptDir)) return;
+        foreach (var stale in Directory.EnumerateFiles(scriptDir, ScriptFilePrefix + "*.cmd"))
+            BestEffortDelete.File(stale);
+    }
     public static string LogPathFor(string installDir) => Path.Combine(TrimDir(installDir), LogFileName);
     public static string StagingRootFor(string installDir) => Path.Combine(TrimDir(installDir), StagingDirName);
 

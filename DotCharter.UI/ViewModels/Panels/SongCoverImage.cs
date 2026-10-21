@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Media.Imaging;
+using DotCharter.Services.Infrastructure;
 
 namespace DotCharter.UI.ViewModels.Panels;
 
@@ -48,9 +49,19 @@ public static class SongCoverImage
     }
 
     /// <summary>
+    ///     The pre-decode half of <see cref="Load" />: the header must be a
+    ///     recognised raster that declares at most
+    ///     <see cref="ImageHeaderProbe.MaxDecodeDimension" /> on either edge. A
+    ///     cover is a file somebody else shipped, and a few hundred bytes of PNG can
+    ///     declare 60,000 × 60,000, i.e. a 14 GB allocation. The stream is rewound.
+    /// </summary>
+    internal static bool DecodeGuard(Stream stream) => ImageHeaderProbe.IsDecodable(stream);
+
+    /// <summary>
     ///     Decodes a cover, downscaled to at most <see cref="MaxDecodeWidth" />.
-    ///     The full-size decode is transient (Avalonia exposes no header probe, so
-    ///     the source size is only known after decoding) — the caller runs this on
+    ///     The header is probed first (<see cref="DecodeGuard" />) so a picture that
+    ///     declares an absurd size is refused before the decoder allocates for it.
+    ///     The full-size decode is then transient — the caller runs this on
     ///     a pool thread and only the capped bitmap is retained. Through a STREAM
     ///     so no file handle stays open on the extracted-cover cache. Null for a
     ///     missing/corrupt image; the row keeps its placeholder icon.
@@ -63,6 +74,7 @@ public static class SongCoverImage
             using (var stream = artwork.Open(key))
             {
                 if (stream is null) return null;
+                if (!DecodeGuard(stream)) return null;
                 full = new Bitmap(stream);
             }
 

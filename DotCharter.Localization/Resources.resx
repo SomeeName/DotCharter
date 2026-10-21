@@ -907,6 +907,7 @@
     <data name="Settings_BackupMigrate_ZipFilter" xml:space="preserve"><value>Zip archives</value></data>
     <data name="Settings_BackupMigrate_Exported" xml:space="preserve"><value>Backup saved ({0} files): {1}</value></data>
     <data name="Settings_BackupMigrate_Imported" xml:space="preserve"><value>Backup restored ({0} files). Restart DotCharter to apply everything.</value></data>
+    <data name="Settings_BackupMigrate_NotRestored" xml:space="preserve"><value>Not restored (left as on this computer): {0}. Set them again in Settings if you need them.</value></data>
     <data name="Settings_BackupMigrate_Failed" xml:space="preserve"><value>Backup operation failed: {0}</value></data>
     <data name="Settings_Backups" xml:space="preserve"><value>Back up the open project</value></data>
     <data name="Settings_BufferLatencyDescription" xml:space="preserve"><value>≈ {0:0.##} ms at {1:0.#} kHz.</value></data>
@@ -1474,6 +1475,8 @@
     <data name="Settings_Tip_SaveCompanionRs2Dlc" xml:space="preserve"><value>Write a .rs2dlc into the DTRS XML folder, so the bundle opens directly in DLC Builder — and can be dropped onto CustomsForge's “Import rs2dlc” box to autofill the metadata.</value></data>
     <data name="Settings_RsXmlSixString_RowLabel" xml:space="preserve"><value>RS XML for 6-string tools</value></data>
     <data name="Settings_Tip_RsXmlSixString" xml:space="preserve"><value>Save a 7- or 8-string guitar as a six-string .xml: notes on the extra strings are dropped, so EOF and DLC Builder can read it. Leave off to keep every string. The DTRS XML folder and the DLC Builder project always use the six-string version.</value></data>
+    <data name="Settings_RsXmlMoverPhrases_RowLabel" xml:space="preserve"><value>RS XML phrases between beats as moveR</value></data>
+    <data name="Settings_Tip_RsXmlMoverPhrases" xml:space="preserve"><value>Write a phrase or section that starts on a note between two beats as moveR on the beat before it, for tools that expect that form. Off writes the real time, which DLC Builder accepts too, with or without its improvements. Applies to the saved .xml and the DTRS XML folder; the Rocksmith package always uses the real time.</value></data>
     <data name="Settings_ExportGenerateDd_RowLabel" xml:space="preserve"><value>Generate dynamic difficulty for single-level arrangements</value></data>
     <data name="Settings_Tip_ExportGenerateDd" xml:space="preserve"><value>Like DLC Builder, every Rocksmith export (the .psarc, and the DTRS XML the DLC Builder project names) generates difficulty levels for an arrangement that has only one, on a copy. The chart keeps its one level. An arrangement that already has levels is exported as it is.</value></data>
     <data name="Settings_ExportDlcBuilderFixes_RowLabel" xml:space="preserve"><value>Apply DLC Builder's fixes on export</value></data>
@@ -1605,6 +1608,10 @@
     <data name="Settings_StemModels_CustomBootstrapping" xml:space="preserve"><value>Starting the embedded Python interpreter…</value></data>
     <data name="Settings_StemModels_CustomAdded" xml:space="preserve"><value>Added “{0}” ({1} stems). Download it in the list below, then set it active.</value></data>
     <data name="Settings_StemModels_CustomConverted" xml:space="preserve"><value>Converted “{0}” to ONNX ({1} stems). Set it active in the list below.</value></data>
+    <data name="Settings_StemModels_PickleConfirmTitle" xml:space="preserve"><value>This file can run code on your PC</value></data>
+    <data name="Settings_StemModels_PickleConfirmMessage" xml:space="preserve"><value>“{0}” is a PyTorch checkpoint (.ckpt / .pt / .pth). A file like this can run code on your PC when it is loaded. DotCharter reads only the model weights when it can, and loads the whole file only if that fails. Import it only if you trust its source: {1}</value></data>
+    <data name="Settings_StemModels_PickleDeclined" xml:space="preserve"><value>Not imported. Checkpoint files can run code on your PC; prefer a .safetensors or .onnx version of the model.</value></data>
+    <data name="Settings_StemModels_PickleChanged" xml:space="preserve"><value>Not imported: this checkpoint was not allowed to run code, or the file changed since you allowed it. Import it again to confirm.</value></data>
     <data name="Settings_StemModels_CacheEmpty" xml:space="preserve"><value>Empty — no songs have been separated yet.</value></data>
     <data name="Settings_StemModels_CacheClear" xml:space="preserve"><value>Clear stem cache</value></data>
     <data name="Settings_StemModels_CacheClearTooltip" xml:space="preserve"><value>Delete every cached stem archive. Any song you play again afterwards has to be separated from scratch, which takes minutes per song.</value></data>
@@ -1889,11 +1896,51 @@
     <data name="Toolbar_FxChain_RemoveTip" xml:space="preserve"><value>Remove from chain</value></data>
     <data name="Toolbar_FxChain_AddPlaceholder" xml:space="preserve"><value>Add VST3…</value></data>
     <data name="Toolbar_Loading" xml:space="preserve"><value>loading…</value></data>
+    <data name="Toolbar_FxChain_NotLoaded" xml:space="preserve"><value>not loaded: plug-in not found</value></data>
+    <data name="Toolbar_FxChain_NotLoadedTip" xml:space="preserve"><value>This plug-in is saved in your chain but is not in the VST3 folders DotCharter scans, so it was not loaded. Install it there, or remove this slot.</value></data>
     <data name="Ribbon_Tones" xml:space="preserve"><value>Tones</value></data>
     <data name="Ribbon_Sections" xml:space="preserve"><value>Sections</value></data>
     <data name="Ribbon_Phrases" xml:space="preserve"><value>Phrases</value></data>
     <data name="Ribbon_Lyrics" xml:space="preserve"><value>Lyrics</value></data>
     <data name="Ribbon_MeasureInfo" xml:space="preserve"><value>Measure info</value></data>
+    <data name="Ribbon_Links" xml:space="preserve"><value>Links</value></data>
+    <data name="Link_GroupTitle" xml:space="preserve"><value>Link {0}</value></data>
+    <data name="LinkPanel_Name" xml:space="preserve"><value>Link panel</value></data>
+    <data name="LinkPanel_Description" xml:space="preserve"><value>Notes, chords, techniques, hand shapes and fingering are shared. Tones, sections and phrases stay per arrangement.</value></data>
+    <data name="LinkPanel_MeasuresOne" xml:space="preserve"><value>{0} measure</value></data>
+    <data name="LinkPanel_MeasuresFmt" xml:space="preserve"><value>{0} measures</value></data>
+    <data name="LinkPanel_SelectedFmt" xml:space="preserve"><value>{0} of {1} selected</value></data>
+    <data name="LinkPanel_Unlink" xml:space="preserve"><value>Unlink selected</value></data>
+    <data name="LinkPanel_NewGroup" xml:space="preserve"><value>New group from selected</value></data>
+    <data name="LinkPanel_Split" xml:space="preserve"><value>Split by arrangement</value></data>
+    <data name="LinkPanel_GoTo" xml:space="preserve"><value>Go to</value></data>
+    <data name="LinkPanel_Here" xml:space="preserve"><value>← selection</value></data>
+    <data name="LinkPanel_Suggestions" xml:space="preserve"><value>Plays the same again · not linked</value></data>
+    <data name="LinkPanel_Link" xml:space="preserve"><value>Link</value></data>
+    <data name="LinkPanel_LinkTip" xml:space="preserve"><value>Add these measures to the group again</value></data>
+    <data name="LinkHover_Click" xml:space="preserve"><value>Click to open the link panel</value></data>
+    <data name="LinkToast_Name" xml:space="preserve"><value>Linked measures notice</value></data>
+    <data name="LinkToast_Linked" xml:space="preserve"><value>Linked</value></data>
+    <data name="LinkToast_ChangedOne" xml:space="preserve"><value>· changed {0} place ({1})</value></data>
+    <data name="LinkToast_ChangedFmt" xml:space="preserve"><value>· changed {0} places ({1})</value></data>
+    <data name="LinkToast_OnlyHere" xml:space="preserve"><value>Only here</value></data>
+    <data name="LinkToast_Dismiss" xml:space="preserve"><value>Dismiss</value></data>
+    <data name="LinkBanner_AppliesOne" xml:space="preserve"><value>· edits apply to {0} place ({1})</value></data>
+    <data name="LinkBanner_AppliesFmt" xml:space="preserve"><value>· edits apply to {0} places ({1})</value></data>
+    <data name="LinkBanner_OnlyThisOne" xml:space="preserve"><value>Only this one</value></data>
+    <data name="LinkBanner_Panel" xml:space="preserve"><value>Panel</value></data>
+    <data name="LinkIdentical_Title" xml:space="preserve"><value>Link identical measures</value></data>
+    <data name="LinkIdentical_Tip" xml:space="preserve"><value>Links the selected measures with every other run that plays exactly the same. Edits then apply to all of them.</value></data>
+    <data name="LinkIdentical_DoneOne" xml:space="preserve"><value>· linked {0} place ({1})</value></data>
+    <data name="LinkIdentical_DoneFmt" xml:space="preserve"><value>· linked {0} places ({1})</value></data>
+    <data name="LinkCreate_TooFewRuns" xml:space="preserve"><value>· no other measures play the same</value></data>
+    <data name="LinkCreate_ArrangementNotInProject" xml:space="preserve"><value>· the arrangement is not in this project</value></data>
+    <data name="LinkCreate_IncompatibleArrangements" xml:space="preserve"><value>· the arrangements differ in strings, tuning or capo</value></data>
+    <data name="LinkCreate_NotWholeMeasures" xml:space="preserve"><value>· select whole measures</value></data>
+    <data name="LinkCreate_DifferentMeasures" xml:space="preserve"><value>· the time signatures differ</value></data>
+    <data name="LinkCreate_Overlap" xml:space="preserve"><value>· these measures are already linked</value></data>
+    <data name="LinkCreate_Empty" xml:space="preserve"><value>· the measures are empty</value></data>
+    <data name="LinkCreate_DifferentContent" xml:space="preserve"><value>· the measures do not play the same</value></data>
     <data name="Timeline_Gutter_Measures" xml:space="preserve"><value>Measures</value></data>
     <data name="Timeline_Gutter_Time" xml:space="preserve"><value>Time</value></data>
     <data name="Timeline_Gutter_Low" xml:space="preserve"><value>Low</value></data>
@@ -1902,6 +1949,12 @@
     <data name="Timeline_SongMap_BarOne" xml:space="preserve"><value>{0} bar</value></data>
     <data name="Timeline_SongMap_BarsFmt" xml:space="preserve"><value>{0} bars</value></data>
     <data name="Timeline_Rows" xml:space="preserve"><value>Rows</value></data>
+    <data name="TimelineLanes_MenuName" xml:space="preserve"><value>Timeline lanes</value></data>
+    <data name="TimelineLanes_AutoHide" xml:space="preserve"><value>Hide empty lanes automatically</value></data>
+    <data name="TimelineLanes_Compact" xml:space="preserve"><value>Compact rows</value></data>
+    <data name="TimelineLanes_ShowAll" xml:space="preserve"><value>Show all lanes</value></data>
+    <data name="TimelineLanes_HiddenOneTone" xml:space="preserve"><value>auto-hidden: one tone</value></data>
+    <data name="TimelineLanes_HiddenEmpty" xml:space="preserve"><value>auto-hidden: empty</value></data>
     <data name="Menu_Import" xml:space="preserve"><value>Import</value></data>
     <data name="Dialog_YoutubeAudio_ToolsMissing" xml:space="preserve"><value>YouTube audio needs yt-dlp + ffmpeg (bundled with releases).</value></data>
     <data name="Dialog_YoutubeAudio_Rights" xml:space="preserve"><value>Only download audio you have the rights to use. DotCharter does not check this; you are responsible (see LEGAL.md).</value></data>
@@ -2100,7 +2153,11 @@
     <data name="Dialog_Export_PreviewFallback" xml:space="preserve"><value>Optional — falls back to the main audio.</value></data>
     <data name="Dialog_Export_Volume" xml:space="preserve"><value>Volume (dB)</value></data>
     <data name="Dialog_Export_PreviewVolume" xml:space="preserve"><value>Preview volume (dB)</value></data>
-    <data name="Dialog_Export_WrittenUnencrypted" xml:space="preserve"><value>Packages are written unencrypted.</value></data>
+    <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>This package is unencrypted. Rocksmith 2014 only loads unencrypted packages with the RS7String 7-string mod. For a standard chart, export a DLC Builder project (.rs2dlc) and build the package in DLC Builder.</value></data>
+    <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>Export DLC Builder project…</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>Writes the chart as a DLC Builder project (.rs2dlc) with its Rocksmith XML into a folder you pick. Open it in DLC Builder to build the encrypted package.</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectWritten" xml:space="preserve"><value>DLC Builder project written: {0}</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectFailed" xml:space="preserve"><value>The DLC Builder project could not be written: {0}</value></data>
     <data name="Dialog_Export_AlbumArt" xml:space="preserve"><value>Album art</value></data>
     <data name="Dialog_Export_AlbumArtHint" xml:space="preserve"><value>Optional — a placeholder is generated when empty.</value></data>
     <data name="Dialog_Export_Package" xml:space="preserve"><value>Package</value></data>
@@ -2134,7 +2191,7 @@
     <data name="Dialog_Export_PlatformMac" xml:space="preserve"><value>macOS (Mac)</value></data>
     <data name="Dialog_Export_PackageForm" xml:space="preserve"><value>Package form</value></data>
     <data name="Dialog_Export_PackageEncrypted" xml:space="preserve"><value>Encrypted (default)</value></data>
-    <data name="Dialog_Export_PackagePlain" xml:space="preserve"><value>Plain (needs the CDLC enabler's plain-PSARC support)</value></data>
+    <data name="Dialog_Export_PackagePlain" xml:space="preserve"><value>Plain (unencrypted)</value></data>
     <data name="Dialog_Export_MacNeedsEncryption" xml:space="preserve"><value>A Mac package is always encrypted, and packages are written unencrypted here.</value></data>
     <data name="Dialog_Export_MacSixStringsOnly" xml:space="preserve"><value>A 7- or 8-string arrangement is ticked: it plays only on Windows (the rs7string mod).</value></data>
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>No Mac package can be written. {0}</value></data>
@@ -2157,6 +2214,10 @@
   <data name="ToneGenerate_Cancelled" xml:space="preserve"><value>Generating tones with AI was canceled. Nothing was written.</value></data>
   <data name="ToneGenerate_ProjectChanged" xml:space="preserve"><value>The project changed while the tones were being generated, so nothing was written.</value></data>
   <data name="ToneGenerate_NoneGeneratedWhy" xml:space="preserve"><value>No tone could be generated: {0}</value></data>
+  <data name="ToneGenerate_ConfirmTitle" xml:space="preserve"><value>Write the generated tones?</value></data>
+  <data name="ToneGenerate_ConfirmOne" xml:space="preserve"><value>The AI proposed {0} tone for “{1}”. Writing it replaces this arrangement's tone slots and the tone names on its placed tone changes, in one undo step.</value></data>
+  <data name="ToneGenerate_Confirm" xml:space="preserve"><value>The AI proposed {0} tones for “{1}”. Writing them replaces this arrangement's tone slots and the tone names on its placed tone changes, in one undo step.</value></data>
+  <data name="ToneGenerate_Declined" xml:space="preserve"><value>The generated tones were not written.</value></data>
     <data name="Dialog_Tones_Title" xml:space="preserve"><value>Tone designer</value></data>
     <data name="Dialog_Tones_Subtitle" xml:space="preserve"><value>Author full Rocksmith tones for this project, assign them to arrangement slots and embed them into the exported package.</value></data>
     <data name="Dialog_Tones_NoArrangements" xml:space="preserve"><value>The project has no instrumental arrangements.</value></data>
@@ -2348,6 +2409,7 @@
     <data name="Picker_SelectAlbumArt" xml:space="preserve"><value>Select album art image</value></data>
     <data name="Picker_SaveExportPackage" xml:space="preserve"><value>Save Rocksmith package</value></data>
     <data name="Picker_SelectTestFolder" xml:space="preserve"><value>Select the test folder</value></data>
+    <data name="Picker_SelectDlcBuilderFolder" xml:space="preserve"><value>Select a folder for the DLC Builder project</value></data>
     <data name="Status_Export_NoProject" xml:space="preserve"><value>Open a project before exporting.</value></data>
     <data name="Status_Export_Success" xml:space="preserve"><value>Rocksmith package exported to {0}.</value></data>
     <data name="Status_Export_SuccessBoth" xml:space="preserve"><value>Rocksmith packages exported to {0} and {1}.</value></data>
@@ -2374,13 +2436,18 @@
     <data name="Export.Validation.TooManyTones" xml:space="preserve"><value>Too many distinct tones ({0}); the game supports at most 4.</value></data>
     <data name="Export.Validation.FretOutOfRange" xml:space="preserve"><value>Fret {0} is outside the playable range (0–24).</value></data>
     <data name="Export.Validation.StringOutOfRange" xml:space="preserve"><value>String {0} is outside the strings this arrangement can export: six, or seven/eight for a guitar part made for the rs7string mod. The arrangement cannot be exported.</value></data>
-    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0}-string guitar: exported for the rs7string mod as a plain package (it needs the CDLC enabler with plain-PSARC support). Chord notes on the 7th string go into the song file's RS7X block; a chord on the 7th string only ships as single notes.</value></data>
+    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0}-string guitar: exported for the rs7string mod. Chord notes on the 7th string go into the song file's RS7X block; a chord on the 7th string only ships as single notes.</value></data>
     <data name="Export.Validation.EightStringMod" xml:space="preserve"><value>8-string guitar: not exported yet. The rs7string mod plays 7 strings; the 8-string format waits for a later mod build.</value></data>
     <data name="Export.Validation.NoteBelowCapo" xml:space="preserve"><value>Note at fret {0} lies below the capo.</value></data>
     <data name="Export.Validation.FirstNoteTooEarly" xml:space="preserve"><value>The first note starts less than one second into the song.</value></data>
     <data name="Export.Validation.FirstPhraseNotAtStart" xml:space="preserve"><value>There is content before the first phrase iteration.</value></data>
     <data name="Export.Validation.LyricTooLong" xml:space="preserve"><value>Lyric '{0}' exceeds the 47-byte limit.</value></data>
     <data name="Export.Validation.DisplayNameGlyphs" xml:space="preserve"><value>'{0}' has characters the Rocksmith font may not show (Japanese, Chinese, Korean, Cyrillic…). Type an English or romanised name here, and put the original in Song/Artist (original script).</value></data>
+    <data name="Export.Validation.TooManyLevels" xml:space="preserve"><value>Too many difficulty levels ({0}); a song file holds at most 36.</value></data>
+    <data name="Export.Validation.TooManyNotes" xml:space="preserve"><value>A level holds {0} notes and chords; a song file numbers at most 32,767 per level.</value></data>
+    <data name="Export.Validation.FingerOutOfRange" xml:space="preserve"><value>Chord finger {0} is outside the allowed range (none, or 0–4).</value></data>
+    <data name="Export.Validation.StringBeyondTuning" xml:space="preserve"><value>String {0} does not exist in this arrangement's tuning. Move the note to a string the arrangement has.</value></data>
+    <data name="Export.Validation.StringCountUnsupported" xml:space="preserve"><value>This arrangement has {0} strings; a package holds six for a bass and up to eight for a guitar.</value></data>
     <data name="Export.Validation.ToneNotDefined" xml:space="preserve"><value>Tone '{0}' has no definition — the game will use its default tone. Author it in the tone editor or import it from a package.</value></data>
     <data name="Profile_DefaultName" xml:space="preserve"><value>Player 1</value></data>
     <data name="Profile_Switcher_Tip" xml:space="preserve"><value>Active player profile — click to switch or add profiles</value></data>
@@ -2572,6 +2639,7 @@
     <data name="EofLoss_MeasureStart" xml:space="preserve"><value>Bar line moved (EOF counts bars from the time signature)</value></data>
     <data name="EofLoss_UnplacedPhrase" xml:space="preserve"><value>Phrase never placed on the timeline</value></data>
     <data name="EofLoss_PhraseMaxDifficulty" xml:space="preserve"><value>Phrase maximum difficulty not kept</value></data>
+    <data name="EofLoss_MoverPhrase" xml:space="preserve"><value>Phrase between beats written as moveR</value></data>
     <data name="EofLoss_ExtraVocalTrack" xml:space="preserve"><value>Extra vocal tracks left out (EOF has one)</value></data>
     <data name="EofLoss_LyricPitch" xml:space="preserve"><value>Lyric pitch outside the MIDI range (exports unpitched)</value></data>
     <data name="EofLoss_CentOffset" xml:space="preserve"><value>Cent offset left out</value></data>
@@ -2826,6 +2894,7 @@
     <data name="History_BeatScale" xml:space="preserve"><value>Scale tempo</value></data>
     <data name="History_Composite" xml:space="preserve"><value>Edit</value></data>
     <data name="History_CreateAndSwitchTemplate" xml:space="preserve"><value>New chord template</value></data>
+    <data name="History_CreateLinkGroup" xml:space="preserve"><value>Link measures</value></data>
     <data name="History_Delete" xml:space="preserve"><value>Delete</value></data>
     <data name="History_DeleteRelated" xml:space="preserve"><value>Delete with related items</value></data>
     <data name="History_DeleteTone" xml:space="preserve"><value>Delete tone</value></data>
@@ -2837,6 +2906,10 @@
     <data name="History_AcceptSuggestedHandShapes" xml:space="preserve"><value>Accept suggested hand shapes</value></data>
     <data name="History_GenerateFingerings" xml:space="preserve"><value>Generate fingerings</value></data>
     <data name="History_GenerateStructure" xml:space="preserve"><value>Generate structure</value></data>
+    <data name="History_LinkFollowUp" xml:space="preserve"><value>Linked copies</value></data>
+    <data name="History_OnlyHere" xml:space="preserve"><value>Only here</value></data>
+    <data name="History_SetLinkGroups" xml:space="preserve"><value>Edit link groups</value></data>
+    <data name="History_AddLinkPlacement" xml:space="preserve"><value>Link measures again</value></data>
     <data name="History_LyricTap" xml:space="preserve"><value>Tap lyric</value></data>
     <data name="History_MergeIntoChords" xml:space="preserve"><value>Merge into chords</value></data>
     <data name="History_MoveLyric" xml:space="preserve"><value>Move lyric</value></data>
@@ -3339,6 +3412,7 @@
     <data name="Status_MidiImportNothingFound" xml:space="preserve"><value>The MIDI file produced no chartable notes.</value></data>
     <data name="Status_MidiImportApplied" xml:space="preserve"><value>Imported MIDI as arrangement '{0}' ({1} notes).</value></data>
     <data name="Status_MidiImportFailed" xml:space="preserve"><value>MIDI import failed: {0}</value></data>
+    <data name="Status_ImportFileTooLarge" xml:space="preserve"><value>{0} is too large to import ({1} MB; the limit is {2} MB).</value></data>
     <data name="Dialog_GenerateLevels_Title" xml:space="preserve"><value>Generate difficulty levels</value></data>
     <data name="Dialog_GenerateLevels_Subtitle" xml:space="preserve"><value>Derives the levels of '{0}' from its hardest one. It currently has {1}.</value></data>
     <data name="Dialog_GenerateLevels_Count" xml:space="preserve"><value>Levels</value></data>
@@ -5478,4 +5552,36 @@
   <data name="Inspector_IssueAi_NoJob" xml:space="preserve"><value>No AI job can fix {0}: the AI changes only hand positions and chord fingering. Use Auto-fix or edit it by hand; Explain with AI still helps.</value></data>
   <data name="Accessibility_SpinnerIncrease" xml:space="preserve"><value>Increase</value></data>
   <data name="Accessibility_SpinnerDecrease" xml:space="preserve"><value>Decrease</value></data>
+  <data name="Menu_LinkedMeasures" xml:space="preserve"><value>Linked measures…</value></data>
+  <data name="Menu_LinkedMeasures_Tip" xml:space="preserve"><value>Lists the song's link groups: rename them, unlink them or go to a placement.</value></data>
+  <data name="LinkGroups_Title" xml:space="preserve"><value>Linked measures</value></data>
+  <data name="LinkGroups_Subtitle" xml:space="preserve"><value>Measures kept equal: an edit in one placement applies to all of them.</value></data>
+  <data name="LinkGroups_Empty" xml:space="preserve"><value>No measures are linked yet.</value></data>
+  <data name="LinkGroups_EmptyHint" xml:space="preserve"><value>Link repeated measures from the timeline, or import a Guitar Pro score to get suggestions.</value></data>
+  <data name="LinkGroups_NamePlaceholder" xml:space="preserve"><value>Group name</value></data>
+  <data name="LinkGroups_Rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="LinkGroups_Delete" xml:space="preserve"><value>Unlink all</value></data>
+  <data name="LinkGroups_GoTo" xml:space="preserve"><value>Go to this placement</value></data>
+  <data name="LinkGroups_Unnamed" xml:space="preserve"><value>Unnamed</value></data>
+  <data name="LinkGroups_PerArrangement" xml:space="preserve"><value>{0} ×{1}</value></data>
+  <data name="LinkGroups_SuggestionsHeader" xml:space="preserve"><value>Suggestions</value></data>
+  <data name="LinkGroups_LinkSelected" xml:space="preserve"><value>Link selected</value></data>
+  <data name="LinkGroups_SuggestionTitle" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="LinkGroups_MeasuresOne" xml:space="preserve"><value>{0} measure</value></data>
+  <data name="LinkGroups_Measures" xml:space="preserve"><value>{0} measures</value></data>
+  <data name="LinkGroups_FromRepeats" xml:space="preserve"><value>from the score's repeats</value></data>
+  <data name="LinkSuggest_Title" xml:space="preserve"><value>Repeated measures found</value></data>
+  <data name="LinkSuggest_Subtitle" xml:space="preserve"><value>Link them so an edit in one place applies to every copy.</value></data>
+  <data name="LinkSuggest_GroupsOne" xml:space="preserve"><value>{0} group to link, {1} placements.</value></data>
+  <data name="LinkSuggest_Groups" xml:space="preserve"><value>{0} groups to link, {1} placements.</value></data>
+  <data name="LinkSuggest_Shared" xml:space="preserve"><value>{0} and {1} share {2} of {3} measures.</value></data>
+  <data name="LinkSuggest_RepeatsEach" xml:space="preserve"><value>{0} repeats {1}× in each.</value></data>
+  <data name="LinkSuggest_RepeatsIn" xml:space="preserve"><value>{0} repeats {1}× in {2}.</value></data>
+  <data name="LinkSuggest_LinkAll" xml:space="preserve"><value>Link all</value></data>
+  <data name="LinkSuggest_Review" xml:space="preserve"><value>Review</value></data>
+  <data name="LinkSuggest_Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="Status_LinkSuggestionsLinkedOne" xml:space="preserve"><value>Linked {0} group of measures. One undo removes it.</value></data>
+  <data name="Status_LinkSuggestionsLinked" xml:space="preserve"><value>Linked {0} groups of measures. One undo removes them all.</value></data>
+  <data name="Status_LinkSuggestionsNone" xml:space="preserve"><value>Those measures can no longer be linked: they changed or are linked already.</value></data>
+  <data name="History_LinkSuggestions" xml:space="preserve"><value>Link suggested measures</value></data>
 </root>

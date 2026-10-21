@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace DotCharter.Launcher;
 
 /// <summary>
-///     Starts <c>app\DotCharter.exe</c> with this process's own command line,
-///     working directory, desktop, show state and standard handles, waits for it
+///     Starts <c>app\DotCharter.exe</c> in its own folder with this process's own
+///     command line, desktop, show state and standard handles, waits for it
 ///     and exits with its exit code. It never shows a window or a message box: a
 ///     failure is one line in <see cref="LaunchCommandLine.FailureLogName" />.
 /// </summary>
@@ -33,13 +33,18 @@ internal static unsafe partial class Program
         startup.Cb = sizeof(StartupInfo);
         var inheritHandles = (startup.Flags & StartfUseStdHandles) != 0;
 
+        // The app's own folder, never the caller's: Windows searches the working
+        // directory for DLLs, so a launch from a Downloads folder would otherwise
+        // let a DLL planted there load into the app.
+        var workingDirectory = LaunchCommandLine.WorkingDirectory(appExe);
         var buffer = (commandLine + "\0").ToCharArray();
         ProcessInformation info;
         fixed (char* application = appExe)
         fixed (char* command = buffer)
+        fixed (char* directory = workingDirectory)
         {
             if (CreateProcessW(application, command, null, null, inheritHandles ? 1 : 0, CreateUnicodeEnvironment,
-                    null, null, &startup, &info) == 0)
+                    null, directory, &startup, &info) == 0)
             {
                 var error = Marshal.GetLastPInvokeError();
                 return Fail(launcherDirectory, appExe, $"CreateProcess failed with Win32 error {error}",
@@ -58,20 +63,7 @@ internal static unsafe partial class Program
     private static int Fail(string launcherDirectory, string appExe, string reason, int exitCode)
     {
         var line = LaunchCommandLine.FailureLine(DateTime.Now, appExe, reason) + Environment.NewLine;
-        foreach (var directory in new[] { launcherDirectory, Path.Combine(Path.GetTempPath(), "DotCharter") })
-        {
-            try
-            {
-                Directory.CreateDirectory(directory);
-                File.AppendAllText(Path.Combine(directory, LaunchCommandLine.FailureLogName), line);
-                break;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Read-only install folder: fall through to %TEMP%.
-            }
-        }
-
+        LaunchCommandLine.TryWriteFailureLog(launcherDirectory, Path.GetTempPath(), line);
         return exitCode;
     }
 

@@ -4,6 +4,7 @@
         xmlns:panels="clr-namespace:DotCharter.UI.Views.Panels;assembly=DotCharter"
         xmlns:shellViews="clr-namespace:DotCharter.UI.Views.Shell;assembly=DotCharter"
         xmlns:editorViews="clr-namespace:DotCharter.UI.Views.Editor;assembly=DotCharter"
+        xmlns:linkViews="using:DotCharter.UI.Views.Editor.Linking"
         xmlns:controls="using:DotCharter.UI.Controls"
         xmlns:sheetControls="clr-namespace:DotCharter.UI.Controls.Sheet;assembly=DotCharter"
         xmlns:behaviors="clr-namespace:DotCharter.UI.Input.Behaviors;assembly=DotCharter"
@@ -142,7 +143,7 @@
                                  height, the bottom dock (inspector + 3D
                                  preview) 3/5 — EditorSplitDefaults, the one
                                  source startup, the layout controller and
-                                 View ▸ Reset Layout all read (#232).
+                                 View ▸ Reset Layout all read.
                                  The MinHeights below are the markup's starting
                                  values only: MainWindowShellLayout.
                                  ApplyEditorRowFloors re-derives row 0's, row 2's
@@ -317,7 +318,18 @@
                                  mirror the same 118 so a stacked row's chart
                                  lines up with this one time-for-time. Move one,
                                  move all three in the same change. -->
-                            <Border Grid.Row="1" Grid.Column="0" Classes="TrackRail">
+                            <!-- Right-click a lane header: the lane menu. A
+                                 PrewarmableFlyout, so the shell's popover prewarm
+                                 realizes it off the first-open path
+                                 (MenuFlyoutPrewarmer.FlyoutsUnder reads ContextFlyout). -->
+                            <Border Grid.Row="1" Grid.Column="0" Classes="TrackRail"
+                                    x:Name="TimelineGutterHost">
+                                <Border.ContextFlyout>
+                                    <shellViews:PrewarmableFlyout Placement="Pointer">
+                                        <editorViews:TimelineLaneMenuView x:Name="TimelineLaneMenu"
+                                                                          Renderer="{Binding #MainChartRenderer}" />
+                                    </shellViews:PrewarmableFlyout>
+                                </Border.ContextFlyout>
                                 <controls:TimelineGutterControl x:Name="TimelineGutter"
                                                                 Renderer="{Binding #MainChartRenderer}"
                                                                 Editor="{Binding ChartEditor}"
@@ -339,6 +351,12 @@
                             <controls:MarqueeSelectionOverlay Grid.Row="1"
                                                               Grid.Column="1"
                                                               Renderer="{Binding #MainChartRenderer}" />
+                            <!-- Linked measures over the timeline: the LINKS chip
+                                 hover card, the "Linked · changed N places" toast
+                                 and the link panel (its attached flyout). -->
+                            <linkViews:LinkOverlayView Grid.Row="1" Grid.Column="1"
+                                                       DataContext="{Binding ChartEditor.LinkedMeasures}"
+                                                       Timeline="{Binding #MainChartRenderer}" />
                             <!-- LAUNCH CARD (P1-6) — the editor's empty-state
                                  door. Content-aware (IsEditorLaunchCardVisible:
                                  no chart content AND no audio), so a GP import

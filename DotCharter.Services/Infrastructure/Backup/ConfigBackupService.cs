@@ -3,9 +3,15 @@ using System.IO.Compression;
 namespace DotCharter.Services.Infrastructure.Backup;
 
 /// <summary>Outcome of an export or import. <see cref="SkippedEntries" /> lists
-/// archive entries an import refused (unknown/credential/unsafe paths) — an
-/// export never skips, it just doesn't pick files up.</summary>
-public sealed record ConfigBackupResult(int FileCount, IReadOnlyList<string> SkippedEntries);
+/// archive entries an import refused (unknown/credential/unsafe paths, files that
+/// are not data) — an export never skips, it just doesn't pick files up.</summary>
+public sealed record ConfigBackupResult(int FileCount, IReadOnlyList<string> SkippedEntries)
+{
+    /// <summary>Settings the backup carried that an import deliberately did NOT take
+    /// (<see cref="AppConfigBackupFilter" />: plug-in, executable, endpoint and
+    /// folder paths). This machine's value stays; the user has to set them again.</summary>
+    public IReadOnlyList<string> NotRestoredSettings { get; init; } = [];
+}
 
 /// <summary>
 ///     Exports the user's whole DotCharter state (settings, keybinds, profiles
@@ -21,8 +27,12 @@ public interface IConfigBackupService
     ConfigBackupResult Export(string archivePath);
 
     /// <summary>Restores a backup archive over the current config root
-    /// (merge-overwrite: files in the archive win, everything else is kept).
-    /// Refuses archives without a manifest or from a newer schema major.</summary>
+    /// (merge-overwrite: files in the archive win, everything else is kept) —
+    /// except what a received file must not decide: only data files restore
+    /// (<see cref="ConfigBackupRules.ShouldTransfer" />), and <c>appconfig.json</c> is merged
+    /// through <see cref="AppConfigBackupFilter" />, so plug-in, executable, endpoint and
+    /// auto-open settings keep THIS machine's value (listed in
+    /// <see cref="ConfigBackupResult.NotRestoredSettings" />). Refuses archives without a manifest or from a newer schema major.</summary>
     /// <exception cref="InvalidDataException">Not a DotCharter backup archive,
     /// or one from a newer, incompatible schema.</exception>
     ConfigBackupResult Import(string archivePath);
@@ -58,7 +68,7 @@ public sealed class ConfigBackupService : IConfigBackupService
                     continue;
 
                 var relative = Path.GetRelativePath(root, file);
-                if (!ConfigBackupRules.ShouldInclude(relative)) continue;
+                if (!ConfigBackupRules.ShouldTransfer(relative)) continue;
 
                 zip.CreateEntryFromFile(file, relative.Replace('\\', '/'), CompressionLevel.Optimal);
                 count++;
@@ -216,7 +226,7 @@ public sealed class ConfigBackupService : IConfigBackupService
                     // A crafted archive must neither escape the config root nor plant
                     // files we would never have exported (credential stores included).
                     var relative = ConfigBackupRules.SanitizeEntryPath(entry.FullName);
-                    if (relative == null || !ConfigBackupRules.ShouldInclude(relative))
+                    if (relative == null || !ConfigBackupRules.ShouldTransfer(relative))
                     {
                         skipped.Add(entry.FullName);
                         return null;
@@ -241,8 +251,13 @@ public sealed class ConfigBackupService : IConfigBackupService
                     "Nothing was changed.");
             }
 
+            var (notRestored, droppedConfig) = FilterStagedAppConfig(staging, root, skipped);
+
             PromoteStagedFiles(staging, root);
-            return new ConfigBackupResult(extraction.FilesWritten, skipped);
+            return new ConfigBackupResult(extraction.FilesWritten - (droppedConfig ? 1 : 0), skipped)
+            {
+                NotRestoredSettings = notRestored
+            };
         }
         finally
         {
@@ -250,6 +265,42 @@ public sealed class ConfigBackupService : IConfigBackupService
             // inflater, or a clean promote that emptied it anyway.
             BestEffortDelete.Directory(staging);
         }
+    }
+
+    /// <summary>
+    ///     Runs the staged <c>appconfig.json</c> through <see cref="AppConfigBackupFilter" />
+    ///     against this machine's own file, BEFORE anything is promoted: the executable
+    ///     and path settings never reach the live root. A file that is not a JSON object
+    ///     is dropped (reported in <paramref name="skipped" />) so the user's working
+    ///     settings are not replaced by something the app cannot read.
+    /// </summary>
+    private static (IReadOnlyList<string> NotRestored, bool Dropped) FilterStagedAppConfig(
+        string staging, string root, List<string> skipped)
+    {
+        var staged = Path.Combine(staging, "appconfig.json");
+        if (!File.Exists(staged)) return ([], false);
+
+        var live = Path.Combine(root, "appconfig.json");
+        string? currentJson = null;
+        try
+        {
+            if (File.Exists(live)) currentJson = File.ReadAllText(live);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable: nothing to keep from it.
+        }
+
+        var filtered = AppConfigBackupFilter.TryFilter(File.ReadAllText(staged), currentJson);
+        if (filtered == null)
+        {
+            File.Delete(staged);
+            skipped.Add("appconfig.json");
+            return ([], true);
+        }
+
+        if (filtered.Changed) File.WriteAllText(staged, filtered.Json);
+        return (filtered.NotRestored, false);
     }
 
     /// <summary>

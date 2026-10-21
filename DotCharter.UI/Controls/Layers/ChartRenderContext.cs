@@ -122,6 +122,11 @@ public class ChartRenderContext
     /// <summary>Per-track top-ribbon layout (visible rows + computed Y positions).</summary>
     public RibbonLayout Ribbon { get; set; } = RibbonLayout.Default;
 
+    /// <summary>The project and the arrangement this frame draws (linked measures read them).</summary>
+    public ChartProject? Project { get; set; }
+
+    public Arrangement? Arrangement { get; set; }
+
     /// <summary>The palette's string colours, read from <see cref="ChartTheme" /> on every
     /// access. An auto-property initializer captured the ARRAY once per renderer, so a theme
     /// swap that assigned a new array never reached an existing 2D timeline.</summary>

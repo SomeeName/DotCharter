@@ -19,6 +19,27 @@
   </PropertyGroup>
 
   <!--
+    NuGet lock files: every DotCharter.* project commits a packages.lock.json
+    that pins each package, direct and transitive, by version AND content hash.
+    CI restores in locked mode (the restore's locked-mode switch), so a restore
+    that would resolve anything else fails instead of building it. The graph
+    always includes win-x64 (RuntimeIdentifiers), so a restore with or without
+    a runtime identifier reads the SAME lock file.
+
+    The committed files pin the PUBLIC graph. A checkout with a plugin in
+    plugins/ restores a different one (the plugin projects and their packages),
+    so it keeps its lock under obj/ and never rewrites the committed file.
+    After changing a package, refresh them with a plugin-free restore of the
+    solution (-p:DotCharterPlugins=false plus the force-evaluate switch;
+    tools/release/README.md has the exact command).
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('DotCharter'))">
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <NuGetLockFilePath Condition="'$(DotCharterPlugins)' != 'false' And Exists('$(MSBuildThisFileDirectory)plugins')">$(MSBuildProjectDirectory)/obj/packages.plugins.lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+
+  <!--
     The public-build switch (#824). DotCharterContestedFeatures=false (a release
     passes it: New-Release.ps1 -ContestedFeatures:$false) leaves CONTESTED_FEATURES
     undefined, which makes DotCharter.Services.ContestedFeatures.Enabled a false

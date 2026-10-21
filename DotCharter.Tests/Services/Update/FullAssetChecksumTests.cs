@@ -20,12 +20,13 @@ namespace DotCharter.Tests.Services.Update;
 ///     <para>
 ///         The digests have been published as <c>SHA256SUMS.txt</c> since 0.41,
 ///         and since 2026-09-04 the check fails CLOSED at or above that version
-///         (<c>GitHubUpdateService.FirstDigestPublishingVersion</c>). It used to
+///         (0.41). It used to
 ///         proceed with a warning whenever the manifest was unreachable or did
 ///         not list the asset — and both are states an attacker who controls the
 ///         release document can ARRANGE, which made the one content check on the
-///         path optional at the attacker's discretion. Below 0.41 the escape
-///         hatch stays, because those releases published nothing to check.
+///         path optional at the attacker's discretion. The manifest now must
+///         also carry a valid publisher signature (<c>ReleaseSigningTests</c>), so
+///         the pre-0.41 escape hatch is gone: an unsigned release is refused.
 ///     </para>
 /// </summary>
 public sealed class FullAssetChecksumTests : IDisposable
@@ -34,8 +35,7 @@ public sealed class FullAssetChecksumTests : IDisposable
         """{"runtimeOptions":{"tfm":"net10.0","includedFrameworks":[{"name":"Microsoft.NETCore.App","version":"10.0.9"}]}}""";
 
     private const string AssetName = "DotCharter-v0.48.0-win-x64.zip";
-    private const string AssetUrl = "https://api.github.com/repos/o/r/releases/assets/1";
-    private const string ChecksumUrl = "https://api.github.com/repos/o/r/releases/assets/2";
+    private const string AssetUrl = FakeReleaseHttp.AssetUrl;
 
     private readonly string _dir = Directory.CreateTempSubdirectory("dotcharter-asset-digest-").FullName;
 
@@ -137,13 +137,13 @@ public sealed class FullAssetChecksumTests : IDisposable
     }
 
     /// <summary>
-    ///     The escape hatch that stays. Every release before v0.41.0 published no
-    ///     digests at all, so refusing there would strand every old install to
-    ///     defend against nothing — and it is the ONLY thing the version gate
-    ///     lets through.
+    ///     The escape hatch that is gone. Releases before v0.41.0 published
+    ///     no digests; an install that verifies signatures only ever updates to a
+    ///     NEWER, signed release, so a release with nothing to check is refused
+    ///     whatever its version says.
     /// </summary>
     [Fact]
-    public async Task APreDigestReleaseStillUpdatesWithoutThem()
+    public async Task APreDigestReleaseIsRefusedNow()
     {
         var zip = BuildPayloadZip();
 
@@ -156,14 +156,15 @@ public sealed class FullAssetChecksumTests : IDisposable
 
         using var service = new GitHubUpdateService(
             new Version(0, 39, 0), handler: handler,
-            installDir: EnsureInstallDir(), downloadDir: Path.Combine(_dir, "downloads"));
+            installDir: EnsureInstallDir(), downloadDir: Path.Combine(_dir, "downloads"),
+            releaseSigningKey: TestReleaseSigning.PublicKey);
 
         var update = new UpdateInfo(
             new Version(0, 40, 0), "v0.40.0", "notes", "https://example/r",
             "DotCharter-v0.40.0-win-x64.zip", AssetUrl, AssetUrl, 0);
 
-        Assert.True(File.Exists(await service.DownloadUpdateAsync(
-            update, cancellationToken: TestContext.Current.CancellationToken)));
+        await Assert.ThrowsAsync<InvalidDataException>(() => service.DownloadUpdateAsync(
+            update, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     // ---- helpers -------------------------------------------------------------
@@ -172,7 +173,8 @@ public sealed class FullAssetChecksumTests : IDisposable
     {
         return new GitHubUpdateService(
             new Version(0, 47, 0), handler: handler,
-            installDir: EnsureInstallDir(), downloadDir: Path.Combine(_dir, "downloads"));
+            installDir: EnsureInstallDir(), downloadDir: Path.Combine(_dir, "downloads"),
+            releaseSigningKey: TestReleaseSigning.PublicKey);
     }
 
     private string EnsureInstallDir()
@@ -188,41 +190,10 @@ public sealed class FullAssetChecksumTests : IDisposable
         => new(new Version(0, 48, 0), "v0.48.0", "notes", "https://example/r",
             AssetName, AssetUrl, AssetUrl, 0);
 
+    /// <summary>The release as New-Release.ps1 publishes it: digests bound to the
+    /// tag and signed (<see cref="FakeReleaseHttp.Serve" />).</summary>
     private static FakeHttpMessageHandler Handler(byte[] asset, string? checksums)
-    {
-        var releaseJson = checksums == null
-            ? $$"""{"tag_name":"v0.48.0","assets":[{"name":"{{AssetName}}","url":"{{AssetUrl}}","size":10}]}"""
-            : $$"""
-              {"tag_name":"v0.48.0","assets":[
-                {"name":"{{AssetName}}","url":"{{AssetUrl}}","size":10},
-                {"name":"SHA256SUMS.txt","url":"{{ChecksumUrl}}","size":80}]}
-              """;
-
-        return new FakeHttpMessageHandler
-        {
-            Fallback = request =>
-            {
-                var url = request.RequestUri!.ToString();
-                if (url.Contains("/releases/tags/", StringComparison.Ordinal))
-                {
-                    return new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent(releaseJson, Encoding.UTF8, "application/json")
-                    };
-                }
-
-                if (url == ChecksumUrl)
-                {
-                    return new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent(checksums ?? "", Encoding.ASCII)
-                    };
-                }
-
-                return Bytes(asset);
-            }
-        };
-    }
+        => FakeReleaseHttp.Serve("v0.48.0", AssetName, asset, checksums: checksums);
 
     private static HttpResponseMessage Bytes(byte[] payload)
     {

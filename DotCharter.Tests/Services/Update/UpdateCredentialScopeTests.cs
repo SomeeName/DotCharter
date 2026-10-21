@@ -88,7 +88,7 @@ public sealed class UpdateCredentialScopeTests
 
             using var service = new GitHubUpdateService(
                 new Version(0, 47, 0), tokenProvider: () => "ghp_secret", handler: handler,
-                installDir: dir, downloadDir: dir);
+                installDir: dir, downloadDir: dir, releaseSigningKey: TestReleaseSigning.PublicKey);
 
             var update = new UpdateInfo(
                 new Version(0, 48, 0), "v0.48.0", "notes", "https://example/r",
@@ -127,7 +127,7 @@ public sealed class UpdateCredentialScopeTests
 
             using var service = new GitHubUpdateService(
                 new Version(0, 39, 0), tokenProvider: () => "ghp_secret", handler: handler,
-                installDir: dir, downloadDir: dir);
+                installDir: dir, downloadDir: dir, releaseSigningKey: TestReleaseSigning.PublicKey);
 
             var update = new UpdateInfo(
                 new Version(0, 40, 0), "v0.40.0", "notes", "https://example/r",

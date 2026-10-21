@@ -47,9 +47,15 @@ public sealed class UpdateInstallerTests
             TargetVersion = "0.67.0",
         };
         File.WriteAllText(UpdaterScriptBuilder.PendingStatePathFor(install), state.ToJson());
-        File.WriteAllText(UpdaterScriptBuilder.ScriptPathFor(install), "@echo off\r\n");
+        File.WriteAllText(UpdaterScriptBuilder.LegacyScriptPathFor(install), "@echo off\r\n");
         return state;
     }
+
+    /// <summary>The installer as the service builds it: downloads live in the
+    /// install (as on a portable install's <c>updates</c> folder), scripts in a
+    /// scratch folder of the test's own.</summary>
+    private static UpdateInstaller NewInstaller(string install)
+        => new(install, downloadDir: install, scriptDir: Path.Combine(install, "scripts"));
 
     // ---- why an install refuses an in-place update -----------------------------
 
@@ -58,7 +64,7 @@ public sealed class UpdateInstallerTests
     {
         using var temp = new TempDirectory();
 
-        Assert.Equal(UpdateApplyBlockReason.NotAReleaseInstall, new UpdateInstaller(temp.Path).GetApplyBlockReason());
+        Assert.Equal(UpdateApplyBlockReason.NotAReleaseInstall, NewInstaller(temp.Path).GetApplyBlockReason());
     }
 
     [Fact]
@@ -67,7 +73,7 @@ public sealed class UpdateInstallerTests
         using var temp = new TempDirectory();
         File.WriteAllBytes(Path.Combine(temp.Path, AppPayload.ExeName), [0x4D, 0x5A]);
 
-        Assert.Equal(UpdateApplyBlockReason.UnknownInstallLayout, new UpdateInstaller(temp.Path).GetApplyBlockReason());
+        Assert.Equal(UpdateApplyBlockReason.UnknownInstallLayout, NewInstaller(temp.Path).GetApplyBlockReason());
     }
 
     [Theory]
@@ -78,7 +84,7 @@ public sealed class UpdateInstallerTests
         using var temp = new TempDirectory();
         WritePayload(temp.Path, runtimeConfig);
 
-        Assert.Equal(UpdateApplyBlockReason.None, new UpdateInstaller(temp.Path).GetApplyBlockReason());
+        Assert.Equal(UpdateApplyBlockReason.None, NewInstaller(temp.Path).GetApplyBlockReason());
         // The write probe cleans up after itself.
         Assert.Empty(Directory.GetFiles(temp.Path, ".dc-update-probe-*"));
     }
@@ -95,7 +101,7 @@ public sealed class UpdateInstallerTests
 
         using var temp = new TempDirectory();
         Stage(temp.Path);
-        var installer = new UpdateInstaller(temp.Path);
+        var installer = NewInstaller(temp.Path);
         Assert.Equal(UpdateApplyBlockReason.None, installer.GetApplyBlockReason());
 
         var install = new DirectoryInfo(temp.Path);
@@ -112,7 +118,7 @@ public sealed class UpdateInstallerTests
             Assert.Equal(UpdateApplyBlockReason.InstallDirNotWritable, installer.GetApplyBlockReason());
 
             var refusal = Assert.Throws<InvalidOperationException>(
-                () => installer.ApplyDownloadedUpdate(Path.Combine(temp.Path, "update.zip")));
+                () => installer.ApplyDownloadedUpdate(Path.Combine(temp.Path, "update.zip"), new string('0', 64)));
             Assert.Contains(nameof(UpdateApplyBlockReason.InstallDirNotWritable), refusal.Message, StringComparison.Ordinal);
         }
         finally
@@ -134,7 +140,7 @@ public sealed class UpdateInstallerTests
     {
         using var temp = new TempDirectory();
         WritePayload(temp.Path, SelfContainedConfig);
-        var installer = new UpdateInstaller(temp.Path);
+        var installer = NewInstaller(temp.Path);
 
         Assert.Null(installer.GetPendingUpdateApply());
         Assert.Throws<InvalidOperationException>(installer.ResumePendingUpdateApply);
@@ -148,7 +154,7 @@ public sealed class UpdateInstallerTests
         File.WriteAllLines(UpdaterScriptBuilder.LogPathFor(temp.Path),
             Enumerable.Range(1, 12).Select(i => $"line {i}"));
 
-        var pending = new UpdateInstaller(temp.Path).GetPendingUpdateApply();
+        var pending = NewInstaller(temp.Path).GetPendingUpdateApply();
 
         Assert.NotNull(pending);
         Assert.True(pending.CanResume);
@@ -169,7 +175,7 @@ public sealed class UpdateInstallerTests
         using var temp = new TempDirectory();
         var staged = Stage(temp.Path);
         Directory.Delete(staged.PayloadDir, recursive: true);
-        var installer = new UpdateInstaller(temp.Path);
+        var installer = NewInstaller(temp.Path);
 
         var pending = installer.GetPendingUpdateApply();
 
@@ -186,7 +192,7 @@ public sealed class UpdateInstallerTests
         using var temp = new TempDirectory();
         Stage(temp.Path, payloadConfig: FrameworkDependentConfig);
 
-        var pending = new UpdateInstaller(temp.Path).GetPendingUpdateApply();
+        var pending = NewInstaller(temp.Path).GetPendingUpdateApply();
 
         Assert.NotNull(pending);
         Assert.False(pending.CanResume);
@@ -200,7 +206,7 @@ public sealed class UpdateInstallerTests
         WritePayload(temp.Path, SelfContainedConfig);
         File.WriteAllText(UpdaterScriptBuilder.PendingStatePathFor(temp.Path), "{ not json");
 
-        var pending = new UpdateInstaller(temp.Path).GetPendingUpdateApply();
+        var pending = NewInstaller(temp.Path).GetPendingUpdateApply();
 
         Assert.NotNull(pending);
         Assert.False(pending.CanResume);
@@ -213,13 +219,13 @@ public sealed class UpdateInstallerTests
         using var temp = new TempDirectory();
         var staged = Stage(temp.Path);
         File.WriteAllText(UpdaterScriptBuilder.LogPathFor(temp.Path), "why it failed");
-        var installer = new UpdateInstaller(temp.Path);
+        var installer = NewInstaller(temp.Path);
 
         installer.DiscardPendingUpdateApply();
 
         Assert.False(Directory.Exists(staged.StagingRoot));
         Assert.False(File.Exists(staged.ZipPath));
-        Assert.False(File.Exists(UpdaterScriptBuilder.ScriptPathFor(temp.Path)));
+        Assert.False(File.Exists(UpdaterScriptBuilder.LegacyScriptPathFor(temp.Path)));
         Assert.False(File.Exists(UpdaterScriptBuilder.PendingStatePathFor(temp.Path)));
         Assert.True(File.Exists(UpdaterScriptBuilder.LogPathFor(temp.Path)));
         Assert.Null(installer.GetPendingUpdateApply());
@@ -239,6 +245,6 @@ public sealed class UpdateInstallerTests
 
         service.DiscardPendingUpdateApply();
 
-        Assert.Null(new UpdateInstaller(temp.Path).GetPendingUpdateApply());
+        Assert.Null(NewInstaller(temp.Path).GetPendingUpdateApply());
     }
 }

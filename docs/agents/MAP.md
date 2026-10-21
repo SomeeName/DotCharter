@@ -266,7 +266,7 @@ pre-existing XML bundle). All are DERIVED — none may fail a save:
 | `.bnk` | `Services/Export/Audio/SoundBankWriter.cs` | the builder — **its codec plugin id must match the wem's codec** |
 | Editor on Fire `.eof` | `Services/Parsing/Eof/EofExporter.cs` → `ExportToFile` | menu + `SaveCompanionService` |
 | Guitar Pro `.gp` | `Services/Export/GuitarPro/GpExporter.cs` | `ExportMenuViewModel.ExportGuitarPro` (`MainWindowViewModel.Export`) |
-| DLC Builder `.rs2dlc` | `Services/Export/DlcBuilder/Rs2DlcProjectBuilder.cs` + `Rs2DlcWriter.cs` | `SaveCompanionService.WriteDlcBuilderProject` |
+| DLC Builder `.rs2dlc` | `Services/Export/DlcBuilder/Rs2DlcProjectBuilder.cs` + `Rs2DlcWriter.cs`, the naming/path references in `DlcBuilderProjectFile.cs` | `SaveCompanionService.WriteDlcBuilderProject` (every save, when its setting is on), `DlcBuilderProjectWriter.Write` (the Rocksmith export dialog's "Export DLC Builder project", on request) |
 | Sheet PDF | `DotCharter.Services/Export/Sheet/SheetPdfExporter.cs` | `ExportMenuViewModel.ExportSheetPdf` (`MainWindowViewModel.Export`) |
 | DotCharter song `.dcsong` | `Services/Package/DcSong/DcSongWriter.cs` behind `DcSongExporter` (`IDcSongExporter`, the one DI-registered exporter here besides the companions) | `ShellDialogsViewModel.OpenDcSongExport` → `DcSongExportViewModel`; format in [services/dcsong-format.md](services/dcsong-format.md). The way back in (File ▸ Open / drop of a `.dcsong`) is `Session/DcSongProjectOpener` → `Package/DcSong/DcSongProjectUnpacker`, routed by `ProjectSessionService.LoadFile` |
 

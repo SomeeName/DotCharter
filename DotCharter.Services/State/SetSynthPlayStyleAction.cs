@@ -6,8 +6,11 @@ namespace DotCharter.Services.State;
 ///     so a change is an undoable edit that marks the project dirty. The target is
 ///     updated IN PLACE: the restorer and the feeder hold the same instance.
 /// </summary>
-public sealed class SetSynthPlayStyleAction(ChartSynthPlayRules target, ChartSynthPlayRules newRules) : IChartAction
+public sealed class SetSynthPlayStyleAction(ChartSynthPlayRules target, ChartSynthPlayRules newRules) : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly ChartSynthPlayRules _old = target.Clone();
     private readonly ChartSynthPlayRules _new = newRules.Clone();
 

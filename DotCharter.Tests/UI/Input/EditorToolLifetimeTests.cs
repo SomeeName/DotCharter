@@ -44,6 +44,8 @@ public sealed class EditorToolLifetimeTests
 
         public event Action<Arrangement?>? FocusRequested { add { } remove { } }
         public event Action? ActionFailed { add { } remove { } }
+        public event Action<IReadOnlyList<LinkPropagationReport>>? LinksPropagated { add { } remove { } }
+        public bool OnlyHere(LinkPropagationReport report) => false;
         public bool CanUndo => false;
         public bool CanRedo => false;
         public int CurrentNodeId => 0;

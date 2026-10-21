@@ -1,4 +1,4 @@
-using System.Text;
+using DotCharter.Tone.Ai;
 
 namespace DotCharter.Services.Ai.Chat;
 
@@ -20,6 +20,9 @@ public static class AiChatExcerpt
 
     /// <summary>The longest instruction sent, in characters.</summary>
     public const int MaxInstructionChars = 2000;
+
+    /// <summary>The most a turn or instruction is read to before it is clipped: more than any clip below keeps.</summary>
+    private const int MaxCollapsedChars = 4000;
 
     /// <summary>The instruction as sent: one line, clipped to <see cref="MaxInstructionChars" />.</summary>
     public static string Instruction(string? text) => Clip(Collapse(text), MaxInstructionChars);
@@ -56,28 +59,11 @@ public static class AiChatExcerpt
         return string.Join("\n", lines);
     }
 
-    /// <summary>Every run of whitespace (line breaks included) as one space, trimmed: a turn
-    /// cannot fake the prompt's own section lines.</summary>
-    private static string Collapse(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return "";
-        var sb = new StringBuilder(text.Length);
-        var space = false;
-        foreach (var c in text)
-        {
-            if (char.IsWhiteSpace(c) || char.IsControl(c))
-            {
-                space = sb.Length > 0;
-                continue;
-            }
-
-            if (space) sb.Append(' ');
-            space = false;
-            sb.Append(c);
-        }
-
-        return sb.ToString();
-    }
+    /// <summary>Every run of whitespace (line breaks included) as one space, trimmed, with control and
+    /// bidi characters gone and runs of the prompt's delimiter characters broken
+    /// (<see cref="AiUntrustedText.Clean" />): a turn, typed or imported, cannot fake the prompt's own
+    /// section lines or close the data block.</summary>
+    private static string Collapse(string? text) => AiUntrustedText.Clean(text, MaxCollapsedChars);
 
     private static string Clip(string text, int max)
     {

@@ -197,7 +197,7 @@ public sealed class PartialManifestChecksumTests : IDisposable
         return new GitHubUpdateService(
             new Version(0, 42, 0), handler: handler,
             installDir: Path.Combine(_temp.Path, "install"),
-            downloadDir: Path.Combine(_temp.Path, "downloads"));
+            downloadDir: Path.Combine(_temp.Path, "downloads"), releaseSigningKey: TestReleaseSigning.PublicKey);
     }
 
     private static FakeHttpMessageHandler Serve(ReleaseFixture release, string checksums)

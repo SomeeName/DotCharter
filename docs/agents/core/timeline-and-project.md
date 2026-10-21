@@ -167,7 +167,10 @@ chord naming) are in [guitar-and-tuning.md](guitar-and-tuning.md).
   separate types, so what is shared is the rule, not the code.
   `ChartProjectPositionsTests.EveryPositionBearingCollection_IsAccountedFor`
   makes it executable — a new collection whose element carries a settable
-  `Position` fails the gate until it is listed.
+  `Position` fails the gate until it is listed. Link placements
+  (`ChartProject.LinkGroups[].Placements`) are walked too: both barlines move,
+  so a beat inserted INSIDE a run widens only that run (and the history then
+  unlinks it).
   **`Services/Editing/Tempo/BeatScaleService` is the one sanctioned hand-written
   copy of that walk, and it is held to the same inventory by
   `TheBeatScaleTraversal_MentionsEveryPositionBearingCollection`.** It cannot

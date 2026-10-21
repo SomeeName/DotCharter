@@ -1,4 +1,5 @@
 using System.Text;
+using DotCharter.Services.Infrastructure;
 
 namespace DotCharter.Services.Parsing.Eof;
 
@@ -41,7 +42,8 @@ public sealed class EofPackWriter
     /// <summary>
     ///     u16 byte-length-prefixed UTF-8 string — mirrors
     ///     <c>eof_save_song_string_pf</c> (and <see cref="EofPackReader.ReadString"/>).
-    ///     A null/empty string writes a zero length and no payload.
+    ///     A null/empty string writes a zero length and no payload. A name past the 16-bit
+    ///     length is cut on a code-point boundary: a long title must not abort the whole save.
     /// </summary>
     public void WriteString(string? value)
     {
@@ -51,9 +53,7 @@ public sealed class EofPackWriter
             return;
         }
 
-        var bytes = Encoding.UTF8.GetBytes(value);
-        if (bytes.Length > ushort.MaxValue)
-            throw new ArgumentException($"EOF string too long ({bytes.Length} bytes).", nameof(value));
+        var bytes = Utf8Truncation.GetBytes(value, ushort.MaxValue);
         WriteU16((ushort)bytes.Length);
         _ms.Write(bytes, 0, bytes.Length);
     }

@@ -365,7 +365,7 @@ public sealed partial class ChartMaintenanceService
         }
 
         var actions = ArrangementHandShapeGenerator.BuildActions(arrangement, plan);
-        if (!_historyService.Do(new CompositeAction(actions) { LabelKey = "History_GenerateHandShapes" })) return;
+        if (!_historyService.Do(new CompositeAction(actions) { LabelKey = "History_GenerateHandShapes", LinkPolicyOverride = LinkPolicy.ShareFirstChanged })) return;
 
         _chartEditor.RequestRedraw();
         _projectState.MainDisplayMessage = _localization.Plural(

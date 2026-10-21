@@ -269,9 +269,15 @@ public sealed class DcSongWriter
 
         try
         {
-            var path = Path.IsPathRooted(own) || request.ProjectDirectory == null
-                ? own
-                : Path.Combine(request.ProjectDirectory, own);
+            // The project's own cover is data from its file: only a file inside the
+            // project folder is packed, never a rooted or escaping name.
+            var path = ProjectRelativePath.TryResolve(request.ProjectDirectory, own);
+            if (path == null)
+            {
+                warnings.Add(DcSongWriteWarning.CoverSkipped);
+                return null;
+            }
+
             return LoadImage(path);
         }
         catch (Exception ex) when (ex is DcSongWriteException or ArgumentException)

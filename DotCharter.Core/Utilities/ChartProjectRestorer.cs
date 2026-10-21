@@ -100,6 +100,40 @@ public static class ChartProjectRestorer
         // project would delete a newer build's data — the loss this collection
         // exists to prevent (see ChartProject.UnknownRscpNodes).
         ReconcileValues(live.UnknownRscpNodes, snapshot.UnknownRscpNodes);
+        RestoreLinkGroups(live, snapshot);
+    }
+
+    /// <summary>
+    ///     Link groups hold their placements' arrangements by REFERENCE, so a restore maps each
+    ///     snapshot arrangement to the live one at the same index (the arrangements were just
+    ///     reconciled index-wise). A placement whose arrangement is not in the snapshot project
+    ///     is already dead and is not carried.
+    /// </summary>
+    public static void RestoreLinkGroups(ChartProject live, ChartProject snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(live);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        Reconcile(live.LinkGroups, snapshot.LinkGroups, (t, s) =>
+        {
+            t.Id = s.Id;
+            t.Letter = s.Letter;
+            t.Name = s.Name;
+            t.Rule = s.Rule;
+            var placements = new List<LinkPlacement>(s.Placements.Count);
+            foreach (var placement in s.Placements)
+            {
+                var index = placement.Arrangement == null ? -1 : snapshot.Arrangements.IndexOf(placement.Arrangement);
+                if (index < 0 || index >= live.Arrangements.Count) continue;
+                placements.Add(new LinkPlacement
+                {
+                    Arrangement = live.Arrangements[index],
+                    Position = placement.Position,
+                    EndPosition = placement.EndPosition
+                });
+            }
+
+            Reconcile(t.Placements, placements, (lp, sp) => lp.CopyFrom(sp));
+        });
     }
 
     public static void RestoreArrangement(Arrangement live, Arrangement snapshot)

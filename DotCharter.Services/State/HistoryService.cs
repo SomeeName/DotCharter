@@ -59,6 +59,7 @@ public class HistoryService : IHistoryService
     private readonly Func<DateTime> _now;
     private readonly ChartingSessionLog? _session;
     private readonly IEditingScope? _scope;
+    private readonly LinkReconciler _links;
     private Node _current;
 
     /// <summary>
@@ -88,6 +89,7 @@ public class HistoryService : IHistoryService
         _maxBytes = Math.Max(0, maxBytes);
         _now = clock ?? (() => DateTime.UtcNow);
         _mergeWindow = mergeWindow ?? MergeWindow;
+        _links = new LinkReconciler(logger);
         _root = CreateRoot();
         _current = _root;
     }
@@ -95,6 +97,7 @@ public class HistoryService : IHistoryService
     public event Action? HistoryChanged;
     public event Action<Arrangement?>? FocusRequested;
     public event Action? ActionFailed;
+    public event Action<IReadOnlyList<LinkPropagationReport>>? LinksPropagated;
 
     /// <summary>
     ///     Runs one apply/revert and, if it throws, tells the world the chart and
@@ -135,6 +138,7 @@ public class HistoryService : IHistoryService
         _current = _root;
         _bytes = 0;
         EndGesture();
+        _links.Reset();
         _logger.Info(AppLogCategory.History, "History cleared.");
         HistoryChanged?.Invoke();
     }
@@ -145,6 +149,8 @@ public class HistoryService : IHistoryService
     {
         if (!action.HasEffect) return false;
 
+        // The link reconciler compares each linked copy with how it was BEFORE the action.
+        _links.EnsureBaseline(_scope?.Project);
         RunOrReportFailure(action.Execute, $"Do {DescribeAction(action)}");
         PushAction(action);
         HistoryChanged?.Invoke();
@@ -157,13 +163,26 @@ public class HistoryService : IHistoryService
         // Do has applied it, and a direct push comes after the caller applied it: either way the
         // chart moved, merged into the open gesture or not.
         MarkEdited(action);
-        if (TryMergeIntoOpenGesture(action)) return true;
+        // Linked measures: propagate or unlink by the action's policy, inside THIS step.
+        var links = _links.Reconcile(_scope?.Project, action);
+        if (TryMergeIntoOpenGesture(action))
+        {
+            if (links != null)
+            {
+                if (_current.Links == null) _current.Links = links;
+                else _current.Links.Absorb(links);
+            }
+
+            RaiseLinksPropagated(links, _current.Links);
+            return true;
+        }
 
         // Tag the action with whichever arrangement the editing scope is
         // currently pointing at so undo/redo can refocus the right panel.
         var node = new Node(_nextId++, action, _scope?.Arrangement, DescribeAction(action), _now())
         {
-            Parent = _current
+            Parent = _current,
+            Links = links
         };
         _nodes[node.Id] = node;
         _bytes += action.EstimatedBytes;
@@ -177,7 +196,25 @@ public class HistoryService : IHistoryService
         EnforceBudget();
         _logger.Info(AppLogCategory.History,
             $"Executed {node.Description} (target={node.Target?.Name ?? "<none>"}, node={node.Id}{(branched ? ", new branch" : "")}). Nodes={_nodes.Count - 1}, retained≈{_bytes / (1024 * 1024)} MiB.");
+        RaiseLinksPropagated(links, links);
         return true;
+    }
+
+    private void RaiseLinksPropagated(LinkFollowUpAction? step, LinkFollowUpAction? node)
+    {
+        if (step is not { Reports.Count: > 0 } || node == null) return;
+        LinksPropagated?.Invoke(node.Reports);
+    }
+
+    public bool OnlyHere(LinkPropagationReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        if (_current.Links is not { } links || !links.Reports.Any(r => r.GroupId == report.GroupId)) return false;
+        var current = links.Reports.First(r => r.GroupId == report.GroupId);
+        if (links.OnlyHere(current) is not { } action) return false;
+        EndGesture();
+        _logger.Info(AppLogCategory.History, $"Linked measures: only here (group {current.Letter}, {current.Targets.Count} placement(s) restored).");
+        return Do(action);
     }
 
     /// <summary>
@@ -260,14 +297,20 @@ public class HistoryService : IHistoryService
         EndGesture();
         _session?.CountUndo();
         FocusRequested?.Invoke(node.Target);
-        RunOrReportFailure(node.Action!.Undo, $"Undo {node.Description}");
+        RunOrReportFailure(() =>
+        {
+            // The step's link follow-up came after its action, so it is reverted first.
+            node.Links?.Undo();
+            node.Action!.Undo();
+        }, $"Undo {node.Description}");
         MarkEdited(node.Action);
+        _links.Rebuild(_scope?.Project);
         // Plain Redo right after this Undo must return to the same node, even
         // if a sibling branch was taken more recently in the past.
         node.Parent!.PreferredChild = node;
         _current = node.Parent;
         _logger.Info(AppLogCategory.History,
-            $"Undo {node.Action.GetType().Name} (target={node.Target?.Name ?? "<none>"}). Node {node.Id} -> {_current.Id}.");
+            $"Undo {node.Action!.GetType().Name} (target={node.Target?.Name ?? "<none>"}). Node {node.Id} -> {_current.Id}.");
         HistoryChanged?.Invoke();
     }
 
@@ -283,11 +326,16 @@ public class HistoryService : IHistoryService
         EndGesture();
         _session?.CountRedo();
         FocusRequested?.Invoke(next.Target);
-        RunOrReportFailure(next.Action!.Execute, $"Redo {next.Description}");
+        RunOrReportFailure(() =>
+        {
+            next.Action!.Execute();
+            next.Links?.Execute();
+        }, $"Redo {next.Description}");
         MarkEdited(next.Action);
+        _links.Rebuild(_scope?.Project);
         _current = next;
         _logger.Info(AppLogCategory.History,
-            $"Redo {next.Action.GetType().Name} (target={next.Target?.Name ?? "<none>"}). Current={next.Id}.");
+            $"Redo {next.Action!.GetType().Name} (target={next.Target?.Name ?? "<none>"}). Current={next.Id}.");
         HistoryChanged?.Invoke();
     }
 
@@ -459,6 +507,7 @@ public class HistoryService : IHistoryService
         first.Parent = null;
         _bytes -= first.Action?.EstimatedBytes ?? 0;
         first.Action = null;
+        first.Links = null;
         first.Target = null;
         _root = first;
         _logger.Trace(AppLogCategory.History,
@@ -471,6 +520,9 @@ public class HistoryService : IHistoryService
         public readonly List<Node> Children = [];
         public int Id { get; } = id;
         public IChartAction? Action { get; set; } = action; // null only for the root sentinel
+
+        /// <summary>What linked measures did after <see cref="Action" />, in the same step (null: nothing).</summary>
+        public LinkFollowUpAction? Links { get; set; }
         public Arrangement? Target { get; set; } = target;
         public string Description { get; } = description;
 

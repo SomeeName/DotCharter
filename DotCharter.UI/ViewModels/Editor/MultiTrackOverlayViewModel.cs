@@ -325,6 +325,9 @@ public class MultiTrackOverlayViewModel : ViewModelBase
             ctx.Ribbon.ShowPhrases = _appConfig.RibbonShowPhrases;
             ctx.Ribbon.ShowLyrics = _appConfig.RibbonShowLyrics;
             ctx.Ribbon.ShowMeasureMetadata = _appConfig.RibbonShowMeasureInfo;
+            ctx.Ribbon.ShowLinks = _appConfig.RibbonShowLinks;
+            ctx.Ribbon.AutoHideEmpty = _appConfig.RibbonAutoHideEmpty;
+            ctx.Ribbon.CompactRows = _appConfig.RibbonCompactRows;
         }
         else
         {
@@ -360,6 +363,9 @@ public class MultiTrackOverlayViewModel : ViewModelBase
         _appConfig.RibbonShowPhrases = ribbon.ShowPhrases;
         _appConfig.RibbonShowLyrics = ribbon.ShowLyrics;
         _appConfig.RibbonShowMeasureInfo = ribbon.ShowMeasureMetadata;
+        _appConfig.RibbonShowLinks = ribbon.ShowLinks;
+        _appConfig.RibbonAutoHideEmpty = ribbon.AutoHideEmpty;
+        _appConfig.RibbonCompactRows = ribbon.CompactRows;
         _configService.SaveAppConfig(_appConfig);
     }
 

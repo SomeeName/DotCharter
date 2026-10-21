@@ -45,6 +45,20 @@ internal sealed class GpLegacyParseState
     public HashSet<GuitarNote> TiedContinuations { get; } = [];
 
     /// <summary>
+    /// Notes carrying the GP3-5 slur bit (note-effect fx1 0x02), which marks the
+    /// ORIGIN of a hammer-on/pull-off. Consumed when the note is emitted, to arm
+    /// <see cref="PendingHopoDestinations"/>.
+    /// </summary>
+    public HashSet<GuitarNote> HopoOrigins { get; } = [];
+
+    /// <summary>
+    /// (track, voice lane, string) keys whose last sound was a slur origin: the
+    /// next non-tied sound on that string receives the HammerOn flag (the
+    /// destination), exactly where gpif's HopoDestination puts it.
+    /// </summary>
+    public HashSet<(int TrackId, int Voice, int StringIndex)> PendingHopoDestinations { get; } = [];
+
+    /// <summary>
     /// The most recent EMITTED sound per (track, voice lane, string) — the
     /// tie-retarget target. Keyed for the whole file walk because the walk is
     /// measure-major and ties cross barlines by design.
@@ -57,6 +71,8 @@ internal sealed class GpLegacyParseState
         PendingLetRingNotes.Clear();
         LetRingByLevel.Clear();
         TiedContinuations.Clear();
+        HopoOrigins.Clear();
+        PendingHopoDestinations.Clear();
         LastSoundOnString.Clear();
     }
 

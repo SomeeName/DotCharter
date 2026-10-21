@@ -287,9 +287,17 @@ function Invoke-HeadlessShardedRun([string]$Label, [string[]]$Filter) {
         }
         if ($exit -eq 0) { $exit = 1 }
     }
+    # Keep the ORIGINAL failure's TRX, messages, stacks and stdout before any re-run
+    # can overwrite or outvote them (#55); a green re-run does not delete this.
+    $script:HeadlessEvidenceDir = $null
+    if ($exit -ne 0) {
+        $script:HeadlessEvidenceDir = Save-HeadlessFailureEvidence -TrxPath @($runs | ForEach-Object { $_.TrxPath }) `
+            -LogPath @($runs | ForEach-Object { $_.LogPath }) -Label 'first-run' -Always
+    }
     if ($exit -ne 0 -and $RaceReruns -gt 0) {
         $exit = Invoke-HeadlessRaceReruns $Label $trx $absent $discovered $weightsPath $results $base $exit
     }
+    if ($script:HeadlessEvidenceDir) { Write-Host "  headless failure evidence kept: $($script:HeadlessEvidenceDir)" }
     if ($UpdateShardWeights) {
         Write-HeadlessShardWeights @($trx) $weightsPath
         Write-Host "  shard weights rewritten: $weightsPath"
@@ -322,6 +330,9 @@ function Invoke-HeadlessRaceReruns([string]$Label, [string]$Trx, [string[]]$Abse
             return $FirstExit
         }
         $failures = @(Read-HeadlessTrxFailures $run.TrxPath)
+        if ($failures.Count -gt 0 -and $script:HeadlessEvidenceDir) {
+            $null = Save-HeadlessFailureEvidence -TrxPath @($run.TrxPath) -LogPath @($run.LogPath) -Label "rerun$attempt" -Folder $script:HeadlessEvidenceDir
+        }
         $ran = @{}
         foreach ($n in @((Select-Xml -Path $run.TrxPath -XPath '//t:UnitTestResult' -Namespace @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }) | ForEach-Object { $_.Node })) {
             $ran[(Get-HeadlessClassName ([string]$n.testName))] = $true

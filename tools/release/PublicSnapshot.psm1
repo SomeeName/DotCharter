@@ -106,7 +106,7 @@ function Get-UserPathPlaceholderLookahead {
 }
 
 # One rule per kind of leak. Key material is gitleaks' job (.gitleaks.toml), which
-# Export-PublicSnapshot.ps1 runs on the snapshot when gitleaks is installed.
+# Export-PublicSnapshot.ps1 runs on the snapshot (-Push refuses without it).
 function Get-PublicLeakRules {
     $ci = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
     $cs = [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
@@ -155,9 +155,37 @@ function Test-BinaryBytes([byte[]]$Bytes) {
     return [Array]::IndexOf($Bytes, [byte]0, 0, $n) -ge 0
 }
 
+# The text the rules read from $Bytes: UTF-8 for a text file; for a file with a NUL in its
+# first 8 KB (PersonalDataLintTests' "binary"), Latin-1 - one char per byte, so every ASCII
+# name in it is still found (a PDB path inside a DLL, a source file with a literal NUL).
+function ConvertTo-LeakScanText {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
+    if (Test-BinaryBytes $Bytes) { return [System.Text.Encoding]::Latin1.GetString($Bytes) }
+    return [System.Text.Encoding]::UTF8.GetString($Bytes)
+}
+
+# The decompressed bytes of a gzip file (magic 1F 8B), in memory; $null for anything else,
+# or a gzip stream that does not decompress.
+function Expand-LeakScanGzip {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$Bytes)
+    if ($Bytes.Length -lt 18 -or $Bytes[0] -ne 0x1f -or $Bytes[1] -ne 0x8b) { return $null }
+    $in = [System.IO.MemoryStream]::new($Bytes)
+    $out = [System.IO.MemoryStream]::new()
+    try {
+        $gzip = [System.IO.Compression.GZipStream]::new($in, [System.IO.Compression.CompressionMode]::Decompress)
+        try { $gzip.CopyTo($out) } finally { $gzip.Dispose() }
+        return , $out.ToArray()
+    }
+    catch [System.IO.InvalidDataException] { return $null }
+    finally { $in.Dispose(); $out.Dispose() }
+}
+
 # Every finding under $Root (a materialised tree; .git folders are skipped). Paths are
-# relative with forward slashes. Binary files (a NUL in the first 8 KB, as
-# PersonalDataLintTests decides) are checked by path only.
+# relative with forward slashes. Nothing is skipped by content: a file with a NUL is read
+# as Latin-1 (ConvertTo-LeakScanText), and a gzip file is read both as stored (its header
+# can carry a file name) and decompressed in memory; a finding inside reports the .gz path
+# and the line of the decompressed text. Screenshot PIXELS are not read: see the manual
+# check in tools/release/README.md.
 function Find-PublicTreeLeaks {
     param([Parameter(Mandatory)][string]$Root)
     $Root = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\', '/')
@@ -167,8 +195,9 @@ function Find-PublicTreeLeaks {
         if ($relative -match '(^|/)\.git(/|$)') { continue }
         Find-PublicLeaksInPath -Path $relative
         $bytes = [System.IO.File]::ReadAllBytes($file)
-        if (Test-BinaryBytes $bytes) { continue }
-        Find-PublicLeaksInText -Path $relative -Text ([System.Text.Encoding]::UTF8.GetString($bytes))
+        Find-PublicLeaksInText -Path $relative -Text (ConvertTo-LeakScanText $bytes)
+        $expanded = Expand-LeakScanGzip $bytes
+        if ($null -ne $expanded) { Find-PublicLeaksInText -Path $relative -Text (ConvertTo-LeakScanText $expanded) }
     }
 }
 
@@ -422,6 +451,49 @@ function New-SnapshotCommit {
     return [pscustomobject]@{ Commit = $commit; Created = $created; Parent = $Parent; Tag = $Tag }
 }
 
+# Where the public repo at $Url stands for this snapshot, from `git ls-remote` alone
+# (nothing fetched, nothing pushed): Problems, each a reason -Push must not run, and
+# Refspecs, what an atomic push sends (none when the snapshot and its tag are public).
+#   - main must still be $Parent, the snapshot's parent (none: no main yet), or already be
+#     $Commit (an unchanged tree reused the public commit);
+#   - the tag $Tag must be absent, or already name $Commit (the unchanged JuceSharp case:
+#     its existing public tag is kept, never re-pushed). A tag for another commit is a
+#     version that was not bumped: public tags are never moved.
+function Get-PublicPushPlan {
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string]$Commit,
+        [string]$Parent,
+        [Parameter(Mandatory)][string]$Tag
+    )
+    $refs = @{}
+    foreach ($line in (Invoke-SnapshotGit -Arguments @('ls-remote', '--heads', '--tags', $Url)).Split("`n", [StringSplitOptions]::RemoveEmptyEntries)) {
+        $f = $line.Trim().Split("`t")
+        if ($f.Count -eq 2) { $refs[$f[1]] = $f[0] }
+    }
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $refspecs = [System.Collections.Generic.List[string]]::new()
+    $main = $refs['refs/heads/main']
+    if ($main -ne $Commit) {
+        if ("$main" -ne "$Parent") {
+            $was = if ($Parent) { $Parent } else { '(no main: a root commit)' }
+            $now = if ($main) { $main } else { '(no main)' }
+            $problems.Add("public main is $now, but the snapshot was built on ${was}: re-run the export")
+        }
+        else { $refspecs.Add('refs/heads/main:refs/heads/main') }
+    }
+    $tagObject = $refs["refs/tags/$Tag"]
+    if ($tagObject) {
+        $peeled = $refs["refs/tags/$Tag^{}"]
+        if (-not $peeled) { $peeled = $tagObject }
+        if ($peeled -ne $Commit) {
+            $problems.Add("tag $Tag already exists for commit $peeled, but this snapshot is ${Commit}: bump the version (a public tag is never moved)")
+        }
+    }
+    else { $refspecs.Add("refs/tags/${Tag}:refs/tags/$Tag") }
+    return [pscustomobject]@{ Url = $Url; Commit = $Commit; Tag = $Tag; Problems = @($problems); Refspecs = @($refspecs) }
+}
+
 # Writes the tree of $Commit (in $GitDir) into $Destination through a private index.
 function Export-SnapshotWorkTree {
     param([Parameter(Mandatory)][string]$GitDir, [Parameter(Mandatory)][string]$Commit, [Parameter(Mandatory)][string]$Destination)
@@ -438,7 +510,7 @@ function Export-SnapshotWorkTree {
 
 Export-ModuleMember -Function Get-PublicRenameMap, Convert-PublicText, Get-PublicExcludedPaths, Test-PublicExcludedPath,
     Get-PersonalDataPatterns, Get-PublicLeakRules, Find-PublicLeaksInText, Find-PublicLeaksInPath, Find-PublicTreeLeaks,
-    Format-PublicLeakReport, Get-NativeRuntimePendingHash, Add-PublicNativeRuntimeEntry, Get-MsBuildVersion,
+    Format-PublicLeakReport, ConvertTo-LeakScanText, Expand-LeakScanGzip, Get-PublicPushPlan, Get-NativeRuntimePendingHash, Add-PublicNativeRuntimeEntry, Get-MsBuildVersion,
     Get-InheritedNativePins, Get-UserPathPlaceholders, Get-UserPathPlaceholderLookahead,
     Invoke-SnapshotGit, New-SnapshotScratchRepo, Get-PreviousSnapshot, New-PublicTree, Set-SnapshotIndexText,
     Get-SnapshotIndexText, Get-SnapshotMessage, New-SnapshotCommit, Export-SnapshotWorkTree

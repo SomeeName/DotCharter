@@ -18,6 +18,7 @@ using DotCharter.UI.Constants;
 using DotCharter.UI.Controls.Layers;
 using DotCharter.UI.Controls.Layers.Helpers;
 using DotCharter.UI.Controls.Timeline2D;
+using DotCharter.UI.Editing.Linking;
 using DotCharter.UI.Editing.Tracks;
 using DotCharter.UI.Input;
 using DotCharter.UI.ViewModels.Editor;
@@ -160,6 +161,7 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
         _layers.Add(new HandShapeLayer());
         _layers.Add(new FretAnchorLayer());
         _layers.Add(new NoteLayer());
+        _layers.Add(new LinkLayer());
         _layers.Add(new PlayheadLayer());
     }
 
@@ -209,48 +211,34 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
     public double ViewportHeight => Bounds.Height;
 
     /// <summary>
-    /// Top-ribbon layout for the arrangement this renderer is bound to
-    /// (override arrangement on stacked rows, otherwise the active one).
-    /// Reads visibility flags off the per-track <see cref="TrackEditorContext"/>
-    /// so users can toggle individual rows per panel. EMPTY rows auto-collapse
-    /// on top of the user toggles — the reclaimed height goes to the lanes.
-    /// The hit tester reads this same property, so rows hide/show consistently
-    /// for drawing and clicking.
+    /// Top-ribbon layout for the arrangement this renderer is bound to (override
+    /// arrangement on stacked rows, otherwise the active one): its track's lane
+    /// settings through <see cref="RibbonLaneRules" /> — empty lanes give their
+    /// height to the note lanes. The hit tester reads this same property, so rows
+    /// hide/show consistently for drawing and clicking.
     /// </summary>
-    public RibbonLayout TopRibbon
+    public RibbonLayout TopRibbon =>
+        CurrentTrack is { } ctx ? RibbonLaneRules.Compose(ctx.Ribbon, RibbonContentOf(ctx)) : RibbonLayout.Default;
+
+    private TrackEditorContext? CurrentTrack =>
+        (OverrideArrangement ?? Editor?.ActiveArrangement) is { } arr && Editor != null
+            ? Editor.TrackContexts.GetOrCreate(arr)
+            : null;
+
+    /// <summary>The lane settings the lane menu edits, for this renderer's track.</summary>
+    internal RibbonVisibility? CurrentRibbon => CurrentTrack?.Ribbon;
+
+    /// <summary>What this renderer's track has per lane — the lane menu's hints read it.</summary>
+    internal RibbonContent? CurrentRibbonContent() => CurrentTrack is { } ctx ? RibbonContentOf(ctx) : null;
+
+    private RibbonContent RibbonContentOf(TrackEditorContext ctx)
     {
-        get
-        {
-            var arr = OverrideArrangement ?? Editor?.ActiveArrangement;
-            if (arr != null && Editor != null)
-            {
-                var ctx = Editor.TrackContexts.GetOrCreate(arr);
-                var vis = ctx.Ribbon;
-
-                // A row shows only while its toggle is on AND the track has
-                // content for it. Exception: with no section/phrase/tone
-                // content at all, the Sections row stays visible as the
-                // right-click → event-dialog entry point — otherwise the
-                // FIRST event could never be added from the timeline (the
-                // dialog edits section + phrase + tone together, so any one
-                // visible event row unlocks all three).
-                var hasTones = ctx.Tones.Count > 0;
-                // Latched: a phrases-only chart walked the whole list per call.
-                var (hasSections, hasPhrases) =
-                    _ribbonEvents.Get(ctx.EventPoints, Editor.HistoryRevision, Environment.TickCount64);
-
-                var hasLyrics = Editor.LyricPhrases.Count > 0;
-                var hasEventContent = hasTones || hasSections || hasPhrases;
-
-                return new RibbonLayout(
-                    vis.ShowTones && hasTones,
-                    vis.ShowSections && (hasSections || !hasEventContent),
-                    vis.ShowPhrases && hasPhrases,
-                    vis.ShowLyrics && hasLyrics,
-                    vis.ShowMeasureMetadata);
-            }
-            return RibbonLayout.Default;
-        }
+        if (Editor == null) return default;
+        // Latched: a phrases-only chart walked the whole list per call.
+        var (hasSections, hasPhrases) =
+            _ribbonEvents.Get(ctx.EventPoints, Editor.HistoryRevision, Environment.TickCount64);
+        return new RibbonContent(RibbonLaneRules.DistinctTones(ctx.Arrangement.ToneBase, ctx.Tones),
+            hasSections, hasPhrases, Editor.LyricPhrases.Count > 0, LinkLaneModel.HasLinks(Editor.ActiveProject, ctx.Arrangement));
     }
 
     public double TopMargin => TopRibbon.TotalHeight;
@@ -378,6 +366,17 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
         _subscribedRibbon?.PropertyChanged -= OnRibbonChanged;
         _subscribedRibbon = target;
         _subscribedRibbon?.PropertyChanged += OnRibbonChanged;
+        SyncLinkHighlight(Editor?.LinkHighlight);
+    }
+
+    private LinkHighlight? _highlight;
+
+    private void SyncLinkHighlight(LinkHighlight? target)
+    {
+        if (ReferenceEquals(_highlight, target)) return;
+        _highlight?.Changed -= RequestNextFrameRendering;
+        _highlight = target;
+        _highlight?.Changed += RequestNextFrameRendering;
     }
 
     private void OnRibbonChanged(object? sender, PropertyChangedEventArgs e)
@@ -473,6 +472,7 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
         _ghostArrangements = null;
         _subscribedRibbon?.PropertyChanged -= OnRibbonChanged;
         _subscribedRibbon = null;
+        SyncLinkHighlight(null);
 
         // The pinned-label registry is a DI singleton keyed by viewport; a
         // stacked row that goes away must not leave its rects (and itself) in
@@ -828,6 +828,8 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
         rc.LoopPendingStartMs = _projectState?.LoopPendingStartMs;
         rc.IsOverrideView = OverrideArrangement != null && OverrideArrangement != Editor.ActiveArrangement;
         rc.Ribbon = ribbonLayout;
+        rc.Project = Editor.ActiveProject;
+        rc.Arrangement = OverrideArrangement ?? Editor.ActiveArrangement;
         // 0.14.3 B playhead feedback: both flags only go true on frames the
         // continuous render loop produces anyway (playback / pinned scrub),
         // so the effects never require extra invalidation and a frozen
@@ -921,6 +923,8 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
                 for (var i = 0; i < _snapshot.TemplateCount; i++)
                     atlas.RegisterCharacters(_snapshot.Templates[i].Name);
 
+                atlas.RegisterCharacters(LinkLayer.Glyphs);
+
                 _lastRegisterSig = sig;
             }
         }
@@ -977,6 +981,8 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
                 foreach (var layer in _layers)
                     layer.Render(_batcher, rc);
             }
+
+            if (Editor.LinkHighlight.FlashAlpha > 0f) RequestNextFrameRendering();
 
             // FPS is a diagnostic, not chart content: draw it only while the
             // Session Health dashboard is open (the 1 Hz summary is still

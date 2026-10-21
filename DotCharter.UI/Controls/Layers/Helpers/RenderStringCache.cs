@@ -34,17 +34,18 @@ public static class RenderStringCache
 
     // Playhead/ruler time labels: cache by integer key so identical timestamps
     // within a session are zero-alloc lookups.
-    private static readonly ConcurrentDictionary<int, string> MmSsCache = new();
     private static readonly ConcurrentDictionary<int, string> MmSsFfCache = new();
 
-    public static string MmSs(double ms)
+    private static readonly ConcurrentDictionary<long, string> RulerTimeCache = new();
+
+    /// <summary>Cached TIME-ruler label (<see cref="TimeRulerPolicy.Format" />, <c>m:ss</c>),
+    /// keyed by the whole second.</summary>
+    public static string RulerTime(double ms)
     {
-        // Quantize to 1s — ruler ticks are at second boundaries.
-        var key = (int)(ms / 1000.0);
-        if (key < 0) key = 0;
-        if (MmSsCache.TryGetValue(key, out var s)) return s;
-        s = TimeSpan.FromSeconds(key).ToString(@"mm\:ss", CultureInfo.InvariantCulture);
-        if (MmSsCache.Count < 8192) MmSsCache.TryAdd(key, s);
+        var key = (long)Math.Round(Math.Max(0, ms) / 1000.0);
+        if (RulerTimeCache.TryGetValue(key, out var s)) return s;
+        s = TimeRulerPolicy.Format(key * 1000.0);
+        if (RulerTimeCache.Count < 8192) RulerTimeCache.TryAdd(key, s);
         return s;
     }
 
@@ -171,6 +172,28 @@ public static class RenderStringCache
         if (BpmLabelCache.TryGetValue(bpmKey, out var s)) return s;
         s = (bpmKey / 100.0).ToString("0.##", CultureInfo.InvariantCulture) + " BPM";
         if (BpmLabelCache.Count < 1024) BpmLabelCache.TryAdd(bpmKey, s);
+        return s;
+    }
+
+    private static readonly ConcurrentDictionary<int, string> MeasureNumCompactCache = new();
+    private static readonly ConcurrentDictionary<int, string> BpmCompactCache = new();
+
+    /// <summary>Cached bare measure number ("17") for the compact measure pill.</summary>
+    public static string MeasureNumberCompactLabel(int measureNumber)
+    {
+        if (MeasureNumCompactCache.TryGetValue(measureNumber, out var s)) return s;
+        s = measureNumber.ToString(CultureInfo.InvariantCulture);
+        if (MeasureNumCompactCache.Count < 4096) MeasureNumCompactCache.TryAdd(measureNumber, s);
+        return s;
+    }
+
+    /// <summary>Cached bare tempo ("120", "131.87") for the compact measure pill.</summary>
+    public static string BpmCompactLabel(double bpm)
+    {
+        var bpmKey = (int)Math.Round(bpm * 100.0);
+        if (BpmCompactCache.TryGetValue(bpmKey, out var s)) return s;
+        s = (bpmKey / 100.0).ToString("0.##", CultureInfo.InvariantCulture);
+        if (BpmCompactCache.Count < 1024) BpmCompactCache.TryAdd(bpmKey, s);
         return s;
     }
 

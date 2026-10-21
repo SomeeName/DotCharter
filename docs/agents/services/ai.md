@@ -40,7 +40,8 @@ Three halves, built in parallel against one contract:
 | `ClaudeCliSystemPrompt.cs` | `IClaudeCliCapabilityProbe` (does this binary take `--system-prompt-file`?) and the hash-named system-prompt FILE that makes the CLI path cacheable |
 | `CodexCliToneModel.cs` | the Codex (local CLI) provider — the installed `codex` binary, `codex exec`, no API key; and `CodexCliLocator` |
 | `NamCaptureSource.cs` | `INamCaptureSource` + `Tone3000CaptureSource`: answers a design's `captureSearch` by searching TONE3000, picking one capture and downloading it into the library |
-| `OpenAiCompatibleToneModel.cs` | LM Studio / Ollama / any chat-completions server, and `AiProviderPresets` |
+| `OpenAiCompatibleToneModel.cs` | LM Studio / Ollama / any chat-completions server, and `AiProviderPresets`. The base URL must be `https`, or `http` to this computer only (`IsAllowedBaseUrl`); redirects are never followed (`OnlineHttp.NoRedirectHandler`); a server's error body is `AiUntrustedText.Redacted` (key, bearer tokens, capped) before it is kept |
+| `AiUntrustedText.cs` | text from outside the app on its way into a prompt, a name or a log: `Clean` (one capped line, no control/bidi characters, delimiter runs broken), `Block` (the `<<<BEGIN CHART DATA` ... `<<<END CHART DATA>>>` fence the system prompt calls data), `Redacted` |
 | `ToneDesignModelFactory.cs` | settings + secrets → a provider, or a specific `NotConfigured` |
 | `ToneDesignService.cs` | the one entry point the UI calls |
 
@@ -630,8 +631,8 @@ re-checked on **2.1.273** (what is installed on the owner's machine, 2026-09-16)
 --disable-slash-commands --no-session-persistence --permission-prompts none
 ```
 
-**With online research on (`AiProviderSettings.WebResearch`, default true since
-2026-09-27) `--tools ""` becomes `--tools "WebSearch,WebFetch" --allowedTools
+**With online research on (`AiProviderSettings.WebResearch`, default FALSE: the
+player opts in under Settings > AI) `--tools ""` becomes `--tools "WebSearch,WebFetch" --allowedTools
 "WebSearch,WebFetch"`**: the two read-only web tools and nothing else,
 pre-approved so no permission prompt can wait on a user who cannot see it. The
 single-turn guarantee below then no longer holds (a search is a turn); the
@@ -642,7 +643,11 @@ cached index, which would search anyway), deadline 360 s. The instruction
 guitar, pedals and tuning; a request naming no recording needs none) rides the
 CONVERSATION on stdin, never the system prompt, so the cached grounding is
 unchanged by the setting. The API providers have no web tools and ignore it; the
-Settings row (`Ai_WebResearch*`) shows for the two CLIs only. Every request also
+Settings row (`Ai_WebResearch*`) shows for the two CLIs only. **The lanes that
+print project text into a prompt never research:** `AiProviderResolution.Create`
+(the Rocksmith tone generator's mapper, the narrator) forces `WebResearch = false`
+like the chart pass does, because a model that can fetch pages while it reads a
+stranger's song title can be steered into fetching an address that carries the prompt. Every request also
 carries the rig tuner's tuning when one is picked (`ToneDesignRequest.Tuning`,
 "The player's guitar is tuned to: Drop D (D A D G B E)"). Pinned by
 `ToneDesignResearchTests` and the two providers' exact-argument tests.

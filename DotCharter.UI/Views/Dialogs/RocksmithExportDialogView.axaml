@@ -47,15 +47,18 @@
                                  finding with a time carries its own "Go to", which seeks
                                  the editor behind the dialog, and one with a verb behind it
                                  its own "Fix". -->
-                            <!-- Shared size groups keep every row's Go to and Fix in one
-                                 column whichever of the two a row shows. -->
+                            <!-- Every row reserves the same Go to and Fix columns, so they
+                                 line up across rows: a row without one keeps the button laid
+                                 out but blank (class Absent), never collapsed. No shared size
+                                 groups: in this virtualizing list a group's width fed back
+                                 through rows whose wrapped message depends on it, and the
+                                 layout never converged. -->
                             <!-- No MaxHeight and no scroller of its own (#214): the list
                                  scrolls with the body, so it takes the height the window
                                  has. A 150 px list inside the body's scroller showed three
                                  findings at 1280x720. -->
                             <ListBox x:Name="FindingsList" ItemsSource="{Binding ValidationItems}"
                                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                     Grid.IsSharedSizeScope="True"
                                      AutomationProperties.Name="{localization:Loc Dialog_Export_Validation}"
                                      Background="Transparent" BorderThickness="0" Padding="4">
                                 <ListBox.ItemTemplate>
@@ -65,8 +68,8 @@
                                                 <ColumnDefinition Width="8" />
                                                 <ColumnDefinition Width="160" />
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" SharedSizeGroup="FindingGoTo" />
-                                                <ColumnDefinition Width="Auto" SharedSizeGroup="FindingFix" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <Panel Grid.Column="0" VerticalAlignment="Center">
                                                 <Ellipse Width="8" Height="8"
@@ -89,13 +92,13 @@
                                                     Content="{localization:Loc Dialog_Export_GoTo}"
                                                     ToolTip.Tip="{localization:Loc Dialog_Export_JumpTip}"
                                                     AutomationProperties.Name="{localization:Loc Dialog_Export_JumpTip}"
-                                                    IsVisible="{Binding HasTime}"
+                                                    Classes.Absent="{Binding !HasTime}"
                                                     Command="{Binding JumpCommand}" />
                                             <Button Grid.Column="4" Classes="DlgLink" VerticalAlignment="Center"
                                                     Content="{localization:Loc Dialog_Export_Fix}"
                                                     ToolTip.Tip="{Binding FixDescription}"
                                                     AutomationProperties.Name="{Binding FixDescription}"
-                                                    IsVisible="{Binding HasFix}"
+                                                    Classes.Absent="{Binding !HasFix}"
                                                     Command="{Binding FixCommand}" />
                                         </Grid>
                                     </DataTemplate>
@@ -109,6 +112,13 @@
                                                 <Binding Path="Message" />
                                             </MultiBinding>
                                         </Setter>
+                                    </Style>
+                                    <Style Selector="Button.DlgLink.Absent">
+                                        <Setter Property="Opacity" Value="0" />
+                                        <Setter Property="IsHitTestVisible" Value="False" />
+                                        <Setter Property="Focusable" Value="False" />
+                                        <Setter Property="IsTabStop" Value="False" />
+                                        <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
                                     </Style>
                                     <Style Selector="ListBoxItem">
                                         <Setter Property="Padding" Value="2" />
@@ -139,8 +149,9 @@
                                    Margin="0,0,0,8" TextWrapping="Wrap" IsVisible="{Binding HasPlatformNote}"
                                    Text="{Binding PlatformNote}" />
                         <!-- Encrypted is the default for every string count (#804); Plain is
-                             the explicit option. Without keys the picker is disabled on Plain
-                             and the Package section's hint below says why. -->
+                             the explicit option. Without keys the picker is disabled on Plain.
+                             Whenever the package WILL be plain, the warning under the picker says
+                             what that costs and offers the way out: a DLC Builder project. -->
                         <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,400">
                             <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
                                        Text="{localization:Loc Dialog_Export_PackageForm}" />
@@ -156,6 +167,31 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                         </Grid>
+                        <Border x:Name="PlainPackageWarning" IsVisible="{Binding Target.WritesPlainPackage}"
+                                Background="{DynamicResource WarningFaint}" BorderBrush="{DynamicResource WarningColor}"
+                                BorderThickness="1" CornerRadius="{DynamicResource RadiusSm}"
+                                Padding="{DynamicResource PaddingRow}" Margin="{DynamicResource GapBottomMd}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <PathIcon Grid.Column="0" Width="16" Height="16" VerticalAlignment="Top"
+                                          Data="{DynamicResource IconAlert}" Foreground="{DynamicResource WarningColor}" />
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock x:Name="PlainPackageWarningText" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextPrimary}" FontSize="{DynamicResource FontSizeSm}"
+                                               Text="{localization:Loc Dialog_Export_PlainPackageWarning}" />
+                                    <Button x:Name="ExportDlcBuilderProjectButton" HorizontalAlignment="Left"
+                                            Theme="{DynamicResource FireGhostButton}" Classes="FireGhost Compact"
+                                            Height="{DynamicResource FireFieldHeight}"
+                                            Content="{localization:Loc Dialog_Export_DlcBuilderProject}"
+                                            AutomationProperties.Name="{localization:Loc Dialog_Export_DlcBuilderProject}"
+                                            ToolTip.Tip="{localization:Loc Dialog_Export_DlcBuilderProjectTip}"
+                                            Command="{Binding ExportDlcBuilderProjectCommand}" />
+                                    <TextBlock x:Name="DlcBuilderProjectMessageText" TextWrapping="Wrap"
+                                               IsVisible="{Binding HasDlcBuilderProjectMessage}"
+                                               Foreground="{DynamicResource TextMuted}" FontSize="{DynamicResource FontSizeSm}"
+                                               Text="{Binding DlcBuilderProjectMessage}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                         <!-- ── Arrangements ───────────────────────────────── -->
                         <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource GapTopMd}">
                             <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Grid.Column="0" Classes="DlgSectionLabel"
@@ -283,9 +319,6 @@
                         <!-- ── Package ────────────────────────────────────── -->
                         <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Margin="0,12,0,10"
                                    Text="{localization:Loc Dialog_Export_Package}" />
-                        <TextBlock Theme="{DynamicResource DlgHintText}" x:Name="UnencryptedPackageHint" Classes="DlgHint"
-                                   Margin="0,0,0,8" TextWrapping="Wrap" IsVisible="{Binding WritesUnencrypted}"
-                                   Text="{localization:Loc Dialog_Export_WrittenUnencrypted}" />
                         <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,400">
                             <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
                                        Text="{localization:Loc Dialog_Export_DlcKey}" />

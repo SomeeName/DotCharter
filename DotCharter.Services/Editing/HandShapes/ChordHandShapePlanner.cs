@@ -70,10 +70,42 @@ public sealed record PlannedHandShape(
 /// inside a hand shape is I20 (<c>AnchorRule</c>), so on a chart that already has
 /// anchors a bar drawn across one would invent a finding. The importer plans before
 /// it generates anchors and keeps this off.</param>
+/// <param name="ContinueThroughGripTones">Let a repeated-strum run continue across
+/// single notes the grip itself plays: every note between the two strums is a
+/// fretted (string, fret) of the run's template, or an open string the template does
+/// not fret, and none carries a technique drawn along its sustain. The hand never
+/// leaves the grip, so the charters keep one bar over strum, arpeggio, strum. Any
+/// other note still breaks the run, and a rest is measured from the last grip tone's
+/// end. Off everywhere: on the tab-vs-chart corpus it moved neither FHP nor measure-link
+/// recall, so no caller turns it on yet.</param>
 public readonly record struct ChordHandShapePlanOptions(
     bool SplitRunsOnRests = false,
     bool CoverEveryChord = false,
-    bool KeepAnchorsOutside = false);
+    bool KeepAnchorsOutside = false,
+    bool ContinueThroughGripTones = false);
+
+/// <summary>Why a repeated-strum run ended before the next chord: the telemetry
+/// <see cref="ChordHandShapePlanner.Plan" /> counts when asked.</summary>
+public enum HandShapeRunBreak
+{
+    /// <summary>The next chord is played with another grip.</summary>
+    OtherGrip,
+
+    /// <summary>A chord of the pair carries a technique drawn along its sustain.</summary>
+    Technique,
+
+    /// <summary>A rest separates the two (<see cref="ChordHandShapePlanOptions.SplitRunsOnRests" />).</summary>
+    Rest,
+
+    /// <summary>The next chord starts more than <see cref="ChordHandShapePlanner.MaxMergeGap" /> after the sound before it ends.</summary>
+    Gap,
+
+    /// <summary>A note the grip does not hold sounds in between.</summary>
+    ForeignSound,
+
+    /// <summary>An existing hand shape or anchor in between, or a next chord already covered or split into notes.</summary>
+    Existing
+}
 
 /// <summary>
 ///     THE hand-shape grouping rule, as a pure planner: walks a level's chords and
@@ -119,11 +151,14 @@ public static class ChordHandShapePlanner
     /// <param name="minted">Receives every template the grip source mints. Pass the
     /// SAME list for every level of an arrangement, so a shape mints once.</param>
     /// <param name="options">The importer's behaviour by default.</param>
+    /// <param name="breaks">When given, counts why each run ended before a following
+    /// chord, one per boundary.</param>
     public static List<PlannedHandShape> Plan(
         ChartLevel level,
         IHandShapeGripSource grips,
         IList<ChordTemplate> minted,
-        ChordHandShapePlanOptions options = default)
+        ChordHandShapePlanOptions options = default,
+        IDictionary<HandShapeRunBreak, int>? breaks = null)
     {
         ArgumentNullException.ThrowIfNull(level);
         ArgumentNullException.ThrowIfNull(grips);
@@ -138,12 +173,14 @@ public static class ChordHandShapePlanner
         // O(C^2). Same predicate, answered in O(log n).
         var coverage = new HandShapeCoverageIndex(level.HandShapes);
         var existingStarts = level.HandShapes.Select(h => h.Position).OrderBy(p => p).ToList();
-        var notePositions = level.Notes.Select(n => n.Position).OrderBy(p => p).ToList();
+        var sortedNotes = level.Notes.OrderBy(n => n.Position).ToList();
+        var notePositions = sortedNotes.Select(n => n.Position).ToList();
         // A level's anchors are not kept sorted mid-session, hence the sorted copy.
         var anchorPositions = options.KeepAnchorsOutside
             ? level.Anchors.Select(a => a.Position).OrderBy(p => p).ToList()
             : [];
         var slideLandings = SlideLandings(level);
+        var context = new RunContext(grips, coverage, sortedNotes, notePositions, existingStarts, anchorPositions, options);
 
         for (var i = 0; i < chords.Count; i++)
         {
@@ -162,43 +199,24 @@ public static class ChordHandShapePlanner
             var template = grips.GripFor(first, minted);
             var run = new List<Chord> { first };
 
-            // Repeated identical chords share ONE bar (the RS convention — inside it
-            // the 3D highway renders repeats as small strums). The run extends while
-            // the next chord plays the same grip, starts within the merge gap,
-            // nothing else sounds in between, and neither side carries a technique
-            // drawn along its sustain.
-            if (!HasSustainVisibleTechnique(first))
+            HandShapeRunBreak? reason = null;
+            if (HasSustainVisibleTechnique(first))
+            {
+                reason = HandShapeRunBreak.Technique;
+            }
+            else
             {
                 while (i + 1 < chords.Count)
                 {
-                    var prev = run[^1];
-                    var next = chords[i + 1];
-                    if (next.ChordNotes.Count == 0 || next.SplitIntoNotes) break;
-                    if (coverage.Covers(next.Position)) break;
-                    if (HasSustainVisibleTechnique(next)) break;
-                    if (!grips.Holds(template, next)) break;
-
-                    var prevEnd = prev.Position + AuthoredSpan(prev);
-                    // A REST between two strums ends the run: the bar carries
-                    // duration, so drawing it across silence tells the player to hold
-                    // through a rest the tab explicitly wrote.
-                    if (options.SplitRunsOnRests && next.Position.CompareTo(prevEnd) > 0) break;
-                    if (next.Position.CompareTo(prevEnd + MaxMergeGap) > 0) break;
-                    if (FirstAfter(notePositions, prev.Position) is { } note && note.CompareTo(next.Position) < 0)
-                        break;
-                    // A bar someone already placed between the two strums (over
-                    // nothing, or over notes this level does not have) must not end up
-                    // inside the merged one.
-                    if (FirstAfter(existingStarts, prev.Position) is { } bar && bar.CompareTo(next.Position) <= 0)
-                        break;
-                    // …nor an anchor (I20): the next strum opens a bar of its own.
-                    if (FirstAfter(anchorPositions, prev.Position) is { } anchor && anchor.CompareTo(next.Position) <= 0)
-                        break;
-
-                    run.Add(next);
+                    reason = NextChordBreak(run[^1], chords[i + 1], template, context);
+                    if (reason != null) break;
+                    run.Add(chords[i + 1]);
                     i++;
                 }
             }
+
+            if (breaks != null && reason is { } why && i + 1 < chords.Count)
+                breaks[why] = breaks.TryGetValue(why, out var count) ? count + 1 : 1;
 
             var last = run[^1];
             var end = last.Position + AuthoredSpan(last);
@@ -214,28 +232,101 @@ public static class ChordHandShapePlanner
             // THIS shape's template (a bend chord {12,12,14} made the
             // plain {12,12} double-stops after it render and edit as the 3-note shape).
             // …and never past a bar that already exists: this pass only ADDS.
-            var clip = end;
-            if (nextChord is { } c && c.CompareTo(clip) < 0) clip = c;
-            if (nextNote is { } n && n.CompareTo(clip) < 0) clip = n;
-            if (nextBar is { } b && b.CompareTo(clip) < 0) clip = b;
-            if (nextAnchor is { } a && a.CompareTo(clip) < 0) clip = a;
+            var clip = Earliest(Earliest(Earliest(Earliest(end, nextChord), nextNote), nextBar), nextAnchor);
             if (clip.CompareTo(first.Position) > 0) end = clip;
 
             if (options.CoverEveryChord && end.CompareTo(last.Position) <= 0)
                 end = Earliest(last.Position + OneBeat, FirstAfterAll(last.Position, nextChord, nextNote, nextBar, nextAnchor));
 
-            var strikes = new List<Chord>(run.Count);
-            foreach (var chord in run)
-            {
-                if (!HasSustainVisibleTechnique(chord) && !IsSlideLanding(slideLandings, chord))
-                    strikes.Add(chord);
-            }
-
-            plan.Add(new PlannedHandShape(first.Position, end, template, run, strikes));
+            plan.Add(new PlannedHandShape(first.Position, end, template, run, StrikeChords(run, slideLandings)));
             coverage.Add(first.Position, end);
         }
 
         return plan;
+    }
+
+    // Why the run on `grip` cannot take `next` after `prev`; null when it can.
+    // Repeated identical chords share ONE bar (the RS convention: inside it the 3D
+    // highway renders repeats as small strums) while the next chord plays the same
+    // grip, starts within the merge gap, nothing else sounds in between and neither
+    // side carries a technique drawn along its sustain.
+    private static HandShapeRunBreak? NextChordBreak(Chord prev, Chord next, ChordTemplate grip, RunContext context)
+    {
+        if (next.ChordNotes.Count == 0 || next.SplitIntoNotes) return HandShapeRunBreak.Existing;
+        if (context.Coverage.Covers(next.Position)) return HandShapeRunBreak.Existing;
+        if (HasSustainVisibleTechnique(next)) return HandShapeRunBreak.Technique;
+        if (!context.Grips.Holds(grip, next)) return HandShapeRunBreak.OtherGrip;
+
+        var prevEnd = prev.Position + AuthoredSpan(prev);
+        if (FirstAfter(context.NotePositions, prev.Position) is { } note && note.CompareTo(next.Position) < 0)
+        {
+            if (!context.Options.ContinueThroughGripTones ||
+                GripTonesEnd(context.SortedNotes, context.NotePositions, prev.Position, next.Position, grip) is not { } tonesEnd)
+            {
+                return HandShapeRunBreak.ForeignSound;
+            }
+
+            if (tonesEnd.CompareTo(prevEnd) > 0) prevEnd = tonesEnd;
+        }
+
+        // A REST between two strums ends the run: the bar carries duration, so
+        // drawing it across silence tells the player to hold through a rest the tab
+        // explicitly wrote.
+        if (context.Options.SplitRunsOnRests && next.Position.CompareTo(prevEnd) > 0) return HandShapeRunBreak.Rest;
+        if (next.Position.CompareTo(prevEnd + MaxMergeGap) > 0) return HandShapeRunBreak.Gap;
+        // A bar someone already placed between the two strums (over nothing, or over
+        // notes this level does not have) must not end up inside the merged one...
+        if (FirstAfter(context.ExistingStarts, prev.Position) is { } bar && bar.CompareTo(next.Position) <= 0)
+            return HandShapeRunBreak.Existing;
+        // ...nor an anchor (I20): the next strum opens a bar of its own.
+        if (FirstAfter(context.AnchorPositions, prev.Position) is { } anchor && anchor.CompareTo(next.Position) <= 0)
+            return HandShapeRunBreak.Existing;
+        return null;
+    }
+
+    /// <summary>What <see cref="NextChordBreak" /> reads of one level's plan.</summary>
+    private sealed record RunContext(
+        IHandShapeGripSource Grips,
+        HandShapeCoverageIndex Coverage,
+        List<GuitarNote> SortedNotes,
+        List<FractionalPosition> NotePositions,
+        List<FractionalPosition> ExistingStarts,
+        List<FractionalPosition> AnchorPositions,
+        ChordHandShapePlanOptions Options);
+
+    /// <summary>
+    ///     When every note strictly between <paramref name="after" /> and
+    ///     <paramref name="before" /> is a GRIP TONE of <paramref name="grip" /> (a
+    ///     fretted string and fret of the grip, or an open string the grip does not
+    ///     fret, with no technique drawn along its sustain), the latest end of those
+    ///     notes: onset plus notated length, else sustain. Otherwise null.
+    /// </summary>
+    private static FractionalPosition? GripTonesEnd(List<GuitarNote> sortedNotes, List<FractionalPosition> positions,
+        FractionalPosition after, FractionalPosition before, ChordTemplate grip)
+    {
+        int lo = 0, hi = positions.Count;
+        while (lo < hi)
+        {
+            var mid = (lo + hi) >> 1;
+            if (positions[mid].CompareTo(after) <= 0) lo = mid + 1;
+            else hi = mid;
+        }
+
+        FractionalPosition? end = null;
+        for (var k = lo; k < sortedNotes.Count && sortedNotes[k].Position.CompareTo(before) < 0; k++)
+        {
+            var note = sortedNotes[k];
+            if (note.BendValues.Count > 0 || note.Tremolo || note.Vibrato || note.SlideTo.HasValue || note.UnpitchedSlide)
+                return null;
+            var held = grip.Frets.TryGetValue(note.StringIndex, out var fret) ? fret == note.Fret : note.Fret == 0;
+            if (!held) return null;
+
+            var span = note.NotationDuration is { Numerator: > 0 } nd ? new FractionalPosition(0, nd) : note.Sustain;
+            var noteEnd = note.Position + span;
+            if (end is not { } e || noteEnd.CompareTo(e) > 0) end = noteEnd;
+        }
+
+        return end;
     }
 
     /// <summary>
@@ -298,6 +389,20 @@ public static class ChordHandShapePlanner
         }
 
         return landings;
+    }
+
+    // The run's chords the importer trims to a short strike: all but a technique
+    // chord or a slide's landing (PlannedHandShape.StrikeChords).
+    private static List<Chord> StrikeChords(List<Chord> run, HashSet<(FractionalPosition Pos, int Str, int Fret)> slideLandings)
+    {
+        var strikes = new List<Chord>(run.Count);
+        foreach (var chord in run)
+        {
+            if (!HasSustainVisibleTechnique(chord) && !IsSlideLanding(slideLandings, chord))
+                strikes.Add(chord);
+        }
+
+        return strikes;
     }
 
     private static bool IsSlideLanding(HashSet<(FractionalPosition Pos, int Str, int Fret)> landings, Chord chord)

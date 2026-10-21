@@ -1,4 +1,5 @@
-﻿using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
+﻿using DotCharter.Services.Parsing.MoverPhrases;
+using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 
 namespace DotCharter.Services.Parsing.Eof;
 
@@ -108,6 +109,7 @@ public sealed class EofImporter
         const ushort flagSection = 2;
         const ushort flagEvent = 4;
         const ushort flagSoloPhrase = 8;
+        var movers = new List<EofMoverPoint>();
 
         foreach (var ev in meta.TextEvents)
         {
@@ -146,6 +148,10 @@ public sealed class EofImporter
                 point.Phrase = ev.Text; // untyped events surface as phrase markers (RB-style sections)
 
             arrangement.EventPoints.Add(point);
+            // EOF reads moveR only off an RS phrase that is attached to a beat.
+            var beatAttachedPhrase = (ev.Flags & flagPhrase) != 0 && !ev.IsMs;
+            if (beatAttachedPhrase && MoverPhraseName.TryParseEof(ev.Text, out var moveBy, out var ownName))
+                movers.Add(new EofMoverPoint(point, moveBy, ownName));
             if (isPhrase && !arrangement.Phrases.Contains(ev.Text))
                 arrangement.Phrases.Add(ev.Text);
             if (isSoloPhrase)
@@ -156,6 +162,8 @@ public sealed class EofImporter
                     info.Solo = true;
             }
         }
+
+        EofMoverPhrases.Resolve(arrangement, movers);
     }
 
     /// <summary>

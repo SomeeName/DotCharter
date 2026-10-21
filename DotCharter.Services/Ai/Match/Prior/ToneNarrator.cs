@@ -45,6 +45,9 @@ public sealed class ToneNarrator : IToneNarrator
     /// twenty-word "name" is a layout bug in the panel that shows it.</summary>
     public const int MaxNameWords = 12;
 
+    /// <summary>The longest song or artist text printed in the prompt; both come from the project file.</summary>
+    private const int SongFieldChars = 120;
+
     /// <summary>The most words a rationale may carry before it is cut.</summary>
     public const int MaxRationaleWords = 80;
 
@@ -171,14 +174,15 @@ public sealed class ToneNarrator : IToneNarrator
         system.AppendLine("4. Never claim to have heard the recording; you are reading a chain.");
         if (!string.IsNullOrWhiteSpace(language))
             system.Append("5. Answer in ").Append(language.Trim()).AppendLine(".");
+        system.AppendLine(AiUntrustedText.DataRule);
         system.AppendLine("Answer with the JSON object ONLY. No prose, no markdown fences.");
 
         var user = new StringBuilder(1024);
         user.Append("Part: the ").Append(section.Label).Append(" part, ")
             .Append(SectionClock.Format(section.From)).Append('–').Append(SectionClock.Format(section.To))
             .Append(", ").Append(section.Stem).AppendLine(".");
-        if (!string.IsNullOrWhiteSpace(songTitle)) user.Append("Song: ").AppendLine(songTitle.Trim());
-        if (!string.IsNullOrWhiteSpace(artist)) user.Append("Artist: ").AppendLine(artist.Trim());
+        if (AiUntrustedText.Clean(songTitle, SongFieldChars) is { Length: > 0 } song) user.Append("Song: ").AppendLine(song);
+        if (AiUntrustedText.Clean(artist, SongFieldChars) is { Length: > 0 } by) user.Append("Artist: ").AppendLine(by);
         user.AppendLine();
         user.Append("Chain: ").AppendLine(DcRigPresetDescriber.Chain(rig));
         user.AppendLine();

@@ -95,8 +95,8 @@ public sealed class MainWindowLayoutController
             // saved dock/timeline ratio is preserved on first show. After this,
             // GridSplitter keeps both rows as star and Avalonia handles
             // resize-with-window automatically.
-            var (timelinePart, dockPart) = DockRowStars(
-                dockPx, cfg.WindowHeight ?? _window.Height, Services.UiScaleController.Scale);
+            var (timelinePart, dockPart) = SavedSplitStars(cfg.LayoutTimelineAreaHeight, dockPx)
+                ?? DockRowStars(dockPx, cfg.WindowHeight ?? _window.Height, Services.UiScaleController.Scale);
             mainGrid.RowDefinitions[0].Height = new GridLength(timelinePart, GridUnitType.Star);
             mainGrid.RowDefinitions[2].Height = new GridLength(dockPart, GridUnitType.Star);
             _savedDockRowHeight = mainGrid.RowDefinitions[2].Height;
@@ -183,6 +183,20 @@ public sealed class MainWindowLayoutController
         return (timeline, dock);
     }
 
+    /// <summary>
+    ///     The user's splitter, restored EXACTLY: the two row heights saved
+    ///     together become the two star values, so the split comes back where it was
+    ///     on the same window and keeps its ratio on a taller or shorter one — the
+    ///     timeline grows with the window instead of a fixed dock eating the growth.
+    ///     Null when the pair is incomplete or unusable (an older config has the dock height
+    ///     only): <see cref="DockRowStars" /> then estimates.
+    /// </summary>
+    internal static (double Timeline, double Dock)? SavedSplitStars(double? timelineAreaPx, double? dockPx) =>
+        timelineAreaPx is { } top && dockPx is { } dock &&
+        double.IsFinite(top) && double.IsFinite(dock) && top >= MinTimelineRowPx && dock >= MinDockRowPx
+            ? (top, dock)
+            : null;
+
     public void PersistOnClose()
     {
         if (_window.DataContext is not MainWindowViewModel vm) return;
@@ -211,6 +225,7 @@ public sealed class MainWindowLayoutController
                     mainGrid.RowDefinitions[2].ActualHeight, vm.IsBottomDockVisible, inRun) is { } px)
             {
                 cfg.LayoutDockHeight = px;
+                cfg.LayoutTimelineAreaHeight = mainGrid.RowDefinitions[0].ActualHeight;
             }
         }
 

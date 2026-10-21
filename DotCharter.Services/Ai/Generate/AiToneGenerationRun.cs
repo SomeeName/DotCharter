@@ -1,8 +1,11 @@
 using System.Globalization;
+using System.Text;
 using DotCharter.Localization;
+using DotCharter.Services.Ai.Chart;
 using DotCharter.Services.Ai.Match;
 using DotCharter.Services.Editing.Maintenance;
 using DotCharter.Services.State;
+using DotCharter.Tone.Ai;
 using DotCharter.Tone.Audio.Dsp.Tones;
 using DotCharter.Tone.Diagnostics;
 
@@ -10,8 +13,8 @@ namespace DotCharter.Services.Ai.Generate;
 
 /// <summary>
 ///     Tools ▸ Tone &amp; sound ▸ <b>Generate tones with AI…</b>: one Rocksmith tone per
-///     placed tone change, from <see cref="IRsToneGenerator" />, written into the
-///     project as ONE undo step.
+///     placed tone change, from <see cref="IRsToneGenerator" />, shown to the user for
+///     confirmation and then written into the project as ONE undo step.
 ///     <para>
 ///         <b>Not the Tone designer's "Estimate tones from audio…"</b>
 ///         (<c>Editing/Tones/ToneGenerationRun</c>). That one measures the audio on this
@@ -43,6 +46,7 @@ public sealed class AiToneGenerationRun
     private readonly ILocalizationService _localization;
     private readonly IAppLogger _logger;
     private readonly Func<IRsToneGenerator?> _generator;
+    private readonly Func<string, string, Task<bool>> _confirmWrite;
 
     /// <summary>0 = idle, 1 = running. A second run would ask the model for the same
     /// windows and race the first one's write into the project.</summary>
@@ -56,13 +60,16 @@ public sealed class AiToneGenerationRun
     /// <param name="logger">The per-tone trail.</param>
     /// <param name="generator">The AI lane, resolved on first use so nothing builds it
     /// on the startup path.</param>
+    /// <param name="confirmWrite">Shows the generated tones (title, body) and answers whether the user
+    /// accepts writing them.</param>
     public AiToneGenerationRun(
         ProjectState state,
         IChartMaintenanceService maintenance,
         IStatusBarService? statusBar,
         ILocalizationService localization,
         IAppLogger logger,
-        Func<IRsToneGenerator?> generator)
+        Func<IRsToneGenerator?> generator,
+        Func<string, string, Task<bool>> confirmWrite)
     {
         _state = state;
         _maintenance = maintenance;
@@ -70,6 +77,7 @@ public sealed class AiToneGenerationRun
         _localization = localization;
         _logger = logger;
         _generator = generator;
+        _confirmWrite = confirmWrite ?? throw new ArgumentNullException(nameof(confirmWrite));
     }
 
     /// <summary>True while a run is in flight.</summary>
@@ -158,6 +166,22 @@ public sealed class AiToneGenerationRun
             return;
         }
 
+        // The tones came from a model that read a project anyone may have written, and writing
+        // them replaces the arrangement's tone slots: the user sees what would be written first.
+        // Declining writes nothing and leaves the project exactly as it was.
+        if (!await _confirmWrite(_localization["ToneGenerate_ConfirmTitle"], ConfirmBody(arrangement, result)))
+        {
+            Say("ToneGenerate_Declined", StatusSeverity.Warning);
+            return;
+        }
+
+        // The dialog can stay open for minutes: the same guard as after the generation.
+        if (!ReferenceEquals(_state.ActiveProject, project) || !project.Arrangements.Contains(arrangement))
+        {
+            Say("ToneGenerate_ProjectChanged", StatusSeverity.Warning);
+            return;
+        }
+
         // ONE undo node for the whole set: the tone definitions, the arrangement's slots
         // and every placed change's name come back with one Ctrl+Z.
         RsToneWriteResult applied = new([], 0, null);
@@ -168,6 +192,23 @@ public sealed class AiToneGenerationRun
             applied.Keys.Count, request.Windows.Count, applied.BaseTone ?? "");
         _logger.Info(AppLogCategory.Audio, done);
         _state.SetMessage(done, StatusSeverity.Success);
+    }
+
+    /// <summary>What the confirmation shows: how many tones, for which arrangement, then each tone's
+    /// name, its gear chain by name and the model's one-line reason.</summary>
+    private string ConfirmBody(Arrangement arrangement, ToneSetGenerationResult result)
+    {
+        var sb = new StringBuilder(_localization.PluralWith(
+            "ToneGenerate_ConfirmOne", "ToneGenerate_Confirm", result.Generated, result.Generated, arrangement.Name));
+        foreach (var generated in result.Tones)
+        {
+            if (generated.Tone is not { } tone) continue;
+            sb.Append("\n\n• ").Append(tone.Name).Append(": ").Append(AiToneText.Summary(tone));
+            if (!string.IsNullOrWhiteSpace(generated.Provenance?.Rationale))
+                sb.Append('\n').Append(generated.Provenance.Rationale);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>The pill's one progress target: the latest line becomes its label and
@@ -264,13 +305,26 @@ public sealed class AiToneGenerationRun
             : ToneStems.Guitar;
     }
 
+    /// <summary>The longest artist, song or album text sent; the chart's own fields are unbounded.</summary>
+    internal const int MaxFieldChars = 120;
+
+    /// <summary>The longest year or arrangement text sent.</summary>
+    internal const int MaxShortFieldChars = 40;
+
     /// <summary>
     ///     The prior-knowledge half of the two generation sources, from what the
     ///     project already knows: song, artist, album, year, arrangement.
     ///     <para>
-    /// The charter's own words (the box in Generate tones with AI…) follow the
-    ///         metadata as one more part, cleaned and capped by <see cref="AiToneContextText" />.
-    ///         None leaves the line exactly as the metadata alone wrote it.
+    ///         <b>The metadata is untrusted text</b> (a shared project's title can say anything), so each
+    ///         field is cleaned and capped (<see cref="AiUntrustedText.Clean" />) and the lot sits between
+    ///         the data block's two delimiter lines, which the prompt names as data and never as
+    ///         instructions. The delimiter characters inside a field are broken, so no field can close the
+    ///         block.
+    ///     </para>
+    ///     <para>
+    ///         The charter's own words (the box in Generate tones with AI…) follow the block on a line of
+    ///         their own, cleaned and capped by <see cref="AiToneContextText" />. None leaves the context
+    ///         exactly as the metadata alone wrote it.
     ///     </para>
     /// </summary>
     internal static string? ContextFor(ChartProject project, Arrangement arrangement, string? charterNotes = null)
@@ -278,13 +332,22 @@ public sealed class AiToneGenerationRun
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(arrangement);
 
-        var parts = new List<string>(6);
-        if (!string.IsNullOrWhiteSpace(project.Chart.Artist)) parts.Add("band: " + project.Chart.Artist);
-        if (!string.IsNullOrWhiteSpace(project.Chart.SongName)) parts.Add("song: " + project.Chart.SongName);
-        if (!string.IsNullOrWhiteSpace(project.Chart.AlbumName)) parts.Add("album: " + project.Chart.AlbumName);
-        if (!string.IsNullOrWhiteSpace(project.Chart.AlbumYear)) parts.Add("year: " + project.Chart.AlbumYear);
-        if (!string.IsNullOrWhiteSpace(arrangement.Name)) parts.Add("arrangement: " + arrangement.Name);
+        var fields = new List<string>(5);
+        AddField(fields, "band", project.Chart.Artist, MaxFieldChars);
+        AddField(fields, "song", project.Chart.SongName, MaxFieldChars);
+        AddField(fields, "album", project.Chart.AlbumName, MaxFieldChars);
+        AddField(fields, "year", project.Chart.AlbumYear, MaxShortFieldChars);
+        AddField(fields, "arrangement", arrangement.Name, MaxShortFieldChars);
+
+        var parts = new List<string>(2);
+        if (fields.Count > 0) parts.Add(AiUntrustedText.Block(string.Join(", ", fields)));
         if (AiToneContextText.Normalize(charterNotes) is { } notes) parts.Add(AiToneContextText.Label + notes);
-        return parts.Count == 0 ? null : string.Join(", ", parts);
+        return parts.Count == 0 ? null : string.Join("\n", parts);
+    }
+
+    private static void AddField(List<string> fields, string label, string? value, int maxLength)
+    {
+        var cleaned = AiUntrustedText.Clean(value, maxLength);
+        if (cleaned.Length > 0) fields.Add(label + ": " + cleaned);
     }
 }

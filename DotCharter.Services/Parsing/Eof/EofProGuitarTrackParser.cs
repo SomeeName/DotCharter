@@ -30,6 +30,30 @@ internal static class EofProGuitarTrackParser
         return currentSteps is null || !currentSteps.SequenceEqual(steps);
     }
 
+    /// <summary>The fewest bytes one Pro Guitar note record occupies: a zero-length
+    /// name (2), chord / difficulty / note mask / ghost mask / legacy mask (5) and
+    /// position, length, flags (12).</summary>
+    private const int MinNoteBytes = 19;
+
+    /// <summary>The fewest bytes one section instance occupies: a zero-length name
+    /// (2), difficulty (1) and start, end, flags (12).</summary>
+    private const int MinSectionBytes = 15;
+
+    /// <summary>
+    ///     A count read straight off the file must fit in the bytes that are left,
+    ///     at the smallest size one record can take — same rule as the beat
+    ///     reader. Without it a corrupt count only fails when the stream runs dry,
+    ///     after the list has grown that far.
+    /// </summary>
+    private static void RequireRoomFor(EofPackReader r, uint count, int minRecordBytes, string what)
+    {
+        if (count > (uint)(r.Remaining / minRecordBytes))
+        {
+            throw new InvalidDataException(
+                $"EOF declares {count} {what} but only {r.Remaining} bytes remain - corrupt file.");
+        }
+    }
+
     public static Arrangement Parse(EofPackReader r, EofTrackInfo info, IList<BeatMarker> beats)
     {
         var arrangement = new Arrangement
@@ -71,6 +95,7 @@ internal static class EofProGuitarTrackParser
 
         var rawNotes = new List<EofRawProGuitarNote>();
         var noteCount = r.ReadU32();
+        RequireRoomFor(r, noteCount, MinNoteBytes, "notes");
         for (var i = 0; i < noteCount; i++)
             rawNotes.Add(EofProGuitarNoteReader.Read(r));
 
@@ -88,6 +113,7 @@ internal static class EofProGuitarTrackParser
         {
             var sectionType = r.ReadU16();
             var instances = r.ReadU32();
+            RequireRoomFor(r, instances, MinSectionBytes, "sections");
             for (var i = 0; i < instances; i++)
             {
                 var name = r.ReadString();

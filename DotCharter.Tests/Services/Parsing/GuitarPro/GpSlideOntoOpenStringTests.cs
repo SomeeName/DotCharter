@@ -219,4 +219,42 @@ public sealed class GpSlideOntoOpenStringTests
         Assert.Equal(3, origin.Fret);
         Assert.Equal(5, origin.SlideTo);
     }
+
+    /// <summary>
+    ///     The ORIGIN-side rule on the GP5 path: a slide OUT of an open string is
+    ///     dropped, as the gpif path drops it, and the note stays. The binary reader kept
+    ///     it, so a GP5 import and the same score saved by Guitar Pro 7 disagreed — the
+    ///     biggest single class of the corpus round-trip diff after the meter fix.
+    /// </summary>
+    [Theory]
+    [InlineData(0x01)] // shift
+    [InlineData(0x02)] // legato
+    [InlineData(0x04)] // out down
+    [InlineData(0x08)] // out up
+    public void Gp5_SlideOutOfAnOpenString_IsDropped(int slide)
+    {
+        var path = LegacyGpFixtureBuilder.WriteFile("5.10",
+        [
+            new FxMeasure().AddVoice(
+                FxBeat.Chord(0, new FxNote(2, 0, Slide: slide)),
+                FxBeat.Chord(0, new FxNote(2, 3, Slide: slide)),
+                FxBeat.Note(0, 2, 5),
+                FxBeat.RestBeat(0))
+        ]);
+        try
+        {
+            var importer = new GpImporter();
+            var notes = Assert.Single(importer.ImportTracks(path, [.. importer.GetAvailableTracks(path).Select(t => t.Id)]))
+                .Levels[0].Notes.OrderBy(n => n.Position).ToList();
+
+            Assert.Equal([0, 3, 5], notes.Select(n => n.Fret));
+            Assert.Null(notes[0].SlideTo);
+            Assert.False(notes[0].UnpitchedSlide);
+            Assert.NotNull(notes[1].SlideTo); // a fretted note keeps its slide
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

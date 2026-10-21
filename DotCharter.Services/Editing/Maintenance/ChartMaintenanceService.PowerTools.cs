@@ -130,8 +130,9 @@ public sealed partial class ChartMaintenanceService
             // Land on the TOP level (index N-1) — that one is a verbatim clone of
             // the source chart, so the editor shows what the user just had. The reduced templates
             // the replaced levels played and the new ones do not go in the same node.
-            _historyService.Do(LevelOperationAction(live, arrangementIndex, before, target, templates,
-                levelCount - 1, vocalTrackIndex));
+            var levels = LevelOperationAction(live, arrangementIndex, before, target, templates,
+                levelCount - 1, vocalTrackIndex);
+            _historyService.Do(new CompositeAction([levels]) { LinkPolicyOverride = LinkPolicy.ShareFirstChanged });
 
             _chartEditor.RequestRedraw();
             _projectState.SetMessage(L("Status_GenerateLevelsApplied", levelCount, target.Name), StatusSeverity.Success);

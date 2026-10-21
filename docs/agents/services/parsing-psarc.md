@@ -47,8 +47,15 @@ its own copy of this guide for the reader's half.
   reports an unreadable package with the neutral resx key `Library_PackageUnreadable`,
   which the song browser shows through `Library/ILibraryReadError`);
   `RocksmithPackageBuilder` writes a PLAIN package whatever
-  `PlainPackage` says, and the export dialog's Package section shows
-  `Dialog_Export_WrittenUnencrypted` with the Package picker disabled on Plain (#804; with keys the default is Encrypted for every string count); a Mac package is never plain, so without the
+  `PlainPackage` says, and the export dialog's Package picker is disabled on Plain (#804; with keys the default is Encrypted for every string count).
+  **Whenever the PC package will be plain, by that or by choosing Plain** (`IExportTarget.WritesPlainPackage`:
+  `ExportTargetViewModel.WritesPlain` and not Mac-only), the dialog shows an amber box,
+  `Dialog_Export_PlainPackageWarning`: plain packages load only with the RS7String 7-string mod, and a
+  standard chart goes through DLC Builder. Its button writes that project on request
+  (`RocksmithExportDlcBuilder` → `Export/DlcBuilder/DlcBuilderProjectWriter`: the `DTRS XML/` bundle and the
+  `.rs2dlc` into a picked folder, replacing the ones there; the save companion shares its file naming and
+  path references through `DlcBuilderProjectFile`). The text names no key and describes no decryption.
+  A Mac package is never plain, so without the
   TOC and Mac SNG keys there is none (#782, `RocksmithPlatformTargets`). With keys
   everything is as before.
   **The values are secrets.** `Diagnostics/SensitiveTextRedactor` blanks

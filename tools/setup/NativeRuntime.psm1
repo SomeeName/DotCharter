@@ -8,12 +8,27 @@
 # are the two files moved into place (the DLL last, because its presence is
 # what turns the fetch off).
 #
+# The manifest is a file any branch can edit, so it is not trusted to say WHERE
+# to download from: only the repositories in $script:AllowedRepositories are
+# fetched, and the release must be a plain tag. Nothing loads the DLL before
+# both of its pinned hashes matched, and the ABI probe loads it in a CHILD
+# PowerShell that gets no GitHub token, never in the process running the build.
+#
 # Used by Get-NativeRuntime.ps1 (called by the build when the DLL is missing)
 # and tools/release/Publish-NativeRuntime.ps1. Tested by
 # DotCharter.Tests/Infrastructure/NativeRuntimeFetchTests with fixture zips and
 # a fake downloader (no network). Runs under Windows PowerShell 5.1 and pwsh 7.
 
 $script:PairFiles = @('juce_sharp.dll', 'juce_vst_host.exe')
+
+# The only repositories a prebuilt runtime is ever downloaded from: the public
+# JuceSharp and the private dev repo it is exported from.
+$script:AllowedRepositories = @('SomeeName/JuceSharp', 'SomeeName/JuceSharp')
+
+# Never handed to the child that loads the DLL.
+$script:TokenVariables = @('GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'SUBMODULES_TOKEN')
+
+$script:ModulePath = $PSCommandPath
 
 # Overrides the network: a folder that already holds the asset zip. Lets the
 # publisher (and a test of the build wiring) install a zip that is not uploaded yet.
@@ -60,6 +75,12 @@ function Read-NativeRuntimeManifest {
     if (-not (Test-Path -LiteralPath $Path)) { throw "The native runtime manifest is missing: $Path." }
     $manifest = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
     if (-not $manifest.repository -or -not $manifest.release) { throw "$Path names no 'repository' or 'release'." }
+    if ($script:AllowedRepositories -cnotcontains "$($manifest.repository)") {
+        throw "$Path names repository '$($manifest.repository)', which is not one of the allowed repositories ($($script:AllowedRepositories -join ', ')); nothing was downloaded."
+    }
+    if ("$($manifest.release)" -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+        throw "$Path names release '$($manifest.release)', which is not a plain release tag; nothing was downloaded."
+    }
     return $manifest
 }
 
@@ -79,8 +100,9 @@ function Get-NativeRuntimeEntry {
     return $entry
 }
 
-# Loads the DLL only to call dca_abi_version(), then unloads it.
-function Read-DllAbiVersion {
+# Loads the DLL into THIS process to call dca_abi_version(), then unloads it.
+# Only the child started by Read-DllAbiVersion calls this.
+function Read-DllAbiVersionInProcess {
     param([Parameter(Mandatory)][string]$DllPath)
     if (-not ('DotCharterNativeRuntime.Kernel32' -as [type])) {
         Add-Type -Namespace DotCharterNativeRuntime -Name Kernel32 -MemberDefinition @'
@@ -110,6 +132,46 @@ public delegate uint DotCharterNativeRuntimeAbiFn();
         return [int]$fn.Invoke()
     }
     finally { [void][DotCharterNativeRuntime.Kernel32]::FreeLibrary($module) }
+}
+
+# The child PowerShell that probes $DllPath: the same host as this one (pwsh or
+# Windows PowerShell), no profile, and an environment without any GitHub token.
+function New-DllAbiProbeStartInfo {
+    param([Parameter(Mandatory)][string]$DllPath)
+    $quote = { param($text) "'" + ($text -replace "'", "''") + "'" }
+    $command = "`$ErrorActionPreference = 'Stop'; Import-Module $(& $quote $script:ModulePath) -Force; " +
+        "Read-DllAbiVersionInProcess -DllPath $(& $quote $DllPath)"
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $info.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encoded"
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    foreach ($name in $script:TokenVariables) { if ($info.EnvironmentVariables.ContainsKey($name)) { $info.EnvironmentVariables.Remove($name) } }
+    return $info
+}
+
+# dca_abi_version() of $DllPath, read in a child process (New-DllAbiProbeStartInfo)
+# so the DLL never loads into the process that runs the build.
+function Read-DllAbiVersion {
+    param([Parameter(Mandatory)][string]$DllPath)
+    $process = [System.Diagnostics.Process]::Start((New-DllAbiProbeStartInfo -DllPath $DllPath))
+    try {
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        $output = $stdout.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) {
+            $why = (($stderr, $output) -join ' ').Trim() -replace '\s+', ' '
+            throw "Could not read the ABI version of $DllPath in a child process (exit $($process.ExitCode)): $why"
+        }
+        $last = @($output -split "\r?\n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
+        if ("$last".Trim() -notmatch '^\d+$') { throw "The ABI probe of $DllPath printed no version: '$output'." }
+        return [int]"$last".Trim()
+    }
+    finally { $process.Dispose() }
 }
 
 # The real downloader: writes $OutDir\$Asset. A local asset folder wins; else the
@@ -215,4 +277,5 @@ function Install-NativeRuntime {
 }
 
 Export-ModuleMember -Function Get-NativeRuntimePairFiles, Get-NativeRuntimeAssetName, Get-JuceSharpGitlink, Get-HeaderAbiVersion,
-    Get-FileSha256, Read-NativeRuntimeManifest, Get-NativeRuntimeEntry, Read-DllAbiVersion, Install-NativeRuntime
+    Get-FileSha256, Read-NativeRuntimeManifest, Get-NativeRuntimeEntry, Read-DllAbiVersion, Read-DllAbiVersionInProcess,
+    New-DllAbiProbeStartInfo, Install-NativeRuntime

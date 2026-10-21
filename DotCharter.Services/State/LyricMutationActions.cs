@@ -8,8 +8,11 @@ namespace DotCharter.Services.State;
 /// horizontally; undo restores both the start and end positions so the
 /// original sustain length comes back exactly.
 /// </summary>
-public class MoveLyricAction : IChartAction
+public class MoveLyricAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly LyricEvent _lyric;
     private readonly FractionalPosition _oldPos;
     private readonly FractionalPosition _oldEnd;
@@ -54,8 +57,11 @@ public class MoveLyricAction : IChartAction
 /// not their intent.
 /// </para>
 /// </summary>
-public class ResizeLyricAction : IChartAction, IMergeableAction
+public class ResizeLyricAction : IChartAction, IMergeableAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly LyricEvent _lyric;
     private readonly FractionalPosition _oldEnd;
     private FractionalPosition _newEnd;
@@ -109,8 +115,11 @@ public class ResizeLyricAction : IChartAction, IMergeableAction
 /// rather than to own one.
 /// </para>
 /// </summary>
-public class ResizeLyricPhraseAction : IChartAction
+public class ResizeLyricPhraseAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly LyricPhrase _phrase;
     private readonly FractionalPosition _oldEnd;
     private readonly FractionalPosition _newEnd;
@@ -133,8 +142,11 @@ public class ResizeLyricPhraseAction : IChartAction
 /// keep an empty gap. Undo re-inserts the lyric at its original index
 /// and restores the phrase reference if it had been dropped.
 /// </summary>
-public class RemoveLyricAction : IChartAction
+public class RemoveLyricAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly ObservableCollection<LyricPhrase> _trackPhrases;
     private readonly LyricPhrase _phrase;
     private readonly LyricEvent _lyric;
@@ -188,8 +200,11 @@ public class RemoveLyricAction : IChartAction
 /// single lyric in place. Backs the vocal pitch-line editor: adjusting the
 /// note per syllable over time. Undo restores the previous pitch exactly.
 /// </summary>
-public class SetLyricNoteAction : IChartAction
+public class SetLyricNoteAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly LyricEvent _lyric;
     private readonly int _oldNote;
     private readonly int _newNote;
@@ -211,8 +226,11 @@ public class SetLyricNoteAction : IChartAction
 /// "Selected lyric" rename field so typos can be corrected without
 /// having to delete and re-tap the syllable.
 /// </summary>
-public class RenameLyricAction : IChartAction
+public class RenameLyricAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly LyricEvent _lyric;
     private readonly string _oldText;
     private readonly string _newText;

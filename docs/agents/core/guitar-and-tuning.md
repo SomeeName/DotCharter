@@ -318,7 +318,9 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   charter loses another; count SONGS, not chords, before adding one. Order is
   catalogue-of-standard-shapes first, then the ergonomic heuristic: legal
   barre grouping → the index barre laid across a muted string to take in a
-  second barre at its own fret (`1x111x`, `1x121x`, never `1x222x`/`1x243x`)
+  second barre at its own fret (`1x111x`, `1x121x`, never `1x222x`/`1x243x`),
+  and a lone same-fret pair across a muted string is ONE index barre (`1x1`,
+  not `1x2`; held-out tab-vs-chart fingering unchanged, the reviewed set +5 chords)
   → no barre directly beneath an open string (Em is `x12`, never `x11`) → no
   finger crossing → position-dependent spread. `ChordTemplateFingerSetterTests`
   lints every shape of up to four fretted strings for fret-order crossings;

@@ -16,29 +16,54 @@
        Each snapshot's one-line message (Get-SnapshotMessage) follows SomeeName/rs7string:
        "Initial public commit of <product>" for a root commit (no public parent), else
        "Update to v<version>". Both get an annotated tag v<version> with that message.
+    0. The public -> dev sync guard (PublicSync.psm1): when a public URL is given, every
+       public main commit after the last snapshot must be named by a
+       'Public-Commit: <Repo>@<sha>' trailer in the history of -DevRef (for JuceSharp also
+       of the dev gitlink). Otherwise the export REFUSES, dry run included, and names each
+       missing commit with its Import-PublicCommit.ps1 command.
+    2b. The push preflight (Get-PublicPushPlan), dry run included, whenever the URLs are
+       given: from `git ls-remote` of BOTH public repos, public main must still be the
+       snapshot's parent and the tag v<version> must be absent or already name the snapshot
+       commit (the unchanged-JuceSharp case keeps its public commit and tag). A tag for
+       another commit means the version was not bumped: refused.
     3. Both trees are checked out under the scratch root and leak-checked
-       (Find-PublicTreeLeaks); gitleaks runs too when it is installed.
+       (Find-PublicTreeLeaks, gzip files decompressed in memory, files with a NUL read as
+       Latin-1); gitleaks runs too when it is installed.
     4. -Build builds the snapshot the public way (tools/agent/Invoke-Gate.ps1 -Build
        -Public in the scratch tree, the dev native pair copied in); -Gate also runs
        the default gate there.
-    5. Prints the scratch paths, the commits, the native publish command and the leak
-       report. Exit code 1 when the leak check has findings.
+    5. Prints the scratch paths, the commits, the native publish command, the leak report
+       and what -Push would refuse. Exit code 1 when the leak check has findings or the
+       push preflight refuses.
 
     Each snapshot's parent is the tip of `main` at -PublicDotCharterUrl /
     -PublicJuceSharpUrl (fetched, never pushed to), or none (a root commit) when no URL
-    is given. Author and committer are the dev checkout's git user.name/user.email; the
-    date is the dev commit's, so a re-run with the same inputs gives the same ids.
+    is given. Author and committer are the dev checkout's git user.name/user.email (which
+    -Push holds to the snapshot identity); the date is the dev commit's, so a re-run with
+    the same inputs gives the same ids.
 
     Never touches the dev checkout's working tree, index, branches or refs: the scratch
     repos read the dev objects through objects/info/alternates.
 
-    -Push pushes main + the version tag of both scratch repos (JuceSharp first). It
-    refuses without BOTH URLs, refuses on any leak finding, and never force-pushes.
-    It creates no repository, changes no visibility and publishes no release.
+    -Push pushes main + the version tag of each scratch repo with `git push --atomic`
+    (JuceSharp first, since DotCharter's gitlink names it), and only after BOTH repos pass
+    the push preflight, which is re-read right before the first push. It refuses:
+      - without BOTH URLs, or without -Gate in the same run (the gate evidence is the run
+        itself: the exact scratch tree being pushed built and passed
+        Invoke-Gate.ps1 -Public -Gate a moment ago; no recorded result is accepted);
+      - on any leak finding; when gitleaks is not installed or reports findings;
+      - when the native pin of the public JuceSharp commit is PENDING;
+      - when a commit or tag it would push carries an author, committer or tagger email
+        other than the snapshot identity (PublicSync.psm1 Get-PublicSnapshotIdentity,
+        tools/release/public-snapshot-identity.json);
+      - when the push preflight (2b) has a problem.
+    The cheap refusals come before the gate runs. It never force-pushes, creates no
+    repository, changes no visibility and publishes no release.
 
 .EXAMPLE
     pwsh -NoProfile -File tools/release/Export-PublicSnapshot.ps1
     pwsh -NoProfile -File tools/release/Export-PublicSnapshot.ps1 -DevRef origin/main -NativeDir JuceSharp/src/JuceSharp/runtimes/win-x64/native -Build
+    pwsh -NoProfile -File tools/release/Export-PublicSnapshot.ps1 -PublicDotCharterUrl https://github.com/SomeeName/DotCharter.git -PublicJuceSharpUrl https://github.com/SomeeName/JuceSharp.git -Gate -Push
 #>
 [CmdletBinding()]
 param(
@@ -65,7 +90,11 @@ $ErrorActionPreference = 'Stop'
 if ($Push -and -not ($PublicDotCharterUrl -and $PublicJuceSharpUrl)) {
     throw '-Push needs BOTH -PublicDotCharterUrl and -PublicJuceSharpUrl: the push target is never guessed.'
 }
+if ($Push -and -not $Gate) {
+    throw '-Push needs -Gate in the same run: what it pushes must have built and passed the default gate the public way (Invoke-Gate.ps1 -Public -Gate) in this scratch tree. No recorded result is accepted.'
+}
 Import-Module (Join-Path $PSScriptRoot 'PublicSnapshot.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'PublicSync.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot '../setup/NativeRuntime.psm1') -Force
 
 # A simple function on purpose: $args passes `-C` and friends through as plain strings.
@@ -109,11 +138,33 @@ Set-Content -LiteralPath $marker -Value 'scratch of tools/release/Export-PublicS
 $juceRepo = Join-Path $ScratchRoot 'JuceSharp.git'
 $dcRepo = Join-Path $ScratchRoot 'DotCharter'
 [void](New-SnapshotScratchRepo -Path $juceRepo -AlternateObjectDirs @(Join-Path $DevJuceSharpGitDir 'objects') -Bare)
-[void](New-SnapshotScratchRepo -Path $dcRepo -AlternateObjectDirs @(Join-Path $devGitCommon 'objects'))
+$dcGitDir = New-SnapshotScratchRepo -Path $dcRepo -AlternateObjectDirs @(Join-Path $devGitCommon 'objects')
+
+# --- 0. the public -> dev sync guard ---------------------------------------------------------
+# Every public commit after the last snapshot must be in dev (a Public-Commit trailer in the
+# history of -DevRef; for JuceSharp also of its gitlink), or this snapshot would overwrite it.
+# A hard stop, dry run included (PublicSync.psm1).
+$juceParent = Get-PreviousSnapshot -Repo $juceRepo -Url $PublicJuceSharpUrl
+$dcParent = Get-PreviousSnapshot -Repo $dcRepo -Url $PublicDotCharterUrl
+# Snapshots are recognised by the ONE snapshot identity (Get-SnapshotIdentities), as in the
+# watch and the import; the dev histories come from Get-DevSyncHistories.
+$missing = @()
+if ($juceParent) {
+    $missing += @(Find-UnimportedPublicCommits -PublicGitDir $juceRepo -PublicRef refs/remotes/public/main -Repo JuceSharp `
+            -DevHistories (Get-DevSyncHistories -DevGitDir $devGitCommon -DevCommit $devCommit -Repo JuceSharp -DevJuceSharpGitDir $DevJuceSharpGitDir))
+}
+if ($dcParent) {
+    $missing += @(Find-UnimportedPublicCommits -PublicGitDir $dcGitDir -PublicRef refs/remotes/public/main -Repo DotCharter `
+            -DevHistories (Get-DevSyncHistories -DevGitDir $devGitCommon -DevCommit $devCommit -Repo DotCharter))
+}
+if ($missing.Count -gt 0) {
+    Write-Host (Format-PublicSyncRefusal -Missing $missing)
+    throw "Export refused: $($missing.Count) public commit(s) are not imported into $DevRef (see above)."
+}
+$guardLine = if ($juceParent -or $dcParent) { 'public sync guard: every public commit since the last snapshot is in dev' } else { 'public sync guard: not run (no public URL, so no previous snapshot)' }
 
 # --- 1. JuceSharp -----------------------------------------------------------------------
 $juceTree = New-PublicTree -Repo $juceRepo -SourceTree "$devJuce^{tree}"
-$juceParent = Get-PreviousSnapshot -Repo $juceRepo -Url $PublicJuceSharpUrl
 $juce = New-SnapshotCommit -Repo $juceRepo -Tree $juceTree -Parent $juceParent `
     -Message (Get-SnapshotMessage -Product 'JuceSharp' -Version $juceVersion -Parent $juceParent) `
     -Name $name -Email $email -Date $devJuceDate -Tag "v$juceVersion"
@@ -148,10 +199,45 @@ $edit = {
     }
 }
 $dcTree = New-PublicTree -Repo $dcRepo -SourceTree "$devCommit^{tree}" -Edit $edit
-$dcParent = Get-PreviousSnapshot -Repo $dcRepo -Url $PublicDotCharterUrl
 $dc = New-SnapshotCommit -Repo $dcRepo -Tree $dcTree -Parent $dcParent `
     -Message (Get-SnapshotMessage -Product 'DotCharter' -Version $version -Parent $dcParent) `
     -Name $name -Email $email -Date $devDate -Tag "v$version"
+
+# --- 2b. push preflight: both public repos, before anything is pushed -----------------------
+# A -Push refusal: the reasons as plain lines (an error record wraps and prefixes them), then the stop.
+function Stop-Push([string]$What, [string[]]$Reasons) {
+    Write-Host "-Push $What, nothing pushed:"
+    foreach ($reason in $Reasons) { Write-Host "  - $reason" }
+    throw "-Push $What, nothing pushed (reasons above)."
+}
+$snapshots = @(
+    [pscustomobject]@{ Label = 'JuceSharp'; Repo = $juceRepo; Url = $PublicJuceSharpUrl; Result = $juce; Parent = $juceParent }
+    [pscustomobject]@{ Label = 'DotCharter'; Repo = $dcRepo; Url = $PublicDotCharterUrl; Result = $dc; Parent = $dcParent }
+)
+function Get-PushPlans {
+    foreach ($s in $snapshots) {
+        if (-not $s.Url) { continue }
+        $plan = Get-PublicPushPlan -Url $s.Url -Commit $s.Result.Commit -Parent $s.Parent -Tag $s.Result.Tag
+        $plan | Add-Member -NotePropertyName Label -NotePropertyValue $s.Label
+        $plan | Add-Member -NotePropertyName Repo -NotePropertyValue $s.Repo
+        $plan
+    }
+}
+$plans = @(Get-PushPlans)
+$preflightProblems = @(foreach ($p in $plans) { foreach ($problem in $p.Problems) { "$($p.Label): $problem" } })
+
+# What -Push would publish must carry the snapshot identity, and nothing else.
+$snapshotIdentity = Get-PublicSnapshotIdentity
+$identityProblems = @(foreach ($s in $snapshots) {
+        $range = @('rev-list', 'refs/heads/main')
+        if ($s.Parent) { $range += @('--not', $s.Parent) }
+        $commits = @((Git -C $s.Repo @range).Split("`n", [StringSplitOptions]::RemoveEmptyEntries))
+        $plan = @($plans | Where-Object Label -EQ $s.Label)
+        $pushesTag = if ($plan) { $plan[0].Refspecs -contains "refs/tags/$($s.Result.Tag):refs/tags/$($s.Result.Tag)" } else { $s.Result.Created }
+        $tags = if ($pushesTag) { @($s.Result.Tag) } else { @() }
+        $gitDir = Git -C $s.Repo rev-parse --path-format=absolute --git-dir
+        foreach ($problem in Find-SnapshotIdentityProblems -GitDir $gitDir -Commits $commits -Tags $tags -Email $snapshotIdentity.Email) { "$($s.Label): $problem" }
+    })
 
 # --- 3. leak check ------------------------------------------------------------------------
 Git -C $dcRepo -c core.longpaths=true reset -q --hard main | Out-Null
@@ -161,8 +247,9 @@ $report = Format-PublicLeakReport -Findings $findings -PerRule $ReportPerRule
 $reportPath = Join-Path $ScratchRoot 'leak-report.txt'
 Set-Content -LiteralPath $reportPath -Value (Format-PublicLeakReport -Findings $findings) -Encoding utf8NoBOM
 
-$gitleaks = Get-Command gitleaks -ErrorAction SilentlyContinue
+$gitleaks = Get-Command gitleaks -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
 $gitleaksLine = 'gitleaks: not installed - key material NOT checked (install gitleaks, then re-run)'
+$gitleaksExit = $null
 if ($gitleaks) {
     # Scanned as '.' from inside the tree: the config's path allowlists are anchored
     # repo-relative ('^DotCharter\.Tests/...') and never match an absolute path.
@@ -170,9 +257,22 @@ if ($gitleaks) {
     try {
         & $gitleaks.Source dir . --config .gitleaks.toml --no-banner --redact 2>&1 |
             Set-Content -LiteralPath (Join-Path $ScratchRoot 'gitleaks.txt') -Encoding utf8NoBOM
+        $gitleaksExit = $LASTEXITCODE
     }
     finally { Pop-Location }
-    $gitleaksLine = if ($LASTEXITCODE -eq 0) { 'gitleaks: clean' } else { "gitleaks: FINDINGS (exit $LASTEXITCODE), see $(Join-Path $ScratchRoot 'gitleaks.txt')" }
+    $gitleaksLine = if ($gitleaksExit -eq 0) { 'gitleaks: clean' } else { "gitleaks: FINDINGS (exit $gitleaksExit), see $(Join-Path $ScratchRoot 'gitleaks.txt')" }
+}
+
+# Everything -Push refuses on, short of the gate. Checked BEFORE the gate runs.
+$pushBlockers = [System.Collections.Generic.List[string]]::new()
+if ($findings.Count -gt 0) { $pushBlockers.Add("the leak check has $($findings.Count) finding(s)") }
+if (-not $gitleaks) { $pushBlockers.Add('gitleaks is not installed, so key material is unchecked') }
+elseif ($gitleaksExit -ne 0) { $pushBlockers.Add("gitleaks reported findings (exit $gitleaksExit), see $(Join-Path $ScratchRoot 'gitleaks.txt')") }
+if (-not $pins) { $pushBlockers.Add('the native pin of the public JuceSharp commit is PENDING: re-export with -NativeDir <the pair built from that tree>') }
+foreach ($problem in $identityProblems) { $pushBlockers.Add("identity: $problem (the snapshot identity is $($snapshotIdentity.Identity); set git user.email to it)") }
+foreach ($problem in $preflightProblems) { $pushBlockers.Add("preflight: $problem") }
+if ($Push -and $pushBlockers.Count -gt 0) {
+    Stop-Push 'refused' $pushBlockers
 }
 
 # --- 4. build ------------------------------------------------------------------------------
@@ -193,6 +293,7 @@ if ($Build -or $Gate) {
     try { & pwsh @gateArgs; $buildExit = $LASTEXITCODE }
     finally { $env:DotCharterSkipNativeFetch = $previousSkip }
     $buildLine = "build: Invoke-Gate.ps1 $($gateArgs[-2..-1] -join ' ') exited $buildExit"
+    if ($Push -and $buildExit -ne 0) { Stop-Push 'refused' @("$buildLine (the snapshot must build and pass the gate)") }
 }
 
 # --- 5. report ------------------------------------------------------------------------------
@@ -204,6 +305,7 @@ function Describe($label, $result, $repo) {
 Write-Host ''
 Write-Host "dev $DevRef = $devCommit (DotCharter v$version); dev JuceSharp gitlink $devJuce (v$juceVersion, ABI $abi)"
 Write-Host "author/committer: $name <$email>"
+Write-Host $guardLine
 Write-Host (Describe 'JuceSharp ' $juce $juceRepo)
 Write-Host (Describe 'DotCharter' $dc $dcRepo)
 Write-Host "    work tree (JuceSharp checked out inside): $dcRepo"
@@ -221,16 +323,32 @@ Write-Host $report
 Write-Host "full report: $reportPath"
 Write-Host $gitleaksLine
 Write-Host $buildLine
+if ($preflightProblems.Count -gt 0) {
+    Write-Host 'export refused by the push preflight:'
+    foreach ($problem in $preflightProblems) { Write-Host "    $problem" }
+}
+elseif ($plans.Count -gt 0) { Write-Host 'push preflight: both public repos accept this snapshot (main is its parent, no tag in the way)' }
+else { Write-Host 'push preflight: not run (no public URL)' }
 
 if ($Push) {
-    if ($findings.Count -gt 0) { throw "-Push refused: the leak check has $($findings.Count) finding(s)." }
-    Git -C $juceRepo push $PublicJuceSharpUrl "refs/heads/main:refs/heads/main" "refs/tags/$($juce.Tag)" | Out-Null
-    Git -C $dcRepo push $PublicDotCharterUrl "refs/heads/main:refs/heads/main" "refs/tags/$($dc.Tag)" | Out-Null
-    Write-Host "pushed JuceSharp $($juce.Commit) and DotCharter $($dc.Commit)."
+    # Re-read both repos right before the first push: the gate took minutes.
+    $plans = @(Get-PushPlans)
+    $late = @(foreach ($p in $plans) { foreach ($problem in $p.Problems) { "$($p.Label): $problem" } })
+    if ($late.Count -gt 0) { Stop-Push 'refused: the public repos moved during the run' $late }
+    foreach ($p in $plans) {
+        if ($p.Refspecs.Count -eq 0) { Write-Host "$($p.Label): $($p.Commit) and tag $($p.Tag) are already public; nothing to push."; continue }
+        $refspecs = [string[]]$p.Refspecs
+        Git -C $p.Repo push --atomic $p.Url @refspecs | Out-Null
+        Write-Host "pushed $($p.Label) ($($p.Refspecs -join ', ')) -> $($p.Commit)"
+    }
 }
 else {
-    Write-Host 'would push (dry run; -Push with both URLs to do it):'
+    Write-Host 'would push (dry run; -Push -Gate with both URLs to do it):'
     Write-Host "    JuceSharp  main -> $($juce.Commit), tag $($juce.Tag)"
     Write-Host "    DotCharter main -> $($dc.Commit), tag $($dc.Tag)"
+    if ($pushBlockers.Count -gt 0) {
+        Write-Host '-Push would refuse:'
+        foreach ($blocker in $pushBlockers) { Write-Host "    $blocker" }
+    }
 }
-exit $(if ($findings.Count -gt 0) { 1 } else { 0 })
+exit $(if ($findings.Count -gt 0 -or $preflightProblems.Count -gt 0) { 1 } else { 0 })

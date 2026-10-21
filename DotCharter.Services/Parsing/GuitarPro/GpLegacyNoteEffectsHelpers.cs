@@ -69,6 +69,9 @@ internal static class GpLegacyNoteEffectsHelpers
         var minFret = GpCapoFrets.MinFrettedFret(capo);
         if (!isVersion5)
         {
+            // A slide OUT of an open string is dropped, as GpNoteParser.ApplySlideFlags
+            // drops it (L09, SlideFromOpenString); the note itself stays.
+            if (note.Fret <= 0 && slideFlag is >= 1 and <= 4) return false;
             switch (slideFlag)
             {
                 case 1: note.SlideTo = -1; break;
@@ -95,6 +98,12 @@ internal static class GpLegacyNoteEffectsHelpers
                 GpPickScrape.Apply(note, slideFlag, capo);
                 return true;
             }
+
+            // A slide OUT of an open string is dropped, exactly as the gpif path does
+            // (GpNoteParser.ApplySlideFlags): it is L09 (SlideFromOpenString) on every
+            // save. Keeping it here made a GP5 import and the same score
+            // round-tripped through Guitar Pro 7 disagree on every such note.
+            if (note.Fret <= 0) slideFlag &= ~0x0F;
 
             if ((slideFlag & 0x01) != 0) note.SlideTo = -1;
             if ((slideFlag & 0x02) != 0)

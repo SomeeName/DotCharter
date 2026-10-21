@@ -143,6 +143,18 @@ public class BeatScaleService : IBeatScaleService
                     }
                 }
             }
+
+            // Linked runs scale with their barlines; the history re-validates them afterwards
+            // and unlinks any placement that does not span the same measures as its group.
+            foreach (var group in project.LinkGroups)
+            {
+                foreach (var placement in group.Placements)
+                {
+                    var target = placement;
+                    Remap(target.Position, p => target.Position = p);
+                    Remap(target.EndPosition, p => target.EndPosition = p);
+                }
+            }
         }
 
         private void WalkArrangement(Arrangement arr)

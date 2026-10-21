@@ -6,7 +6,7 @@ namespace DotCharter.Services.Audio.Lyrics;
 /// <summary>A downloadable lyric-alignment model.</summary>
 /// <param name="Id">Folder name under the models root (<see cref="LyricModelCatalog" />).</param>
 /// <param name="AssetName">Release asset to fetch.</param>
-/// <param name="Sha256">Expected hash of the archive, lower-case hex; empty skips the check.</param>
+/// <param name="Sha256">Expected SHA-256 of the archive, hex (case-insensitive); required - an empty value refuses the install.</param>
 /// <param name="ApproximateBytes">For the progress message — these are hundreds of megabytes.</param>
 public sealed record LyricModelDownload(string Id, string AssetName, string Sha256, long ApproximateBytes);
 
@@ -79,6 +79,16 @@ public sealed class LyricModelInstaller(
             return true;
         }
 
+        // The archive is checked against a published hash before anything is
+        // extracted, so an entry with no hash cannot be installed at all - and is
+        // refused before a few hundred megabytes are fetched for nothing.
+        if (string.IsNullOrWhiteSpace(model.Sha256))
+        {
+            logger?.Error(AppLogCategory.Audio,
+                $"Lyric model '{model.Id}' has no expected hash; refusing to download or install it.");
+            return false;
+        }
+
         var target = TargetDirectory(model.Id);
         var staging = target + ".incoming";
 
@@ -101,7 +111,7 @@ public sealed class LyricModelInstaller(
                 if (!VerifyHash(archive, model.Sha256))
                 {
                     logger?.Error(AppLogCategory.Audio,
-                        $"Lyric model '{model.Id}' failed its hash check; the download was discarded.");
+                        $"Lyric model '{model.Id}' failed its hash check (or has no expected hash); the download was discarded.");
                     return false;
                 }
 
@@ -156,7 +166,9 @@ public sealed class LyricModelInstaller(
 
     private static bool VerifyHash(string path, string expected)
     {
-        if (string.IsNullOrWhiteSpace(expected)) return true;
+        // No expected hash means nothing to verify against, and an archive that was
+        // never verified is not installed: fail CLOSED, never "nothing to compare".
+        if (string.IsNullOrWhiteSpace(expected)) return false;
 
         using var stream = File.OpenRead(path);
         var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();

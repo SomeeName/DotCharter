@@ -223,8 +223,11 @@ public static class ArrangementSettingsEdit
 /// <summary>"New arrangement" committed from the arrangement dialog: the add and the switch to it are one
 ///     undo node, and undo restores the previous pick.</summary>
 public sealed class AddArrangementAction(IChartEditorSurface editor, IList<Arrangement> arrangements,
-    Arrangement arrangement) : IChartAction
+    Arrangement arrangement) : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly Arrangement? _previousActive = editor.ActiveArrangement;
 
     public void Execute()
@@ -250,8 +253,11 @@ public sealed class MutateArrangementSettingsAction(
     Arrangement live,
     Arrangement before,
     Arrangement after,
-    Action? onChanged) : IChartAction
+    Action? onChanged) : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats (a tuning, capo or string-count change unlinks the placements that cannot share, under every policy).</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     public void Execute()
     {
         ChartProjectRestorer.RestoreArrangement(live, after);

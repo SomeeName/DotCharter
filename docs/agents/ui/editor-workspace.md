@@ -232,6 +232,27 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
     2 px top inset, **no** gap before the measure band, a 20 px band holding a
     17 px pill (`PillTopIn`), and a 3 px separator. Four lanes cost **97 px**,
     five cost 121.
+    - **The lanes are ONE flag set** (`RibbonLanes`) plus a `RibbonDensity`: a
+      new lane is a flag, an entry in `RibbonLayout`'s row order and a Y
+      property, never another constructor bool. **Compact rows** draw 18 px rows
+      with a 15 px chip and a 15 px measures band (the approved mockup); drawing
+      code asks the layout it draws with (`ribbon.BarTop`, `.Bar`, `.PillTop`),
+      never the static normal-density constants.
+    - **Which lanes get a row is `Editing/Tracks/RibbonLaneRules`**: the user's
+      toggles, minus empty lanes while "Hide empty lanes automatically" is on
+      (the default). A chart with ONE tone (base tone plus every change, by
+      name) has an empty TONES lane. SECTIONS stays as the event dialog's entry
+      point while the track has no section, phrase or tone change. The
+      renderer's `TopRibbon`, its hit tester and the lane menu's "auto-hidden"
+      hints all read these rules (`UI/TimelineLaneTests`).
+    - **The lane menu** is a right-click on the gutter (`TimelineGutterHost`'s
+      `ContextFlyout`, a `PrewarmableFlyout` the shell prewarms;
+      `Views/Editor/TimelineLaneMenuView`). It edits the same `RibbonVisibility`
+      as View ▸ Timeline Rows and the palette. The lane settings are GLOBAL like
+      the row toggles: the active track's ribbon is written to `AppConfig`
+      (`Ribbon*`) on every change and applied to whichever arrangement becomes
+      active; stacked rows keep their own in-memory flags.
+      `Perf/TimelineLaneMenuUiPerfSmokeTests`.
     - **A bar's height lives beside the pitch it fits inside, on purpose.** It
       was `ChartEditorConstants.RenderMetrics.BadgeHeight` (20, in a 30 px row),
       i.e. 5 px of dead space above and below every section, phrase, tone and
@@ -277,17 +298,21 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
       from either focus area (`GlobalEditingCoordinator.BuildDeleteActions`, one undo step);
       with other content selected the focus-area rule decides and the lyric stays.
       `UI/Input/Tools/LyricClickSelectionTests`, `DeleteSelectedRelatedTests`.
-  - **The measure band prints its BPM on EVERY measure with room for it** (0.51,
-    reversing the 0.15 change-only rule): `MeasurePillPolicy.ShowBpm` takes the
-    measure's on-screen width and falls back to change-only below
-    `MinBpmMeasureWidthPx`, which is what stops a zoomed-out band becoming
-    overlapping text.
-    - **The time SIGNATURE follows a DIFFERENT rule and that is deliberate**: a
-      change always prints, and the pinned left-edge context pill prints the
-      meter only when the passage is not in the meter the chart OPENED in
-      (`ShowTimeSig`, O(1) against `Beats[0]`). Under the old
-      `changed || isFirstVisible` — the BPM's rule — every 4/4 chart in the
-      library printed "4/4" forever on the one pill a reader looks at most.
+  - **The measure band shows at EVERY zoom and never overlaps**
+    (`MeasurePillPolicy.Plan`, pure, `UI/Rendering/MeasurePillPolicyTests`). It
+    is never hidden for zoom. `BackgroundLayer` collects the measures in view
+    and the planner places: the first pill (number, tempo AND meter) when no
+    sticky pill is pinned; every tempo or meter change, which wins over a stride
+    label it would hit; then one pill per stride (1, 2, 4, 8 … measures, from
+    the pill width against the measure width), aligned to measure NUMBERS so
+    labels do not jump while scrolling. Every pill states its tempo: the full
+    `M17 | 120 BPM | 4/4` form where it fits before the next pill, else the
+    compact `17 · 120 · 3/4`. The sticky left-edge pill always carries number,
+    tempo and meter. Two changes closer than one pill cannot both be drawn; the
+    earlier keeps its place.
+    - **The time SIGNATURE prints on a change, on the first pill and on the
+      sticky pill** — not on every measure: a chart's meter is usually decided
+      once, and repeating "4/4" on every pill is noise.
     - **Every sticky label is PUSHED OUT by the next label of its row**
       (`Controls/Layers/Helpers/StickyLabel`, 2026-09-23): the measure pill, the
       section / phrase / tone chips and the FHP fret chip, sticky-header style.

@@ -77,6 +77,9 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
     /// <summary>The PC package is written plain, by choice or for want of keys.</summary>
     public bool WritesPlain => SelectedPackageOption.Plain || !RocksmithKeys.CanWriteEncrypted;
 
+    /// <summary>The PC package is written plain, so the dialog warns: a Mac-only target writes no PC package.</summary>
+    public bool WritesPlainPackage => WritesPlain && !IsMacOnly;
+
     /// <summary>The target writes a Mac package (Mac or PC + Mac).</summary>
     public bool IncludesMac => SelectedPlatformOption.Value != ExportPlatform.Pc;
 
@@ -91,6 +94,7 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
             if (value is null || !SetProperty(ref _selectedPlatform, value)) return;
             OnPropertyChanged(nameof(IncludesMac));
             OnPropertyChanged(nameof(IsMacOnly));
+            OnPropertyChanged(nameof(WritesPlainPackage));
             TargetChanged?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -102,6 +106,7 @@ public sealed partial class ExportTargetViewModel : ObservableObject, IExportTar
         {
             if (value is null || !SetProperty(ref _selectedPackage, value)) return;
             OnPropertyChanged(nameof(WritesPlain));
+            OnPropertyChanged(nameof(WritesPlainPackage));
         }
     }
 

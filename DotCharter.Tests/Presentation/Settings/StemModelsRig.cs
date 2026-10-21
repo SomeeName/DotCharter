@@ -1,7 +1,9 @@
+using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Screens.Settings;
 using DotCharter.Services.Audio.StemSeparation;
 using DotCharter.Services.Audio.StemSeparation.Cache;
 using DotCharter.Services.Audio.StemSeparation.Gpu;
+using DotCharter.Tests.Presentation.Dialogs;
 using DotCharter.Tone.Diagnostics;
 
 namespace DotCharter.Tests.Presentation.Settings;
@@ -20,16 +22,19 @@ internal static class StemModelsRig
         StemCacheStore? stemCache = null,
         IUiDispatcher? ui = null,
         IAppLogger? logger = null,
-        IStemGpuEnvironment? gpu = null)
+        IStemGpuEnvironment? gpu = null,
+        IDialogs? dialogs = null)
     {
         config ??= new FakeConfigurationService();
         ui ??= new InlineUiDispatcher();
         var localization = FakeLocalization.English();
         return new StemModelsSettingsViewModel(
             manager, localization, ui,
-            new StemBackendViewModel(manager, config, localization, separation, logger, gpu),
-            new GpuRuntimeViewModel(localization, ui, legacyCudaRuntime, logger),
-            new StemCacheViewModel(localization, ui, stemCache, logger),
+            new StemModelsBlocks(
+                new StemBackendViewModel(manager, config, localization, separation, logger, gpu),
+                new GpuRuntimeViewModel(localization, ui, legacyCudaRuntime, logger),
+                new StemCacheViewModel(localization, ui, stemCache, logger)),
+            dialogs ?? new ScriptedDialogs(_ => throw new InvalidOperationException("no dialog expected")),
             logger);
     }
 

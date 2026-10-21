@@ -236,6 +236,36 @@ public sealed class FilesSettingsViewModelTests : IDisposable
         Assert.True(rig.Backup.HasStatus);
     }
 
+    /// <summary>
+    ///     A restore that leaves the plug-in / tool / endpoint settings alone must SAY so
+    ///    : the user otherwise sees "restored" and finds no VST chain after the
+    ///     restart. It also flushes first, because the import reads this machine's file.
+    /// </summary>
+    [Fact]
+    public async Task Import_TellsTheUserWhichSettingsWereNotRestored()
+    {
+        var rig = NewRig();
+        rig.Files.Answer = @"D:ackup.zip";
+        rig.Archive.NotRestoredSettings = ["GuitarVstChain", "FfmpegPath"];
+
+        await rig.Backup.ImportAsync();
+
+        Assert.Contains("GuitarVstChain, FfmpegPath", rig.Backup.StatusText, StringComparison.Ordinal);
+        Assert.True(rig.Config.FlushCount > 0, "the live appconfig.json must be written before the import reads it");
+    }
+
+    [Fact]
+    public async Task Import_SaysNothingAboutSettings_WhenEverythingWasRestored()
+    {
+        var rig = NewRig();
+        rig.Files.Answer = @"D:ackup.zip";
+
+        await rig.Backup.ImportAsync();
+
+        Assert.DoesNotContain("GuitarVstChain", rig.Backup.StatusText, StringComparison.Ordinal);
+        Assert.DoesNotContain("{0}", rig.Backup.StatusText, StringComparison.Ordinal);
+    }
+
     /// <summary>A part-way import may still have replaced files, so the caches are dropped even when it throws.</summary>
     [Fact]
     public async Task AFailedImport_StillDropsTheCaches_AndReportsTheFailure()

@@ -123,7 +123,7 @@ public sealed class EditorShortWindowUiPerfSmokeTests
     /// </summary>
     private const int MinAnnotationRowsAt720 = 3;
 
-    /// <summary>At 1920x1080 the 2:3 default split (#232) gives the tab panel ~490 px and the list
+    /// <summary>At 1920x1080 the 3:4 default split (#232, #81) gives the tab panel ~490 px and the list
     /// ~370, so all six seeded rows. Before the fix the ~50 px rows showed two of them, at the
     /// split the shell had before #232.</summary>
     private const int MinAnnotationRowsAt1080 = 6;
@@ -301,11 +301,11 @@ public sealed class EditorShortWindowUiPerfSmokeTests
         Assert.True(main.RowDefinitions[2].ActualHeight > EditorRowFloors.DockFloorPx,
             $"{at} the dock row is {main.RowDefinitions[2].ActualHeight:0.#} px — its #211 floor now binds on a tall window.");
 
-        // The split a first launch shows is EditorSplitDefaults' 2 : 3 (#232), so on a tall window
+        // The split a first launch shows is EditorSplitDefaults' 3 : 4 (#232, #81), so on a tall window
         // the dock is the taller row. The layout controller's own 1* starting height used to win
         // here and give the timeline two thirds.
         Assert.True(main.RowDefinitions[2].ActualHeight > main.RowDefinitions[0].ActualHeight,
             $"{at} the dock row is {main.RowDefinitions[2].ActualHeight:0.#} px under a {main.RowDefinitions[0].ActualHeight:0.#} px " +
-            "timeline — the first-launch split is not EditorSplitDefaults' 2 : 3.");
+            "timeline — the first-launch split is not EditorSplitDefaults' 3 : 4.");
     }
 }

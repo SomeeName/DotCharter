@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -12,7 +13,8 @@ namespace DotCharter.Tests.Perf;
 /// <summary>
 ///     The export dialog's #184 surfaces, attached to a real window and laid out: the findings
 ///     come FIRST (above the target section), every finding with a verb behind it shows a Fix
-///     that MEASURES, and one without shows none.
+///     that MEASURES, and one without shows a blank one that keeps the column: not drawn, not
+///     clickable, not focusable, out of the screen reader's view.
 /// </summary>
 [Collection("HeadlessUI")]
 public sealed class RocksmithExportFixUiPerfSmokeTests
@@ -43,6 +45,8 @@ public sealed class RocksmithExportFixUiPerfSmokeTests
             .Where(b => b.DataContext is IExportFinding finding && ReferenceEquals(b.Command, finding.FixCommand))
     ];
 
+    private static bool Shown(Button link) => link.IsEffectivelyVisible && link.Opacity > 0 && link.IsHitTestVisible;
+
     [Fact]
     public async Task Fix_Measures_AndTheFindingsComeFirst()
     {
@@ -57,22 +61,23 @@ public sealed class RocksmithExportFixUiPerfSmokeTests
             foreach (var fix in fixes)
             {
                 var finding = (IExportFinding)fix.DataContext!;
-                Assert.Equal(finding.HasFix, fix.IsEffectivelyVisible);
-                if (finding.HasFix)
-                    Assert.True(fix.Bounds is { Width: > 1, Height: > 1 }, $"Fix for '{finding.Message}' laid out as {fix.Bounds}");
+                Assert.Equal(finding.HasFix, Shown(fix));
+                Assert.Equal(finding.HasFix, fix.Focusable);
+                Assert.Equal(finding.HasFix, AutomationProperties.GetAccessibilityView(fix) != AccessibilityView.Raw);
+                Assert.True(fix.Bounds is { Width: > 1, Height: > 1 }, $"Fix for '{finding.Message}' laid out as {fix.Bounds}");
             }
 
-            Assert.Contains(fixes, f => f.IsEffectivelyVisible);
-            Assert.Contains(fixes, f => !f.IsEffectivelyVisible);
+            Assert.Contains(fixes, Shown);
+            Assert.Contains(fixes, f => !Shown(f));
 
             // One column per verb whichever a row shows: every visible Go to and every visible Fix line up.
             static double Left(Control c, Control root) => c.TranslatePoint(default, root)!.Value.X;
             var jumps = view.GetVisualDescendants().OfType<Button>()
-                .Where(b => b.DataContext is IExportFinding f && ReferenceEquals(b.Command, f.JumpCommand) && b.IsEffectivelyVisible)
+                .Where(b => b.DataContext is IExportFinding f && ReferenceEquals(b.Command, f.JumpCommand) && Shown(b))
                 .ToList();
             Assert.True(jumps.Count >= 2, $"only {jumps.Count} visible Go to");
             Assert.Single(jumps.Select(j => Math.Round(Left(j, view))).Distinct());
-            Assert.Single(fixes.Where(f => f.IsEffectivelyVisible).Select(f => Math.Round(Left(f, view))).Distinct());
+            Assert.Single(fixes.Where(Shown).Select(f => Math.Round(Left(f, view))).Distinct());
 
             var target = view.GetVisualDescendants().OfType<ComboBox>().Single(t => t.Name == "PackageFormPicker");
             Assert.True(review.TranslatePoint(default, view)!.Value.Y < target.TranslatePoint(default, view)!.Value.Y,

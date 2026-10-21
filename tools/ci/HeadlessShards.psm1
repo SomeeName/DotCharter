@@ -453,7 +453,99 @@ function Get-HeadlessRaceRerunDecision([object[]]$Failures, [string[]]$Absent) {
         Reason = "all $($failures.Count) failure(s) carry the harness-fault signature" }
 }
 
+<#
+    FAILURE EVIDENCE (#55). A flaky headless case that fails once and leaves no
+    message cannot be diagnosed, so every failed run keeps what it printed.
+
+    Get-HeadlessFailureEvidenceRoot: $env:DOTCHARTER_HEADLESS_FAILURES_DIR (CI
+    points it at a folder the workflow uploads), else
+    %TEMP%\dotcharter-headless-failures.
+
+    Save-HeadlessFailureEvidence copies the given TRX files and logs into a
+    timestamped folder under the root, plus failures.txt: for every failed case
+    its name, message, stack trace and captured stdout. It saves NOTHING (and
+    returns $null) when no TRX holds a failed case, unless -Always is given (a
+    crashed shard or a class that never reported leaves no failed case, only a
+    log). -Folder adds a later capture (a re-run's) to the same run's folder, so
+    the ORIGINAL failure's evidence survives a re-run that passes. A new folder
+    prunes the root down to the newest -Keep (default 20) timestamped folders.
+    Returns the folder path.
+#>
+function Get-HeadlessFailureEvidenceRoot {
+    if ($env:DOTCHARTER_HEADLESS_FAILURES_DIR) { return [System.IO.Path]::GetFullPath($env:DOTCHARTER_HEADLESS_FAILURES_DIR) }
+    return Join-Path ([System.IO.Path]::GetTempPath()) 'dotcharter-headless-failures'
+}
+
+function Remove-OldHeadlessFailureFolders([string]$Root, [int]$Keep = 20) {
+    if (-not (Test-Path -LiteralPath $Root)) { return }
+    $folders = @(Get-ChildItem -LiteralPath $Root -Directory | Where-Object { $_.Name -match '^\d{8}-\d{6}' } |
+        Sort-Object Name -Descending)
+    if ($folders.Count -le $Keep) { return }
+    foreach ($old in ($folders | Select-Object -Skip $Keep)) { Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+function Save-HeadlessFailureEvidence {
+    param(
+        [string[]]$TrxPath,
+        [string[]]$LogPath,
+        [string]$Label = 'run',
+        [string]$Root = '',
+        [string]$Folder = '',
+        [int]$Keep = 20,
+        [switch]$Always
+    )
+    $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
+    $trxs = @($TrxPath | Where-Object { $_ -and (Test-Path -LiteralPath $_) })
+    $failed = @()
+    foreach ($trx in $trxs) {
+        [xml]$doc = Get-Content -LiteralPath $trx -Raw
+        foreach ($n in @((Select-Xml -Xml $doc -XPath "//t:UnitTestResult[@outcome='Failed']" -Namespace $ns) | ForEach-Object { $_.Node })) {
+            $failed += [pscustomobject]@{ Trx = $trx; Node = $n }
+        }
+    }
+    if ($failed.Count -eq 0 -and -not $Always) { return $null }
+
+    $created = $false
+    if (-not $Folder) {
+        if (-not $Root) { $Root = Get-HeadlessFailureEvidenceRoot }
+        New-Item -ItemType Directory -Force -Path $Root | Out-Null
+        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $Folder = Join-Path $Root $stamp
+        $n = 1
+        while (Test-Path -LiteralPath $Folder) { $n++; $Folder = Join-Path $Root ("{0}-{1}" -f $stamp, $n) }
+        $created = $true
+    }
+    New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+
+    foreach ($trx in $trxs) { Copy-Item -LiteralPath $trx -Destination (Join-Path $Folder ("{0}-{1}" -f $Label, (Split-Path $trx -Leaf))) -Force }
+    foreach ($log in @($LogPath | Where-Object { $_ -and (Test-Path -LiteralPath $_) })) {
+        $parent = Split-Path (Split-Path $log -Parent) -Leaf
+        Copy-Item -LiteralPath $log -Destination (Join-Path $Folder ("{0}-{1}-{2}" -f $Label, $parent, (Split-Path $log -Leaf))) -Force
+    }
+
+    $text = New-Object System.Text.StringBuilder
+    [void]$text.AppendLine("[$Label] $($failed.Count) failed case(s)")
+    foreach ($f in $failed) {
+        $node = $f.Node
+        $message = ''; $stack = ''; $stdout = ''
+        if ($node.Output) {
+            if ($node.Output.ErrorInfo) { $message = [string]$node.Output.ErrorInfo.Message; $stack = [string]$node.Output.ErrorInfo.StackTrace }
+            if ($node.Output.StdOut) { $stdout = [string]$node.Output.StdOut }
+        }
+        [void]$text.AppendLine('')
+        [void]$text.AppendLine("=== FAILED $($node.testName)  (from $(Split-Path $f.Trx -Leaf))")
+        [void]$text.AppendLine('--- message'); [void]$text.AppendLine($message.Trim())
+        [void]$text.AppendLine('--- stack trace'); [void]$text.AppendLine($stack.Trim())
+        [void]$text.AppendLine('--- stdout'); [void]$text.AppendLine($stdout.Trim())
+    }
+    [System.IO.File]::AppendAllText((Join-Path $Folder 'failures.txt'), $text.ToString())
+
+    if ($created) { Remove-OldHeadlessFailureFolders (Split-Path $Folder -Parent) $Keep }
+    return $Folder
+}
+
 Export-ModuleMember -Function Get-HeadlessClassName, Read-HeadlessTestListing, Get-HeadlessDiscovery, `
     Read-HeadlessShardWeights, New-HeadlessShardPlan, Invoke-HeadlessShards, Merge-HeadlessTrx, `
     Write-HeadlessShardWeights, Stop-ProcessTree, ConvertTo-CommandLineArgument, `
-    Get-HeadlessHarnessFaults, Test-HeadlessHarnessFault, Read-HeadlessTrxFailures, Get-HeadlessRaceRerunDecision
+    Get-HeadlessHarnessFaults, Test-HeadlessHarnessFault, Read-HeadlessTrxFailures, Get-HeadlessRaceRerunDecision, `
+    Get-HeadlessFailureEvidenceRoot, Remove-OldHeadlessFailureFolders, Save-HeadlessFailureEvidence

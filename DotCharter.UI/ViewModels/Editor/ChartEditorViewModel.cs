@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Tone.UI.ViewModels.Shell;
 using DotCharter.UI.Constants;
+using DotCharter.UI.Editing.Linking;
+using DotCharter.UI.ViewModels.Editor.Linking;
 
 namespace DotCharter.UI.ViewModels.Editor;
 
@@ -243,6 +245,17 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
     /// latches key on (<c>RepeatChordLatch</c>). Read from the 3D render thread
     /// too, hence the interlocked read.</summary>
     public long HistoryRevision => Interlocked.Read(ref _historyRevision);
+
+    /// <summary>The link group every timeline emphasises or flashes.</summary>
+    public LinkHighlight LinkHighlight { get; } = new();
+
+    /// <summary>
+    ///     The linked-measures surfaces (panel, toast, Inspector banner), for the menus and the
+    ///     palette to bind through. It needs the app config, which this view model does not take,
+    ///     so it is its own singleton and registers itself here when it is constructed (the
+    ///     Inspector view model takes it, so that happens with the shell).
+    /// </summary>
+    [ObservableProperty] private LinkedMeasuresViewModel? _linkedMeasures;
 
     /// <summary>The hand shapes the inspector's last validation pass found E05/D09
     /// against (<see cref="DotCharter.Services.Editing.Validation.HandShapeFindings" />);

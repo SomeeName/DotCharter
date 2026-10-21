@@ -18,7 +18,8 @@ public static class ExportPathDefaults
     /// <summary>The playback audio when it is .wem/.wav, else a sibling .wem/.wav of it; null when none exists.</summary>
     public static string? ProjectAudio(string audioFileName, string projectPath, IExportTargetWriter files)
     {
-        if (string.IsNullOrWhiteSpace(audioFileName)) return null;
+        // A UNC, device or network-drive reference is never probed (see ProjectRelativePath).
+        if (!ProjectRelativePath.IsReadableMediaReference(audioFileName)) return null;
         var full = Path.IsPathRooted(audioFileName) ? audioFileName : Path.Combine(ProjectDirectory(projectPath) ?? "", audioFileName);
         foreach (var candidate in new[] { full, Path.ChangeExtension(full, "wem"), Path.ChangeExtension(full, "wav") })
         {
@@ -38,8 +39,9 @@ public static class ExportPathDefaults
     {
         var cover = project.Chart.CoverArtPath;
         if (string.IsNullOrWhiteSpace(cover)) return "";
-        var full = Path.IsPathRooted(cover) ? cover : Path.Combine(ProjectDirectory(projectPath) ?? "", cover);
-        return files.FileExists(full) ? full : "";
+        // Packed into the export, so only a file inside the project folder qualifies.
+        var full = ProjectRelativePath.TryResolve(ProjectDirectory(projectPath), cover);
+        return full != null && files.FileExists(full) ? full : "";
     }
 
     /// <summary>Rewrites the file name's platform suffix (_p / _m), keeping its folder and base name.</summary>

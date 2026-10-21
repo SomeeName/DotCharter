@@ -96,7 +96,8 @@ public static class StemFolderProbe
     /// </summary>
     public static string ResolveStemPath(string projectDir, string legacyDir, string path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        // Data from the .rscp: a UNC, device or network-drive path is refused unprobed.
+        if (!ProjectRelativePath.IsReadableMediaReference(path)) return string.Empty;
         if (Path.IsPathRooted(path)) return path;
 
         var canonical = ResolveAbsolute(projectDir, path);

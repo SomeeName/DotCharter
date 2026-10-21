@@ -905,6 +905,7 @@
     <data name="Settings_BackupMigrate_ZipFilter" xml:space="preserve"><value>Zip アーカイブ</value></data>
     <data name="Settings_BackupMigrate_Exported" xml:space="preserve"><value>バックアップを保存しました（{0}ファイル）: {1}</value></data>
     <data name="Settings_BackupMigrate_Imported" xml:space="preserve"><value>バックアップを復元しました（{0}ファイル）。すべてを反映するには DotCharter を再起動してください。</value></data>
+    <data name="Settings_BackupMigrate_NotRestored" xml:space="preserve"><value>復元されなかった項目（このコンピューターの設定を維持）：{0}。必要な場合は設定で再度指定してください。</value></data>
     <data name="Settings_BackupMigrate_Failed" xml:space="preserve"><value>バックアップ操作に失敗しました: {0}</value></data>
     <data name="Settings_Backups" xml:space="preserve"><value>開いているプロジェクトをバックアップ</value></data>
     <data name="Settings_BufferLatencyDescription" xml:space="preserve"><value>{1:0.#} kHz で ≈ {0:0.##} ms。</value></data>
@@ -1472,6 +1473,8 @@
     <data name="Settings_Tip_SaveCompanionRs2Dlc" xml:space="preserve"><value>DTRS XML フォルダーに .rs2dlc を書き出し、バンドルを DLC Builder で直接開けるようにします。CustomsForge の「Import rs2dlc」欄にドロップすればメタデータを自動入力できます。</value></data>
     <data name="Settings_RsXmlSixString_RowLabel" xml:space="preserve"><value>6弦ツール向け RS XML</value></data>
     <data name="Settings_Tip_RsXmlSixString" xml:space="preserve"><value>7弦・8弦ギターを6弦の .xml として保存します。追加弦のノートは省かれ、EOF や DLC Builder で読み込めます。オフのときはすべての弦を残します。DTRS XML フォルダーと DLC Builder プロジェクトは常に6弦版を使います。</value></data>
+    <data name="Settings_RsXmlMoverPhrases_RowLabel" xml:space="preserve"><value>拍の間のフレーズを moveR で RS XML に書く</value></data>
+    <data name="Settings_Tip_RsXmlMoverPhrases" xml:space="preserve"><value>拍と拍の間のノートで始まるフレーズやセクションを、その前の拍に moveR として書きます。この形式を必要とするツール向けです。オフのときは実際の時刻を書きます。DLC Builder は改善処理の有無にかかわらずこちらも受け付けます。保存する .xml と DTRS XML フォルダーに適用され、Rocksmith パッケージは常に実際の時刻を使います。</value></data>
     <data name="Settings_ExportGenerateDd_RowLabel" xml:space="preserve"><value>1 レベルのアレンジメントにダイナミック難易度を生成</value></data>
     <data name="Settings_Tip_ExportGenerateDd" xml:space="preserve"><value>DLC Builder と同じく、Rocksmith の書き出し（.psarc と、DLC Builder プロジェクトが参照する DTRS XML）では、難易度レベルが 1 つだけのアレンジメントのコピーに難易度レベルを生成します。譜面自体は 1 レベルのままです。すでにレベルがあるアレンジメントはそのまま書き出されます。</value></data>
     <data name="Settings_ExportDlcBuilderFixes_RowLabel" xml:space="preserve"><value>書き出し時に DLC Builder の修正を適用</value></data>
@@ -1603,6 +1606,10 @@
     <data name="Settings_StemModels_CustomBootstrapping" xml:space="preserve"><value>埋め込み Python インタープリタを起動しています…</value></data>
     <data name="Settings_StemModels_CustomAdded" xml:space="preserve"><value>「{0}」（{1} ステム）を追加しました。下の一覧でダウンロードしてから有効にしてください。</value></data>
     <data name="Settings_StemModels_CustomConverted" xml:space="preserve"><value>「{0}」（{1} ステム）を ONNX に変換しました。下の一覧で有効にしてください。</value></data>
+    <data name="Settings_StemModels_PickleConfirmTitle" xml:space="preserve"><value>このファイルは PC 上でコードを実行できます</value></data>
+    <data name="Settings_StemModels_PickleConfirmMessage" xml:space="preserve"><value>「{0}」は PyTorch チェックポイント（.ckpt / .pt / .pth）です。この種のファイルは読み込み時に PC 上でコードを実行できます。DotCharter は可能な限りモデルの重みだけを読み込み、それに失敗した場合にのみファイル全体を読み込みます。提供元を信頼できる場合にのみインポートしてください: {1}</value></data>
+    <data name="Settings_StemModels_PickleDeclined" xml:space="preserve"><value>インポートしませんでした。チェックポイントファイルは PC 上でコードを実行できます。モデルの .safetensors 版または .onnx 版を使用してください。</value></data>
+    <data name="Settings_StemModels_PickleChanged" xml:space="preserve"><value>インポートしませんでした: このチェックポイントにはコードの実行が許可されていないか、許可した後にファイルが変更されました。もう一度インポートして確認してください。</value></data>
     <data name="Settings_StemModels_CacheEmpty" xml:space="preserve"><value>空です — まだ分離した曲はありません。</value></data>
     <data name="Settings_StemModels_CacheClear" xml:space="preserve"><value>ステムキャッシュを消去</value></data>
     <data name="Settings_StemModels_CacheClearTooltip" xml:space="preserve"><value>キャッシュ済みのステムアーカイブをすべて削除します。以降にもう一度再生する曲は最初から分離が必要で、1曲あたり数分かかります。</value></data>
@@ -1887,11 +1894,51 @@
     <data name="Toolbar_FxChain_RemoveTip" xml:space="preserve"><value>チェーンから削除</value></data>
     <data name="Toolbar_FxChain_AddPlaceholder" xml:space="preserve"><value>VST3を追加…</value></data>
     <data name="Toolbar_Loading" xml:space="preserve"><value>読み込み中…</value></data>
+    <data name="Toolbar_FxChain_NotLoaded" xml:space="preserve"><value>未読み込み：プラグインが見つかりません</value></data>
+    <data name="Toolbar_FxChain_NotLoadedTip" xml:space="preserve"><value>このプラグインはチェーンに保存されていますが、DotCharter がスキャンする VST3 フォルダにないため読み込まれませんでした。そのフォルダにインストールするか、このスロットを削除してください。</value></data>
     <data name="Ribbon_Tones" xml:space="preserve"><value>トーン</value></data>
     <data name="Ribbon_Sections" xml:space="preserve"><value>セクション</value></data>
     <data name="Ribbon_Phrases" xml:space="preserve"><value>フレーズ</value></data>
     <data name="Ribbon_Lyrics" xml:space="preserve"><value>歌詞</value></data>
     <data name="Ribbon_MeasureInfo" xml:space="preserve"><value>小節情報</value></data>
+    <data name="Ribbon_Links" xml:space="preserve"><value>リンク</value></data>
+    <data name="Link_GroupTitle" xml:space="preserve"><value>リンク {0}</value></data>
+    <data name="LinkPanel_Name" xml:space="preserve"><value>リンクパネル</value></data>
+    <data name="LinkPanel_Description" xml:space="preserve"><value>ノート、コード、テクニック、ハンドシェイプ、運指は共有されます。トーン、セクション、フレーズはアレンジメントごとです。</value></data>
+    <data name="LinkPanel_MeasuresOne" xml:space="preserve"><value>{0} 小節</value></data>
+    <data name="LinkPanel_MeasuresFmt" xml:space="preserve"><value>{0} 小節</value></data>
+    <data name="LinkPanel_SelectedFmt" xml:space="preserve"><value>{1} 件中 {0} 件を選択</value></data>
+    <data name="LinkPanel_Unlink" xml:space="preserve"><value>選択をリンク解除</value></data>
+    <data name="LinkPanel_NewGroup" xml:space="preserve"><value>選択から新規グループ</value></data>
+    <data name="LinkPanel_Split" xml:space="preserve"><value>アレンジメントごとに分割</value></data>
+    <data name="LinkPanel_GoTo" xml:space="preserve"><value>移動</value></data>
+    <data name="LinkPanel_Here" xml:space="preserve"><value>← 選択</value></data>
+    <data name="LinkPanel_Suggestions" xml:space="preserve"><value>再び同じ内容 · 未リンク</value></data>
+    <data name="LinkPanel_Link" xml:space="preserve"><value>リンク</value></data>
+    <data name="LinkPanel_LinkTip" xml:space="preserve"><value>この小節を再びグループに追加</value></data>
+    <data name="LinkHover_Click" xml:space="preserve"><value>クリックでリンクパネルを開く</value></data>
+    <data name="LinkToast_Name" xml:space="preserve"><value>リンク小節の通知</value></data>
+    <data name="LinkToast_Linked" xml:space="preserve"><value>リンク</value></data>
+    <data name="LinkToast_ChangedOne" xml:space="preserve"><value>· {0} か所を変更 ({1})</value></data>
+    <data name="LinkToast_ChangedFmt" xml:space="preserve"><value>· {0} か所を変更 ({1})</value></data>
+    <data name="LinkToast_OnlyHere" xml:space="preserve"><value>ここだけ</value></data>
+    <data name="LinkToast_Dismiss" xml:space="preserve"><value>閉じる</value></data>
+    <data name="LinkBanner_AppliesOne" xml:space="preserve"><value>· 編集は {0} か所に適用 ({1})</value></data>
+    <data name="LinkBanner_AppliesFmt" xml:space="preserve"><value>· 編集は {0} か所に適用 ({1})</value></data>
+    <data name="LinkBanner_OnlyThisOne" xml:space="preserve"><value>これだけ</value></data>
+    <data name="LinkBanner_Panel" xml:space="preserve"><value>パネル</value></data>
+    <data name="LinkIdentical_Title" xml:space="preserve"><value>同一の小節をリンク</value></data>
+    <data name="LinkIdentical_Tip" xml:space="preserve"><value>選択した小節を、まったく同じ内容のすべての箇所とリンクします。以後の編集はすべてに適用されます。</value></data>
+    <data name="LinkIdentical_DoneOne" xml:space="preserve"><value>· {0} か所をリンク ({1})</value></data>
+    <data name="LinkIdentical_DoneFmt" xml:space="preserve"><value>· {0} か所をリンク ({1})</value></data>
+    <data name="LinkCreate_TooFewRuns" xml:space="preserve"><value>· 同じ内容の小節が他にありません</value></data>
+    <data name="LinkCreate_ArrangementNotInProject" xml:space="preserve"><value>· このアレンジメントはプロジェクトにありません</value></data>
+    <data name="LinkCreate_IncompatibleArrangements" xml:space="preserve"><value>· アレンジメントの弦数、チューニング、カポが異なります</value></data>
+    <data name="LinkCreate_NotWholeMeasures" xml:space="preserve"><value>· 小節全体を選択してください</value></data>
+    <data name="LinkCreate_DifferentMeasures" xml:space="preserve"><value>· 拍子が異なります</value></data>
+    <data name="LinkCreate_Overlap" xml:space="preserve"><value>· これらの小節は既にリンクされています</value></data>
+    <data name="LinkCreate_Empty" xml:space="preserve"><value>· 小節が空です</value></data>
+    <data name="LinkCreate_DifferentContent" xml:space="preserve"><value>· 小節の内容が一致しません</value></data>
     <data name="Timeline_Gutter_Measures" xml:space="preserve"><value>小節</value></data>
     <data name="Timeline_Gutter_Time" xml:space="preserve"><value>時間</value></data>
     <data name="Timeline_Gutter_Low" xml:space="preserve"><value>低</value></data>
@@ -1900,6 +1947,12 @@
     <data name="Timeline_SongMap_BarOne" xml:space="preserve"><value>{0}小節</value></data>
     <data name="Timeline_SongMap_BarsFmt" xml:space="preserve"><value>{0}小節</value></data>
     <data name="Timeline_Rows" xml:space="preserve"><value>行</value></data>
+    <data name="TimelineLanes_MenuName" xml:space="preserve"><value>タイムラインのレーン</value></data>
+    <data name="TimelineLanes_AutoHide" xml:space="preserve"><value>空のレーンを自動で隠す</value></data>
+    <data name="TimelineLanes_Compact" xml:space="preserve"><value>行をコンパクトに</value></data>
+    <data name="TimelineLanes_ShowAll" xml:space="preserve"><value>すべてのレーンを表示</value></data>
+    <data name="TimelineLanes_HiddenOneTone" xml:space="preserve"><value>自動で非表示: トーン1つ</value></data>
+    <data name="TimelineLanes_HiddenEmpty" xml:space="preserve"><value>自動で非表示: 空</value></data>
     <data name="Menu_Import" xml:space="preserve"><value>インポート</value></data>
     <data name="Dialog_YoutubeAudio_ToolsMissing" xml:space="preserve"><value>YouTube音声にはyt-dlpとffmpegが必要です（リリース版に同梱）。</value></data>
     <data name="Dialog_YoutubeAudio_Rights" xml:space="preserve"><value>使用する権利を持つ音声のみをダウンロードしてください。DotCharter はこれを確認しません。責任はご自身にあります(LEGAL.md を参照)。</value></data>
@@ -2096,7 +2149,11 @@
     <data name="Dialog_Export_PreviewFallback" xml:space="preserve"><value>任意。未指定の場合はメインオーディオを使用します。</value></data>
     <data name="Dialog_Export_Volume" xml:space="preserve"><value>音量（dB）</value></data>
     <data name="Dialog_Export_PreviewVolume" xml:space="preserve"><value>プレビュー音量（dB）</value></data>
-    <data name="Dialog_Export_WrittenUnencrypted" xml:space="preserve"><value>パッケージは暗号化せずに書き出されます。</value></data>
+    <data name="Dialog_Export_PlainPackageWarning" xml:space="preserve"><value>このパッケージは暗号化されていません。Rocksmith 2014 は、RS7String 7弦 Mod がある場合にのみ、暗号化されていないパッケージを読み込みます。標準のチャートは、DLC Builder プロジェクト（.rs2dlc）を書き出して、DLC Builder でパッケージを作成してください。</value></data>
+    <data name="Dialog_Export_DlcBuilderProject" xml:space="preserve"><value>DLC Builder プロジェクトを書き出す…</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectTip" xml:space="preserve"><value>チャートを DLC Builder プロジェクト（.rs2dlc）と Rocksmith XML として、選んだフォルダーに書き出します。DLC Builder で開いて、暗号化されたパッケージを作成します。</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectWritten" xml:space="preserve"><value>DLC Builder プロジェクトを書き出しました: {0}</value></data>
+    <data name="Dialog_Export_DlcBuilderProjectFailed" xml:space="preserve"><value>DLC Builder プロジェクトを書き出せませんでした: {0}</value></data>
     <data name="Dialog_Export_AlbumArt" xml:space="preserve"><value>アルバムアート</value></data>
     <data name="Dialog_Export_AlbumArtHint" xml:space="preserve"><value>任意。空の場合はプレースホルダーを生成します。</value></data>
     <data name="Dialog_Export_Package" xml:space="preserve"><value>パッケージ</value></data>
@@ -2130,7 +2187,7 @@
     <data name="Dialog_Export_PlatformMac" xml:space="preserve"><value>macOS（Mac）</value></data>
     <data name="Dialog_Export_PackageForm" xml:space="preserve"><value>パッケージ形式</value></data>
     <data name="Dialog_Export_PackageEncrypted" xml:space="preserve"><value>暗号化（既定）</value></data>
-    <data name="Dialog_Export_PackagePlain" xml:space="preserve"><value>暗号化なし（CDLC Enabler の非暗号化 PSARC 対応が必要）</value></data>
+    <data name="Dialog_Export_PackagePlain" xml:space="preserve"><value>暗号化なし</value></data>
     <data name="Dialog_Export_MacNeedsEncryption" xml:space="preserve"><value>Mac 用パッケージは常に暗号化されますが、ここではパッケージを暗号化せずに書き出します。</value></data>
     <data name="Dialog_Export_MacSixStringsOnly" xml:space="preserve"><value>7 弦または 8 弦のアレンジメントが選ばれています。これは Windows（rs7string mod）でのみ再生できます。</value></data>
     <data name="Dialog_Export_MacUnavailable" xml:space="preserve"><value>Mac 用パッケージは書き出せません。{0}</value></data>
@@ -2153,6 +2210,10 @@
   <data name="ToneGenerate_Cancelled" xml:space="preserve"><value>AI によるトーン生成をキャンセルしました。何も書き込まれていません。</value></data>
   <data name="ToneGenerate_ProjectChanged" xml:space="preserve"><value>トーンの生成中にプロジェクトが変わったため、何も書き込みませんでした。</value></data>
   <data name="ToneGenerate_NoneGeneratedWhy" xml:space="preserve"><value>トーンを 1 つも生成できませんでした: {0}</value></data>
+  <data name="ToneGenerate_ConfirmTitle" xml:space="preserve"><value>生成したトーンを書き込みますか?</value></data>
+  <data name="ToneGenerate_ConfirmOne" xml:space="preserve"><value>AI が「{1}」に {0} 件のトーンを提案しました。書き込むと、このアレンジのトーンスロットと、配置済みトーンチェンジのトーン名が置き換えられます(元に戻す操作は 1 回分です)。</value></data>
+  <data name="ToneGenerate_Confirm" xml:space="preserve"><value>AI が「{1}」に {0} 件のトーンを提案しました。書き込むと、このアレンジのトーンスロットと、配置済みトーンチェンジのトーン名が置き換えられます(元に戻す操作は 1 回分です)。</value></data>
+  <data name="ToneGenerate_Declined" xml:space="preserve"><value>生成したトーンは書き込まれませんでした。</value></data>
     <data name="Dialog_Tones_Title" xml:space="preserve"><value>トーンデザイナー</value></data>
     <data name="Dialog_Tones_Subtitle" xml:space="preserve"><value>このプロジェクト用に Rocksmith のトーンを作成し、アレンジメントのスロットに割り当てて、エクスポートするパッケージに埋め込みます。</value></data>
     <data name="Dialog_Tones_NoArrangements" xml:space="preserve"><value>プロジェクトに楽器アレンジメントがありません。</value></data>
@@ -2344,6 +2405,7 @@
     <data name="Picker_SelectAlbumArt" xml:space="preserve"><value>アルバムアート画像を選択</value></data>
     <data name="Picker_SaveExportPackage" xml:space="preserve"><value>Rocksmith パッケージを保存</value></data>
     <data name="Picker_SelectTestFolder" xml:space="preserve"><value>テストフォルダーを選択</value></data>
+    <data name="Picker_SelectDlcBuilderFolder" xml:space="preserve"><value>DLC Builder プロジェクトのフォルダーを選択</value></data>
     <data name="Status_Export_NoProject" xml:space="preserve"><value>エクスポートする前にプロジェクトを開いてください。</value></data>
     <data name="Status_Export_Success" xml:space="preserve"><value>Rocksmith パッケージを {0} にエクスポートしました。</value></data>
     <data name="Status_Export_SuccessBoth" xml:space="preserve"><value>Rocksmith パッケージを {0} と {1} にエクスポートしました。</value></data>
@@ -2369,13 +2431,18 @@
     <data name="Export.Validation.TooManyTones" xml:space="preserve"><value>個別のトーンが多すぎます（{0}）。ゲームの上限は 4 です。</value></data>
     <data name="Export.Validation.FretOutOfRange" xml:space="preserve"><value>フレット {0} は演奏可能範囲（0–24）外です。</value></data>
     <data name="Export.Validation.StringOutOfRange" xml:space="preserve"><value>弦 {0} はこのアレンジメントがエクスポートできる弦の範囲外です（6 弦、または rs7string MOD 向けギターパートの 7/8 弦）。このアレンジメントはエクスポートできません。</value></data>
-    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0} 弦ギター：rs7string MOD 向けに暗号化なしのパッケージとしてエクスポートします（plain-PSARC 対応の CDLC Enabler が必要です）。7弦の和音構成音はソングファイルの RS7X ブロックに入ります。7弦だけの和音は単音としてエクスポートされます。</value></data>
+    <data name="Export.Validation.ExtendedRangeGuitar" xml:space="preserve"><value>{0} 弦ギター：rs7string MOD 向けにエクスポートします。7弦の和音構成音はソングファイルの RS7X ブロックに入ります。7弦だけの和音は単音としてエクスポートされます。</value></data>
     <data name="Export.Validation.EightStringMod" xml:space="preserve"><value>8 弦ギター：まだエクスポートできません。rs7string MOD は 7 弦まで演奏します。8 弦の形式は今後の MOD バージョンを待っています。</value></data>
     <data name="Export.Validation.NoteBelowCapo" xml:space="preserve"><value>フレット {0} のノートがカポより下にあります。</value></data>
     <data name="Export.Validation.FirstNoteTooEarly" xml:space="preserve"><value>最初のノートが曲の開始から 1 秒未満で始まっています。</value></data>
     <data name="Export.Validation.FirstPhraseNotAtStart" xml:space="preserve"><value>最初のフレーズより前にコンテンツがあります。</value></data>
     <data name="Export.Validation.LyricTooLong" xml:space="preserve"><value>歌詞「{0}」が 47 バイトの上限を超えています。</value></data>
     <data name="Export.Validation.DisplayNameGlyphs" xml:space="preserve"><value>「{0}」には Rocksmith のフォントで表示できない可能性のある文字（日本語・中国語・韓国語・キリル文字など）が含まれています。ここには英語またはローマ字の名前を入力し、元の表記は「曲名／アーティスト（原語表記）」に入力してください。</value></data>
+    <data name="Export.Validation.TooManyLevels" xml:space="preserve"><value>難易度レベルが多すぎます（{0}）。曲ファイルに入るのは最大 36 です。</value></data>
+    <data name="Export.Validation.TooManyNotes" xml:space="preserve"><value>1 つのレベルに {0} 個のノートとコードがあります。曲ファイルが 1 レベルで扱えるのは最大 32,767 個です。</value></data>
+    <data name="Export.Validation.FingerOutOfRange" xml:space="preserve"><value>コードの指 {0} は許可された範囲（なし、または 0–4）外です。</value></data>
+    <data name="Export.Validation.StringBeyondTuning" xml:space="preserve"><value>弦 {0} はこのアレンジメントのチューニングにありません。ノートをアレンジメントにある弦へ移してください。</value></data>
+    <data name="Export.Validation.StringCountUnsupported" xml:space="preserve"><value>このアレンジメントは {0} 弦です。パッケージが扱えるのはベースで 6 弦、ギターで最大 8 弦です。</value></data>
     <data name="Export.Validation.ToneNotDefined" xml:space="preserve"><value>トーン「{0}」に定義がありません — ゲームは既定のトーンを使用します。トーンエディターで作成するか、パッケージからインポートしてください。</value></data>
     <data name="Profile_DefaultName" xml:space="preserve"><value>プレイヤー1</value></data>
     <data name="Profile_Switcher_Tip" xml:space="preserve"><value>使用中のプレイヤープロファイルです。クリックで切り替え・追加できます。</value></data>
@@ -2567,6 +2634,7 @@
     <data name="EofLoss_MeasureStart" xml:space="preserve"><value>小節線の移動（EOF は拍子から小節を数える）</value></data>
     <data name="EofLoss_UnplacedPhrase" xml:space="preserve"><value>タイムラインに配置されていないフレーズ</value></data>
     <data name="EofLoss_PhraseMaxDifficulty" xml:space="preserve"><value>フレーズの最大難易度は保持されない</value></data>
+    <data name="EofLoss_MoverPhrase" xml:space="preserve"><value>拍の間のフレーズを moveR として書き出し</value></data>
     <data name="EofLoss_ExtraVocalTrack" xml:space="preserve"><value>追加のボーカルトラックを除外（EOF は 1 本のみ）</value></data>
     <data name="EofLoss_LyricPitch" xml:space="preserve"><value>MIDI 範囲外の歌詞ピッチ（ピッチなしで書き出し）</value></data>
     <data name="EofLoss_CentOffset" xml:space="preserve"><value>セントオフセットを除外</value></data>
@@ -2821,6 +2889,7 @@
     <data name="History_BeatScale" xml:space="preserve"><value>テンポを変更</value></data>
     <data name="History_Composite" xml:space="preserve"><value>編集</value></data>
     <data name="History_CreateAndSwitchTemplate" xml:space="preserve"><value>新しいコードテンプレート</value></data>
+    <data name="History_CreateLinkGroup" xml:space="preserve"><value>小節をリンク</value></data>
     <data name="History_Delete" xml:space="preserve"><value>削除</value></data>
     <data name="History_DeleteRelated" xml:space="preserve"><value>関連項目ごと削除</value></data>
     <data name="History_DeleteTone" xml:space="preserve"><value>トーンを削除</value></data>
@@ -2832,6 +2901,10 @@
     <data name="History_AcceptSuggestedHandShapes" xml:space="preserve"><value>提案ハンドシェイプを適用</value></data>
     <data name="History_GenerateFingerings" xml:space="preserve"><value>運指を生成</value></data>
     <data name="History_GenerateStructure" xml:space="preserve"><value>構成を生成</value></data>
+    <data name="History_LinkFollowUp" xml:space="preserve"><value>リンクされたコピー</value></data>
+    <data name="History_OnlyHere" xml:space="preserve"><value>ここだけ</value></data>
+    <data name="History_SetLinkGroups" xml:space="preserve"><value>リンクグループを編集</value></data>
+    <data name="History_AddLinkPlacement" xml:space="preserve"><value>小節を再リンク</value></data>
     <data name="History_LyricTap" xml:space="preserve"><value>歌詞をタップ</value></data>
     <data name="History_MergeIntoChords" xml:space="preserve"><value>コードにまとめる</value></data>
     <data name="History_MoveLyric" xml:space="preserve"><value>歌詞を移動</value></data>
@@ -3331,6 +3404,7 @@
     <data name="Status_MidiImportNothingFound" xml:space="preserve"><value>このMIDIファイルからは譜面化できるノートが得られませんでした。</value></data>
     <data name="Status_MidiImportApplied" xml:space="preserve"><value>MIDIをアレンジメント「{0}」としてインポートしました（{1}ノート）。</value></data>
     <data name="Status_MidiImportFailed" xml:space="preserve"><value>MIDIのインポートに失敗しました: {0}</value></data>
+    <data name="Status_ImportFileTooLarge" xml:space="preserve"><value>{0} は大きすぎるためインポートできません（{1} MB。上限は {2} MB です）。</value></data>
     <data name="Dialog_GenerateLevels_Title" xml:space="preserve"><value>難易度レベルを生成</value></data>
     <data name="Dialog_GenerateLevels_Subtitle" xml:space="preserve"><value>「{0}」のレベルを最も難しいレベルから生成します。現在は{1}あります。</value></data>
     <data name="Dialog_GenerateLevels_Count" xml:space="preserve"><value>レベル数</value></data>
@@ -5436,4 +5510,36 @@
   <data name="Inspector_IssueAi_NoJob" xml:space="preserve"><value>{0} を修正できるAIジョブはありません。AIが変更できるのは手のポジションとコードの運指だけです。自動修正を使うか手動で編集してください。「AIで説明」は利用できます。</value></data>
   <data name="Accessibility_SpinnerIncrease" xml:space="preserve"><value>増やす</value></data>
   <data name="Accessibility_SpinnerDecrease" xml:space="preserve"><value>減らす</value></data>
+  <data name="Menu_LinkedMeasures" xml:space="preserve"><value>リンクされた小節…</value></data>
+  <data name="Menu_LinkedMeasures_Tip" xml:space="preserve"><value>曲のリンクグループを一覧表示します。名前の変更、リンク解除、配置への移動ができます。</value></data>
+  <data name="LinkGroups_Title" xml:space="preserve"><value>リンクされた小節</value></data>
+  <data name="LinkGroups_Subtitle" xml:space="preserve"><value>同じ内容に保たれる小節です。ひとつの配置での編集がすべてに適用されます。</value></data>
+  <data name="LinkGroups_Empty" xml:space="preserve"><value>リンクされた小節はまだありません。</value></data>
+  <data name="LinkGroups_EmptyHint" xml:space="preserve"><value>タイムラインで繰り返しの小節をリンクするか、Guitar Pro の譜面をインポートして候補を表示します。</value></data>
+  <data name="LinkGroups_NamePlaceholder" xml:space="preserve"><value>グループ名</value></data>
+  <data name="LinkGroups_Rename" xml:space="preserve"><value>名前を変更</value></data>
+  <data name="LinkGroups_Delete" xml:space="preserve"><value>すべて解除</value></data>
+  <data name="LinkGroups_GoTo" xml:space="preserve"><value>この配置へ移動</value></data>
+  <data name="LinkGroups_Unnamed" xml:space="preserve"><value>名前なし</value></data>
+  <data name="LinkGroups_PerArrangement" xml:space="preserve"><value>{0} ×{1}</value></data>
+  <data name="LinkGroups_SuggestionsHeader" xml:space="preserve"><value>候補</value></data>
+  <data name="LinkGroups_LinkSelected" xml:space="preserve"><value>選択をリンク</value></data>
+  <data name="LinkGroups_SuggestionTitle" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="LinkGroups_MeasuresOne" xml:space="preserve"><value>{0} 小節</value></data>
+  <data name="LinkGroups_Measures" xml:space="preserve"><value>{0} 小節</value></data>
+  <data name="LinkGroups_FromRepeats" xml:space="preserve"><value>譜面の反復記号から</value></data>
+  <data name="LinkSuggest_Title" xml:space="preserve"><value>繰り返しの小節が見つかりました</value></data>
+  <data name="LinkSuggest_Subtitle" xml:space="preserve"><value>リンクすると、1か所での編集がすべてのコピーに適用されます。</value></data>
+  <data name="LinkSuggest_GroupsOne" xml:space="preserve"><value>リンクできるグループ {0} 件、配置 {1} 件。</value></data>
+  <data name="LinkSuggest_Groups" xml:space="preserve"><value>リンクできるグループ {0} 件、配置 {1} 件。</value></data>
+  <data name="LinkSuggest_Shared" xml:space="preserve"><value>{0} と {1} は {3} 小節のうち {2} 小節を共有しています。</value></data>
+  <data name="LinkSuggest_RepeatsEach" xml:space="preserve"><value>{0} は各パートで {1} 回繰り返されます。</value></data>
+  <data name="LinkSuggest_RepeatsIn" xml:space="preserve"><value>{0} は {2} で {1} 回繰り返されます。</value></data>
+  <data name="LinkSuggest_LinkAll" xml:space="preserve"><value>すべてリンク</value></data>
+  <data name="LinkSuggest_Review" xml:space="preserve"><value>確認</value></data>
+  <data name="LinkSuggest_Skip" xml:space="preserve"><value>スキップ</value></data>
+  <data name="Status_LinkSuggestionsLinkedOne" xml:space="preserve"><value>小節グループを {0} 件リンクしました。元に戻す1回で解除できます。</value></data>
+  <data name="Status_LinkSuggestionsLinked" xml:space="preserve"><value>小節グループを {0} 件リンクしました。元に戻す1回ですべて解除できます。</value></data>
+  <data name="Status_LinkSuggestionsNone" xml:space="preserve"><value>これらの小節はリンクできなくなりました。変更されたか、すでにリンクされています。</value></data>
+  <data name="History_LinkSuggestions" xml:space="preserve"><value>候補の小節をリンク</value></data>
 </root>

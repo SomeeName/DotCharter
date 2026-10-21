@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DotCharter.Services.Export.Audio;
 using DotCharter.Services.Import.Youtube;
+using DotCharter.Services.Infrastructure;
 using DotCharter.Services.Parsing;
 using SkiaSharp;
 
@@ -385,8 +386,12 @@ public static class AudioMetadataExtractor
     /// <summary>Decodes the extracted image, resizes it to a square
     /// <see cref="CoverArtSize" /> px (ignoring source aspect ratio, mirroring
     /// the DDS art pipeline) and re-encodes it as PNG bytes.</summary>
-    private static byte[]? ResizeToPng(string imagePath)
+    internal static byte[]? ResizeToPng(string imagePath)
     {
+        // Embedded art is whatever the tagger put in the file: a header that
+        // declares an absurd size is refused before the decoder allocates for it.
+        if (!ImageHeaderProbe.IsDecodable(imagePath)) return null;
+
         using var source = SKBitmap.Decode(imagePath);
         if (source is null) return null;
 

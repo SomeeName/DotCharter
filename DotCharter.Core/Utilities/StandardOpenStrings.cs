@@ -19,8 +19,8 @@ namespace DotCharter.Core.Utilities;
 ///     </para>
 ///     <para>
 ///         Up to six strings the table is the 6-string guitar's, truncated — a
-///         4-string bass is E A D G, and a 5-string reads E A D G B (the RS SNG
-///         reading <see cref="TuningUtilities.GetStandardMidiPitches" /> documents).
+///         4-string bass is E A D G, and a 5-string reads E A D G B (and every importer,
+///         GP included, measures against it — <see cref="TuningUtilities.GetStandardMidiPitches" />).
 ///         A string index past the instrument keeps climbing the six-string neck
 ///         (…, 24, 29, then fourths), which is what the old copies answered for it.
 ///     </para>

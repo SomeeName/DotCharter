@@ -198,6 +198,6 @@ public sealed class TrackContextRegistry : ITrackContextRegistry, IDisposable
     {
         if (FocusedTrack == null) return;
         if (FocusedTrack.Arrangement != _projectState.ActiveArrangement) return;
-        FocusedTrack.Level = _projectState.ActiveLevel ?? FocusedTrack.Arrangement.Levels.FirstOrDefault();
+        FocusedTrack.Level = _projectState.ActiveLevel ?? ChartLevels.Hardest(FocusedTrack.Arrangement);
     }
 }

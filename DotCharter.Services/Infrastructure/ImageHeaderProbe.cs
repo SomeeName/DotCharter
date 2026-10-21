@@ -71,6 +71,43 @@ public static class ImageHeaderProbe
         return TryReadPixelSize(buffer.AsSpan(0, read), out width, out height);
     }
 
+    /// <summary>
+    ///     The longest edge any picture the app did not make may declare before
+    ///     it is handed to a decoder. A decoder allocates width × height × 4
+    ///     bytes up front, so a PNG of a few hundred bytes that declares
+    ///     60,000 × 60,000 is a 14 GB allocation; 8192² is 256 MiB, well past
+    ///     any album cover.
+    /// </summary>
+    public const int MaxDecodeDimension = 8192;
+
+    /// <summary>True for a size a decoder may be asked to allocate for.</summary>
+    public static bool IsWithinDecodeCap(int width, int height)
+        => width is > 0 and <= MaxDecodeDimension && height is > 0 and <= MaxDecodeDimension;
+
+    /// <summary>
+    ///     The pre-decode gate: the header must be one this probe recognises AND
+    ///     declare a size inside <see cref="MaxDecodeDimension" />. A header it
+    ///     does not recognise is refused too — a decoder would have been asked
+    ///     to allocate for a size nobody checked. The stream is rewound, so the
+    ///     decoder reads from the start.
+    /// </summary>
+    public static bool IsDecodable(Stream stream)
+        => TryReadPixelSize(stream, out var width, out var height) && IsWithinDecodeCap(width, height);
+
+    /// <summary><see cref="IsDecodable(Stream)" /> on a file. False for one that cannot be opened.</summary>
+    public static bool IsDecodable(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            return IsDecodable(stream);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     // ---- PNG: 8-byte signature, then IHDR whose first 8 data bytes are W,H (BE) ----
 
     private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];

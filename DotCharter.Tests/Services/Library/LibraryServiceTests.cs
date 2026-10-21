@@ -115,6 +115,28 @@ public sealed class LibraryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Cancelling_a_scan_ends_a_blocked_package_read_promptly_and_reports_no_partial_row()
+    {
+        var packages = new FakeSource(".dcsong");
+        var slow = Touch("slow.dcsong");
+        packages.Rows[slow] = [Row(slow, "Slow", "Band")];
+        packages.Blocks.Add(slow);
+        var found = new List<LibrarySongEntry>();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var scan = Task.Run(() => new LibraryService(_logger, [packages]) { ScanParallelismForTests = 1 }
+            .ScanAsync(Library, null, new Progress<IReadOnlyList<LibrarySongEntry>>(found.AddRange), cts.Token),
+            TestContext.Current.CancellationToken);
+        Assert.True(packages.Entered.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+
+        cts.Cancel();
+        var finished = await Task.WhenAny(scan, Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+        Assert.Same(scan, finished);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scan);
+        Assert.Empty(found);
+    }
+
+    [Fact]
     public async Task Every_per_song_question_reaches_the_source_that_owns_the_file()
     {
         var archives = new FakeSource(".psarc");
@@ -168,6 +190,8 @@ public sealed class LibraryServiceTests : IDisposable
     private sealed class FakeSource(string extension) : ILibraryPackageSource
     {
         public Dictionary<string, IReadOnlyList<LibrarySongEntry>> Rows { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> Blocks { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public ManualResetEventSlim Entered { get; } = new();
         public HashSet<string> Fails { get; } = new(StringComparer.OrdinalIgnoreCase);
         public ConcurrentQueue<string> ReadQueue { get; } = new();
         public List<string> Read => [.. ReadQueue];
@@ -177,10 +201,17 @@ public sealed class LibraryServiceTests : IDisposable
 
         public void BeginScan() => ScansBegun++;
 
-        public IReadOnlyList<LibrarySongEntry> ReadForIndex(string path)
+        public IReadOnlyList<LibrarySongEntry> ReadForIndex(string path, CancellationToken cancellationToken)
         {
             Assert.EndsWith(extension, path, StringComparison.OrdinalIgnoreCase);
             ReadQueue.Enqueue(path);
+            if (Blocks.Contains(path))
+            {
+                Entered.Set();
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(30));
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             return Fails.Contains(path) ? throw new InvalidDataException("damaged") : Rows.GetValueOrDefault(path, []);
         }
 

@@ -121,6 +121,68 @@ public static class ConfigBackupRules
         return false;
     }
 
+    private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"];
+
+    private static HashSet<string> Ext(IEnumerable<string> extensions) => new(extensions, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     The ONE allowlist of what a backup moves: per tree, the file types the app
+    ///     itself writes there. A tree that is not a key here is not transferred, and a
+    ///     file whose type is not listed for its tree is refused on import.
+    ///     <para>
+    ///         <c>recovery/</c> is deliberately absent although it is user data
+    ///         (<see cref="UserDataTopDirs" />, so an update never overwrites it): a crash
+    ///         snapshot's sidecar names the project path it would be saved back to, so a
+    ///         received one could point the next "recover" at any file. Snapshots are
+    ///         machine-local scratch, not something to migrate.
+    ///     </para>
+    /// </summary>
+    private static readonly Dictionary<string, HashSet<string>> TransferExtensionsByTree =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            // Profile data, recorded takes (.wav) and the profile picture.
+            ["profiles"] = Ext([".json", ".wav", .. ImageExtensions]),
+            ["languages"] = Ext([".json"]),
+            ["themes"] = Ext([".json", .. ImageExtensions]),
+            [PhraseCatalogService.FolderName] = Ext([".rscp"]),
+            [Audio.Dsp.Tones.SongToneEditStore.FolderName] = Ext([".json"])
+        };
+
+    /// <summary>Directory names that mean "a plug-in or application bundle": its
+    /// contents are loaded as a unit, so nothing under one travels.</summary>
+    private static readonly string[] BundleSuffixes = [".vst3", ".vst", ".component", ".app", ".bundle", ".dll"];
+
+    /// <summary>
+    ///     Whether a file belongs in the archive AND may be restored from one:
+    ///     <see cref="ShouldInclude" /> plus, for the user-data TREES, a data
+    ///     extension and no bundle directory on the way. The root-level files are
+    ///     named exactly, so they need no extension check.
+    ///     <para>
+    ///         Used on export too, so a stray binary in <c>profiles/</c> is not packed
+    ///         into a backup that the import would then refuse.
+    ///     </para>
+    /// </summary>
+    public static bool ShouldTransfer(string relativePath)
+    {
+        if (!ShouldInclude(relativePath)) return false;
+
+        var p = Normalize(relativePath)!;
+        if (IncludedRootFiles.Contains(p)) return true;
+
+        var segments = p.Split('/');
+        if (!TransferExtensionsByTree.TryGetValue(segments[0], out var extensions)) return false;
+
+        for (var i = 0; i < segments.Length - 1; i++)
+        {
+            foreach (var suffix in BundleSuffixes)
+            {
+                if (segments[i].EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+        }
+
+        return extensions.Contains(Path.GetExtension(segments[^1]));
+    }
+
     /// <summary>
     ///     Sanitizes an archive entry name into a config-root-relative path:
     ///     separators normalized to '/', and rooted paths / drive letters /

@@ -16,7 +16,7 @@
         <Company>DotCharter</Company>
         <Description>DotCharter - a rhythm-game charting workstation for custom Rocksmith songs.</Description>
         <!-- The SDK derives binary versions from Version; release identity comes from InformationalVersion. -->
-        <Version>1.0.0</Version>
+        <Version>1.1.0</Version>
         <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
@@ -71,8 +71,11 @@
          untrimmed publish writes. _RequiresILLinkPack makes the SDK restore and
          import the linker without that property. New-Release.ps1's
          Test-PublishTrimSettings fails a payload whose runtimeconfig carries any
-         of the trimmed-app switches, or whose D3D11 binding is still full size. -->
-    <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+         of the trimmed-app switches, or whose D3D11 binding is still full size.
+         _RequiresILLinkPack is UNCONDITIONAL so every restore (with or without a
+         runtime identifier) requests the linker and the committed lock file
+         covers the release publish, which restores in locked mode. -->
+    <PropertyGroup>
         <_RequiresILLinkPack>true</_RequiresILLinkPack>
     </PropertyGroup>
 

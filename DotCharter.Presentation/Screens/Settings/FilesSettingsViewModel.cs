@@ -33,6 +33,7 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
             new("psarcCodec", "Settings_SaveCompanionPsarcCodec", "Settings_Tip_SaveCompanionPsarcCodec"),
             new("rs2dlc", "Settings_SaveCompanionRs2Dlc_RowLabel", "Settings_Tip_SaveCompanionRs2Dlc"),
             new("rsXmlSixString", "Settings_RsXmlSixString_RowLabel", "Settings_Tip_RsXmlSixString"),
+            new("rsXmlMoverPhrases", "Settings_RsXmlMoverPhrases_RowLabel", "Settings_Tip_RsXmlMoverPhrases"),
             new("dlcBuilderFixes", "Settings_ExportDlcBuilderFixes_RowLabel", "Settings_Tip_ExportDlcBuilderFixes"),
             new("generateDd", "Settings_ExportGenerateDd_RowLabel", "Settings_Tip_ExportGenerateDd"),
             new("ddMlModel", "Settings_ExportDdMlModel_RowLabel", "Settings_Tip_ExportDdMlModel")),
@@ -56,7 +57,7 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
     private static readonly string[] Tracked =
     [
         nameof(SaveCompanionEof), nameof(SaveCompanionEofAudio), nameof(SaveCompanionPsarc),
-        nameof(SaveCompanionPsarcCodecIndex), nameof(SaveCompanionRs2Dlc), nameof(RsXmlSixStringProjection),
+        nameof(SaveCompanionPsarcCodecIndex), nameof(SaveCompanionRs2Dlc), nameof(RsXmlSixStringProjection), nameof(RsXmlMoverPhrases),
         nameof(ExportGenerateDynamicDifficulty), nameof(ExportDdUseMlModel), nameof(ExportApplyDlcBuilderFixes),
         nameof(AutoBackupEnabled), nameof(AutoBackupIntervalMinutes),
         nameof(AutoBackupKeepCount), nameof(PsarcOpenHardestLevelOnly)
@@ -80,6 +81,7 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
     [ObservableProperty] private int _saveCompanionPsarcCodecIndex;
     [ObservableProperty] private bool _saveCompanionRs2Dlc = true;
     [ObservableProperty] private bool _rsXmlSixStringProjection;
+    [ObservableProperty] private bool _rsXmlMoverPhrases;
     [ObservableProperty] private bool _exportGenerateDynamicDifficulty = true;
     [ObservableProperty] private bool _exportDdUseMlModel;
     [ObservableProperty] private bool _exportApplyDlcBuilderFixes = true;
@@ -171,6 +173,7 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
             config.SaveCompanionPsarcCodec.Equals("Pcm", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         SaveCompanionRs2Dlc = config.SaveCompanionRs2Dlc;
         RsXmlSixStringProjection = config.RsXmlSixStringProjection;
+        RsXmlMoverPhrases = config.RsXmlMoverPhrases;
         ExportGenerateDynamicDifficulty = config.ExportGenerateDynamicDifficulty;
         ExportDdUseMlModel = DlcBuilderSteps.ParseMode(config.ExportDdLevelCountMode) == DdLevelCountMode.MLModel;
         ExportApplyDlcBuilderFixes = config.ExportApplyDlcBuilderFixes;
@@ -191,6 +194,7 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
         config.SaveCompanionPsarcCodec = SaveCompanionPsarcCodecIndex == 1 ? "Pcm" : "Vorbis";
         config.SaveCompanionRs2Dlc = SaveCompanionRs2Dlc;
         config.RsXmlSixStringProjection = RsXmlSixStringProjection;
+        config.RsXmlMoverPhrases = RsXmlMoverPhrases;
         config.ExportGenerateDynamicDifficulty = ExportGenerateDynamicDifficulty;
         config.ExportDdLevelCountMode = (ExportDdUseMlModel ? DdLevelCountMode.MLModel : DdLevelCountMode.Simple).ToString();
         config.ExportApplyDlcBuilderFixes = ExportApplyDlcBuilderFixes;

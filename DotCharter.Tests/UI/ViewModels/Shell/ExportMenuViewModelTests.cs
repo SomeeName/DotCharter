@@ -2,6 +2,7 @@ using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Fakes.Dialogs;
 using DotCharter.Services.Editing.Highway;
+using DotCharter.Services.Export.Validation;
 using DotCharter.Services.Parsing.Eof;
 using DotCharter.Tests.Presentation.Dialogs;
 using DotCharter.Tone.Infrastructure.Storage;
@@ -50,6 +51,29 @@ public sealed class ExportMenuViewModelTests
 
         Assert.Equal([FakeLocalization.English()["GpExport_Title"]], storage.RequestedTitles);
         Assert.Equal("before", harness.State.MainDisplayMessage);
+    }
+
+    [Fact]
+    public async Task AGuitarProExport_OfASoundOnAStringTheTuningLacks_IsRefusedBeforeThePickerOpens()
+    {
+        var harness = new ChartEditHarness();
+        harness.State.ActiveLevel!.Notes.Add(new GuitarNote
+        {
+            Position = TimelineMath.PositionFromMs(1000, harness.State.Beats),
+            StringIndex = 9,
+            Fret = 3
+        });
+        var storage = new FakeFileStorageService { NextSaveFile = "unused.gp" };
+        var exports = Build(harness.State, storage, new ExportTargetWriter());
+        var loc = FakeLocalization.English();
+
+        await exports.ExportGuitarProCommand.ExecuteAsync(null);
+
+        Assert.Empty(storage.RequestedTitles);
+        Assert.Equal(StatusSeverity.Error, harness.State.MainDisplaySeverity);
+        Assert.Equal(
+            loc.Format("GpExport_Failed", loc.Format(ChartExportValidator.KeyStringBeyondTuning, "9")),
+            harness.State.MainDisplayMessage);
     }
 
     [Fact]

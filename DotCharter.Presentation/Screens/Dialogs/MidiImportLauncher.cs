@@ -1,6 +1,7 @@
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
+using DotCharter.Services.Infrastructure;
 using DotCharter.Services.Infrastructure.Configuration;
 using DotCharter.Tone.Diagnostics;
 using DotCharter.Tone.Infrastructure.Configuration;
@@ -55,7 +56,16 @@ public sealed class MidiImportLauncher(
         statusBar.BeginTask(ReadTaskId, _localization.Format("Status_ImportingFile", Path.GetFileName(filePath)));
         try
         {
-            file = await Task.Run(() => MidiFileParser.Parse(files.ReadAllBytes(filePath)));
+            file = await Task.Run(() => ParseWithinLimit(filePath));
+        }
+        catch (ImportFileTooLargeException tooLarge)
+        {
+            _logger.Warning(AppLogCategory.Import, $"MIDI import refused: {tooLarge.Message} File='{filePath}'.");
+            state.SetMessage(
+                _localization.Format("Status_ImportFileTooLarge", Path.GetFileName(filePath),
+                    ImportSizeLimits.ToMegabytes(tooLarge.Length), ImportSizeLimits.ToMegabytes(tooLarge.Cap)),
+                StatusSeverity.Error);
+            return false;
         }
         catch (Exception ex)
         {
@@ -72,6 +82,14 @@ public sealed class MidiImportLauncher(
             $"MIDI file loaded. File='{filePath}', format={file.Format}, ppq={file.TicksPerQuarterNote}, " +
             $"tracks={file.Tracks.Count}, tempoEvents={file.TempoEvents.Count}.");
         return await dialogs.ShowAsync(new MidiImportRequest(Path.GetFileName(filePath), file));
+    }
+
+    /// <summary>The length is checked first, through the same seam as the read, so an
+    /// oversized file is refused without a byte of it being loaded.</summary>
+    private MidiFileData ParseWithinLimit(string filePath)
+    {
+        ImportSizeLimits.RequireWithin(files.FileLength(filePath), ImportSizeLimits.MidiFileBytes, "The MIDI file");
+        return MidiFileParser.Parse(files.ReadAllBytes(filePath));
     }
 
     /// <summary>A draft is added to the open project, so with none there is nothing to import into.</summary>

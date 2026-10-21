@@ -228,10 +228,12 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
         DotCharter.Services.Editing.Linting.IAudioChartLintService? audioLint = null,
         IAudioPlaybackService? audioPlayback = null,
         PhraseCatalogViewModel? phraseCatalog = null,
-        IChordShapesScreen? chordShapes = null)
+        IChordShapesScreen? chordShapes = null,
+        Linking.LinkedMeasuresViewModel? linkedMeasures = null)
     {
         RiffLibrary = phraseCatalog;
         ChordShapes = chordShapes;
+        LinkedMeasures = linkedMeasures;
         _chartEditor = chartEditor;
         _historyService = historyService;
         _highwayEditingService = highwayEditingService;
@@ -343,6 +345,10 @@ public partial class InspectorViewModel : ViewModelBase, IDisposable
     /// <summary>The Chord shapes tab's screen, a target-architecture contract. Optional for the
     /// same reason as <see cref="RiffLibrary" />; the tab header hides itself when it is absent.</summary>
     public IChordShapesScreen? ChordShapes { get; }
+
+    /// <summary>The Sound tab's "Linked · edits apply to N places" banner. Optional for the
+    /// same reason as <see cref="RiffLibrary" />; the banner hides itself when it is absent.</summary>
+    public Linking.LinkedMeasuresViewModel? LinkedMeasures { get; }
 
     /// <summary>v0.29 audio-verified lint (FEHLER-tab block) — standalone sub-VM.</summary>
     public AudioLintViewModel AudioLint { get; }

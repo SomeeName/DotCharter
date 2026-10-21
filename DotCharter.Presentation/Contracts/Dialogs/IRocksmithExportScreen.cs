@@ -55,9 +55,17 @@ public interface IRocksmithExportScreen : IDialogScreen<bool>
 
     bool HasVolumeMessage { get; }
 
-    /// <summary>No key file: every package is written unencrypted, and the
-    /// dialog says so — neutrally, nothing about keys.</summary>
-    bool WritesUnencrypted { get; }
+    /// <summary>
+    ///     Writes the chart as a DLC Builder project (<c>.rs2dlc</c> and its XML) into a folder the user
+    ///     picks, for a standard chart that needs an encrypted package. It sits in the warning
+    ///     <see cref="IExportTarget.WritesPlainPackage" /> shows.
+    /// </summary>
+    ICommand ExportDlcBuilderProjectCommand { get; }
+
+    /// <summary>Where the last DLC Builder project went; empty when none was written.</summary>
+    string DlcBuilderProjectMessage { get; }
+
+    bool HasDlcBuilderProjectMessage { get; }
 
     /// <summary>What the platform choice writes: both file names for PC + Mac, or why
     /// there is no Mac package (PC + Mac then writes PC alone). Empty for PC.</summary>
@@ -167,6 +175,13 @@ public interface IExportTarget : INotifyPropertyChanged
 
     /// <summary>The picker is live; without keys it is not and Plain is the only form.</summary>
     bool CanChoosePackage { get; }
+
+    /// <summary>
+    ///     The PC package will be written unencrypted, by choice or because no encrypted one can be:
+    ///     Rocksmith 2014 loads that only with the RS7String mod, and the dialog warns. Never for a
+    ///     Mac-only target, whose package is always encrypted.
+    /// </summary>
+    bool WritesPlainPackage { get; }
 }
 
 public interface IExportChoice

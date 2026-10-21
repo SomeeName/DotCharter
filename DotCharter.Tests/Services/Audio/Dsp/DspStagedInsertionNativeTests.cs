@@ -12,7 +12,20 @@ public sealed class DspStagedInsertionNativeTests
     public void ParkedInsertion_RemainsDryUntilConfiguredAndActivated(int player)
     {
         JuceAudioEngine? engine = null;
-        try { engine = new JuceAudioEngine(new JuceEngineConfig { EnableConsoleLog = false }); }
+        // The Null device, not the default one: the test renders offline only, and a
+        // hosted CI runner has no audio endpoint (engine_create failed with Device).
+        try
+        {
+            engine = new JuceAudioEngine(new JuceEngineConfig
+            {
+                EnableConsoleLog = false,
+                PreferredDriver = AudioDriver.Wasapi,
+                OutputTypeName = "Null",
+                SampleRate = 48_000,
+                OutputChannels = 2,
+                EnableNullDevice = true,
+            });
+        }
         catch (DllNotFoundException) { Assert.Skip("Native audio library unavailable"); }
         using var lifetime = engine!;
         engine!.Stop(); // Offline rendering must be the only processor.

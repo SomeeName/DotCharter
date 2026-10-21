@@ -110,6 +110,8 @@ public sealed class ProfileToneRigReachabilityTests
             // AppConfig derives from it.
             .Where(f => !f.EndsWith("AppConfig.cs", StringComparison.Ordinal))
             .Where(f => !f.EndsWith("RigConfig.cs", StringComparison.Ordinal))
+            // The backup filter names every settings key as a JSON string to classify it; it reads no value.
+            .Where(f => !f.EndsWith("AppConfigBackupFilter.cs", StringComparison.Ordinal))
             .Where(f =>
             {
                 var source = SourceText.StripComments(UiSourceTree.ReadAllText(f));

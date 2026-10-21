@@ -15,9 +15,13 @@
     names the mirror that served each file, and only verified bytes are cached.
 
     MSYS2 itself is a pinned base archive (URL + SHA-256), unpacked into -WorkRoot
-    (outside the repo) the first time; its gcc/make/nasm/pkgconf packages come
-    from pacman and their versions are written into ffmpeg-BUILDINFO.txt. Nothing
-    is installed system-wide.
+    (outside the repo) the first time. Its toolchain (gcc/make/nasm/pkgconf and
+    their whole dependency closure) is pinned the same way: every package file is
+    named with its SHA-256 in ffmpeg-min/msys2-packages.json, downloaded through
+    Save-PinnedFile and installed with `pacman -U` from the verified file. pacman
+    never syncs (-S), so nothing the repository serves today is installed, and
+    the build stops unless the installed set is exactly the pins. Nothing is
+    installed system-wide.
 
     Output in -OutDir: ffmpeg.exe, ffmpeg-LICENSE.txt (LGPL v2.1),
     ffmpeg-BUILDINFO.txt. The script fails unless the built exe lists every
@@ -61,7 +65,10 @@ $Msys2BaseUrls   = @(
     'https://repo.msys2.org/distrib/x86_64/msys2-base-x86_64-20260927.sfx.exe'
 )
 $Msys2BaseSha256 = 'ad336cccfda47758b5e15cda993fbba421115cb0b126697daef1ee4dfe37209f'
-$Msys2Packages   = @('make', 'diffutils', 'mingw-w64-x86_64-gcc', 'mingw-w64-x86_64-nasm', 'mingw-w64-x86_64-pkgconf')
+# The toolchain packages, each pinned by file and SHA-256. Re-pin all of them
+# together (new files from a fresh MSYS2's /var/cache/pacman/pkg): a partial
+# bump mixes package generations.
+$Msys2Pins = Get-Content -LiteralPath (Join-Path (Join-Path $PSScriptRoot 'ffmpeg-min') 'msys2-packages.json') -Raw | ConvertFrom-Json
 $Versions = [ordered]@{
     FFMPEG_VERSION = $inventory.ffmpegVersion
     OGG_VERSION    = '1.3.6'
@@ -98,6 +105,28 @@ function Test-MsysToolchain([string]$Root) {
         if (-not (Test-Path -LiteralPath (Join-Path $Root $tool) -PathType Leaf)) { return $false }
     }
     return $true
+}
+
+# The differences between the installed packages (`pacman -Q` lines, "name version")
+# and the pins: a pin missing or at another version, and any MinGW package that
+# is not pinned at all. Empty means the toolchain is exactly the pins.
+function Compare-MsysPinnedPackages([string[]]$Installed, $Pins) {
+    $have = @{}
+    foreach ($line in $Installed) {
+        $parts = "$line".Trim() -split '\s+'
+        if ($parts.Count -ge 2) { $have[$parts[0]] = $parts[1] }
+    }
+    $pinned = @{}
+    foreach ($pin in $Pins) { $pinned[$pin.name] = $pin.version }
+    $problems = @()
+    foreach ($name in $pinned.Keys | Sort-Object) {
+        if (-not $have.ContainsKey($name)) { $problems += "$name is not installed (pinned $($pinned[$name]))" }
+        elseif ($have[$name] -cne $pinned[$name]) { $problems += "$name is $($have[$name]), pinned $($pinned[$name])" }
+    }
+    foreach ($name in $have.Keys | Sort-Object) {
+        if ($name -like 'mingw-w64-*' -and -not $pinned.ContainsKey($name)) { $problems += "$name $($have[$name]) is installed but not pinned" }
+    }
+    return $problems
 }
 
 # Launch without a console, retain diagnostics and check the actual child's exit code.
@@ -147,12 +176,28 @@ if (-not (Test-Path -LiteralPath $bash)) {
 $env:MSYSTEM = 'MINGW64'
 $env:CHERE_INVOKING = '1'
 Write-Host 'MSYS2 toolchain'
-if (Test-MsysToolchain (Join-Path $WorkRoot 'msys64')) {
-    Write-Host 'Using the complete cached MSYS2 toolchain; compiler versions are recorded in the build info.'
+$msysRoot = Join-Path $WorkRoot 'msys64'
+function Get-MsysPinMismatches {
+    $list = Join-Path $WorkRoot 'msys2-installed.txt'
+    if (Test-Path -LiteralPath $list) { Remove-Item -LiteralPath $list -Force }
+    Invoke-Low $bash @('-lc', "pacman -Q > `"`$(cygpath -u '$list')`"")
+    return @(Compare-MsysPinnedPackages (Get-Content -LiteralPath $list) $Msys2Pins.packages)
+}
+if ((Test-MsysToolchain $msysRoot) -and (Get-MsysPinMismatches).Count -eq 0) {
+    Write-Host 'Using the cached MSYS2 toolchain; it is exactly the pinned packages.'
 }
 else {
-    Invoke-Low $bash @('-lc', "pacman -Sy --noconfirm >/dev/null && pacman -S --noconfirm --needed $($Msys2Packages -join ' ')")
-    if (-not (Test-MsysToolchain (Join-Path $WorkRoot 'msys64'))) { throw 'MSYS2 did not install the required compiler tools.' }
+    $packageDir = Join-Path $dl 'msys2-packages'
+    New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+    foreach ($package in $Msys2Pins.packages) {
+        Save-PinnedFile -Urls @($Msys2Pins.mirrors | ForEach-Object { "$_/$($package.repo)/$($package.file)" }) -Dest (Join-Path $packageDir $package.file) -Sha256 $package.sha256 | Out-Null
+    }
+    # Only the verified files: no -S, so pacman reads no repository database.
+    $files = ($Msys2Pins.packages | ForEach-Object { "'$($_.file)'" }) -join ' '
+    Invoke-Low $bash @('-lc', "cd `"`$(cygpath -u '$packageDir')`" && pacman -U --noconfirm --needed $files")
+    if (-not (Test-MsysToolchain $msysRoot)) { throw 'MSYS2 did not install the required compiler tools.' }
+    $mismatches = Get-MsysPinMismatches
+    if ($mismatches.Count -gt 0) { throw "The MSYS2 toolchain is not the pinned one: $($mismatches -join '; ')" }
 }
 
 # --- Sources ------------------------------------------------------------------
@@ -189,4 +234,6 @@ Copy-Item (Join-Path $work 'out\ffmpeg-LICENSE.txt') (Join-Path $OutDir 'ffmpeg-
 $info = Join-Path $OutDir 'ffmpeg-BUILDINFO.txt'
 Copy-Item (Join-Path $work 'out\ffmpeg-BUILDINFO.txt') $info -Force
 Add-Content -LiteralPath $info -Value "`nMSYS2 base: $($Msys2BaseUrls[0]) ($Msys2BaseSha256)"
+Add-Content -LiteralPath $info -Value ("MSYS2 packages (pinned, tools/release/ffmpeg-min/msys2-packages.json): " +
+    (($Msys2Pins.packages | ForEach-Object { "$($_.name) $($_.version)" }) -join ', '))
 Write-Host ("ffmpeg.exe {0:N1} MB -> {1}" -f ((Get-Item (Join-Path $OutDir 'ffmpeg.exe')).Length / 1MB), $OutDir)

@@ -136,5 +136,39 @@ tuning, naming).
   a lossless round trip legitimately returns one authored point as two).
   Chord templates have no position and are compared as a multiset via
   `ChordTemplate.Equals`.
+- `Linking/` — the linked-measures foundation (#76). **`MeasureContentIndex` is
+  THE measure-content comparison — detection, link verification, the load check
+  and the stored hash all go through it; never write a second one.** Content is
+  in beats, exact (relative `FractionalPosition`s, no rounding); time signatures
+  and beat counts are part of the key. Two roles (`MeasureContentKind`):
+  **Detection** compares what is played and ignores exactly what
+  `ChartSpacingEnforcer` changes — a sustain or hand-shape end within the
+  spacing gap of the next onset (or the run's end) reads "held", anchors compare
+  as the position in effect at each onset (5 ms snap), a hand shape from before
+  the run is clipped to it, derived `Ignore` is skipped; staccato never equals
+  legato. **Integrity** is the full stored content (exact sustains, notation
+  durations, notation voices, stored anchors/shapes, template names) — it
+  fingerprints ONE placement and never compares two. The gap is `SpacingGap`,
+  the ONE implementation: `ChartSpacingEnforcer.GetMinDistance` delegates to it,
+  and `ChartSpacingEnforcer.SpacingGapOf(config)` feeds
+  `MeasureContentOptions.Spacing` — key a chart with the gap it was cleaned
+  with. Every key starts with a header naming the format version
+  (`MeasureContentOptions.FormatVersion`) and every option, so a key or hash
+  from another rule never matches; bump the version with any change to what a
+  key holds (`MeasureContentIndexTests.TheHash_IsStable` pins one literal).
+  `LinkCandidateDetector.Detect(parts)` finds repeated whole-measure runs over
+  detection keys (greedy, longest first, no overlap, never starting or ending on
+  a rest, each run re-checked WHOLE); hand it one part for repeats within an
+  arrangement or one `LinkCompatibility` class (same instrument, strings,
+  tuning, capo, cents; never vocals or play-only) for shared runs. Groups are
+  named by letter (`Letter`); the detector's results are `LinkCandidateGroup` /
+  `LinkCandidatePlacement`, not the model.
+  The MODEL is `Domain/Project/LinkGroup` + `LinkPlacement` on
+  `ChartProject.LinkGroups` (real copies in every placement; the arrangement by
+  reference, the run as absolute barlines; the restorer, `ChartProjectPositions`
+  and `BeatScaleService` all carry it). `LinkRuns` resolves placements to
+  measures and keys, `LinkedRunCopier` plans one copy, `LinkGroupVerifier` is the
+  load check. Propagation and the per-action policy are services-side:
+  [linked-measures.md](../services/editing-invariants/linked-measures.md).
 - `Diagnostics/` — **currently empty**; the diagnostic/validation types are under
   `Domain/Validation/`, not here.

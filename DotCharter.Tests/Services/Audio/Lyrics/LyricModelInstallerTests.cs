@@ -15,8 +15,16 @@ public sealed class LyricModelInstallerTests : IDisposable
 
     public void Dispose() => BestEffortDelete.Directory(_root);
 
-    private static readonly LyricModelDownload Model =
-        new("lyric-align-en", "lyric-align-en-v1.zip", Sha256: "", ApproximateBytes: 1024);
+    /// <summary>The hash is the integrity story, so every download here carries the real
+    /// one of the archive it serves (<see cref="Archive" /> is byte-for-byte deterministic).</summary>
+    private static LyricModelDownload ModelFor(Stream archive)
+    {
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(archive)).ToLowerInvariant();
+        archive.Position = 0;
+        return new("lyric-align-en", "lyric-align-en-v1.zip", Sha256: hash, ApproximateBytes: 1024);
+    }
+
+    private static readonly LyricModelDownload Model = ModelFor(Archive());
 
     /// <summary>A well-formed model archive: the two files the installer requires.</summary>
     private static Stream Archive(bool nested = false, bool complete = true)
@@ -25,13 +33,20 @@ public sealed class LyricModelInstallerTests : IDisposable
         using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
         {
             var prefix = nested ? "lyric-align-en/" : "";
-            using (var w = new StreamWriter(zip.CreateEntry(prefix + "model.onnx").Open())) w.Write("onnx");
+            using (var w = new StreamWriter(Entry(zip, prefix + "model.onnx").Open())) w.Write("onnx");
             if (complete)
-                using (var w = new StreamWriter(zip.CreateEntry(prefix + "vocab.json").Open())) w.Write("{}");
+                using (var w = new StreamWriter(Entry(zip, prefix + "vocab.json").Open())) w.Write("{}");
         }
 
         buffer.Position = 0;
         return buffer;
+    }
+
+    private static ZipArchiveEntry Entry(ZipArchive zip, string name)
+    {
+        var entry = zip.CreateEntry(name);
+        entry.LastWriteTime = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero); // same bytes every call
+        return entry;
     }
 
     private LyricModelInstaller Installer(Func<string, CancellationToken, Task<Stream>> fetch) =>
@@ -85,7 +100,7 @@ public sealed class LyricModelInstallerTests : IDisposable
     {
         var installer = Installer((_, _) => Task.FromResult(Archive(nested: true)));
 
-        Assert.True(await installer.EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken));
+        Assert.True(await installer.EnsureInstalledAsync(ModelFor(Archive(nested: true)), ct: TestContext.Current.CancellationToken));
         Assert.True(File.Exists(Path.Combine(_root, Model.Id, "vocab.json")));
     }
 
@@ -98,7 +113,7 @@ public sealed class LyricModelInstallerTests : IDisposable
     {
         var installer = Installer((_, _) => Task.FromResult(Archive(complete: false)));
 
-        Assert.False(await installer.EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken));
+        Assert.False(await installer.EnsureInstalledAsync(ModelFor(Archive(complete: false)), ct: TestContext.Current.CancellationToken));
         Assert.False(installer.IsInstalled(Model.Id));
         Assert.False(Directory.Exists(Path.Combine(_root, Model.Id)));
     }
@@ -125,6 +140,35 @@ public sealed class LyricModelInstallerTests : IDisposable
 
         Assert.False(await installer.EnsureInstalledAsync(wrongHash, ct: TestContext.Current.CancellationToken));
         Assert.False(installer.IsInstalled(Model.Id));
+    }
+
+    /// <summary>
+    ///     A download that carries no expected hash is refused outright: the check
+    ///     passing because there was nothing to compare against is how a tampered
+    ///     archive would ride in on a catalogue entry that lost its hash.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ADownloadWithNoExpectedHashIsRefusedBeforeItIsFetched(string noHash)
+    {
+        var fetches = 0;
+        var installer = Installer((_, _) => { fetches++; return Task.FromResult(Archive()); });
+
+        Assert.False(await installer.EnsureInstalledAsync(
+            Model with { Sha256 = noHash }, ct: TestContext.Current.CancellationToken));
+        Assert.Equal(0, fetches);
+        Assert.False(installer.IsInstalled(Model.Id));
+        Assert.False(Directory.Exists(Path.Combine(_root, Model.Id)));
+    }
+
+    [Fact]
+    public async Task TheRightHashInstalls_UppercaseHexIncluded()
+    {
+        var installer = Installer((_, _) => Task.FromResult(Archive()));
+
+        Assert.True(await installer.EnsureInstalledAsync(
+            Model with { Sha256 = Model.Sha256.ToUpperInvariant() }, ct: TestContext.Current.CancellationToken));
     }
 
     /// <summary>Cancellation is the one thing that propagates.</summary>

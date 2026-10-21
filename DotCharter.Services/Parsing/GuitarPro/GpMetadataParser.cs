@@ -38,7 +38,10 @@ public static class GpMetadataParser
         foreach (var entry in unfolded)
         {
             var mb = entry.Element;
-            meta.Bars.Add(ReadBar(mb));
+            var bar = ReadBar(mb);
+            bar.SourceBarIndex = entry.OriginalIndex;
+            bar.RepeatPass = entry.RepeatPass;
+            meta.Bars.Add(bar);
             if (!firstKeyCaptured)
                 firstKeyCaptured = TryReadKey(mb, meta);
         }

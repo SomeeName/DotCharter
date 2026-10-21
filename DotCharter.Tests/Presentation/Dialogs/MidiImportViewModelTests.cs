@@ -107,6 +107,35 @@ public sealed class MidiImportViewModelTests : IDisposable
         Assert.False(h.Vm.ImportCommand.CanExecute(null), "a crashed conversion must not leave Import pressable");
     }
 
+    /// <summary>
+    ///     The draft maps pitches onto the arrangement's open strings, read the way the app
+    ///     sounds them (<see cref="SoundingPitch.OpenStringMidi" />): a 5-string bass is
+    ///     E A D G B, so a standard B E A D G bass is <c>-5 -5 -5 -5 -4</c>. The dialog used to
+    ///     measure 5 and 6 bass strings against B E A D G (C) and put every pitch a fourth low.
+    /// </summary>
+    [Theory]
+    [InlineData(4, new[] { 0, 0, 0, 0 }, new[] { 28, 33, 38, 43 })]
+    [InlineData(5, new[] { -5, -5, -5, -5, -4 }, new[] { 23, 28, 33, 38, 43 })]
+    [InlineData(6, new[] { -5, -5, -5, -5, -4, -4 }, new[] { 23, 28, 33, 38, 43, 48 })]
+    public async Task A_bass_draft_maps_onto_the_open_strings_the_app_sounds(int strings, int[] offsets, int[] expected)
+    {
+        IReadOnlyList<int>? open = null;
+        var h = new Harness((_, options) =>
+        {
+            open = options.OpenStringMidi;
+            return new MidiChartDraft([], []);
+        });
+        var bass = h.State.ActiveArrangement!;
+        bass.ArrangementType = ArrangementType.Bass;
+        bass.StringCount = strings;
+        foreach (var offset in offsets) bass.TuningPitches.Add(new TuningOffset(offset));
+
+        await h.OpenAsync(WriteFixtureMidiFile());
+
+        Assert.Equal(expected, open);
+        Assert.Equal(Enumerable.Range(0, strings).Select(i => SoundingPitch.OpenStringMidi(bass, i)!.Value), open);
+    }
+
     [Fact]
     public async Task An_honestly_empty_conversion_explains_itself_and_shows_no_error()
     {

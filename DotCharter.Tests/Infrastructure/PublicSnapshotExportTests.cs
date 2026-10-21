@@ -13,7 +13,7 @@ namespace DotCharter.Tests.Infrastructure;
 ///     is the PUBLIC JuceSharp snapshot. The module's own code runs under pwsh on fixture repos;
 ///     every private name here is assembled from pieces, like the module's.
 /// </summary>
-public sealed class PublicSnapshotExportTests
+public sealed partial class PublicSnapshotExportTests
 {
     private const string Dev = "-" + "Dev";
     private static string Root => TestPaths.RepoRoot();
@@ -81,8 +81,13 @@ public sealed class PublicSnapshotExportTests
 
             // A path-only leak: an innocuous file inside the add-on folder.
             WriteTree(Path.Combine(scratch, "addons-file"), "add" + "ons/x/readme.txt", "nothing to see\n");
+            // Nothing is skipped by content (#83): a file with a literal NUL is read as Latin-1,
+            // and a gzip fixture is decompressed in memory (the finding names the .gz and the
+            // line of the decompressed text).
+            WriteTree(Path.Combine(scratch, "nul-file"), "src/Odd.cs", $"// a\0b\n\nvar repo = \"DotCharter{Dev}\";\n");
+            WriteGzip(Path.Combine(scratch, "gz-file"), "fixtures/song.json.gz", "{\n  \"x\": 1,\n  \"path\": \"F:" + @"\\" + "Rock" + "smith" + @"\\dlc" + "\"\n}\n");
 
-            // Clean: near misses of every rule, and a binary file that carries a dev name past a NUL.
+            // Clean: near misses of every rule, and a clean binary file and gzip fixture.
             var clean = Path.Combine(scratch, "clean");
             WriteTree(clean, "README.md",
                 "https://github.com/SomeeName/DotCharter/releases/latest github.com/SomeeName/JuceSharp/pulls\n" +
@@ -92,7 +97,8 @@ public sealed class PublicSnapshotExportTests
                 UserPath(@"you\.local") + UserPath(@"Alex\AppData") + UserPath(@"A B\tone.json") + UserPath("NAME</c>") +
                 UserPath("&lt;name&gt;</c>") + UserPath(@"<user>\x") + UserPath("\u2026`") + UserPath("M\u00fcller\\x") +
                 "\"C:" + @"\\Users\\alice\\x" + "\"\n" + "'C:" + @"\\\\Users\\\\M\\u00fcller\\\\x" + "'\n");
-            File.WriteAllBytes(Path.Combine(clean, "blob.bin"), [0, .. Encoding.ASCII.GetBytes($"DotCharter{Dev}")]);
+            File.WriteAllBytes(Path.Combine(clean, "blob.bin"), [0, .. Encoding.ASCII.GetBytes($"DotCharter{Dev}elopment")]);
+            WriteGzip(clean, "fixtures/clean.json.gz", "{ \"song\": \"SomeeName/DotCharter\" }\n");
 
             var run = RunPwsh(scratch, $$"""
                 Import-Module {{Quote(Module)}} -Force
@@ -108,6 +114,8 @@ public sealed class PublicSnapshotExportTests
             foreach (var c in cases)
                 Assert.True(lines.Contains($"{c.Case}|{c.Rule}|docs/note.md:3"), $"'{c.Case}' was not reported as {c.Rule} at docs/note.md:3.\n{run.Output}");
             Assert.Contains($"addons-file|addons-path|{"add" + "ons"}/x/readme.txt:0", lines);
+            Assert.Contains("nul-file|dev-repo|src/Odd.cs:3", lines);
+            Assert.Contains("gz-file|personal-data|fixtures/song.json.gz:3", lines);
             Assert.Contains("clean|clean", lines);
         }
         finally
@@ -208,16 +216,28 @@ public sealed class PublicSnapshotExportTests
             Assert.Contains("leak check: clean", first.Output, StringComparison.Ordinal);
 
             // Release 2: a new dev commit; the previous snapshots come from the "public" repos.
+            // Same version first: public v1.2.3 already names the first snapshot, so the push
+            // preflight refuses, dry run included (#83). A public tag is never moved.
             WriteTree(devDc, "README.md", $"See SomeeName/DotCharter{Dev}, now with more.\n");
             Commit(devDc, "second dev commit", "README.md");
+            var sameVersion = RunExport(scratch, devDc, devJuce, "s2", publicDc1, publicJuce1);
+            Assert.True(sameVersion.ExitCode != 0, sameVersion.Output);
+            Assert.Contains($"DotCharter: tag v1.2.3 already exists for commit {dc1}", sameVersion.Output, StringComparison.Ordinal);
+            Assert.Contains("bump the version", sameVersion.Output, StringComparison.Ordinal);
+            // The unchanged JuceSharp reuses its public commit AND tag: no problem there.
+            Assert.DoesNotContain("JuceSharp: tag", sameVersion.Output, StringComparison.Ordinal);
+
+            WriteTree(devDc, "DotCharter.UI/DotCharter.UI.csproj", Csproj("1.2.4"));
+            Commit(devDc, "version 1.2.4", "DotCharter.UI/DotCharter.UI.csproj");
             var second = RunExport(scratch, devDc, devJuce, "s2", publicDc1, publicJuce1);
             Assert.True(second.ExitCode == 0, second.Output);
+            Assert.Contains("push preflight: both public repos accept this snapshot", second.Output, StringComparison.Ordinal);
             var publicDc2 = Path.Combine(scratch, "s2", "DotCharter");
             Assert.Equal(dc1, Git(publicDc2, "log", "-1", "--format=%P", "main"));
             Assert.Equal("2", Git(publicDc2, "rev-list", "--count", "main"));
             // A snapshot with a public parent is "Update to v<version>", and so is its tag.
-            Assert.Equal("Update to v1.2.3", Git(publicDc2, "log", "-1", "--format=%B", "main"));
-            Assert.EndsWith("\n\nUpdate to v1.2.3", Git(publicDc2, "cat-file", "-p", "v1.2.3"), StringComparison.Ordinal);
+            Assert.Equal("Update to v1.2.4", Git(publicDc2, "log", "-1", "--format=%B", "main"));
+            Assert.EndsWith("\n\nUpdate to v1.2.4", Git(publicDc2, "cat-file", "-p", "v1.2.4"), StringComparison.Ordinal);
             // JuceSharp did not change: the previous public commit is reused, not stacked, and
             // its tag keeps that commit's message, so it is the tag already public.
             var publicJuce2 = Path.Combine(scratch, "s2", "JuceSharp.git");
@@ -228,10 +248,12 @@ public sealed class PublicSnapshotExportTests
             // Release 3: JuceSharp moves on with nothing for the rename map to change, so the
             // public JuceSharp tree IS the dev gitlink's and the dev pin carries over.
             WriteTree(devJuce, "README.md", "Issues: the tracker\n");
-            Commit(devJuce, "native work 2", "README.md");
+            WriteTree(devJuce, "Directory.Build.props", Csproj("9.8.8"));
+            Commit(devJuce, "native work 2", "README.md", "Directory.Build.props");
             var devJuce2 = Git(devJuce, "rev-parse", "HEAD");
             WriteTree(devDc, "tools/setup/native-runtime.json", Manifest((devJuceCommit, DllHash, HostHash), (devJuce2, DllHash2, HostHash2)));
-            Git(devDc, "add", "--", "tools/setup/native-runtime.json");
+            WriteTree(devDc, "DotCharter.UI/DotCharter.UI.csproj", Csproj("1.2.5"));
+            Git(devDc, "add", "--", "tools/setup/native-runtime.json", "DotCharter.UI/DotCharter.UI.csproj");
             Git(devDc, "update-index", "--cacheinfo", $"160000,{devJuce2},JuceSharp");
             Commit(devDc, "bump JuceSharp");
             var third = RunExport(scratch, devDc, devJuce, "s3", publicDc2, Path.Combine(scratch, "s2", "JuceSharp.git"));
@@ -240,8 +262,8 @@ public sealed class PublicSnapshotExportTests
             var publicJuce3 = Path.Combine(scratch, "s3", "JuceSharp.git");
             var juce3 = Git(publicJuce3, "rev-parse", "main");
             Assert.Equal(juce1, Git(publicJuce3, "log", "-1", "--format=%P", "main"));
-            Assert.Equal("Update to v9.8.7", Git(publicJuce3, "log", "-1", "--format=%B", "main"));
-            Assert.EndsWith("\n\nUpdate to v9.8.7", Git(publicJuce3, "cat-file", "-p", "v9.8.7"), StringComparison.Ordinal);
+            Assert.Equal("Update to v9.8.8", Git(publicJuce3, "log", "-1", "--format=%B", "main"));
+            Assert.EndsWith("\n\nUpdate to v9.8.8", Git(publicJuce3, "cat-file", "-p", "v9.8.8"), StringComparison.Ordinal);
             Assert.Equal(Git(devJuce, "rev-parse", "HEAD^{tree}"), Git(publicJuce3, "rev-parse", "main^{tree}"));
             Assert.Matches($"^160000 commit {juce3}\tJuceSharp$", Git(publicDc3, "ls-tree", "main", "JuceSharp"));
             var manifest3 = Git(publicDc3, "show", "main:tools/setup/native-runtime.json");
@@ -286,20 +308,32 @@ public sealed class PublicSnapshotExportTests
 
     private static string UserPath(string rest) => "C:" + @"\Users\" + rest + "\n";
 
-    private static void WriteTree(string root, string relative, string content)
+    // A csproj / Directory.Build.props carrying only <Version>, as the export reads it.
+    internal static string Csproj(string version) => $"<Project>\n  <PropertyGroup>\n    <Version>{version}</Version>\n  </PropertyGroup>\n</Project>\n";
+
+    private static void WriteGzip(string root, string relative, string content)
+    {
+        var path = Path.Combine(root, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var file = File.Create(path);
+        using var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionLevel.SmallestSize);
+        gzip.Write(Encoding.UTF8.GetBytes(content));
+    }
+
+    internal static void WriteTree(string root, string relative, string content)
     {
         var path = Path.Combine(root, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
     }
 
-    private static void Commit(string repo, string message, params string[] paths)
+    internal static void Commit(string repo, string message, params string[] paths)
     {
         if (paths.Length > 0) Git(repo, ["add", "--", .. paths]);
         Git(repo, "-c", "user.name=Dev", "-c", "user.email=dev@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "-m", message);
     }
 
-    private static string Git(string cwd, params string[] arguments)
+    internal static string Git(string cwd, params string[] arguments)
     {
         var info = new ProcessStartInfo("git")
         {
@@ -321,16 +355,16 @@ public sealed class PublicSnapshotExportTests
     }
 
     // git writes read-only object files; clear the flag before deleting.
-    private static void DeleteTree(string path)
+    internal static void DeleteTree(string path)
     {
         foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
             File.SetAttributes(file, FileAttributes.Normal);
         Directory.Delete(path, true);
     }
 
-    private static string Quote(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
+    internal static string Quote(string text) => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
 
-    private static (int ExitCode, string Output) RunPwsh(string scratch, string script)
+    internal static (int ExitCode, string Output) RunPwsh(string scratch, string script)
     {
         var file = Path.Combine(Directory.CreateTempSubdirectory("dc-public-pwsh-").FullName, "case.ps1");
         File.WriteAllText(file, "$ErrorActionPreference = 'Stop'\n" + script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));

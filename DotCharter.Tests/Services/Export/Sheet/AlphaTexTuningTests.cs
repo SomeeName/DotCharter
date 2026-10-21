@@ -69,15 +69,12 @@ public class AlphaTexTuningTests
     ///     The cross-assert that keeps the two standard rows from drifting again:
     ///     the pitch CLASSES the exporter engraves must be the ones
     ///     <see cref="TuningUtilities.GetTuningNames" /> names, for every string
-    ///     count whose base is unambiguous. 5 is excluded on purpose — the
-    ///     exporter reads a 5-string as a BASS (B0 E1 A1 D2 G2, which is what its
-    ///     emitted instrument program says too) while the naming table reads it
-    ///     off the six-string row; that ambiguity is documented in
-    ///     <see cref="TuningOffsetResolution" /> and has to be resolved at the
-    ///     importers, not here.
+    ///     count. 5 agrees too: the exporter and the naming table both read it off
+    ///     the six-string row (E A D G B), and the GP importers subtract that row.
     /// </summary>
     [Theory]
     [InlineData(4)]
+    [InlineData(5)]
     [InlineData(6)]
     [InlineData(7)]
     [InlineData(8)]

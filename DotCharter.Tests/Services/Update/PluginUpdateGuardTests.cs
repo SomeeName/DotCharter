@@ -120,7 +120,8 @@ public sealed class PluginUpdateGuardTests : IDisposable
         var zipPath = WriteSplitZip("public.zip", plugin: false);
 
         using var service = new GitHubUpdateService(new Version(0, 70, 0), installDir: install,
-            downloadDir: _temp.Path, pluginFiles: Declared);
+            downloadDir: _temp.Path, pluginFiles: Declared, releaseSigningKey: TestReleaseSigning.PublicKey);
+        service.TrustDownloadForTests(zipPath);
         var error = Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
 
         Assert.Contains("carries plugins (" + Plugin + ")", error.Message, StringComparison.Ordinal);
@@ -141,7 +142,8 @@ public sealed class PluginUpdateGuardTests : IDisposable
         var zipPath = WriteSplitZip("plugin.zip", plugin: true);
 
         using var service = new GitHubUpdateService(new Version(0, 70, 0), installDir: install,
-            downloadDir: _temp.Path, pluginFiles: Declared);
+            downloadDir: _temp.Path, pluginFiles: Declared, releaseSigningKey: TestReleaseSigning.PublicKey);
+        service.TrustDownloadForTests(zipPath);
         var error = Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
 
         Assert.DoesNotContain("carries plugins", error.Message, StringComparison.Ordinal);
@@ -231,7 +233,7 @@ public sealed class PluginUpdateGuardTests : IDisposable
     private GitHubUpdateService NewService(FakeHttpMessageHandler handler)
         => new(new Version(0, 42, 0), handler: handler,
             installDir: Path.Combine(_temp.Path, "install"),
-            downloadDir: Path.Combine(_temp.Path, "downloads"), pluginFiles: Declared);
+            downloadDir: Path.Combine(_temp.Path, "downloads"), pluginFiles: Declared, releaseSigningKey: TestReleaseSigning.PublicKey);
 
     private static FakeHttpMessageHandler Serve(ReleaseFixture release)
         => FakeReleaseHttp.Serve("v0.43.0", AssetName, release.Zip, release.ManifestBytes,

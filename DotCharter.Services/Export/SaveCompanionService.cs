@@ -169,17 +169,12 @@ public sealed class SaveCompanionService : ISaveCompanionService
         var audio = ResolveAudio(directory, snapshot.AudioFileName);
         var coverArt = ResolveCoverArt(directory, snapshot.Chart.CoverArtPath);
 
-        var dto = Rs2DlcProjectBuilder.Build(snapshot, new Rs2DlcProjectBuilder.Rs2DlcBuildOptions(
-            AudioFileName: RelativeToProject(directory, audio),
-            CoverArtFileName: RelativeToProject(directory, coverArt),
-            AudioLengthMs: audioLengthMs,
-            FallbackCharter: config.DefaultCharterName,
-            IncludeVocals: VocalsExportPolicy.IncludeVocals(config)));
+        var dto = DlcBuilderProjectFile.Build(config, snapshot, directory, audio, coverArt, audioLengthMs);
 
         // The PROJECT ROOT, not the bundle: SaveDlcBuilderXmlBundle swaps the
         // bundle in by renaming the old one aside, so a file written inside it is
         // moved to 'DTRS XML.old' on the next save and deleted on the one after.
-        var path = Path.Combine(directory, Rs2DlcProjectBuilder.FileNameFor(snapshot));
+        var path = DlcBuilderProjectFile.PathIn(directory, snapshot);
 
         // The .rs2dlc is DLC Builder's own project format, so the charter opens it
         // and assigns TONES there — which we always write empty. Overwrite only the
@@ -195,19 +190,6 @@ public sealed class SaveCompanionService : ISaveCompanionService
         _logger.Info(AppLogCategory.Project,
             $"DLC Builder project written. Path='{path}', arrangements={dto.Arrangements.Length}, key='{dto.DlcKey}'.");
         return path;
-    }
-
-    /// <summary>A resolved absolute path expressed the way the project stores it —
-    /// a bare file name when it is inside the project folder, otherwise absolute.</summary>
-    private static string RelativeToProject(string directory, string? absolutePath)
-    {
-        if (string.IsNullOrWhiteSpace(absolutePath)) return "";
-
-        var parent = Path.GetDirectoryName(Path.GetFullPath(absolutePath));
-        return string.Equals(parent, Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar),
-            StringComparison.OrdinalIgnoreCase)
-            ? Path.GetFileName(absolutePath)
-            : absolutePath;
     }
 
     public async Task<string?> BuildPsarcAsync(
@@ -404,18 +386,16 @@ public sealed class SaveCompanionService : ISaveCompanionService
     }
 
     /// <summary>The chart's cover art on disk. CoverArtPath is a bare file name
-    /// relative to the project folder (like AudioFileName), but may be absolute.
-    /// Returns "" when unset or missing, so the builder generates a placeholder
+    /// relative to the project folder; a rooted, UNC or escaping one is refused
+    /// unprobed (<see cref="ProjectRelativePath" />). Returns "" when unset, refused or missing, so the builder generates a placeholder
     /// rather than the DDS pipeline choking on a bad path.</summary>
     private static string ResolveCoverArt(string directory, string coverArtPath)
     {
         if (string.IsNullOrWhiteSpace(coverArtPath)) return "";
 
-        var full = Path.IsPathRooted(coverArtPath)
-            ? coverArtPath
-            : Path.Combine(directory, coverArtPath);
-
-        return File.Exists(full) ? full : "";
+        // Copied into the export, so only a file inside the project folder qualifies.
+        var full = ProjectRelativePath.TryResolve(directory, coverArtPath);
+        return full != null && File.Exists(full) ? full : "";
     }
 
     private static string ProjectDirectory(string projectPath) =>

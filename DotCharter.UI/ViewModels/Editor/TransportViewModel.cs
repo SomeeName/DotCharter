@@ -282,8 +282,13 @@ public partial class TransportViewModel : ViewModelBase, IEditorTransport
         // possible instead of waiting for the UI thread to finish
         // inflating MainWindow and run the restore continuation below.
         var (savedChain, savedInstrumentPath) = LoadPersistedVstSelections();
-        if (savedChain.Count > 0)
-            _audioService.SetGuitarVstChain(savedChain);
+        // Only a path the scanner reported is handed to the engine. The chain comes out
+        // of a settings file, and "the path exists" is not a reason to load native code
+        // from it: a restored backup or a copied config could name a plug-in anywhere.
+        // The rest stay in the chain as slots that say they are not loaded.
+        var loadable = savedChain.Where(e => IsScannedPlugin(plugins, e.PluginPath)).ToList();
+        if (loadable.Count > 0)
+            _audioService.SetGuitarVstChain(loadable);
         var instrumentKnown = savedInstrumentPath != null && plugins.Any(p =>
             string.Equals(p.PluginPath, savedInstrumentPath, StringComparison.OrdinalIgnoreCase));
         if (instrumentKnown)
@@ -304,10 +309,14 @@ public partial class TransportViewModel : ViewModelBase, IEditorTransport
                 InstrumentVstPlugins.Add(p);
             }
 
-            RestoreLastVstSelections(savedChain, instrumentKnown ? savedInstrumentPath : null);
+            RestoreLastVstSelections(savedChain, loadable, instrumentKnown ? savedInstrumentPath : null);
             _vstRestoreComplete = true;
         });
     }
+
+    private static bool IsScannedPlugin(IReadOnlyList<VstPluginInfo> scanned, string? path)
+        => !string.IsNullOrWhiteSpace(path) &&
+           scanned.Any(p => string.Equals(p.PluginPath, path, StringComparison.OrdinalIgnoreCase));
 
     partial void OnSelectedMidiInstrumentIndexChanged(int value)
     {

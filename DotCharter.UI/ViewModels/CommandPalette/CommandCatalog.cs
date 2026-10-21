@@ -121,6 +121,7 @@ public static class CommandCatalog
         list.Add(FromCommand("edit.pasteSpecial", "Menu_PasteSpecial", ed, vm.ShellDialogs.OpenPasteSpecialCommand,
             () => k.PasteSpecial));
         list.Add(FromCommand("edit.selectAll", "Keybind_SelectAll", ed, vm.SelectAllCommand, () => k.SelectAll));
+        list.Add(FromAction("edit.linkIdentical", "LinkIdentical_Title", ed, () => vm.ChartEditor.LinkedMeasures?.LinkIdentical()));
         list.Add(FromCommand("edit.selectLike", "Keybind_SelectLike", ed, vm.SelectLikePatternCommand,
             () => k.SelectLike));
         list.Add(FromCommand("edit.patternBuilder", "Keybind_PatternBuilder", ed,
@@ -173,14 +174,10 @@ public static class CommandCatalog
         list.Add(FromAction("view.toggleWaveform", "Keybind_ToggleWaveform", vw,
             () => vm.ProjectState.ShowWaveform = !vm.ProjectState.ShowWaveform, () => k.ToggleWaveform));
         list.Add(FromCommand("view.toggleMinimap", "Menu_ShowMinimap", vw, vm.ToggleMinimapCommand));
-        // View ▸ Timeline Rows — the five ActiveRibbon flags. Their pill strip
-        // above the timeline was deleted (the toggles became View-menu rows),
-        // so the menu is their ONLY other door while the palette already
-        // carried every neighbouring View toggle. Titles are composed
-        // "Timeline Rows · X" from the same keys the menu rows wear, so the
-        // two surfaces cannot drift and no new strings are minted. The ribbon
-        // is read at CLICK time — it follows the focused track and is null
-        // with no chart, in which case the toggle is a no-op like the menu's.
+        // View ▸ Timeline Rows — the ActiveRibbon flags, twins of the menu rows.
+        // Titles are "Timeline Rows · X" from the keys the menu rows wear, so the
+        // two surfaces cannot drift. The ribbon is read at CLICK time — it follows
+        // the focused track and is null with no chart (then a no-op, like the menu).
         string RowTitle(string key) => $"{l["Timeline_Rows"]} · {l[key]}";
         void AddRowToggle(string id, string titleKey, Action<RibbonVisibility> flip) =>
             list.Add(new AppCommand(id, RowTitle(titleKey), l[vw], () =>
@@ -198,6 +195,10 @@ public static class CommandCatalog
             ribbon => ribbon.ShowTones = !ribbon.ShowTones);
         AddRowToggle("view.toggleRowMeasureInfo", "Ribbon_MeasureInfo",
             ribbon => ribbon.ShowMeasureMetadata = !ribbon.ShowMeasureMetadata);
+        AddRowToggle("view.toggleRowLinks", "Ribbon_Links",
+            ribbon => ribbon.ShowLinks = !ribbon.ShowLinks);
+        AddRowToggle("view.toggleLaneAutoHide", "TimelineLanes_AutoHide", ribbon => ribbon.AutoHideEmpty = !ribbon.AutoHideEmpty);
+        AddRowToggle("view.toggleLaneCompact", "TimelineLanes_Compact", ribbon => ribbon.CompactRows = !ribbon.CompactRows);
         list.Add(FromCommand("view.zoomIn", "Keybind_ZoomIn", vw, vm.ZoomInCommand, () => k.ZoomIn));
         list.Add(FromCommand("view.zoomOut", "Keybind_ZoomOut", vw, vm.ZoomOutCommand, () => k.ZoomOut));
         list.Add(FromCommand("view.followPlayhead", "Menu_FollowPlayhead", vw, vm.ToggleTimelineFollowCommand));
@@ -247,6 +248,7 @@ public static class CommandCatalog
         // === Tools ===
         const string to = "Menu_Tools";
         list.Add(FromCommand("tools.generateFhp", "Menu_GenerateFhp", to, vm.GenerateFhpCommand));
+        list.Add(FromCommand("tools.linkedMeasures", "Menu_LinkedMeasures", to, vm.ShellDialogs.OpenLinkGroupsCommand));
         list.Add(FromCommand("tools.generateFhpForSelection", "Menu_GenerateFhpForSelection", to,
             vm.GenerateFhpForSelectionCommand));
         list.Add(FromAction("tools.editFhp", "Keybind_EditFhp", to, () => vm.ShellDialogs.OpenFhp(), () => k.EditFhp));
@@ -465,8 +467,7 @@ public static class CommandCatalog
         }, () => k.DuplicateSelection));
         list.Add(FromAction("edit.deleteRelated", "Keybind_DeleteRelated", ed,
             () => global.DeleteSelectedRelated(vm.ChartEditor.FocusArea), () => k.DeleteRelated));
-        list.Add(FromCommand("edit.checkpoints", "Checkpoints_Menu", ed,
-            vm.ShellDialogs.OpenCheckpointsCommand));
+        list.Add(FromCommand("edit.checkpoints", "Checkpoints_Menu", ed, vm.ShellDialogs.OpenCheckpointsCommand));
         // Edit ▸ Bookmarks: ten menu rows with typed Int32 parameters, mirrored
         // here the way the Open Recent rows are. The keybind digit family
         // (BookmarkBase) is excluded from palette COVERAGE with a fair excuse

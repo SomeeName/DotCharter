@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Automation.Peers;
 using Avalonia.Controls;
@@ -194,23 +195,145 @@ public sealed class RocksmithExportLayoutUiPerfSmokeTests(ITestOutputHelper outp
         }, CancellationToken.None);
     }
 
-    /// <summary>#756: without the user's key file every package is written unencrypted,
-    /// and the Package section says so (the Full variant); with keys it says nothing.</summary>
-    [Fact]
-    public async Task UnencryptedHint_ShowsOnlyWhenPackagesAreWrittenUnencrypted()
+    /// <summary>
+    ///     A plain package comes with a warning box under the package form (the Plain variant): it lays out
+    ///     with a size inside the body, its text and its DLC Builder button fit whole (in de-DE and ja-JP
+    ///     too, under the release's localized pass), the button is named, and the result line shows
+    ///     once a project was written. An encrypted package (every other variant) shows no box.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Sizes))]
+    public async Task PlainPackageWarning_ShowsOnlyForAPlainPackage_AndItsTextAndButtonFit(int width, int height)
     {
         await HeadlessSessionFixture.Dispatch(() =>
         {
-            WithDialog(FakeRocksmithExportScreen.Full(), 1280, 720, (view, _) =>
+            WithDialog(FakeRocksmithExportScreen.Plain(), width, height, (view, window) =>
             {
-                var hint = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "UnencryptedPackageHint");
-                Assert.True(hint.IsEffectivelyVisible);
-                Assert.True(hint.Bounds is { Width: > 1, Height: > 1 }, $"unencrypted hint laid out as {hint.Bounds}");
-                Assert.Equal(LocalizationService.Instance["Dialog_Export_WrittenUnencrypted"], hint.Text);
+                var loc = LocalizationService.Instance;
+                var box = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PlainPackageWarning");
+                // The Package form sits below the findings: scroll it into view for the picture.
+                box.BringIntoView();
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                Capture(window, $"rocksmith-export-plain-warning-{width}x{height}.png");
+                Assert.True(box.IsEffectivelyVisible);
+                Assert.True(box.Bounds is { Width: > 100, Height: > 40 }, $"warning box laid out as {box.Bounds}");
+
+                var text = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "PlainPackageWarningText");
+                Assert.Equal(loc["Dialog_Export_PlainPackageWarning"], text.Text);
+                Assert.True(text.Bounds is { Width: > 100, Height: > 12 }, $"warning text laid out as {text.Bounds}");
+                Assert.True(text.DesiredSize.Height <= text.Bounds.Height + 0.5, $"warning text is clipped: {text.DesiredSize} in {text.Bounds}");
+
+                var button = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ExportDlcBuilderProjectButton");
+                Assert.True(button.IsEffectivelyVisible);
+                Assert.True(button.Bounds is { Width: > 1, Height: >= 30 }, $"DLC Builder button laid out as {button.Bounds}");
+                Assert.Equal(loc["Dialog_Export_DlcBuilderProject"], ControlAutomationPeer.CreatePeerForElement(button).GetName());
+                var label = button.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == loc["Dialog_Export_DlcBuilderProject"]);
+                Assert.True(label.Bounds.Width + 0.5 >= label.DesiredSize.Width, $"the button label is clipped: {label.DesiredSize} in {label.Bounds}");
+
+                var inBody = RectIn(Body(view), view);
+                var b = RectIn(box, view);
+                Assert.True(b.Left >= inBody.Left - 0.5 && b.Right <= inBody.Right + 0.5 && b.Top >= inBody.Top - 0.5 && b.Bottom <= inBody.Bottom + 0.5,
+                    $"warning {b} is not whole inside the body {inBody}");
+                var inner = RectIn(button, view);
+                Assert.True(b.Contains(inner), $"the button {inner} leaves the warning {b}");
+
+                var message = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "DlcBuilderProjectMessageText");
+                Assert.True(message.IsEffectivelyVisible);
+                Assert.True(message.DesiredSize.Height <= message.Bounds.Height + 0.5, $"result line is clipped: {message.DesiredSize} in {message.Bounds}");
+                Assert.True(b.Contains(RectIn(message, view)), "the result line leaves the warning");
             });
-            WithDialog(FakeRocksmithExportScreen.Default(), 1280, 720, (view, _) =>
-                Assert.False(view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "UnencryptedPackageHint").IsEffectivelyVisible));
+            WithDialog(FakeRocksmithExportScreen.Default(), width, height, (view, _) =>
+            {
+                Assert.False(view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PlainPackageWarning").IsEffectivelyVisible);
+                Assert.False(view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ExportDlcBuilderProjectButton").IsEffectivelyVisible);
+            });
         }, CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     The findings layout converges in every shipped culture at every window width from a small
+    ///     laptop to a desktop: each width is laid out on its own, and a measure/arrange cycle throws
+    ///     "Infinite layout loop detected" out of <c>UpdateLayout</c>. Every row also
+    ///     keeps its Go to and Fix in the same two columns whether it shows them or not, so the links
+    ///     line up down the list, and a link a row does not show is blank, not clickable, not focusable.
+    /// </summary>
+    [Fact]
+    public async Task TheFindings_LayOutWithoutALoop_AndTheirLinksLineUp_AtEveryWidthAndCulture()
+    {
+        var problems = new List<string>();
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var restore = LocalizationService.Instance.ConfiguredCulture;
+            try
+            {
+                foreach (var culture in new[] { "en-US", "de-DE", "ja-JP" })
+                {
+                    LocalizationService.Instance.SetConfiguredCulture(culture);
+                    CultureInfo.CurrentUICulture = LocalizationService.Instance.Culture;
+                    var view = new RocksmithExportDialogView { DataContext = FakeRocksmithExportScreen.Full() };
+                    var window = new Window { Width = 1000, Height = 1080, Content = DialogHost.Preview(view) };
+                    try
+                    {
+                        for (var width = 1000; width <= 1960; width += 8)
+                        {
+                            window.Width = width;
+                            try
+                            {
+                                if (!window.IsVisible) window.Show();
+                                Dispatcher.UIThread.RunJobs();
+                                window.UpdateLayout();
+                            }
+                            catch (InvalidOperationException e)
+                            {
+                                // A loop leaves the layout queue spinning: the rest of this culture's sweep says nothing more.
+                                problems.Add($"{culture} {width}x1080: {e.Message}");
+                                break;
+                            }
+
+                            LinksLineUp(view, $"{culture} {width}x1080", problems);
+                        }
+                    }
+                    finally
+                    {
+                        window.Close();
+                    }
+                }
+            }
+            finally
+            {
+                LocalizationService.Instance.SetConfiguredCulture(restore);
+                CultureInfo.CurrentUICulture = LocalizationService.Instance.Culture;
+            }
+        }, CancellationToken.None);
+        Assert.True(problems.Count == 0, string.Join("\n", problems.OrderBy(p => p.Contains("layout loop", StringComparison.Ordinal) ? 0 : 1).Take(20)));
+    }
+
+    private static void LinksLineUp(Control view, string at, List<string> problems)
+    {
+        var list = view.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "FindingsList");
+        var rows = list.GetVisualDescendants().OfType<ListBoxItem>().Where(r => r.IsEffectivelyVisible).ToList();
+        var shown = rows.Count(r => r.DataContext is IExportFinding { HasFix: true });
+        var absent = rows.Count(r => r.DataContext is IExportFinding { HasFix: false });
+        if (shown == 0 || absent == 0) problems.Add($"{at}: the realized rows do not mix rows with and without Fix ({shown} / {absent})");
+        foreach (var column in new[] { 3, 4 })
+        {
+            var lefts = new HashSet<double>();
+            foreach (var row in rows)
+            {
+                var link = row.GetVisualDescendants().OfType<Button>().Single(b => Grid.GetColumn(b) == column);
+                lefts.Add(Math.Round(RectIn(link, list).Left, 1));
+                var finding = (IExportFinding)row.DataContext!;
+                var wanted = column == 3 ? finding.HasTime : finding.HasFix;
+                if (link.Bounds.Width < 1) problems.Add($"{at}: a link in column {column} takes no width, so the columns cannot line up");
+                if (!wanted && (link.Opacity > 0 || link.IsHitTestVisible || link.Focusable))
+                    problems.Add($"{at}: a row's absent link in column {column} can still be seen, clicked or focused");
+                if (wanted && (link.Opacity < 1 || !link.IsHitTestVisible))
+                    problems.Add($"{at}: a row's link in column {column} is hidden");
+            }
+
+            if (lefts.Count != 1) problems.Add($"{at}: the links in column {column} start at {string.Join(", ", lefts)}");
+        }
     }
 
     private static void Capture(Window window, string file)

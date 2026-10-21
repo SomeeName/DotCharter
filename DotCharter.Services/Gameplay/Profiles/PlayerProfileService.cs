@@ -383,8 +383,9 @@ public sealed class PlayerProfileService : IPlayerProfileService
             {
                 try
                 {
-                    var stale = Path.Combine(dataDir, profile.AvatarFileName);
-                    if (File.Exists(stale)) File.Delete(stale);
+                    // Only ever a file inside this profile's data folder.
+                    var stale = ProjectRelativePath.TryResolve(dataDir, profile.AvatarFileName);
+                    if (stale != null && File.Exists(stale)) File.Delete(stale);
                 }
                 catch
                 {
@@ -404,8 +405,8 @@ public sealed class PlayerProfileService : IPlayerProfileService
         {
             var profile = LoadLocked().Profiles.FirstOrDefault(p => p.Id == id);
             if (profile == null || string.IsNullOrEmpty(profile.AvatarFileName)) return null;
-            var path = Path.Combine(DataDirectoryLocked(id), profile.AvatarFileName);
-            return File.Exists(path) ? path : null;
+            var path = ProjectRelativePath.TryResolve(DataDirectoryLocked(id), profile.AvatarFileName);
+            return path != null && File.Exists(path) ? path : null;
         }
     }
 
@@ -528,10 +529,13 @@ public sealed class PlayerProfileService : IPlayerProfileService
                     return null;
                 }
 
-                // Avatar referenced but not shipped in the archive: drop the
-                // reference so the UI falls back to the accent dot cleanly.
+                // Avatar referenced but not shipped in the archive, or naming a
+                // file outside the profile's data folder (the app later READS and
+                // DELETES it): drop the reference so the UI falls back to the
+                // accent dot cleanly. A refused name is never probed.
                 if (!string.IsNullOrEmpty(imported.AvatarFileName) &&
-                    !File.Exists(Path.Combine(dataDir, imported.AvatarFileName)))
+                    (ProjectRelativePath.TryResolve(dataDir, imported.AvatarFileName) is not { } avatar ||
+                     !File.Exists(avatar)))
                 {
                     imported.AvatarFileName = "";
                 }

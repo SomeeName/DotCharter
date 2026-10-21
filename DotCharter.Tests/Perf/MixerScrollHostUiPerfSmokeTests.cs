@@ -78,7 +78,7 @@ public sealed class MixerScrollHostUiPerfSmokeTests
                 for (var y = viewportTop + 20; y < viewportTop + host.Viewport.Height - 10; y += 40)
                 {
                     host.Offset = default;
-                    window.UpdateLayout();
+                    Settle(window);
                     var point = new Point(x, y);
 
                     foreach (var direction in new[] { -1, 1 })
@@ -329,29 +329,70 @@ public sealed class MixerScrollHostUiPerfSmokeTests
         Settle(mixer.Window);
 
         var centre = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), mixer.Window)!.Value;
-        var hit = mixer.Window.InputHitTest(centre) as Visual;
-        // Hit testing reads the composed scene, which can trail the layout by a
-        // frame after a programmatic scroll; let it catch up (bounded).
-        for (var frame = 0; frame < 5 && !(hit != null && (hit == control || control.IsVisualAncestorOf(hit))); frame++)
+        // Hit testing reads the composed scene, which can trail the layout after a programmatic
+        // scroll; tick until it catches up (bounded, #55), then fail with what it hit instead.
+        Visual? Hit() => mixer.Window.InputHitTest(centre) as Visual;
+        bool OnControl() => Hit() is { } h && (h == control || control.IsVisualAncestorOf(h));
+        RenderQuiescence.WaitUntil(OnControl, () => Settle(mixer.Window), () =>
         {
-            Settle(mixer.Window);
-            hit = mixer.Window.InputHitTest(centre) as Visual;
-        }
-
-        Assert.True(hit != null && (hit == control || control.IsVisualAncestorOf(hit)),
-            $"{control.GetType().Name} is not under the pointer at {centre} (hit {hit?.GetType().Name ?? "nothing"} " +
-            $"{(hit as Control)?.Name} in {string.Join("/", hit?.GetVisualAncestors().Take(6).Select(a => a.GetType().Name) ?? [])}; " +
-            $"offset {host.Offset.Y:0} of {max:0}).");
+            var hit = Hit();
+            return $"{control.GetType().Name} is not under the pointer at {centre} (hit {hit?.GetType().Name ?? "nothing"} " +
+                   $"{(hit as Control)?.Name} in {string.Join("/", hit?.GetVisualAncestors().Take(6).Select(a => a.GetType().Name) ?? [])}; " +
+                   $"offset {host.Offset.Y:0} of {max:0}).";
+        });
         return centre;
     }
 
     private static void Wheel(Window window, Point point, int direction, RawInputModifiers modifiers = RawInputModifiers.None)
     {
+        // The notch is routed by the composed scene's hit test, which can trail the previous notch's
+        // scroll under load (#55): wait until the scene under the pointer stops changing first.
+        SettleAt(window, point);
         window.MouseWheel(point, new Vector(0, direction), modifiers);
         Settle(window);
     }
 
+    /// <summary>Settles, then ticks until hit testing at <paramref name="point" /> returns the same
+    /// visual on two consecutive frames — layout is idle, so the scene has caught up there.</summary>
+    private static void SettleAt(Window window, Point point)
+    {
+        Settle(window);
+        Visual? last = null;
+        var first = true;
+        RenderQuiescence.WaitUntil(
+            () =>
+            {
+                var hit = window.InputHitTest(point) as Visual;
+                var same = !first && hit == last;
+                (first, last) = (false, hit);
+                return same;
+            },
+            () => SettleOnce(window),
+            () => $"hit testing at {point} kept changing ({last?.GetType().Name ?? "nothing"} on the last frame).");
+    }
+
+    /// <summary>
+    ///     Runs layout, forces a render, then waits (bounded, #55) until the composed scene agrees with
+    ///     the layout: hit testing a visible control at its layout centre must find that control.
+    ///     <c>ForceRenderTimerTick</c> only prompts a render, so under load the scene used for hit
+    ///     testing can trail layout, and a wheel at a stale position reads as a product fault.
+    /// </summary>
     private static void Settle(Window window)
+    {
+        SettleOnce(window);
+        var probe = FindProbe(window);
+        if (probe is null) return;
+
+        var (control, centre) = probe.Value;
+        Visual? Hit() => window.InputHitTest(centre) as Visual;
+        RenderQuiescence.WaitUntil(
+            () => Hit() is { } h && (h == control || control.IsVisualAncestorOf(h)),
+            () => SettleOnce(window),
+            () => $"{control.GetType().Name} {control.Name} at layout position {centre} but hit testing found " +
+                  $"{Hit()?.GetType().Name ?? "nothing"}.");
+    }
+
+    private static void SettleOnce(Window window)
     {
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
@@ -359,6 +400,33 @@ public sealed class MixerScrollHostUiPerfSmokeTests
         // without a frame the pointer "hits" where the content used to be.
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>A visible, hit-testable control whose centre is inside every scroll viewport above it.
+    /// None while a dropdown is open (its popup may legitimately cover the control).</summary>
+    private static (Control Control, Point Centre)? FindProbe(Window window)
+    {
+        var all = window.GetVisualDescendants().ToList();
+        if (all.OfType<ComboBox>().Any(c => c.IsDropDownOpen)) return null;
+
+        foreach (var control in all.OfType<Control>())
+        {
+            if (!control.Focusable || !control.IsHitTestVisible || !control.IsEffectivelyVisible || control.Bounds.Height < 4) continue;
+
+            var inView = true;
+            foreach (var scroller in control.GetVisualAncestors().OfType<ScrollViewer>())
+            {
+                var local = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), scroller);
+                inView &= local is { } l && l.X >= 0 && l.Y >= 0 && l.X < scroller.Viewport.Width && l.Y < scroller.Viewport.Height;
+            }
+
+            if (!inView) continue;
+            var centre = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window);
+            if (centre is { } c && c.X >= 0 && c.Y >= 0 && c.X < window.Bounds.Width && c.Y < window.Bounds.Height)
+                return (control, c);
+        }
+
+        return null;
     }
 
     private static bool IsInViewport(ScrollViewer host, Control control)

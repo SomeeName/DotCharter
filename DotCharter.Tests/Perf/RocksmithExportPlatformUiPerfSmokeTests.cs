@@ -93,6 +93,12 @@ public sealed class RocksmithExportPlatformUiPerfSmokeTests
                     Assert.Equal(2, picker.ItemCount);
                     Assert.False(((ExportPackageChoice)picker.SelectedItem!).Plain);
                     Assert.True(picker.Bounds is { Width: > 1, Height: > 1 }, $"package picker laid out as {picker.Bounds}");
+                    // Encrypted: no warning. Picking Plain brings it, through the real binding.
+                    Assert.False(PlainWarning(view).IsEffectivelyVisible);
+                    vm.Target.SelectedPackageOption = vm.Target.PackageOptions.Single(o => o.Plain);
+                    Settle(view);
+                    Assert.True(PlainWarning(view).IsEffectivelyVisible);
+                    Assert.True(PlainWarning(view).Bounds is { Width: > 1, Height: > 1 }, $"warning laid out as {PlainWarning(view).Bounds}");
                 });
             }
 
@@ -104,12 +110,14 @@ public sealed class RocksmithExportPlatformUiPerfSmokeTests
                     var picker = PackagePicker(view);
                     Assert.False(picker.IsEffectivelyEnabled);
                     Assert.True(((ExportPackageChoice)picker.SelectedItem!).Plain);
-                    var hint = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "UnencryptedPackageHint");
-                    Assert.True(hint.IsEffectivelyVisible);
+                    Assert.True(PlainWarning(view).IsEffectivelyVisible);
                 });
             }
         }, CancellationToken.None);
     }
+
+    private static Border PlainWarning(RocksmithExportDialogView view) =>
+        view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PlainPackageWarning");
 
     private static ComboBox PackagePicker(RocksmithExportDialogView view) =>
         view.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "PackageFormPicker");

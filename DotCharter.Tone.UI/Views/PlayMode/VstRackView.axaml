@@ -74,6 +74,12 @@
                             <TextBlock Grid.Column="3" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
                                        Text="{localization:Loc Toolbar_Loading}"
                                        IsVisible="{Binding IsLoading}" />
+                            <!-- A saved entry the VST3 scan did not find: kept, never
+                                 loaded, and the row says why instead of looking live. -->
+                            <TextBlock Grid.Column="3" Theme="{StaticResource FirePopoverMetaText}" Classes="FirePopoverMeta"
+                                       Text="{Binding UnavailableLabel}"
+                                       ToolTip.Tip="{Binding UnavailableReason}"
+                                       IsVisible="{Binding IsUnavailable}" />
                             <!-- ON / BYPASS is a word, not a dot: it survives a
                                  screenshot and a colour-blind reader. Clicking it
                                  is the bypass toggle. Two TextBlocks rather than a
@@ -82,7 +88,7 @@
                             <ToggleButton Grid.Column="4" Theme="{StaticResource FirePopoverStatePillToggle}" Classes="FirePopoverStatePill"
                                           HorizontalAlignment="Right"
                                           IsChecked="{Binding Bypass}"
-                                          IsEnabled="{Binding !IsLoading}"
+                                          IsEnabled="{Binding CanInteract}"
                                           ToolTip.Tip="{localization:Loc Toolbar_FxChain_Bypass}"
                                           AutomationProperties.Name="{localization:Loc Toolbar_FxChain_Bypass}">
                                 <Panel>
@@ -115,7 +121,7 @@
                                         VerticalAlignment="Center">
                                 <ToggleButton Theme="{StaticResource FirePopoverIconToggle}" Classes="FirePopoverIcon"
                                               Content="{localization:Loc Toolbar_OpenGui}"
-                                              IsEnabled="{Binding !IsLoading}"
+                                              IsEnabled="{Binding CanInteract}"
                                               IsChecked="{Binding EditorOpen}"
                                               AutomationProperties.Name="{localization:Loc Toolbar_OpenGui}" />
                                 <Button Theme="{StaticResource FirePopoverIconButton}" Classes="FirePopoverIcon FirePopoverRemove"

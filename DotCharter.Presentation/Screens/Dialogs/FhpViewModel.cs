@@ -120,8 +120,11 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
     }
 
     private sealed class MutateAnchorAction(IChartEditorSurface editor, FretAnchor target, FretAnchor before, FretAnchor after)
-        : IChartAction
+        : IChartAction, ILinkPolicyAction
     {
+        /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+        public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
         public bool HasEffect => !ChartActionStateComparer.AnchorsEqual(before, after);
 
         public void Execute() => Apply(after);
@@ -137,8 +140,11 @@ public sealed class FhpViewModel : DialogViewModel<bool>, IFhpScreen, IDialogSet
         }
     }
 
-    private sealed class AddAnchorAction(IChartEditorSurface editor, FretAnchor anchor) : IChartAction
+    private sealed class AddAnchorAction(IChartEditorSurface editor, FretAnchor anchor) : IChartAction, ILinkPolicyAction
     {
+        /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+        public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
         public void Execute()
         {
             editor.Anchors.Add(anchor);

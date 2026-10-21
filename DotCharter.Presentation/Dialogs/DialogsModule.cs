@@ -54,6 +54,12 @@ public static class DialogsModule
         services.AddScoped<IShowlightsScreen, ShowlightsViewModel>();
         services.AddScoped<ICheckpointsScreen, CheckpointsViewModel>();
         services.AddScoped<IGpImportScreen, GpImportViewModel>();
+        services.AddScoped<ILinkSuggestionsScreen, LinkSuggestionsViewModel>();
+        services.AddScoped<ILinkGroupsScreen, LinkGroupsViewModel>();
+        // A factory: the offer outlives any one dialog scope, and its chart-edit bundle is singletons only.
+        services.AddSingleton(sp => new GpLinkSuggestionOffer(sp.GetRequiredService<IDialogs>(),
+            sp.GetRequiredService<DotCharter.Services.Import.GuitarPro.GpImportApplier>(),
+            ActivatorUtilities.CreateInstance<ChartEditDialogServices>(sp)));
         services.AddScoped<IAboutScreen, AboutViewModel>();
         services.AddScoped<ITextDocumentScreen, TextDocumentViewModel>();
         services.AddScoped<ISongMetadataScreen, SongMetadataViewModel>();

@@ -284,6 +284,9 @@ try {
     $headlessNote = if ($ranHeadless -and $raceRerun) { "run; GREEN AFTER A RACE RE-RUN -$($raceRerun.Trim() -replace '^headless race re-run: PASSED', '')" } `
         elseif ($ranHeadless) { 'run' } elseif (-not $gateOk) { 'skipped: the gate is red' } elseif ($docsOnly) { 'not needed: docs only' } `
         else { 'not needed: no view changes' }
+    # Invoke-Gate keeps a failed headless run's TRX and messages (#55) and prints where.
+    $evidenceLine = [string](@($headlessOut) | Where-Object { "$_" -match 'headless failure evidence kept:' } | Select-Object -First 1)
+    if ($evidenceLine) { Write-Host "== $($evidenceLine.Trim())" }
     $worktreeNote = if ($rebuild) { "fresh: $rebuild" } else { 'incremental' }
     Write-Host "== Train $($Prs -join ', '): $verdict ($gateKind; headless $headlessNote) - worktree $worktreeNote ${prepareSeconds}s, gates ${gateSeconds}s"
     if ($verdict -ne 'GREEN') {

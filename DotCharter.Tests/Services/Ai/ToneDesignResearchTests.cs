@@ -4,7 +4,7 @@ namespace DotCharter.Tests.Services.Ai;
 
 /// <summary>
 ///     What a design request carries beyond the words typed: ONLINE RESEARCH for
-///     the CLI providers (<see cref="AiProviderSettings.WebResearch" />, on by
+///     the CLI providers (<see cref="AiProviderSettings.WebResearch" />, off by
 ///     default) and the player's TUNING from the rig tuner. The exact argument
 ///     lists with research ON are the providers' own contract tests; this pins the
 ///     switch both ways and where the instruction goes.
@@ -22,16 +22,16 @@ public sealed class ToneDesignResearchTests
             "Master of Puppets", "Metallica", tuning));
 
     [Fact]
-    public void ResearchIsOnByDefault_AndAnOlderConfigGetsItToo()
+    public void ResearchIsOffByDefault_AndAnOlderConfigGetsItOffToo()
     {
-        Assert.True(new AiProviderSettings(AiProviderKind.ClaudeCli, "", null).WebResearch);
-        Assert.True(new AiProviderSettings(AiProviderKind.CodexCli, "", null, UseLibraryTones: false).WebResearch);
+        Assert.False(new AiProviderSettings(AiProviderKind.ClaudeCli, "", null).WebResearch);
+        Assert.False(new AiProviderSettings(AiProviderKind.CodexCli, "", null, UseLibraryTones: false).WebResearch);
     }
 
     [Fact]
     public void ClaudeCode_GetsTheWebTools_OnlyWhileResearchIsOn()
     {
-        var on = new ClaudeCliToneModel(new AiProviderSettings(AiProviderKind.ClaudeCli, "", null), @"C:\x\claude.exe",
+        var on = new ClaudeCliToneModel(new AiProviderSettings(AiProviderKind.ClaudeCli, "", null, WebResearch: true), @"C:\x\claude.exe",
             new NoRunner(), workingDirectory: Path.GetTempPath()).BuildArguments(Prompt());
         var off = new ClaudeCliToneModel(new AiProviderSettings(AiProviderKind.ClaudeCli, "", null, WebResearch: false),
             @"C:\x\claude.exe", new NoRunner(), workingDirectory: Path.GetTempPath()).BuildArguments(Prompt());

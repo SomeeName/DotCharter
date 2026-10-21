@@ -19,8 +19,11 @@ public readonly record struct ScaledPosition(
 /// snapshots of the beat list and every position-bearing element so that
 /// redo/undo restore an exact pre/post state.
 /// </summary>
-public class BeatScaleAction : IChartAction
+public class BeatScaleAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: a whole-chart tool; placements it makes differ are unlinked, never propagated to.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.UnlinkOnDivergence;
+
     private readonly List<ScaledPosition> _positions;
 
     private readonly IList<BeatMarker> _beats;

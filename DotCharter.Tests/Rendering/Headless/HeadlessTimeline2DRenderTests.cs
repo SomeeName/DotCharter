@@ -246,7 +246,7 @@ public class HeadlessTimeline2DRenderTests
             DrawLabels = true,
             Snapshot = snap,
             Transport = transport,
-            Ribbon = new RibbonLayout(true, true, true, true, true)
+            Ribbon = new RibbonLayout(RibbonLanes.All)
         };
     }
 

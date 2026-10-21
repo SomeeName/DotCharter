@@ -128,17 +128,19 @@ public sealed class UpdateNetworkBoundsTests : IDisposable
     private static readonly TimeSpan TestBudget = TimeSpan.FromMilliseconds(500);
 
     /// <summary>A release asset that is a real, applicable zip — so the only thing
-    /// a test can be failing on is the bound under test.</summary>
-    private static byte[] RealAssetZip() =>
-        FakeRelease.Zip(FakeRelease.HostFiles("v9.9.9"), "DotCharter-v9.9.9-win-x64");
+    /// a test can be failing on is the bound under test. ONE instance: a zip
+    /// carries entry timestamps, and the signed digest is over these bytes.</summary>
+    private static byte[] RealAssetZip() => RealAsset.Value;
+
+    private static readonly Lazy<byte[]> RealAsset = new(() =>
+        FakeRelease.Zip(FakeRelease.HostFiles("v9.9.9"), "DotCharter-v9.9.9-win-x64"));
 
     /// <summary>
-    ///     <b>Pre-0.41 on purpose, and at an allowed host.</b> The updater refuses
-    ///     a download url outside the GitHub release hosts outright, and requires
-    ///     published digests at or above
-    ///     <see cref="GitHubUpdateService.FirstDigestPublishingVersion" /> — both
-    ///     correct, and both would answer every case here before the stream bound
-    ///     under test ever ran. These cases are about the BYTES.
+    ///     <b>At an allowed host, with signed digests of <see cref="RealAssetZip" />.</b>
+    ///     The updater refuses a download url outside the GitHub release hosts
+    ///     outright, and a release without signed digests — both correct, and
+    ///     both would answer every case here before the stream bound under test ever
+    ///     ran. These cases are about the BYTES.
     /// </summary>
     private static UpdateInfo UpdateFor(long assetSizeBytes) => new(
         new Version(0, 40, 0), "v0.40.0", "notes", "https://example.invalid/release",
@@ -148,26 +150,42 @@ public sealed class UpdateNetworkBoundsTests : IDisposable
         assetSizeBytes);
 
     /// <summary>
-    ///     Answers the release-document lookup with 404 — "this release publishes
-    ///     no digests", legal below
-    ///     <see cref="GitHubUpdateService.FirstDigestPublishingVersion" /> — and
-    ///     forwards everything else, so each stub below sees exactly the requests
-    ///     it always saw and its <c>Calls</c> count still means what it meant.
+    ///     Answers the release-document lookup with a release whose signed
+    ///     <c>SHA256SUMS.txt</c> digests <see cref="RealAssetZip" /> — and forwards
+    ///     everything else, so each stub below sees exactly the requests it always
+    ///     saw and its <c>Calls</c> count still means what it meant.
     /// </summary>
-    private sealed class NoReleaseDocument(HttpMessageHandler inner) : DelegatingHandler(inner)
+    private sealed class SignedReleaseDocument(HttpMessageHandler inner) : DelegatingHandler(inner)
     {
+        private static readonly string Sums = TestReleaseSigning.Bind(
+            FakeReleaseHttp.Digests(("DotCharter-v0.40.0-win-x64.zip", RealAssetZip())), "v0.40.0");
+
+        private static readonly string Signature = TestReleaseSigning.Sign(Sums);
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-            => request.RequestUri!.ToString().Contains("/releases/tags/", StringComparison.Ordinal)
-                ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
-                {
-                    Content = new StringContent(string.Empty)
-                })
-                : base.SendAsync(request, ct);
+        {
+            var url = request.RequestUri!.ToString();
+            if (url.Contains("/releases/tags/", StringComparison.Ordinal))
+            {
+                return Text($$"""
+                    {"tag_name":"v0.40.0","assets":[
+                      {"name":"SHA256SUMS.txt","url":"{{FakeReleaseHttp.ChecksumUrl}}","size":{{Sums.Length}}},
+                      {"name":"SHA256SUMS.txt.sig","url":"{{FakeReleaseHttp.SignatureUrl}}","size":{{Signature.Length}}}]}
+                    """);
+            }
+
+            if (url == FakeReleaseHttp.ChecksumUrl) return Text(Sums);
+            if (url == FakeReleaseHttp.SignatureUrl) return Text(Signature);
+            return base.SendAsync(request, ct);
+        }
+
+        private static Task<HttpResponseMessage> Text(string body)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
     }
 
     private GitHubUpdateService ServiceOver(HttpMessageHandler handler) =>
-        new(new Version(0, 1, 0), handler: new NoReleaseDocument(handler),
-            downloadDir: _dir.Path, installDir: _dir.Path);
+        new(new Version(0, 1, 0), handler: new SignedReleaseDocument(handler),
+            downloadDir: _dir.Path, installDir: _dir.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
 
     private static HttpResponseMessage Streamed(Stream body, long? declaredLength)
     {
@@ -232,10 +250,12 @@ public sealed class UpdateNetworkBoundsTests : IDisposable
         // AssetSizeBytes = 0 too: nothing anywhere claims a length.
         using var service = ServiceOver(handler);
 
-        var path = await service.DownloadUpdateAsync(UpdateFor(0), cancellationToken: Ct);
-
-        // Under the ceiling, so this one is allowed through and lands whole.
-        Assert.Equal(asset.Length + 4096, new FileInfo(path).Length);
+        // Under the ceiling, so the stream is allowed through whole — and it is the
+        // signed DIGEST that refuses those extra bytes, never the byte ceiling.
+        var error = await Assert.ThrowsAsync<InvalidDataException>(
+            () => service.DownloadUpdateAsync(UpdateFor(0), cancellationToken: Ct));
+        byte[] landed = [.. asset, .. Enumerable.Repeat((byte)'x', 4096)];
+        Assert.Contains($"got {FakeRelease.Sha256(landed)}", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>The other direction: a host that declared more than it sent used to
@@ -409,8 +429,9 @@ public sealed class UpdateNetworkBoundsTests : IDisposable
     // ── every exchange has a DEADLINE, headers and body ─────────────────────
 
     private GitHubUpdateService ImpatientServiceOver(HttpMessageHandler handler) =>
-        new(new Version(0, 1, 0), handler: handler, downloadDir: _dir.Path, installDir: _dir.Path,
-            apiTimeout: TestBudget, downloadTimeout: TestBudget, rangeTimeout: TestBudget);
+        new(new Version(0, 1, 0), handler: new SignedReleaseDocument(handler), downloadDir: _dir.Path, installDir: _dir.Path,
+            apiTimeout: TestBudget, downloadTimeout: TestBudget, rangeTimeout: TestBudget,
+            releaseSigningKey: TestReleaseSigning.PublicKey);
 
     /// <summary>
     ///     The regression: the client's 30 s <c>Timeout</c> bounded the HEADER

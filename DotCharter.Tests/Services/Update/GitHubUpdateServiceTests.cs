@@ -302,16 +302,15 @@ public sealed class GitHubUpdateServiceTests
             zipBytes = ms.ToArray();
         }
 
-        var handler = new FakeHttpMessageHandler();
-        // The digest resolve comes FIRST now; v0.13.0 predates published digests,
-        // so a 404 on the release document is the legal "there are none" answer.
-        handler.EnqueueStatus(System.Net.HttpStatusCode.NotFound);
-        handler.EnqueueBytes(zipBytes);
+        // The signed digest resolve comes FIRST: every release publishes a
+        // signed SHA256SUMS.txt, and nothing downloads without one.
+        const string assetName = "DotCharter-v0.13.0-win-x64.zip";
+        var handler = FakeReleaseHttp.Serve("v0.13.0", assetName, zipBytes,
+            checksums: FakeReleaseHttp.Digests((assetName, zipBytes)));
         using var service = new GitHubUpdateService(
-            new Version(0, 12, 5), handler: handler, downloadDir: temp.Path);
+            new Version(0, 12, 5), handler: handler, downloadDir: temp.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
         var update = new UpdateInfo(new Version(0, 13, 0), "v0.13.0", "notes", "url",
-            "DotCharter-v0.13.0-win-x64.zip", "https://api.github.com/assets/12",
-            "https://api.github.com/assets/12", zipBytes.Length);
+            assetName, FakeReleaseHttp.AssetUrl, FakeReleaseHttp.AssetUrl, zipBytes.Length);
 
         var progressValues = new List<double>();
         var path = await service.DownloadUpdateAsync(
@@ -321,22 +320,23 @@ public sealed class GitHubUpdateServiceTests
         Assert.Equal(zipBytes.Length, new FileInfo(path).Length);
         Assert.Equal(1.0, progressValues[^1]);
         // Asset downloads must request the raw bytes from the API asset url.
-        // Request 0 is the release-document lookup the digest resolve makes.
-        Assert.Equal("application/octet-stream", handler.HeaderOf(1, "Accept"));
-        Assert.Contains("api.github.com/assets/12", handler.Requests[1].RequestUri!.ToString());
+        // The requests before it are the digest and signature lookups.
+        var assetRequest = handler.Requests.FindIndex(r => r.RequestUri!.ToString() == FakeReleaseHttp.AssetUrl);
+        Assert.True(assetRequest >= 0, "the asset was never requested");
+        Assert.Equal("application/octet-stream", handler.HeaderOf(assetRequest, "Accept"));
     }
 
     [Fact]
     public async Task DownloadUpdate_CorruptZip_ThrowsAndDeletesFile()
     {
         using var temp = new TempDir();
-        var handler = new FakeHttpMessageHandler();
-        handler.EnqueueStatus(System.Net.HttpStatusCode.NotFound);
-        handler.EnqueueBytes([1, 2, 3, 4, 5, 6, 7, 8]);
+        byte[] broken = [1, 2, 3, 4, 5, 6, 7, 8];
+        var handler = FakeReleaseHttp.Serve("v0.13.0", "broken.zip", broken,
+            checksums: FakeReleaseHttp.Digests(("broken.zip", broken)));
         using var service = new GitHubUpdateService(
-            new Version(0, 12, 5), handler: handler, downloadDir: temp.Path);
+            new Version(0, 12, 5), handler: handler, downloadDir: temp.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
         var update = new UpdateInfo(new Version(0, 13, 0), "v0.13.0", "notes", "url",
-            "broken.zip", "https://api.github.com/assets/13", "https://api.github.com/assets/13", 8);
+            "broken.zip", FakeReleaseHttp.AssetUrl, FakeReleaseHttp.AssetUrl, 8);
 
         await Assert.ThrowsAsync<InvalidDataException>(
             () => service.DownloadUpdateAsync(update, cancellationToken: TestContext.Current.CancellationToken));
@@ -366,7 +366,7 @@ public sealed class GitHubUpdateServiceTests
         var handler = ServeRelease(release);
 
         using var service = new GitHubUpdateService(
-            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads);
+            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads, releaseSigningKey: TestReleaseSigning.PublicKey);
 
         var path = await service.DownloadUpdateAsync(
             release.Update, cancellationToken: TestContext.Current.CancellationToken);
@@ -405,7 +405,7 @@ public sealed class GitHubUpdateServiceTests
         var handler = ServeRelease(release, honourRanges: false);
 
         using var service = new GitHubUpdateService(
-            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads);
+            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads, releaseSigningKey: TestReleaseSigning.PublicKey);
 
         var path = await service.DownloadUpdateAsync(
             release.Update, cancellationToken: TestContext.Current.CancellationToken);
@@ -431,7 +431,7 @@ public sealed class GitHubUpdateServiceTests
         var handler = ServeRelease(release, withManifest: false);
 
         using var service = new GitHubUpdateService(
-            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads);
+            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads, releaseSigningKey: TestReleaseSigning.PublicKey);
 
         var path = await service.DownloadUpdateAsync(
             release.Update with { ManifestAssetApiUrl = null },
@@ -464,7 +464,7 @@ public sealed class GitHubUpdateServiceTests
         var handler = ServeRelease(release with { Manifest = lying });
 
         using var service = new GitHubUpdateService(
-            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads);
+            new Version(0, 42, 0), handler: handler, installDir: install, downloadDir: downloads, releaseSigningKey: TestReleaseSigning.PublicKey);
 
         var path = await service.DownloadUpdateAsync(
             release.Update, cancellationToken: TestContext.Current.CancellationToken);
@@ -541,7 +541,7 @@ public sealed class GitHubUpdateServiceTests
     {
         using var temp = new TempDir();
         using var service = new GitHubUpdateService(
-            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path);
+            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
 
         Assert.Equal(UpdateApplyBlockReason.NotAReleaseInstall, service.GetApplyBlockReason());
     }
@@ -552,7 +552,7 @@ public sealed class GitHubUpdateServiceTests
         using var temp = new TempDir();
         WriteSelfContainedInstall(temp.Path);
         using var service = new GitHubUpdateService(
-            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path);
+            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
 
         Assert.Equal(UpdateApplyBlockReason.None, service.GetApplyBlockReason());
     }
@@ -565,7 +565,7 @@ public sealed class GitHubUpdateServiceTests
         using var temp = new TempDir();
         File.WriteAllBytes(Path.Combine(temp.Path, AppPayload.ExeName), [0x4D, 0x5A]);
         using var service = new GitHubUpdateService(
-            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path);
+            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
 
         Assert.Equal(UpdateApplyBlockReason.UnknownInstallLayout, service.GetApplyBlockReason());
     }
@@ -581,8 +581,9 @@ public sealed class GitHubUpdateServiceTests
         BuildPayloadZip(zipPath, selfContained: false);
 
         using var service = new GitHubUpdateService(
-            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path);
+            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
 
+        service.TrustDownloadForTests(zipPath);
         var error = Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
 
         Assert.Contains("framework-dependent", error.Message);
@@ -600,8 +601,9 @@ public sealed class GitHubUpdateServiceTests
             zip.CreateEntry(AppPayload.ExeName);
 
         using var service = new GitHubUpdateService(
-            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path);
+            new Version(0, 12, 5), installDir: temp.Path, downloadDir: temp.Path, releaseSigningKey: TestReleaseSigning.PublicKey);
 
+        service.TrustDownloadForTests(zipPath);
         Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
         Assert.False(Directory.Exists(Path.Combine(temp.Path, UpdaterScriptBuilder.StagingDirName)));
     }

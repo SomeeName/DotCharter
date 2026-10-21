@@ -117,7 +117,8 @@ internal sealed class ProjectSilencePadder(
         for (var i = 0; i < project.Stems.Count; i++)
         {
             var stem = project.Stems[i];
-            if (string.IsNullOrWhiteSpace(stem.Path)) continue;
+            // Data from the .rscp: a UNC, device or network-drive path is refused unprobed.
+            if (!ProjectRelativePath.IsReadableMediaReference(stem.Path)) continue;
             var path = Path.IsPathRooted(stem.Path)
                 ? stem.Path
                 : new[] { projectDir, audioDir }
@@ -177,8 +178,11 @@ internal sealed class ProjectSilencePadder(
     /// Add silence: the project snapshot plus the audio it plays. Both ways round, the
     ///     session then plays the snapshot's audio file; the files themselves are never deleted.
     /// </summary>
-    private sealed class AudioSpliceAction(ProjectSilencePadder padder, IChartAction snapshot) : IChartAction
+    private sealed class AudioSpliceAction(ProjectSilencePadder padder, IChartAction snapshot) : IChartAction, ILinkPolicyAction
     {
+        /// <summary>Linked measures: a whole-chart tool; placements it makes differ are unlinked, never propagated to.</summary>
+        public LinkPolicy LinkPolicy => LinkPolicy.UnlinkOnDivergence;
+
         public long EstimatedBytes => snapshot.EstimatedBytes;
 
         public void Execute()

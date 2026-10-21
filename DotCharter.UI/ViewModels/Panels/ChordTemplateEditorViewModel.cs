@@ -755,7 +755,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
 
         var actions = ChordTemplateFingeringBackfill.Plan(arrangement, _fingeringService, _editor, Names.ChordNaming(arrangement));
         if (actions.Count == 0) return;
-        _historyService.Do(new CompositeAction(actions) { LabelKey = "History_GenerateFingerings" });
+        _historyService.Do(new CompositeAction(actions) { LabelKey = "History_GenerateFingerings", LinkPolicyOverride = LinkPolicy.ShareFirstChanged });
 
         if (Template != null) LoadTemplate(Template, StringInputs.Count);
     }

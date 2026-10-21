@@ -30,6 +30,9 @@ namespace DotCharter.Tone.Ai;
 /// </summary>
 public static class ToneDesignPromptBuilder
 {
+    /// <summary>The longest song or artist text printed in the request; both may come from a project file.</summary>
+    private const int SongFieldChars = 120;
+
     /// <summary>Ids of the factory presets rendered as few-shot examples: a clean,
     /// a crunch, a high-gain and a bass, chosen because all four are algorithmic
     /// (no <c>namamp</c> capture file, which a draft cannot carry) and because a
@@ -298,10 +301,10 @@ public static class ToneDesignPromptBuilder
         }
 
         sb.Append("Request: ").AppendLine(request.Description?.Trim());
-        if (!string.IsNullOrWhiteSpace(request.SongTitle))
-            sb.Append("Song: ").AppendLine(request.SongTitle.Trim());
-        if (!string.IsNullOrWhiteSpace(request.Artist))
-            sb.Append("Artist: ").AppendLine(request.Artist.Trim());
+        if (AiUntrustedText.Clean(request.SongTitle, SongFieldChars) is { Length: > 0 } song)
+            sb.Append("Song: ").AppendLine(song);
+        if (AiUntrustedText.Clean(request.Artist, SongFieldChars) is { Length: > 0 } artist)
+            sb.Append("Artist: ").AppendLine(artist);
         if (!string.IsNullOrWhiteSpace(request.Tuning))
             sb.Append("The player's guitar is tuned to: ").AppendLine(request.Tuning.Trim());
 

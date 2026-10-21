@@ -303,8 +303,8 @@ public sealed class RecoverySnapshotStoreTests : IDisposable
     ///         <see cref="RecoverySnapshotStore.IsRecoverable" /> can never gate an
     ///         untitled session, so it re-offered itself on every launch.
     ///     </para>
-    ///     A directory squatting on the sidecar's own temp name makes the sidecar
-    ///     write fail deterministically, standing in for the crash.
+    ///     A directory squatting on the sidecar's own file name makes the sidecar
+    ///     swap fail deterministically, standing in for the crash.
     /// </summary>
     [Fact]
     public void WriteSnapshot_WhoseSidecarFails_LeavesNoUnnamedSnapshot()
@@ -312,9 +312,10 @@ public sealed class RecoverySnapshotStoreTests : IDisposable
         var original = Path.Combine(_originalsDir, "song.rscp");
         var snapshotPath = _store.GetSnapshotPath(original);
         Directory.CreateDirectory(_store.RootDirectory);
-        // AtomicFile.WriteAllText stages "<sidecar>.tmp" first; a directory there
-        // makes its FileStream throw before anything is renamed.
-        Directory.CreateDirectory(Path.ChangeExtension(snapshotPath, null) + ".rscp.json.tmp");
+        // AtomicFile.WriteAllText stages a uniquely named sibling and renames it over
+        // the sidecar; a directory sitting on the sidecar's name makes that rename
+        // fail (after the bounded retry), with the stage swept on the way out.
+        Directory.CreateDirectory(Path.ChangeExtension(snapshotPath, null) + ".rscp.json");
 
         Assert.ThrowsAny<Exception>(() => _store.WriteSnapshot(BuildProject(), Metadata(original)));
 

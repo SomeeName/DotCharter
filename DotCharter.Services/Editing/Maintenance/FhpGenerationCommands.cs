@@ -84,7 +84,8 @@ internal sealed class FhpGenerationCommands(
         if (chordRepoints.Count > 0) actions.Add(new SetTemplateIdsAction(chordRepoints, _chartEditor));
         if (shapeRepoints.Count > 0) actions.Add(new SetHandShapeTemplateIdsAction(shapeRepoints, _chartEditor));
 
-        var action = actions.Count == 1 ? actions[0] : new CompositeAction(actions) { LabelKey = "History_GenerateFhp" };
+        // A generator, not a gesture: the first linked copy it changed is written into every other copy.
+        var action = new CompositeAction(actions) { LabelKey = "History_GenerateFhp", LinkPolicyOverride = LinkPolicy.ShareFirstChanged };
         if (!_historyService.Do(action)) return;
 
         SelectionBulkOps.ReplaceWith(_chartEditor.Selection.SelectedAnchors,
@@ -137,7 +138,8 @@ internal sealed class FhpGenerationCommands(
             actions.Add(new RemoveAnchorsAction(level.Anchors, anchorsToReplace));
         actions.Add(new AddAnchorsAction(level.Anchors, generatedAnchors));
 
-        var action = actions.Count == 1 ? actions[0] : new CompositeAction(actions) { LabelKey = "History_GenerateFhp" };
+        // A generator, not a gesture: the first linked copy it changed is written into every other copy.
+        var action = new CompositeAction(actions) { LabelKey = "History_GenerateFhp", LinkPolicyOverride = LinkPolicy.ShareFirstChanged };
         if (!_historyService.Do(action)) return;
 
         SelectionBulkOps.ReplaceWith(_chartEditor.Selection.SelectedAnchors, generatedAnchors);

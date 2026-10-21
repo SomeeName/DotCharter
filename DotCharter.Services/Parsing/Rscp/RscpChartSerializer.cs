@@ -89,6 +89,15 @@ public class RscpChartSerializer : IChartSerializer
         // the normal parse, so migration only touches what the parse could not find.
         _migrations.Upgrade(doc, filePath, project);
 
+        // Linked measures name their arrangements by index, so they are read last — and
+        // checked: a copy that does not match its group (an older build edited it) is
+        // unlinked here, its content kept.
+        foreach (var notice in RscpLinkGroups.Read(doc, project))
+        {
+            _logger?.Warning(AppLogCategory.Project,
+                $"RSCP '{filePath}': linked measures {notice.Letter} ('{notice.Name}'): {notice.Unlinked} placement(s) unlinked on load ({notice.Reason}); their content is kept.");
+        }
+
         _logger?.Trace(AppLogCategory.Project,
             $"RSCP loaded: beats={project.Beats.Count}, arrangements={project.Arrangements.Count}, vocalTracks={project.VocalTracks.Count}.");
         return project;

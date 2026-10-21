@@ -113,12 +113,16 @@ public sealed class OpenAiCompatibleToneModel : IToneDesignModel, IDisposable
     /// <summary>The <c>X-Title</c> OpenRouter shows for this app.</summary>
     private const string OpenRouterTitle = "DotCharter";
 
+    /// <summary>The most of a server's error body kept in an exception's detail (and so in the log).</summary>
+    private const int MaxErrorDetailChars = 240;
+
     private readonly string _baseUrl;
     private readonly bool _isOpenRouter;
     private readonly HttpClient _http;
     private readonly IAppLogger? _logger;
     private readonly string _modelId;
     private readonly string? _effort;
+    private readonly string? _apiKey;
 
     /// <summary>Creates the provider over <paramref name="settings" />' base URL and
     /// model id.</summary>
@@ -134,15 +138,25 @@ public sealed class OpenAiCompatibleToneModel : IToneDesignModel, IDisposable
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentException.ThrowIfNullOrWhiteSpace(settings.BaseUrl);
+        if (!IsAllowedBaseUrl(settings.BaseUrl))
+        {
+            throw new ToneDesignException(
+                ToneDesignFault.NotConfigured,
+                "The base URL must start with https://. Plain http:// is accepted only for this computer " +
+                "(localhost or 127.0.0.1), because the whole prompt and the API key travel to that address.");
+        }
 
         _logger = logger;
         _baseUrl = settings.BaseUrl.TrimEnd('/');
         _modelId = settings.ModelId?.Trim() ?? "";
         _isOpenRouter = IsOpenRouter(_baseUrl);
         _effort = AiReasoning.WireValue(settings.Effort, AiProviderKind.OpenAiCompatible, _modelId);
-        _http = OnlineHttp.CreateClient(RequestTimeout, handler);
-        if (!string.IsNullOrWhiteSpace(apiKey))
-            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+        _apiKey = apiKey?.Trim();
+        // No redirect is followed: a 307/308 would replay the POST body (the prompt, with the bearer key
+        // in the headers) at an address the user never typed.
+        _http = OnlineHttp.CreateClient(RequestTimeout, handler, followRedirects: false);
+        if (!string.IsNullOrWhiteSpace(_apiKey))
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
         if (!_isOpenRouter) return;
 
@@ -151,6 +165,17 @@ public sealed class OpenAiCompatibleToneModel : IToneDesignModel, IDisposable
         // https://openrouter.ai/docs/api-reference/overview
         _http.DefaultRequestHeaders.TryAddWithoutValidation("HTTP-Referer", OpenRouterReferer);
         _http.DefaultRequestHeaders.TryAddWithoutValidation("X-Title", OpenRouterTitle);
+    }
+
+    /// <summary>True when the prompt may be sent to <paramref name="baseUrl" />: any <c>https</c>
+    /// address, or <c>http</c> to this computer (<c>localhost</c>, a <c>*.localhost</c> name or a loopback
+    /// IP — LM Studio and Ollama). Anything else would send the prompt and the key in the clear.</summary>
+    internal static bool IsAllowedBaseUrl(string? baseUrl)
+    {
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme == Uri.UriSchemeHttps) return true;
+        return uri.Scheme == Uri.UriSchemeHttp &&
+               (uri.IsLoopback || uri.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>True when <paramref name="baseUrl" /> addresses OpenRouter, which
@@ -632,8 +657,13 @@ public sealed class OpenAiCompatibleToneModel : IToneDesignModel, IDisposable
         return ids;
     }
 
-    private static ToneDesignException ForStatus(HttpStatusCode status, string payload) => status switch
+    private ToneDesignException ForStatus(HttpStatusCode status, string payload) => status switch
     {
+        _ when (int)status is >= 300 and < 400 => new ToneDesignException(
+            ToneDesignFault.NotConfigured,
+            $"The server answered {(int)status} (a redirect). Redirects are not followed, because the " +
+            "prompt would go to an address you did not enter: check the base URL.",
+            Detail(status, "")),
         HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => new ToneDesignException(
             ToneDesignFault.Authentication,
             "The server rejected the API key.",
@@ -652,8 +682,8 @@ public sealed class OpenAiCompatibleToneModel : IToneDesignModel, IDisposable
             Detail(status, payload))
     };
 
-    private static string Detail(HttpStatusCode status, string payload)
-        => $"HTTP {(int)status}: {payload[..Math.Min(payload.Length, 512)]}";
+    private string Detail(HttpStatusCode status, string payload)
+        => $"HTTP {(int)status}: {AiUntrustedText.Redacted(payload, MaxErrorDetailChars, _apiKey)}";
 
     private static ToneDesignException Translate(Exception ex) => ex switch
     {

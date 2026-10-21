@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using DotCharter.Services.Export;
+using DotCharter.Services.Parsing.MoverPhrases;
 using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 
 namespace DotCharter.Services.Parsing.Eof;
@@ -366,10 +367,12 @@ internal sealed class EofExportSession
             var placed = new HashSet<string>();
             placedPhrases[arrangement] = placed;
             var coveredByEventPoint = new HashSet<FractionalPosition>();
+            var movers = EofMoverPhrases.PlanExport(arrangement, _beats.Count);
 
             foreach (var ep in arrangement.EventPoints)
             {
-                var (pos, floating, ms) = AnchorPosition(ep.Position);
+                var (pos, floating, ms) = MarkerPosition(ep.Position, movers);
+                var moverText = MoverText(arrangement, ep.Phrase, ep.Position, movers);
 
                 void Emit(string text, ushort flags)
                 {
@@ -389,7 +392,7 @@ internal sealed class EofExportSession
                     ? EventFlagRsSoloPhrase
                     : (ushort)0;
 
-                if (hasSection && hasPhrase && ep.Section == ep.Phrase)
+                if (hasSection && hasPhrase && ep.Section == ep.Phrase && moverText is null)
                 {
                     // EOF stores RS section + phrase as ONE event with both bits
                     // (mirrors gp_import.c) — keep that shape when the texts agree.
@@ -398,13 +401,19 @@ internal sealed class EofExportSession
                 else
                 {
                     if (hasSection) Emit(ep.Section, EventFlagRsSection);
-                    if (hasPhrase) Emit(ep.Phrase, (ushort)(EventFlagRsPhrase | soloFlag));
+                    if (hasPhrase) Emit(moverText ?? ep.Phrase, (ushort)(EventFlagRsPhrase | soloFlag));
                 }
 
-                if (!string.IsNullOrEmpty(ep.Events)) Emit(ep.Events, EventFlagRsEvent);
+                // An event is not a phrase: it stays where it is even when the phrase moves.
+                if (!string.IsNullOrEmpty(ep.Events))
+                {
+                    var (eventPos, eventFloating, eventMs) = AnchorPosition(ep.Position);
+                    var eventFlags = eventFloating ? (ushort)(EventFlagRsEvent | EventFlagFloatingPos) : EventFlagRsEvent;
+                    events.Add(new TextEvent(ep.Events, eventPos, (ushort)trackIndex, eventFlags, eventMs));
+                }
             }
 
-            EmitExplicitPhraseIterations(events, trackIndex, arrangement, coveredByEventPoint, placed);
+            EmitExplicitPhraseIterations(events, trackIndex, arrangement, coveredByEventPoint, placed, movers);
         }
 
         ReportPhraseMetadataLoss(placedPhrases);
@@ -431,7 +440,8 @@ internal sealed class EofExportSession
     ///     </para>
     /// </summary>
     private void EmitExplicitPhraseIterations(List<TextEvent> events, int trackIndex, Arrangement arrangement,
-        HashSet<FractionalPosition> coveredByEventPoint, HashSet<string> placed)
+        HashSet<FractionalPosition> coveredByEventPoint, HashSet<string> placed,
+        Dictionary<FractionalPosition, EofMoverPlacement> movers)
     {
         foreach (var iteration in arrangement.PhraseIterations)
         {
@@ -446,9 +456,10 @@ internal sealed class EofExportSession
             if (arrangement.PhraseInfos.TryGetValue(name, out var info) && info.Solo)
                 flags |= EventFlagRsSoloPhrase;
 
-            var (pos, floating, ms) = AnchorPosition(iteration.Position);
+            var (pos, floating, ms) = MarkerPosition(iteration.Position, movers);
             if (floating) flags |= EventFlagFloatingPos;
-            events.Add(new TextEvent(name, pos, (ushort)trackIndex, flags, ms));
+            var text = MoverText(arrangement, name, iteration.Position, movers) ?? name;
+            events.Add(new TextEvent(text, pos, (ushort)trackIndex, flags, ms));
         }
     }
 
@@ -474,6 +485,32 @@ internal sealed class EofExportSession
                 }
             }
         }
+    }
+
+    /// <summary>A phrase or section the moveR plan covers goes on the beat before it;
+    /// every other marker anchors as <see cref="AnchorPosition" /> says.</summary>
+    private (uint Pos, bool Floating, double Ms) MarkerPosition(FractionalPosition position,
+        Dictionary<FractionalPosition, EofMoverPlacement> movers) =>
+        movers.TryGetValue(position, out var mover)
+            ? AnchorPosition(new FractionalPosition(mover.BeatIndex))
+            : AnchorPosition(position);
+
+    /// <summary>
+    ///     "moveR&lt;N&gt;" for a phrase the plan covers, null otherwise. The plain form is
+    ///     the one DLC Builder also reads (a name before the token would stop it moving the
+    ///     phrase in EOF's XML), so the phrase's own name is lost and reported; it comes back
+    ///     as the section's name on the next import.
+    /// </summary>
+    private string? MoverText(Arrangement arrangement, string? phrase, FractionalPosition position,
+        Dictionary<FractionalPosition, EofMoverPlacement> movers)
+    {
+        if (string.IsNullOrEmpty(phrase) || !movers.TryGetValue(position, out var mover)) return null;
+
+        var text = MoverPhraseName.Format(mover.MoveBy);
+        Report.Add(EofConversionKind.Approximated, EofLoss.MoverPhrase, arrangement.Name,
+            $"Phrase \"{phrase}\" between beats is written as \"{text}\" on the beat before it.",
+            detail: $"{phrase} → {text}");
+        return text;
     }
 
     /// <summary>Beat-index anchoring: an event exactly on a beat stores the beat

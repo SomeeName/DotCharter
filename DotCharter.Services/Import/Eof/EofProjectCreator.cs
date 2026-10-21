@@ -39,6 +39,8 @@ public sealed class EofProjectCreator(
     ///     The OGG/WAV beside the .eof. EOF stores audio externally — typically
     ///     <c>guitar.ogg</c> or <c>song.ogg</c> — so the metadata-recorded name
     ///     is tried first, then the common defaults. Empty when there is none.
+    ///     A recorded name that is rooted, UNC or climbs out of the folder is
+    ///     refused without being probed.
     /// </summary>
     public static string FindCompanionAudio(IExportTargetWriter files, string eofPath, EofImportMetadata meta)
     {
@@ -50,10 +52,12 @@ public sealed class EofProjectCreator(
         if (!string.IsNullOrWhiteSpace(meta.AudioFileName)) candidates.Add(meta.AudioFileName);
         candidates.AddRange(["guitar.ogg", "song.ogg", "guitar.wav", "song.wav"]);
 
+        // The recorded name is data from the .eof, and the file found here is
+        // copied into the new project: only a plain name beside the .eof counts.
         foreach (var name in candidates)
         {
-            var path = Path.Combine(dir, name);
-            if (files.FileExists(path)) return path;
+            var path = ProjectRelativePath.TryResolve(dir, name);
+            if (path != null && files.FileExists(path)) return path;
         }
 
         return "";

@@ -114,7 +114,13 @@ public sealed class SnapshotFieldCoverageTests
     ///     </list>
     /// </summary>
     private static readonly string[] NotMembership =
-        ["project.Chart.SingleNotes", "project.Chart.Chords", ".TuningPitches"];
+    [
+        "project.Chart.SingleNotes", "project.Chart.Chords", ".TuningPitches",
+        // Not a drop: the .rscp load check (LinkGroupVerifier) unlinks every placement whose copy
+        // differs from its group, and a blind fill makes every copy differ. The link round trip
+        // through the file is RscpLinkGroupsTests' and the rich fixture's (RscpDeepValueRoundTripTests).
+        "project.LinkGroups"
+    ];
 }
 
 /// <summary>
@@ -143,6 +149,11 @@ internal static class ModelGraphWalker
     /// </summary>
     private static void MakeCrossReferencesConsistent(ChartProject project)
     {
+        // A link placement names an arrangement OF THIS PROJECT by reference (see LinkPlacement).
+        var next = 0;
+        foreach (var placement in project.LinkGroups.SelectMany(g => g.Placements))
+            placement.Arrangement = project.Arrangements[next++ % project.Arrangements.Count];
+
         foreach (var arrangement in project.Arrangements)
         {
             // A chord points at a template by id, and a blind fill gives it one whose frets

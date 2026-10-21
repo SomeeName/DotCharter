@@ -209,7 +209,8 @@ public sealed class OnlineSecretLoggingTests
 
     private sealed class ScriptedCallbackListener(Func<Task<string?>> query) : IOAuthCallbackListener
     {
-        public Task<string?> WaitForCallbackAsync(string prefix, TimeSpan timeout, CancellationToken ct) =>
+        public Task<string?> WaitForCallbackAsync(
+            string prefix, Func<string, bool> accept, TimeSpan timeout, CancellationToken ct) =>
             query();
     }
 }

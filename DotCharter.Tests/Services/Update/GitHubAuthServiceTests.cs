@@ -59,6 +59,31 @@ public sealed class GitHubAuthServiceTests : IDisposable
         Assert.Contains("scope=repo", handler.RequestBodies[0]);
     }
 
+    /// <summary>
+    ///     What the token can do. The only thing the app does with it is READ one
+    ///     repository's releases and download their assets. A GitHub App (client id
+    ///     "Iv...") gets its reach from the read-only permissions configured on the app and
+    ///     ignores a requested scope, so none is asked for; an OAuth app has no read-only
+    ///     scope for a private repo, so the classic "repo" scope is the narrowest that works.
+    /// </summary>
+    [Theory]
+    [InlineData("Iv23liExample", false)]
+    [InlineData("Iv1.8a61f9b3a7aba766", false)]
+    [InlineData("Ov23liExample", true)]
+    [InlineData("0123456789abcdef0123", true)]
+    public async Task StartDeviceFlow_AsksNoScopeOfAGitHubApp_AndRepoOfAnOAuthApp(string clientId, bool asksRepo)
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.EnqueueJson(DeviceCodeJson);
+        using var service = CreateService(handler);
+
+        await service.StartDeviceFlowAsync(clientId, TestContext.Current.CancellationToken);
+
+        Assert.Contains("client_id=" + clientId, handler.RequestBodies[0]);
+        if (asksRepo) Assert.Contains("scope=repo", handler.RequestBodies[0]);
+        else Assert.DoesNotContain("scope", handler.RequestBodies[0]);
+    }
+
     [Fact]
     public async Task WaitForDeviceAuthorization_PendingSlowDownThenSuccess()
     {

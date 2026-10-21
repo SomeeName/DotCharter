@@ -34,6 +34,9 @@ namespace DotCharter.Services.Ai.Generate;
 /// </summary>
 public static class RsToneGeneratePrompt
 {
+    /// <summary>The longest song, artist or tone-name text printed in a prompt line.</summary>
+    internal const int MaxFieldChars = 120;
+
     /// <summary>The reply schema's name, for a provider that takes one.</summary>
     public const string SchemaName = "rs_tone";
 
@@ -106,13 +109,16 @@ public static class RsToneGeneratePrompt
 
         var user = new StringBuilder(2048);
         user.Append("Instrument: ").AppendLine(request.Instrument);
-        user.Append("Tone key to use: ").AppendLine(request.ToneKey);
-        user.Append("Tone name to use: ").AppendLine(request.ToneName);
+        user.Append("Tone key to use: ").AppendLine(AiUntrustedText.Clean(request.ToneKey, MaxFieldChars));
+        user.Append("Tone name to use: ").AppendLine(AiUntrustedText.Clean(request.ToneName, MaxFieldChars));
 
-        if (!string.IsNullOrWhiteSpace(request.SongTitle) || !string.IsNullOrWhiteSpace(request.Artist))
+        // The song, artist and tone name come from the project file: one capped line each.
+        var song = AiUntrustedText.Clean(request.SongTitle, MaxFieldChars);
+        var artist = AiUntrustedText.Clean(request.Artist, MaxFieldChars);
+        if (song.Length > 0 || artist.Length > 0)
         {
             user.AppendLine(CultureInfo.InvariantCulture,
-                $"Song: {request.SongTitle ?? "(unknown)"} — {request.Artist ?? "(unknown artist)"}");
+                $"Song: {(song.Length > 0 ? song : "(unknown)")} — {(artist.Length > 0 ? artist : "(unknown artist)")}");
         }
 
         if (request.Features is { } features)
@@ -189,7 +195,7 @@ public static class RsToneGeneratePrompt
     /// </summary>
     /// <param name="name">The descriptive name.</param>
     public static string NameHintLine(string name) =>
-        $"The charter named this tone \"{name.Trim()}\". Treat that as a SOFT hint about its character only " +
+        $"The charter named this tone \"{AiUntrustedText.Clean(name, MaxFieldChars)}\". Treat that as a SOFT hint about its character only " +
         "(clean, crunch, lead, acoustic, an effect): the measurements above and the charter's instruction below " +
         "win wherever they disagree with it.";
 
@@ -241,6 +247,8 @@ public static class RsToneGeneratePrompt
         {(bass
             ? "- This is a BASS arrangement: use the bass-prefixed amps and cabinets below."
             : "- This is a GUITAR arrangement: bass-prefixed gear is not offered below and must not be used.")}
+
+        {AiUntrustedText.DataRule}
 
         Only a knob you deliberately set needs to appear; everything you omit takes
         the game's own default, which is usually what you want.

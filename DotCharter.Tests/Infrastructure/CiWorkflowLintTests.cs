@@ -38,29 +38,103 @@ public sealed class CiWorkflowLintTests
     }
 
     /// <summary>
-    ///     CI runs only when started by hand (the "Run workflow" button), and a
-    ///     newer run of the same branch cancels the older one. It used to run on
-    ///     every push AND every PR, then on every PR, in Windows minutes that bill
-    ///     at 2x against this private repo's 2,000 free a month, while merges were
-    ///     decided on the local gate anyway (#63).
+    ///     The job-level guard that keeps the PRIVATE dev repo manual-only while the
+    ///     public repo runs on push and pull_request. Both repos carry the same
+    ///     workflow; on the private one a push or PR then creates a run whose jobs
+    ///     are all skipped (0 minutes), while the "Run workflow" button still runs
+    ///     everything. Windows minutes bill at 2x against the private repo's 2,000
+    ///     free a month, and one PR run cost ~240 of them (#63).
+    /// </summary>
+    private const string PrivateRepoGate = "github.event_name == 'workflow_dispatch' || !github.event.repository.private";
+
+    private static string[] Triggers(string yaml, string file)
+    {
+        var on = Regex.Match(yaml, @"^on:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)+)", RegexOptions.Multiline);
+        Assert.True(on.Success, $"{file}: no multi-line on: block");
+        return [.. Regex.Matches(on.Groups[1].Value, @"^  ([a-z_]+):", RegexOptions.Multiline).Select(m => m.Groups[1].Value)];
+    }
+
+    /// <summary>
+    ///     The jobs that could start on the private repo without a manual dispatch:
+    ///     none when <c>workflow_dispatch</c> is the only trigger, otherwise every job
+    ///     whose job-level <c>if:</c> does not AND in <see cref="PrivateRepoGate"/>
+    ///     (on its own, or as <c>${{ x &amp;&amp; (gate) }}</c> with no <c>||</c> in x).
+    /// </summary>
+    private static List<string> JobsThatCanRunUnattendedOnThePrivateRepo(string yaml, string file)
+    {
+        var triggers = Triggers(yaml, file);
+        Assert.Contains("workflow_dispatch", triggers);
+        if (triggers is ["workflow_dispatch"]) return [];
+
+        const string suffix = $"&& ({PrivateRepoGate})";
+        var ungated = new List<string>();
+        foreach (var (id, body) in Jobs(yaml))
+        {
+            var condition = Regex.Match(body, @"^    if:[ \t]*(.+?)[ \t]*$", RegexOptions.Multiline);
+            var expression = condition.Success ? condition.Groups[1].Value : "";
+            if (expression.StartsWith("${{", StringComparison.Ordinal) && expression.EndsWith("}}", StringComparison.Ordinal))
+                expression = expression[3..^2].Trim();
+
+            var rest = expression == PrivateRepoGate ? ""
+                : expression.EndsWith(suffix, StringComparison.Ordinal) ? expression[..^suffix.Length]
+                : null;
+            if (rest is null || rest.Contains("||", StringComparison.Ordinal))
+                ungated.Add($"{file}: job '{id}' (if: {(condition.Success ? condition.Groups[1].Value : "<none>")})");
+        }
+        return ungated;
+    }
+
+    /// <summary>
+    ///     A trigger besides the manual button is allowed only when EVERY job is
+    ///     gated on <see cref="PrivateRepoGate"/>, so the private dev repo never
+    ///     spends a minute it was not asked to; and a newer run of the same branch
+    ///     cancels the older one.
     /// </summary>
     [Fact]
-    public void Ci_runs_only_when_started_by_hand_and_cancels_superseded_runs()
+    public void Ci_runs_unattended_only_on_the_public_repo_and_cancels_superseded_runs()
     {
         foreach (var file in Directory.GetFiles(Path.Combine(TestPaths.RepoRoot(), ".github", "workflows"), "*.y*ml"))
         {
             var yaml = File.ReadAllText(file).Replace("\r\n", "\n");
-            var on = Regex.Match(yaml, @"^on:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)+)", RegexOptions.Multiline);
-            Assert.True(on.Success, $"{Path.GetFileName(file)}: no multi-line on: block");
-            var triggers = Regex.Matches(on.Groups[1].Value, @"^  ([a-z_]+):", RegexOptions.Multiline)
-                .Select(m => m.Groups[1].Value)
-                .ToArray();
-            Assert.NotEmpty(triggers);
-            Assert.True(triggers is ["workflow_dispatch"],
-                $"{Path.GetFileName(file)} triggers on [{string.Join(", ", triggers)}]; only workflow_dispatch (the manual button) may start a run.");
+            // The one exemption: the daily public sync watch, a ~1 minute Linux job that
+            // runs ONLY in the private *-Dev repos (schedule or dispatch); its shape and
+            // its `endsWith(github.repository, '-Dev')` guard are pinned by
+            // PublicSyncWatchWorkflowLintTests.
+            if (Path.GetFileName(file) == PublicSyncWatchWorkflowLintTests.FileName)
+            {
+                var triggers = Triggers(yaml, PublicSyncWatchWorkflowLintTests.FileName);
+                Assert.True(triggers.Order(StringComparer.Ordinal).SequenceEqual(["schedule", "workflow_dispatch"]),
+                    $"{PublicSyncWatchWorkflowLintTests.FileName} triggers on [{string.Join(", ", triggers)}]; it may only run on schedule or by hand.");
+                continue;
+            }
+
+            var ungated = JobsThatCanRunUnattendedOnThePrivateRepo(yaml, Path.GetFileName(file));
+            Assert.True(ungated.Count == 0,
+                $"Every job of a workflow with a trigger other than workflow_dispatch must carry `if: {PrivateRepoGate}` "
+                + $"(or `${{{{ <condition> && ({PrivateRepoGate}) }}}}`), so the private dev repo stays manual-only:\n  "
+                + string.Join("\n  ", ungated));
         }
 
         Assert.Matches(@"(?m)^concurrency:[ \t]*\n(?:  .*\n)*  cancel-in-progress: true", Workflow().Replace("\r\n", "\n"));
+    }
+
+    /// <summary>
+    ///     The lint above is not vacuous: an ungated push trigger, a gate OR-ed
+    ///     away and an <c>always()</c> without the gate are each reported, while the
+    ///     manual-only and the fully gated shapes pass. Step-level <c>if:</c>s
+    ///     (deeper indent) never count as the job's gate.
+    /// </summary>
+    [Theory]
+    [InlineData("  push:\n    branches: [main]\n  workflow_dispatch:\n", "", "    if: always()\n", 2)]
+    [InlineData("  pull_request:\n  workflow_dispatch:\n", $"    if: {PrivateRepoGate}\n", "", 1)]
+    [InlineData("  push:\n  workflow_dispatch:\n", $"    if: ${{{{ always() || ({PrivateRepoGate}) }}}}\n", $"    if: {PrivateRepoGate}\n", 1)]
+    [InlineData("  push:\n  workflow_dispatch:\n", $"    if: {PrivateRepoGate}\n", $"    if: ${{{{ always() && ({PrivateRepoGate}) }}}}\n", 0)]
+    [InlineData("  workflow_dispatch:\n", "", "", 0)]
+    public void The_trigger_lint_reports_every_job_that_could_run_unattended_on_the_private_repo(string on, string firstIf, string secondIf, int expected)
+    {
+        var yaml = $"name: t\n\non:\n{on}\njobs:\n  first:\n    name: First\n{firstIf}    runs-on: ubuntu-latest\n    steps:\n      - run: echo\n"
+                 + $"  second:\n    needs: first\n{secondIf}    runs-on: ubuntu-latest\n    steps:\n      - if: {PrivateRepoGate}\n        run: echo\n";
+        Assert.Equal(expected, JobsThatCanRunUnattendedOnThePrivateRepo(yaml, "fixture.yml").Count);
     }
 
     [Fact]
@@ -88,6 +162,26 @@ public sealed class CiWorkflowLintTests
         // The shard count is a CHOICE made against the runner's cores and memory
         // (the workflow comment says which), not an inherited script default.
         Assert.Matches(@"run:[^\n]*Invoke-HeadlessUiCi\.ps1[^\n]*-Shards \d+", headless);
+    }
+
+    /// <summary>
+    ///     A failed headless run must leave its evidence (#55): the script keeps the
+    ///     TRX and messages in a folder the workflow names, and the job uploads that
+    ///     folder as <c>headless-failures</c>, only on failure, for a short while.
+    /// </summary>
+    [Fact]
+    public void The_headless_job_uploads_the_failure_evidence_folder_on_failure()
+    {
+        var jobs = Jobs(Workflow());
+        var job = jobs.Single(j => Regex.IsMatch(j.Value, @"run:[^\n]*Invoke-HeadlessUiCi\.ps1")).Value.Replace("\r\n", "\n");
+
+        Assert.Contains("DOTCHARTER_HEADLESS_FAILURES_DIR: TestResults/headless-failures", job);
+        Assert.Matches(@"if: failure\(\)\n\s*uses: actions/upload-artifact@[0-9a-f]{40}[^\n]*\n\s*with:\n\s*name: headless-failures\n\s*path: TestResults/headless-failures/\n(?:\s*if-no-files-found: \w+\n)?\s*retention-days: 7\b", job);
+
+        var ci = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "tools", "ci", "Invoke-HeadlessUiCi.ps1"));
+        Assert.Contains("Save-HeadlessFailureEvidence", ci);
+        var gate = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "tools", "agent", "Invoke-Gate.ps1"));
+        Assert.Contains("Save-HeadlessFailureEvidence", gate);
     }
 
     /// <summary>
@@ -168,7 +262,7 @@ public sealed class CiWorkflowLintTests
         var lane = jobs.Where(j => Regex.IsMatch(j.Value, @"(?m)^[ \t]+[^#\s][^\n]*Get-SoftwareVulkan\.ps1")).Select(j => j.Key).ToList();
         Assert.Single(lane);
         var job = jobs[lane[0]];
-        Assert.Contains("if: ${{ inputs.software-gpu-tests }}", job);
+        Assert.Contains($"if: ${{{{ inputs.software-gpu-tests && ({PrivateRepoGate}) }}}}", job);
         Assert.Matches(@"DOTCHARTER_GPU_TESTS: sw\n(?:[^\n]*\n)*?\s*run: dotnet test [^\n]*--filter-class ""DotCharter\.Tests\.Rendering\.Headless\.\*""", job);
 
         foreach (var text in jobs.Where(j => j.Key != lane[0]).Select(j => j.Value))
@@ -195,10 +289,22 @@ public sealed class CiWorkflowLintTests
                 $"build.yml runs {script}, which does not exist.");
         }
 
+        // A full commit SHA only: a tag ("v7") can be moved by whoever controls the
+        // action's repository, a SHA cannot. The version rides in a comment.
         var uses = Regex.Matches(yaml, @"(?m)^\s*(?:-\s+)?uses:\s*(\S+)").Select(m => m.Groups[1].Value).ToList();
         Assert.NotEmpty(uses);
         foreach (var action in uses)
-            Assert.Matches(@"^[\w.-]+/[\w./-]+@(v\d+(\.\d+)*|[0-9a-f]{40})$", action);
+            Assert.Matches(@"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$", action);
+
+        // No checkout leaves the token in .git/config for the steps after it.
+        var checkouts = Regex.Matches(yaml.Replace("\r\n", "\n"), @"(?m)^[ \t]*(?:-[ \t]+)?uses:[ \t]*actions/checkout@\S+.*\n((?:(?![ \t]*-[ \t])(?![ \t]*\n)[ \t]+.*\n)*)");
+        Assert.True(checkouts.Count >= 4, $"only {checkouts.Count} checkouts found");
+        foreach (Match checkout in checkouts)
+            Assert.Matches(@"(?m)^\s+persist-credentials: false\s*$", checkout.Groups[1].Value);
+
+        // The event is part of the concurrency group: a push run (all jobs skipped on
+        // the private repo) must never cancel a manual run of the same ref.
+        Assert.Matches(@"(?m)^  group: .*\$\{\{ github\.event_name \}\}", yaml);
     }
 
     /// <summary>
@@ -243,7 +349,9 @@ public sealed class CiWorkflowLintTests
     /// <summary>
     ///     The native job takes the prebuilt pair for the gitlink first (#832) and
     ///     builds C++ only when asked for the native suite or when the download
-    ///     fails; the release is private, so the download needs the PAT as GH_TOKEN.
+    ///     fails. The dev repo's release is private, so ONLY the private repo hands
+    ///     the download the PAT as GH_TOKEN; the public repo (and a fork's pull
+    ///     request) uses the run's own token.
     ///     And CI is the PUBLIC build: it never mentions the plugin folder.
     /// </summary>
     [Fact]
@@ -255,10 +363,83 @@ public sealed class CiWorkflowLintTests
         var prebuilt = native.IndexOf("tools/setup/Get-NativeRuntime.ps1", StringComparison.Ordinal);
         var cmake = native.IndexOf("cmake -S ", StringComparison.Ordinal);
         Assert.True(prebuilt >= 0 && cmake > prebuilt, "the prebuilt download must come before the from-source build");
-        Assert.Matches(@"id: prebuilt\n(?:[^\n]*\n)*?\s*continue-on-error: true\n(?:[^\n]*\n)*?\s*GH_TOKEN: \$\{\{ secrets\.SUBMODULES_TOKEN \}\}", native);
+        Assert.Matches(@"id: prebuilt\n(?:[^\n]*\n)*?\s*continue-on-error: true\n(?:[^\n]*\n)*?\s*GH_TOKEN: \$\{\{ github\.event\.repository\.private && secrets\.SUBMODULES_TOKEN \|\| github\.token \}\}", native);
         Assert.Matches(@"- name: Build JUCE native runtime\n\s*if: \$\{\{ inputs\.native-tests \|\| steps\.prebuilt\.outcome == 'failure' \}\}", native);
 
         Assert.DoesNotContain("plugins/", yaml, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DotCharterPlugins", yaml, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     The submodule PAT lives for ONE git command. It reaches the submodule
+    ///     fetch through <c>git -c</c> (never <c>git config --global</c>, which every
+    ///     later step - build, tests, branch scripts - could read), with the
+    ///     credential helper switched off so nothing stores it, and only the steps
+    ///     named here may mention the secret at all.
+    /// </summary>
+    [Fact]
+    public void The_submodule_token_lives_for_one_git_command_and_reaches_no_other_step()
+    {
+        var yaml = Workflow().Replace("\r\n", "\n");
+        Assert.DoesNotMatch(@"git\s+config\s+(?:--global|--system)", yaml);
+
+        var checkouts = 0;
+        foreach (var (job, text) in Jobs(yaml))
+        {
+            foreach (var step in Regex.Split(text, @"\n(?=      - )").Where(s => s.Contains("secrets.", StringComparison.Ordinal)))
+            {
+                var name = Regex.Match(step, @"- name: ([^\n]+)").Groups[1].Value.Trim();
+                // A step holding a secret hands nothing on to the steps after it.
+                Assert.DoesNotMatch(@"GITHUB_(ENV|OUTPUT|PATH|STATE)", step);
+                if (name == "Prebuilt native runtime")
+                {
+                    Assert.Matches(@"\n\s+GH_TOKEN: \$\{\{ github\.event\.repository\.private && secrets\.SUBMODULES_TOKEN \|\| github\.token \}\}\n", step);
+                    continue;
+                }
+
+                Assert.True(name == "Checkout submodules (JuceSharp)", $"job '{job}', step '{name}' reads a secret; only the submodule checkout may.");
+                checkouts++;
+                Assert.Matches(@"\n\s+SUBMODULES_TOKEN: \$\{\{ secrets\.SUBMODULES_TOKEN \}\}\n", step);
+                var uses = step.Split('\n').Where(l => l.Contains("$env:SUBMODULES_TOKEN", StringComparison.Ordinal) && l.Trim() != "if ($env:SUBMODULES_TOKEN) {").ToList();
+                Assert.NotEmpty(uses);
+                foreach (var line in uses)
+                {
+                    Assert.Matches(@"^\s*git -c credential\.helper= -c ", line);
+                    Assert.Contains("submodule update", line, StringComparison.Ordinal);
+                }
+            }
+        }
+
+        Assert.True(checkouts >= 4, $"only {checkouts} submodule checkouts carry the token");
+    }
+
+    /// <summary>
+    ///     Every DotCharter.* project commits a NuGet lock file (version + content
+    ///     hash of each package, transitive ones included), and every CI restore
+    ///     runs in locked mode, so a restore that would resolve anything else
+    ///     fails instead of building it.
+    /// </summary>
+    [Fact]
+    public void Every_restore_is_locked_to_the_committed_lock_files()
+    {
+        var root = TestPaths.RepoRoot();
+        var yaml = Workflow().Replace("\r\n", "\n");
+        var restores = Regex.Matches(yaml, @"(?m)^.*\bdotnet restore\b.*$").Select(m => m.Value).ToList();
+        Assert.True(restores.Count >= 4, $"only {restores.Count} dotnet restore lines found");
+        foreach (var restore in restores)
+            Assert.Contains("--locked-mode", restore, StringComparison.Ordinal);
+
+        var props = File.ReadAllText(Path.Combine(root, "Directory.Build.props"));
+        Assert.Contains("<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>", props, StringComparison.Ordinal);
+        Assert.Contains("<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>", props, StringComparison.Ordinal);
+
+        var solution = File.ReadAllText(Path.Combine(root, "DotCharter.sln"));
+        var projects = Regex.Matches(solution, @"""([^""]*\\(DotCharter[^""\\]*)\.csproj)""").Select(m => m.Groups[1].Value).ToList();
+        Assert.True(projects.Count >= 10, $"only {projects.Count} DotCharter projects in the solution");
+        foreach (var project in projects)
+        {
+            var folder = Path.GetDirectoryName(Path.Combine(root, project.Replace('\\', Path.DirectorySeparatorChar)))!;
+            Assert.True(File.Exists(Path.Combine(folder, "packages.lock.json")), $"{project} has no committed packages.lock.json");
+        }
     }
 }

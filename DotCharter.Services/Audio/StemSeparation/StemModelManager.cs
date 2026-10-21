@@ -70,6 +70,7 @@ public sealed class StemModelManager
         _configService = configService;
         _logger = logger;
         _releaseAssets = releaseAssets;
+        PickleConsent = new CheckpointPickleConsent(configService);
         // Signing in or out changes which rows can be downloaded: the same event a download
         // raises, so every list of models refreshes.
         releaseAssets?.SignInChanged += () => ModelsChanged?.Invoke(this, EventArgs.Empty);
@@ -160,7 +161,7 @@ public sealed class StemModelManager
 
     /// <summary>Absolute path the model would have on disk (whether or not it exists).</summary>
     public string GetLocalPath(StemModelDescriptor descriptor) =>
-        Path.Combine(ModelsDirectory, descriptor.FileName);
+        Path.Combine(ModelsDirectory, StemModelFileName.Contained(descriptor.FileName));
 
     public string? GetLocalPathIfInstalled(string id)
     {
@@ -536,6 +537,9 @@ public sealed class StemModelManager
     ///         (<c>AssemblyLayeringTests</c>).
     ///     </para>
     /// </summary>
+    /// <summary>The user's per-URL consent to a full unpickle of a <c>.ckpt</c> / <c>.pt</c> / <c>.pth</c>.</summary>
+    public CheckpointPickleConsent PickleConsent { get; }
+
     public Task<StemModelDescriptor> ImportCheckpointFromUrlAsync(
         string ckptUrl,
         IProgress<ModelDownloadProgress>? progress = null,
@@ -568,6 +572,11 @@ public sealed class StemModelManager
         if (string.IsNullOrWhiteSpace(ckptName) || !ckptName.Contains('.'))
             throw new ArgumentException($"Could not derive filename from '{ckptUrl}'.", nameof(ckptUrl));
 
+        // A pickle can run code on load: nothing is fetched without the user's consent.
+        var isPickle = CheckpointPickleConsent.IsPickleFormat(ckptUrl);
+        if (isPickle && !PickleConsent.IsGranted(ckptUrl))
+            throw new CheckpointConsentException($"'{ckptName}' can run code when loaded and was not allowed.");
+
         Directory.CreateDirectory(ModelsDirectory);
         var ckptPath = Path.Combine(ModelsDirectory, ckptName);
         var onnxName = Path.GetFileNameWithoutExtension(ckptName) + ".onnx";
@@ -575,6 +584,12 @@ public sealed class StemModelManager
         var yamlPath = Path.Combine(ModelsDirectory, Path.GetFileNameWithoutExtension(ckptName) + ".yaml");
 
         await DownloadToAsync(ckptUrl, ckptPath, progress, ct).ConfigureAwait(false);
+
+        // Consent covers the bytes the user accepted; a changed file withdraws it.
+        var allowUnpickle = isPickle && PickleConsent.AllowsFile(
+            ckptUrl, await CheckpointPickleConsent.HashFileAsync(ckptPath, ct).ConfigureAwait(false));
+        if (isPickle && !allowUnpickle)
+            throw new CheckpointConsentException($"'{ckptName}' changed since it was allowed to run code.");
 
         var yamlCandidates = new List<string>();
         if (!string.IsNullOrWhiteSpace(yamlUrl))
@@ -606,7 +621,8 @@ public sealed class StemModelManager
             }
         }
 
-        var conv = converter ?? new CkptToOnnxConverter();
+        // Weights-only first, always; the full-unpickle fallback only with consent.
+        var conv = converter ?? new CkptToOnnxConverter { AllowUnsafePickleFallback = allowUnpickle };
         await conv.ConvertAsync(ckptPath, File.Exists(yamlPath) ? yamlPath : null, onnxPath, progress: null, ct).ConfigureAwait(false);
 
         // Register the produced ONNX as a custom catalog entry. Reuse the

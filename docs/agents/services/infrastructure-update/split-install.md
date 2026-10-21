@@ -58,10 +58,15 @@ NativeAOT (`PublishAot`, size-optimised, no globalization or stack-trace data):
 ~1.3 s later, `r2r=yes`). It starts `app\DotCharter.exe` with its own raw
 command-line tail (`LaunchCommandLine.ArgumentTail`, unparsed — quoting reaches
 the app byte for byte), its own `STARTUPINFO` (desktop, show state, redirected
-handles, which are inherited only when redirected) and its working directory,
-waits, and exits with the app's exit code. It never shows a window or a message
-box: a missing `app\DotCharter.exe` or a failed `CreateProcess` appends one line
-to `dotcharter-launcher.log` beside it (or `%TEMP%\DotCharter\`) and exits
+handles, which are inherited only when redirected) and the APP folder as its
+working directory (`LaunchCommandLine.WorkingDirectory`, never the caller's:
+Windows searches the working directory for DLLs, so a launch from a Downloads
+folder could otherwise load a DLL planted there; a relative path on the command
+line therefore resolves against `app\`, not the caller's folder), waits, and exits with the
+app's exit code. It never shows a window or a message box: a missing `app\DotCharter.exe` or a failed `CreateProcess` appends one line
+to `dotcharter-launcher.log` beside it (or, when that folder is read-only, to a
+randomly named `%TEMP%\dotcharter-launcher-<token>.log` created exclusively, never a
+fixed path; `LaunchCommandLine.TryWriteFailureLog`) and exits
 `0x44430001` / `0x44430002`. It references nothing first-party; the tests compile
 `LaunchCommandLine.cs` in by link. A `dotnet build` of the solution builds it as
 an ordinary exe so the gate style-checks it; only `New-Release.ps1`'s

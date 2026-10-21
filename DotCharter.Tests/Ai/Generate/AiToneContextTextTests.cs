@@ -1,5 +1,6 @@
 using DotCharter.Services.Ai.Generate;
 using DotCharter.Services.Ai.Match;
+using DotCharter.Tone.Ai;
 
 namespace DotCharter.Tests.Ai.Generate;
 
@@ -31,8 +32,8 @@ public sealed class AiToneContextTextTests
         var context = AiToneGenerationRun.ContextFor(Project(), arrangement, "The solo is a wah into a cranked Marshall.");
 
         Assert.Equal(
-            "band: Sakasma, song: Polkadot Stingray, album: Album, year: 2019, arrangement: Lead, " +
-            "the charter's notes: The solo is a wah into a cranked Marshall.",
+            AiUntrustedText.Block("band: Sakasma, song: Polkadot Stingray, album: Album, year: 2019, arrangement: Lead") +
+            "\nthe charter's notes: The solo is a wah into a cranked Marshall.",
             context);
         Assert.Contains("the charter's notes: The solo is a wah into a cranked Marshall.", Prompt(context), StringComparison.Ordinal);
     }

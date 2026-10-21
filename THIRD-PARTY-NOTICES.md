@@ -293,6 +293,7 @@ tools use are listed separately: they are never part of a release.
 | `Avalonia.Fonts.Inter` (carries the **Inter** font, SIL OFL 1.1, <https://github.com/rsms/inter>) | MIT (package), OFL-1.1 (font) | <https://github.com/AvaloniaUI/Avalonia> |
 | `Dock.Avalonia`, `Dock.Avalonia.Themes.Fluent`, `Dock.Model.Avalonia`, `Dock.Model.Mvvm` | MIT | <https://github.com/wieslawsoltes/Dock> |
 | `CommunityToolkit.Mvvm` | MIT | <https://github.com/CommunityToolkit/dotnet> |
+| `BouncyCastle.Cryptography` (Ed25519 verification of the release signature, `Update/ReleaseSignature`) | MIT | <https://github.com/bcgit/bc-csharp> |
 | `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Logging.Abstractions`, `System.Security.Cryptography.ProtectedData` | MIT | <https://github.com/dotnet/runtime> |
 | `Silk.NET.Core`, `Silk.NET.Maths`, `Silk.NET.Vulkan`, `Silk.NET.Vulkan.Extensions.KHR`, `Silk.NET.Vulkan.Extensions.EXT`, `Silk.NET.DXGI`, `Silk.NET.Direct3D11` | MIT | <https://github.com/dotnet/Silk.NET> |
 | `SkiaSharp` | MIT | <https://github.com/mono/SkiaSharp> |

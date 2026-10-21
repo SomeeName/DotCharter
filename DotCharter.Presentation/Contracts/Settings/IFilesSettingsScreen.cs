@@ -28,6 +28,9 @@ public interface IFilesSettingsScreen : INotifyPropertyChanged
     /// <summary>Save a 7-/8-string guitar's <c>.xml</c> as a six-string arrangement for EOF and DLC Builder.</summary>
     bool RsXmlSixStringProjection { get; set; }
 
+    /// <summary>Write a phrase that starts on a note between two beats as moveR&lt;N&gt; on the beat before it, in the saved <c>.xml</c> and the DTRS XML bundle.</summary>
+    bool RsXmlMoverPhrases { get; set; }
+
     /// <summary>Generate dynamic difficulty, on a copy, for every single-level arrangement a Rocksmith export writes.</summary>
     bool ExportGenerateDynamicDifficulty { get; set; }
 

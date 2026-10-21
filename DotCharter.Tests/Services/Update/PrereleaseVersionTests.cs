@@ -38,7 +38,7 @@ public sealed class PrereleaseVersionTests
             checksums: FakeReleaseHttp.Digests((asset, zip)));
         using var scratch = new TempDirectory();
         using var service = new GitHubUpdateService(new Version(1, 0, 0), handler: handler,
-            installDir: scratch.Path, downloadDir: scratch.Path, currentVersionText: "1.0.0-beta.1");
+            installDir: scratch.Path, downloadDir: scratch.Path, currentVersionText: "1.0.0-beta.1", releaseSigningKey: TestReleaseSigning.PublicKey);
         var update = new UpdateInfo(new Version(1, 0, 0), "v" + version, "", "", asset,
             FakeReleaseHttp.AssetUrl, FakeReleaseHttp.AssetUrl, zip.Length);
         var downloaded = await service.DownloadUpdateAsync(update, cancellationToken: TestContext.Current.CancellationToken);

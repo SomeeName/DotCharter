@@ -12,7 +12,7 @@ public static class LaunchCommandLine
     /// <summary>The app's own executable inside <see cref="AppFolderName" />.</summary>
     public const string AppExeName = "DotCharter.exe";
 
-    /// <summary>Written beside the launcher (or in %TEMP%) when it cannot start the app.</summary>
+    /// <summary>Written beside the launcher (or, if that is read-only, to a uniquely named file in %TEMP%) when it cannot start the app.</summary>
     public const string FailureLogName = "dotcharter-launcher.log";
 
     /// <summary>Exit code: <c>app\DotCharter.exe</c> is not there.</summary>
@@ -53,9 +53,69 @@ public static class LaunchCommandLine
         return commandLine[end..];
     }
 
+    /// <summary>
+    ///     The app's working directory: its own folder, never the caller's. Windows
+    ///     searches the working directory for DLLs, so inheriting a Downloads folder
+    ///     would let a file planted there load into the app.
+    /// </summary>
+    public static string WorkingDirectory(string appExePath)
+        => Path.GetDirectoryName(appExePath) ?? throw new ArgumentException("No folder in the app path.", nameof(appExePath));
+
     /// <summary>The command line the app is started with: its quoted path, then the tail.</summary>
     public static string ForApp(string appExePath, string argumentTail)
         => argumentTail.Length == 0 ? $"\"{appExePath}\"" : $"\"{appExePath}\" {argumentTail}";
+
+    /// <summary>The name of a fallback failure log in the temp folder for <paramref name="token" />.</summary>
+    public static string FallbackFailureLogName(string token) => $"dotcharter-launcher-{token}.log";
+
+    /// <summary>
+    ///     Writes <paramref name="line" /> to the failure log and returns the file written, or
+    ///     null when nowhere took it. First choice is <see cref="FailureLogName" /> beside the
+    ///     launcher (appended to). When that folder is read-only the note goes to
+    ///     <paramref name="tempDirectory" /> in a file whose name carries a random token and
+    ///     which is created exclusively (<see cref="FileMode.CreateNew" />): there is no fixed,
+    ///     guessable path under the temp folder for anyone to pre-create or point elsewhere,
+    ///     and a file that already sits on the chosen name is never opened.
+    ///     Self-contained on purpose: the launcher references nothing first-party.
+    /// </summary>
+    public static string? TryWriteFailureLog(
+        string launcherDirectory, string tempDirectory, string line, Func<string>? token = null)
+    {
+        try
+        {
+            Directory.CreateDirectory(launcherDirectory);
+            var beside = Path.Combine(launcherDirectory, FailureLogName);
+            File.AppendAllText(beside, line);
+            return beside;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // Read-only install folder: fall through to the temp folder.
+        }
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var name = FallbackFailureLogName(token?.Invoke() ?? Guid.NewGuid().ToString("N"));
+            try
+            {
+                var path = Path.Combine(tempDirectory, name);
+                using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                using var writer = new StreamWriter(stream);
+                writer.Write(line);
+                return path;
+            }
+            catch (IOException) when (File.Exists(Path.Combine(tempDirectory, name)))
+            {
+                // That name is taken (guessed, or planted): never touch it, pick another.
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>The one line the failure log gets, so a user has something to send.</summary>
     public static string FailureLine(DateTime now, string appExePath, string reason)

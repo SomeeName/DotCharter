@@ -70,19 +70,39 @@ public static class OnlineHttp
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
+    ///     The pooled handler for a request whose BODY must not travel anywhere but the address it was
+    ///     sent to (a model call carries the whole prompt, and a bearer key): redirects are not followed,
+    ///     so a <c>307</c>/<c>308</c> reaches the caller as a status instead of replaying the POST.
+    ///     Shared and never disposed, like <see cref="SharedHandler" />.
+    /// </summary>
+    internal static SocketsHttpHandler NoRedirectHandler => NoRedirectShared.Value;
+
+    private static readonly Lazy<SocketsHttpHandler> NoRedirectShared = new(
+        () => new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(1),
+            MaxConnectionsPerServer = 8
+        },
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
     ///     Builds a client with <paramref name="timeout" /> and the response-size
     ///     cap applied. <paramref name="handler" /> is the tests' seam — when it
     ///     is supplied the client owns it (each test gets its own scripted
     ///     handler); when it is null the process-wide pooled handler is shared
     ///     and deliberately NOT disposed with the client.
+    ///     <paramref name="followRedirects" /> false uses the shared handler that does not follow them.
     /// </summary>
     public static HttpClient CreateClient(
         TimeSpan timeout,
         HttpMessageHandler? handler = null,
-        long maxResponseBytes = MaxResponseBytes)
+        long maxResponseBytes = MaxResponseBytes,
+        bool followRedirects = true)
     {
         var client = handler == null
-            ? new HttpClient(SharedHandler.Value, disposeHandler: false)
+            ? new HttpClient(followRedirects ? SharedHandler.Value : NoRedirectHandler, disposeHandler: false)
             : new HttpClient(handler);
         client.Timeout = timeout;
         client.MaxResponseContentBufferSize = Math.Clamp(maxResponseBytes, 1024L, int.MaxValue);

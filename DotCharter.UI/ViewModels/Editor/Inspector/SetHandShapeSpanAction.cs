@@ -11,8 +11,11 @@ namespace DotCharter.UI.ViewModels.Editor.Inspector;
 ///         shape is not a shorter shape, it is a broken one.
 ///     </para>
 /// </summary>
-public sealed class SetHandShapeSpanAction : IChartAction
+public sealed class SetHandShapeSpanAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly HandShape _handShape;
     private readonly FractionalPosition _oldStart;
     private readonly FractionalPosition _oldEnd;

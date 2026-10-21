@@ -44,9 +44,20 @@ generator, same gate; it writes tone BODIES only and holds them for review first
   runs inside `await Task.Run(...)`, and the write lands back on the caller's context as
   ONE undo step. The command is an async `[RelayCommand]`, so the menu item is disabled
   while a run is in flight.
+- **Nothing is written before the user has seen it.** After generating, the run shows
+  one confirmation (the injected `confirmWrite`; the shell wires it to the message dialog
+  with Yes/No): each tone's name, its gear chain by name and the model's reason. Declining
+  (or a project that changed while the dialog was open) writes nothing and says so on the
+  rail; accepting is the ONE undo step below.
+- **The project's text is data, not instructions.** `ContextFor` cleans and caps each
+  metadata field (`AiUntrustedText.Clean`) and puts them between
+  `<<<BEGIN CHART DATA ...>>>` and `<<<END CHART DATA>>>`; the system prompt carries
+  `AiUntrustedText.DataRule`; the song, artist and tone-name lines are cleaned too, and the
+  chat excerpt breaks delimiter runs. A model's tone name and rationale are capped and
+  stripped of control characters on the way in (`RsToneReplyReader`).
 - Pinned by `Ai/Generate/AiToneGenerationRunTests` (task + progress + rail line, a
   blocking generator does not block the caller, cancel, project switch, none generated,
-  nothing to do).
+  nothing to do, the confirmation before the write) and `Ai/Generate/AiToneInjectionTests`.
 
 **Not the same lane as `Ai/Match/`.** The matcher produces a `DcRigPreset` — the
 app's own DSP rig, which the app can PLAY. This produces an `RsTone` — gear the

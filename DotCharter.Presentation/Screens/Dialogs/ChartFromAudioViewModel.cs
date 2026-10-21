@@ -333,8 +333,11 @@ public sealed partial class ChartFromAudioViewModel : DialogViewModel<bool>, ICh
 
     /// <summary>The draft arrangement and the switch to it are one undo node.</summary>
     private sealed class AddArrangementAction(ProjectState state, ChartProject project, Arrangement arrangement)
-        : IChartAction
+        : IChartAction, ILinkPolicyAction
     {
+        /// <summary>Linked measures: cannot change linked content in beats.</summary>
+        public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
         private readonly Arrangement? _previousActive = state.ActiveArrangement;
 
         public void Execute()

@@ -13,6 +13,35 @@ A rollback that itself fails rides out as an `AggregateException` beside the
 original: a partial rollback must never be reported as a clean failure. Pinned by
 `ConfigBackupServiceTests.Import_ThatFailsPartWayThroughThePromote_LeavesTheConfigRootExactlyAsItWas`.
 
+## A backup is a file somebody else may have written
+
+A restore takes DATA, never anything the app would run, load or open. Three guards,
+each pinned by `ConfigBackupImportSecurityTests`, `RecoveredProjectPathTests` and
+`TransportVstScanGateTests`:
+
+- **`appconfig.json` goes through `AppConfigBackupFilter`**, an allowlist with a
+  `BackupSettingKind` per key: `Value` (taken), `DataFolder` (taken only when it is a
+  local, rooted, non-UNC, non-device directory that EXISTS here), `ExistingProjectFiles`
+  (`RecentProjects`, entries kept only when they are local `.rscp` files that exist) and
+  `Never` (VST chain/paths, `FfmpegPath`/`YtDlpPath`, `LastProjectPath`, `LogFilePath`,
+  consents, and `Ai.Kind`/`Ai.BaseUrl` — the AI address receives the stored key and
+  doubles as the Claude Code path). An unlisted key is `Never`. This machine's value is
+  kept for everything not taken, and `ConfigBackupResult.NotRestoredSettings` lists what the
+  backup carried and lost; the Files tab prints it. A NEW `AppConfig` property fails
+  `EveryAppConfigSetting_HasExactlyOneCategory` until it is classified.
+- **`ConfigBackupRules.ShouldTransfer` is the one list of files that travel**: per tree,
+  the types the app writes there (`profiles/` json + wav + images, `languages/` json,
+  `themes/` json + images, `phrases/` rscp, `song-tones/` json), nothing under a bundle
+  directory, and **`recovery/` not at all** (it stays in `UserDataTopDirs`, so an update
+  still never overwrites it). Export uses it too.
+- **A recovery sidecar's `OriginalProjectPath` is adopted only through
+  `RecoveredProjectPath.IsAdoptable`** (plain local `.rscp`, outside the OS and program
+  folders); otherwise the session is recovered untitled. The recovery dialog prints the
+  adopted path.
+- **The startup VST restore loads only chain entries the scan reported**
+  (`TransportViewModel.ScanAndRestoreVstSelections`); the rest stay as slots with
+  `IsUnavailable` + a printed reason and are filtered out of every engine push.
+
 **`SettingsViewModel.ImportBackupAsync` drops the caches in a `finally`, not the
 `try`.** An import that threw part-way still REPLACED files on disk, and that is
 exactly when the invalidations were being skipped — leaving every service holding
@@ -145,6 +174,19 @@ back does the most damage.
   `PayloadDeletions.TakeFrom` removes `payload-deletions.txt` from the payload —
   a resume with only the staging tree could not reconstruct them and every
   dropped file would survive the no-purge copy forever.
+  **The record is DATA, not an authority (#109).** It sits in a user-writable
+  folder, and Resume copies from its paths while Discard deletes them. So
+  `UpdateInstaller.GetPendingUpdateApply` believes a record only when its
+  `StagingRoot` IS `<install>\update-staging`, its `PayloadDir` sits inside it and
+  its `ZipPath` (if any) sits in the update download folder; otherwise it reports
+  the record unresumable with the reason, and Discard deletes only the canonical
+  staging root and never a path the record named. Resume also re-runs
+  `PayloadReceiptFilter` on the staged tree. `ReleaseSigningTests` pins all three.
+  **The updater script has a RANDOM name in a per-user folder (#109):**
+  `UpdaterScriptBuilder.CreateScriptFile` writes `dotcharter-update-<32 hex>.cmd`
+  under `%TEMP%\DotCharter-updater` with `FileMode.CreateNew`, never the old fixed
+  `<install>\dotcharter-update.cmd` (still deleted when found, still refused
+  inside a payload).
   **…and the record is CLEARED when the staging tree it describes is replaced
   (2026-09-04).** `ApplyDownloadedUpdate` deletes and rebuilds
   `<install>\update-staging` before anything else, so a record from an earlier

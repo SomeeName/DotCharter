@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DotCharter.Launcher;
 using DotCharter.Services.Import.Youtube;
 using DotCharter.Tone.Infrastructure.Storage;
@@ -110,5 +111,22 @@ public sealed class InstallLocationTests
         // The folder names agree with the app's side of the contract.
         Assert.Equal(InstallLocation.AppFolderName, LaunchCommandLine.AppFolderName);
         Assert.Equal(InstallLocation.ExeName, LaunchCommandLine.AppExeName);
+    }
+
+    /// <summary>
+    ///     The app starts in its own folder, never in the caller's: Windows searches
+    ///     the working directory for DLLs, so a launch from a Downloads folder would
+    ///     otherwise let a file planted there load into the app.
+    /// </summary>
+    [Fact]
+    public void TheLauncherStartsTheAppWithTheAppFolderAsItsWorkingDirectory()
+    {
+        Assert.Equal(Path.Combine(@"C:\DC", "app"), LaunchCommandLine.WorkingDirectory(LaunchCommandLine.AppExePath(@"C:\DC")));
+
+        var program = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "DotCharter.Launcher", "Program.cs"));
+        Assert.Contains("LaunchCommandLine.WorkingDirectory(appExe)", program, StringComparison.Ordinal);
+        var call = Regex.Match(program, @"CreateProcessW\(application,[^;]*;", RegexOptions.Singleline).Value;
+        Assert.NotEmpty(call);
+        Assert.Matches(@"null,\s*directory,\s*&startup", call);
     }
 }

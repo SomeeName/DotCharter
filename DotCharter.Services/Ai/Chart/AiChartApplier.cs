@@ -53,7 +53,8 @@ public static class AiChartApplier
     {
         var composition = Compose(arrangement, level, plans, fingering, checkGuards);
         summary = composition.Summary;
-        var composite = new CompositeAction(composition.Actions) { LabelKey = HistoryLabelKey };
+        // A generator's result: the first linked copy it changed is written into every other copy.
+        var composite = new CompositeAction(composition.Actions) { LabelKey = HistoryLabelKey, LinkPolicyOverride = LinkPolicy.ShareFirstChanged };
         return composite.HasEffect ? composite : null;
     }
 

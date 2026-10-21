@@ -218,6 +218,17 @@ public class ChordTemplateFingerSetter
                 frets[i] = -1;
         }
 
+        // Two strings on one fret with a MUTED string between: the index lies
+        // across all three and mutes the middle one with its flat, never a second
+        // finger on its own fret. An OPEN string between must ring, so that case
+        // stays with the catalogue's two fingers.
+        if (frets is [0, -1, 0] && !template.Frets.ContainsKey(lowestNonzeroString + 1))
+        {
+            template.Fingers[lowestNonzeroString] = 1;
+            template.Fingers[lowestNonzeroString + 2] = 1;
+            return;
+        }
+
         var matchingShape = RecognizedShapes[frets.Length].FirstOrDefault(s => s.Matches(frets));
         if (matchingShape != null)
         {

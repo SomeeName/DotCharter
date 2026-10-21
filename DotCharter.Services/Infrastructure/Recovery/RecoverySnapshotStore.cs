@@ -153,12 +153,13 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
         // and the audio path baked absolute, and IsRecoverable can never gate it,
         // so it re-offers itself on every launch until it is discarded by hand.
         //
-        // AtomicFile.WriteAllText writes "<path>.tmp", forces it to the platter
-        // and renames with the bounded retry — the same three steps the snapshot
-        // does by hand. DeleteSnapshot/DeleteSession already sweep that exact
-        // temp name; the catch below sweeps OUR temp, so a failed sidecar leaves
-        // the previous (still described) snapshot standing rather than a staged
-        // orphan beside it.
+        // AtomicFile.WriteAllText stages a randomly named sibling ".tmp", forces
+        // it to the platter and renames with the bounded retry — the same three
+        // steps the snapshot does by hand — and removes its own stage when the
+        // swap fails. DeleteSnapshot/DeleteSession still sweep the fixed
+        // "<path>.tmp" name an older build left behind; the catch below sweeps
+        // OUR temp, so a failed sidecar leaves the previous (still described)
+        // snapshot standing rather than a staged orphan beside it.
         var sidecarPath = SidecarPathFor(snapshotPath);
         try
         {
@@ -194,6 +195,14 @@ public sealed class RecoverySnapshotStore : IRecoverySnapshotStore
                            {
                                TimestampUtc = SafeLastWriteUtc(file) ?? DateTimeOffset.UtcNow
                            };
+
+            // The sidecar is not trusted to say where Save writes: a path that is not
+            // a plain local .rscp leaves the session untitled (Save As), work intact.
+            if (!string.IsNullOrWhiteSpace(metadata.OriginalProjectPath) &&
+                !RecoveredProjectPath.IsAdoptable(metadata.OriginalProjectPath))
+            {
+                metadata.OriginalProjectPath = string.Empty;
+            }
 
             sessions.Add(new RecoverableSession
             {

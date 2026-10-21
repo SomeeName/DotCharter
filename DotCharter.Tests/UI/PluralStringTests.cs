@@ -203,7 +203,18 @@ public sealed class PluralStringTests
         // #707: the song-package export's stems line.
         ("Dialog_DcSong_Stems_DescOne", "Dialog_DcSong_Stems_Desc"),
         // #646: a Play Mode setlist's song count on Song Select.
-        ("PlayMode_Setlist_SongsOne", "PlayMode_Setlist_SongsFmt")
+        ("PlayMode_Setlist_SongsOne", "PlayMode_Setlist_SongsFmt"),
+        // The AI tone confirmation: how many tones the model proposes.
+        ("ToneGenerate_ConfirmOne", "ToneGenerate_Confirm"),
+        // Linked measures: a group's length, the toast, the Inspector line, Link identical measures.
+        ("LinkPanel_MeasuresOne", "LinkPanel_MeasuresFmt"),
+        ("LinkToast_ChangedOne", "LinkToast_ChangedFmt"),
+        ("LinkBanner_AppliesOne", "LinkBanner_AppliesFmt"),
+        ("LinkIdentical_DoneOne", "LinkIdentical_DoneFmt"),
+        // Linked measures: the import summary, the manager's suggestion rows and the Link all status.
+        ("LinkSuggest_GroupsOne", "LinkSuggest_Groups"),
+        ("LinkGroups_MeasuresOne", "LinkGroups_Measures"),
+        ("Status_LinkSuggestionsLinkedOne", "Status_LinkSuggestionsLinked")
     ];
 
     public static TheoryData<string, string> Pairs

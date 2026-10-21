@@ -114,12 +114,7 @@ public partial class App
         // snapshots under ConfigRoot/checkpoints, keyed by project identity.
         services.AddSingleton<DotCharter.Services.State.Checkpoints.ICheckpointService>(_ =>
             new DotCharter.Services.State.Checkpoints.CheckpointService());
-        services.AddSingleton<DotCharter.Services.Export.ISaveCompanionService,
-            DotCharter.Services.Export.SaveCompanionService>();
-        // File ▸ Export ▸ DotCharter song: the .dcsong writer's door, driven by the export dialog.
-        services.AddSingleton<DotCharter.Services.Package.DcSong.IDcSongExporter>(sp =>
-            new DotCharter.Services.Package.DcSong.DcSongExporter(sp.GetRequiredService<IAppLogger>(),
-                () => sp.GetService<IConfigurationService>()?.LoadAppConfig().FfmpegPath));
+        AddExportServices(services);
         services.AddSingleton<IProjectSessionService, ProjectSessionService>();
         services.AddSingleton<ITimelineInteractionFactory, TimelineInteractionFactory>();
         services.AddSingleton<IDiagnosticsDialogService>(sp =>
@@ -182,5 +177,20 @@ public partial class App
         services.AddSingleton<DotCharter.Services.Infrastructure.LibraryDoctor.ILibraryDoctorService,
             DotCharter.Services.Infrastructure.LibraryDoctor.LibraryDoctorService>();
         services.AddSingleton<IThemeService, ThemeService>();
+    }
+
+    // The document-backed export doors: save companion, DLC Builder project writer, .dcsong exporter.
+    private static void AddExportServices(IServiceCollection services)
+    {
+        services.AddSingleton<DotCharter.Services.Export.ISaveCompanionService,
+            DotCharter.Services.Export.SaveCompanionService>();
+        // Export ▸ Rocksmith ▸ DLC Builder project: the writer rides the project document service, so it lives
+        // with the app's other services (the dialogs module has no document service to give it).
+        services.AddSingleton<DotCharter.Services.Export.DlcBuilder.IDlcBuilderProjectWriter,
+            DotCharter.Services.Export.DlcBuilder.DlcBuilderProjectWriter>();
+        // File ▸ Export ▸ DotCharter song: the .dcsong writer's door, driven by the export dialog.
+        services.AddSingleton<DotCharter.Services.Package.DcSong.IDcSongExporter>(sp =>
+            new DotCharter.Services.Package.DcSong.DcSongExporter(sp.GetRequiredService<IAppLogger>(),
+                () => sp.GetService<IConfigurationService>()?.LoadAppConfig().FfmpegPath));
     }
 }

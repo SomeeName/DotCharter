@@ -216,14 +216,31 @@ Rules that are load-bearing:
   are states an attacker who controls the release document can ARRANGE, by
   renaming the asset out of the manifest or making the manifest unreachable, so
   the one content check on the path was optional at the attacker's discretion.
-  `GitHubUpdateService.FirstDigestPublishingVersion` (0.41, the release the
-  script began emitting digests) is the gate: at or above it every one of the
-  three is a refusal; below it the escape hatch stays, because those releases
-  published nothing to check against and refusing them would strand every old
-  install. `ResolveReleaseDigestsAsync` fetches the digests ONCE for both
-  download paths and is where the version gate lives.
-  `Services/Update/FullAssetChecksumTests` covers all four cases (match, the
-  three refusals) plus the pre-0.41 escape hatch.
+  Every one of the three is a refusal, at every version: the pre-0.41 escape
+  hatch went with #109 (an install that verifies signatures only ever updates to
+  a newer, signed release). `ResolveReleaseDigestsAsync` fetches the digests ONCE
+  for both download paths. `Services/Update/FullAssetChecksumTests` covers the
+  match and the refusals.
+- **The digests are SIGNED (#109, v1.1.0).** `SHA256SUMS.txt` comes from the same
+  release page as the zip, so a stolen token could publish a matching pair. The
+  release now also publishes `SHA256SUMS.txt.sig`, an Ed25519 signature over the
+  exact bytes of `SHA256SUMS.txt`, which carries a `# release: v<ver>` line
+  binding it to its tag. `ResolveReleaseDigestsAsync` fetches both as BYTES and
+  `Update/ReleaseSignature.Check` verifies them against the public key pinned in
+  `ReleaseSignature.PinnedPublicKeyBase64` before any digest is believed. A
+  missing, malformed or wrong-key signature, or a manifest naming another tag, is
+  a refusal. Every hash the updater trusts (the full zip's, `payload-manifest.json`'s
+  and through it every partial member) hangs off that one signed document. The
+  key's private half lives OUTSIDE the repo; signing, backup and rotation are in
+  `tools/release/README.md` § Release signing. Tests pass their own key through
+  the `releaseSigningKey` constructor parameter (`TestReleaseSigning` in
+  `FakeRelease.cs`); `Services/Update/ReleaseSigningTests` pins the refusals and
+  that the product default is the pinned key.
+- **The zip is RE-HASHED at apply (#109).** `GitHubUpdateService` remembers the
+  SHA-256 of every zip it verified (full) or assembled from verified members
+  (partial); `ApplyDownloadedUpdate` refuses any other path, and
+  `UpdateInstaller.ApplyDownloadedUpdate(zip, sha)` hashes it again through a
+  `FileShare.Read` handle held until extraction ends, refusing on any change.
 - **The download url is HOST-RESTRICTED, not merely un-signed (2026-09-04).**
   Every asset url comes out of the release JSON, so it is data. The allow-list
   (`AllowedHosts`) gated only whether the user's GitHub token was ATTACHED —
@@ -244,10 +261,10 @@ Rules that are load-bearing:
   must hash to, so an attacker who could substitute it simply declared the digests
   of whatever it wanted written. `New-Release.ps1` has digested it into
   `SHA256SUMS.txt` since 0.41 (the header comment at :13-14 says "digests of
-  assets 1-2") and nothing read that. `PayloadManifestMatchesPublishedDigestAsync`
-  applies the SAME three outcomes as the full path — unreachable ⇒ warn and
-  proceed, unlisted ⇒ warn and proceed, listed-and-mismatched ⇒ **fall back to the
-  full download, which digests its own bytes and refuses a mismatch outright**. A
+  assets 1-2") and nothing read that. `PayloadManifestMatchesPublishedDigest`
+  checks it against the signed digests: unlisted or mismatched ⇒ **fall back to the
+  full download, which digests its own bytes and refuses a mismatch outright**
+  (an unreachable or unsigned digest file already refused the whole update). A
   fallback is a refusal here, not a "trust it": `Services/Update/PartialManifestChecksumTests
   .AMismatchingManifestOnAReleaseWhoseAssetAlsoMismatches_RefusesTheUpdate` is the
   case that proves the second half.

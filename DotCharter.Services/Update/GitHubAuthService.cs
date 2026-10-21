@@ -16,7 +16,16 @@ public sealed class GitHubAuthService : IGitHubAuthService, IDisposable
     private const string DeviceCodeUrl = "https://github.com/login/device/code";
     private const string AccessTokenUrl = "https://github.com/login/oauth/access_token";
     private const string UserUrl = "https://api.github.com/user";
-    private const string Scope = "repo";
+
+    /// <summary>
+    ///     The classic OAuth scope asked of an OAuth app. Everything the app does with the
+    ///     token is READ one repository's releases and download their assets
+    ///     (<c>GitHubUpdateService</c>, <c>GitHubReleaseAssetDownloader</c>, the lyric-model
+    ///     fetch) plus <c>GET /user</c> for the login name. The sign-in exists for a PRIVATE
+    ///     feed, and classic OAuth has no read-only scope for a private repository:
+    ///     <c>public_repo</c> cannot see it and <c>repo</c> is the narrowest that can.
+    /// </summary>
+    private const string OAuthAppScope = "repo";
 
     private readonly GitHubTokenStore _store;
     private readonly IAppLogger? _logger;
@@ -72,17 +81,26 @@ public sealed class GitHubAuthService : IGitHubAuthService, IDisposable
         }
     }
 
+    /// <summary>
+    ///     The scope to request for <paramref name="clientId" />. A GitHub App's client id
+    ///     starts with <c>Iv</c>; its user token gets its reach from the read-only permissions
+    ///     configured on the app itself (contents: read) and GitHub ignores a requested scope,
+    ///     so none is sent and nothing broader than the app's grant can be implied. Any other
+    ///     id is an OAuth app and gets <see cref="OAuthAppScope" />.
+    /// </summary>
+    internal static string ScopeFor(string clientId)
+        => clientId.StartsWith("Iv", StringComparison.Ordinal) ? string.Empty : OAuthAppScope;
+
     public async Task<GitHubDeviceCode> StartDeviceFlowAsync(
         string clientId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(clientId))
             throw new ArgumentException("An OAuth app client id is required for the Device Flow.", nameof(clientId));
 
-        var json = await PostFormAsync(DeviceCodeUrl, new Dictionary<string, string>
-        {
-            ["client_id"] = clientId,
-            ["scope"] = Scope
-        }, cancellationToken).ConfigureAwait(false);
+        var form = new Dictionary<string, string> { ["client_id"] = clientId };
+        var scope = ScopeFor(clientId);
+        if (scope.Length > 0) form["scope"] = scope;
+        var json = await PostFormAsync(DeviceCodeUrl, form, cancellationToken).ConfigureAwait(false);
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;

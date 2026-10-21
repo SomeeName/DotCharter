@@ -1,0 +1,42 @@
+name: Public sync watch
+
+# Once a day, ~1 minute on ubuntu-latest: lists the public DotCharter and JuceSharp
+# commits after the last snapshot that dev has not imported (no `Public-Commit:`
+# trailer) and opens ONE dev issue per commit, deduplicated by title. The export
+# (tools/release/Export-PublicSnapshot.ps1) is the hard stop; this is the reminder.
+# It reads public data only (git ls-remote + fetch, no token) and dev's own history;
+# the only write is an issue. The one exemption from "manual only", pinned by
+# Infrastructure/CiWorkflowLintTests.
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    name: Public commits not imported into dev
+    # Only in the dev repo: the public export carries this file too.
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && endsWith(github.repository, '-Dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out dev (history only, no submodule)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Open an issue per public commit not imported
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: pwsh -NoProfile -File tools/release/Find-UnimportedPublicCommits.ps1 -DevRef HEAD -OpenIssues

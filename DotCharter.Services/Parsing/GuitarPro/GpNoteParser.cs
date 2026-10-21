@@ -328,9 +328,13 @@ public sealed class GpNoteParser
 
         if (found.PalmMuted != null) note.Mute = MuteType.Palm;
 
-        if (found.Harmonic != null)
+        // Guitar Pro writes a `Harmonic` switch beside `HarmonicType`; alphaTab's writer (and
+        // so our own .gp export) writes only `HarmonicType` + `HarmonicFret`. Keying on the
+        // switch alone would lose every harmonic of an exported chart on re-import.
+        var hType = found.HarmonicType?.Element("HType")?.Value ?? "";
+        if (found.Harmonic != null ||
+            (found.HarmonicType != null && !string.Equals(hType, "NoHarmonic", StringComparison.OrdinalIgnoreCase)))
         {
-            var hType = found.HarmonicType?.Element("HType")?.Value ?? "";
             note.Harmonic = string.Equals(hType, "Pinch", StringComparison.OrdinalIgnoreCase)
                 ? HarmonicType.Pinch
                 : HarmonicType.Normal;

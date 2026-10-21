@@ -56,7 +56,7 @@ public sealed class TimelineGutterControl : Control
         AvaloniaProperty.Register<TimelineGutterControl, int>(nameof(TransposeSemitones));
 
     /// <summary>Caption band, mono caps. Matches the Fire eyebrow step.</summary>
-    private const double CaptionSize = 9.5;
+    internal const double CaptionSize = 9.5;
     private const double StringNameSize = 13.0;
     private const double MetaSize = 9.0;
 
@@ -260,12 +260,13 @@ public sealed class TimelineGutterControl : Control
         DrawingContext context, TimelineGutterLayout layout, double w, IBrush dim, IBrush seam)
     {
         var r = layout.Ribbon;
-        if (r.ShowTones) Caption(context, "Ribbon_Tones", r.ToneY, RibbonLayout.RowHeight, w, dim, seam);
-        if (r.ShowSections) Caption(context, "Ribbon_Sections", r.SectionY, RibbonLayout.RowHeight, w, dim, seam);
-        if (r.ShowPhrases) Caption(context, "Ribbon_Phrases", r.PhraseY, RibbonLayout.RowHeight, w, dim, seam);
-        if (r.ShowLyrics) Caption(context, "Ribbon_Lyrics", r.LyricY, RibbonLayout.RowHeight, w, dim, seam);
+        if (r.ShowTones) Caption(context, "Ribbon_Tones", r.ToneY, r.RowPitch, w, dim, seam);
+        if (r.ShowSections) Caption(context, "Ribbon_Sections", r.SectionY, r.RowPitch, w, dim, seam);
+        if (r.ShowPhrases) Caption(context, "Ribbon_Phrases", r.PhraseY, r.RowPitch, w, dim, seam);
+        if (r.ShowLyrics) Caption(context, "Ribbon_Lyrics", r.LyricY, r.RowPitch, w, dim, seam);
+        if (r.ShowLinks) Caption(context, "Ribbon_Links", r.LinkY, r.RowPitch, w, dim, seam);
         if (r.ShowMeasureMetadata)
-            Caption(context, "Timeline_Gutter_Measures", r.MetadataY, RibbonLayout.MetadataBandHeight, w, dim, seam);
+            Caption(context, "Timeline_Gutter_Measures", r.MetadataY, r.Band, w, dim, seam);
     }
 
     private void Caption(

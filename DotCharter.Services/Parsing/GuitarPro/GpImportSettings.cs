@@ -9,10 +9,10 @@
 ///     <see cref="AppConfig"/> via <see cref="FromConfig"/>; <see cref="Default"/>
 ///     carries EOF's defaults and is used whenever a caller passes none.
 ///     <para>
-///     The time-signature / tempo options (<c>GpImportTimeSignatures</c>,
-///     <c>GpImportDropMidBeatTempoChanges</c>) are NOT here — they are consumed
-///     when the UI turns <see cref="GpImportMetadata"/> into a beat map
-///     (<see cref="GpBeatMapBuilder"/>), not inside the note/chord importers.
+///     The tempo option (<c>GpImportDropMidBeatTempoChanges</c>) is NOT here — it
+///     is consumed when the UI turns <see cref="GpImportMetadata"/> into a beat
+///     map (<see cref="GpBeatMapBuilder"/>). <see cref="ImportTimeSignatures"/>
+///     is: the importer must place notes on the same grid that map will have.
 ///     </para>
 /// </summary>
 public sealed record GpImportSettings
@@ -47,6 +47,14 @@ public sealed record GpImportSettings
     /// Charter's choice); EOF uses 1. Clamped to 1–3 by the materializer.</summary>
     public int SlideInFretDistance { get; init; } = GpPostProcessor.DefaultSlideInFretDistance;
 
+    /// <summary>The beat map will carry the score's time signatures
+    /// (<c>AppConfig.GpImportTimeSignatures</c>, passed to
+    /// <see cref="GpBeatMapBuilder.Build"/>): a 6/8 bar is six eighth-note beats,
+    /// so the importer places its notes in those beats (<see cref="GpMeterGrid"/>).
+    /// Off ⇒ every bar is four quarter beats and positions stay in quarter notes.
+    /// Default on, as in AppConfig.</summary>
+    public bool ImportTimeSignatures { get; init; } = true;
+
     /// <summary>EOF defaults, used when a caller passes no settings.</summary>
     public static GpImportSettings Default { get; } = new();
 
@@ -59,6 +67,7 @@ public sealed record GpImportSettings
         PreserveShortRests = config.GpImportPreserveShortRests,
         BeatTextTechniques = config.GpImportBeatTextTechniques,
         MarkersToSections = config.GpImportMarkersToSections,
-        SlideInFretDistance = config.GpImportSlideInFretDistance
+        SlideInFretDistance = config.GpImportSlideInFretDistance,
+        ImportTimeSignatures = config.GpImportTimeSignatures
     };
 }

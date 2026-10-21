@@ -97,7 +97,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
         Assert.Contains("practice-profiles.json", names);
         Assert.Contains("profiles/default/stats.json", names);
         Assert.Contains("languages/fr-FR.json", names);
-        Assert.Contains("recovery/snapshot.rscp", names);
+        Assert.Contains("phrases/snapshot.rscp", names);
 
         Assert.DoesNotContain("github-token.dat", names);
         Assert.DoesNotContain("online-session.bin", names);
@@ -132,9 +132,9 @@ public sealed class ConfigBackupServiceTests : IDisposable
     public void Export_DoesNotPackItselfWhenSavedInsideTheConfigRoot()
     {
         var root = CreatePopulatedConfigRoot();
-        // "recovery/" is an included tree, so an unguarded export would try to
+        // "phrases/" is an included tree, so an unguarded export would try to
         // zip the half-written archive into itself.
-        var zipPath = Path.Combine(root, "recovery", "backup.zip");
+        var zipPath = Path.Combine(root, "phrases", "backup.zip");
 
         var result = new ConfigBackupService(root).Export(zipPath);
 
@@ -162,7 +162,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
                      "practice-profiles.json",
                      Path.Combine("profiles", "default", "stats.json"),
                      Path.Combine("languages", "fr-FR.json"),
-                     Path.Combine("recovery", "snapshot.rscp")
+                     Path.Combine("phrases", "snapshot.rscp")
                  })
         {
             var expected = File.ReadAllBytes(Path.Combine(source, relative));
@@ -189,7 +189,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
 
         var target = Path.Combine(_workDir, "target-root");
         Directory.CreateDirectory(target);
-        File.WriteAllText(Path.Combine(target, "appconfig.json"), "{ \"old\": true }");
+        File.WriteAllText(Path.Combine(target, "appconfig.json"), "{ \"UiScale\": 0.5 }");
         File.WriteAllText(Path.Combine(target, "unrelated.txt"), "kept");
 
         new ConfigBackupService(target).Import(zipPath);
@@ -356,7 +356,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
                 ConfigBackupRules.SchemaMajor, 0, null, DateTimeOffset.UtcNow, 1);
             WriteEntry(zip, ConfigBackupRules.ManifestEntryName, ConfigBackupRules.SerializeManifest(manifest));
             for (var i = 0; i < ConfigBackupService.MaxImportEntries + 8; i++)
-                zip.CreateEntry($"recovery/{i}.rscp");
+                zip.CreateEntry($"phrases/{i}.rscp");
         }
 
         // The point of the fixture: a small file declaring tens of thousands of
@@ -390,7 +390,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
 
             // 8 MiB of zeros in a ~8 KB archive, under an ALLOWLISTED path so it
             // is the BUDGET that refuses it and not the allowlist.
-            using var entry = zip.CreateEntry("recovery/bomb.rscp").Open();
+            using var entry = zip.CreateEntry("phrases/bomb.rscp").Open();
             var chunk = new byte[1024 * 1024];
             for (var i = 0; i < 8; i++) entry.Write(chunk);
         }
@@ -451,7 +451,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
             foreach (var name in live.Keys)
                 WriteEntry(zip, name, $$"""{"from":"the archive: {{name}}"}""");
 
-            using var entry = zip.CreateEntry("recovery/huge.rscp").Open();
+            using var entry = zip.CreateEntry("phrases/huge.rscp").Open();
             var chunk = new byte[1024 * 1024];
             for (var i = 0; i < 8; i++) entry.Write(chunk);
         }
@@ -466,7 +466,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
 
         // …and no scratch is left where a portable install would broadcast it.
         Assert.False(Directory.Exists(Path.Combine(target, ConfigBackupService.ImportStagingFolderName)));
-        Assert.False(Directory.Exists(Path.Combine(target, "recovery")));
+        Assert.False(Directory.Exists(Path.Combine(target, "phrases")));
     }
 
     /// <summary>
@@ -492,7 +492,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
             WriteEntry(zip, ConfigBackupRules.ManifestEntryName, ConfigBackupRules.SerializeManifest(manifest));
             WriteEntry(zip, "appconfig.json", """{"from":"the archive"}""");
             WriteEntry(zip, "keybinds.json", """{"from":"the archive"}""");
-            WriteEntry(zip, "recovery/late.rscp", new string('x', 4096));
+            WriteEntry(zip, "phrases/late.rscp", new string('x', 4096));
         }
 
         // Re-stamp the LAST member's compression method (central directory copy,
@@ -502,7 +502,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
         // Mangling the DATA would not do: .NET's ZipArchive verifies no CRC on
         // read, so a corrupt member is silently returned as different bytes.
         var bytes = File.ReadAllBytes(zipPath);
-        var central = CentralDirectoryHeaderOffset(bytes, "recovery/late.rscp");
+        var central = CentralDirectoryHeaderOffset(bytes, "phrases/late.rscp");
         bytes[central + 10] = 6;
         bytes[central + 11] = 0;
         File.WriteAllBytes(zipPath, bytes);
@@ -513,7 +513,7 @@ public sealed class ConfigBackupServiceTests : IDisposable
         Assert.Equal("""{"live":"settings"}""", File.ReadAllText(Path.Combine(target, "appconfig.json")));
         Assert.Equal("""{"live":"keybinds"}""", File.ReadAllText(Path.Combine(target, "keybinds.json")));
         Assert.False(Directory.Exists(Path.Combine(target, ConfigBackupService.ImportStagingFolderName)));
-        Assert.False(Directory.Exists(Path.Combine(target, "recovery")));
+        Assert.False(Directory.Exists(Path.Combine(target, "phrases")));
     }
 
     /// <summary>An interrupted earlier import must not be able to leak into the
@@ -581,13 +581,13 @@ public sealed class ConfigBackupServiceTests : IDisposable
             File.WriteAllText(path, content, Encoding.UTF8);
         }
 
-        Write("appconfig.json", "{ \"themePresetId\": \"midnight\", \"uiScale\": 1.25 }");
+        Write("appconfig.json", "{ \"LanguageCulture\": \"de-DE\", \"UiScale\": 1.25 }");
         Write("keybinds.json", "{ \"togglePlayback\": \"Space\" }");
         Write("player-profiles.json", "{ \"profiles\": [ { \"id\": \"p1\" } ] }");
         Write("practice-profiles.json", "{ \"songs\": {} }");
         Write(Path.Combine("profiles", "default", "stats.json"), "{ \"totalNotesHit\": 12345 }");
         Write(Path.Combine("languages", "fr-FR.json"), "{ \"Language_DisplayName\": \"Français\" }");
-        Write(Path.Combine("recovery", "snapshot.rscp"), "snapshot-bytes");
+        Write(Path.Combine("phrases", "snapshot.rscp"), "snapshot-bytes");
 
         // Must never travel:
         Write("github-token.dat", "dpapi-sealed-github-token");

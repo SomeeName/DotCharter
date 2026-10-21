@@ -43,7 +43,11 @@ public static class AiProviderResolution
         return settings.IsEnabled && (factory is null || factory.Supports(settings.Kind));
     }
 
-    /// <summary>Resolves the model for the settings in force. Throws
+    /// <summary>Resolves the model for the settings in force, <b>with web research off whatever the
+    /// setting says</b>: this is the door the lanes that put project text into a prompt (the Rocksmith
+    /// tone generator, the narrator) use, and a model that can fetch pages while it reads a stranger's
+    /// song title can be steered into fetching an address that carries the prompt. The chart pass
+    /// forces the same. Throws
     /// <see cref="ToneDesignException" /> with
     /// <see cref="ToneDesignFault.NotConfigured" /> — naming the ONE thing that is
     /// missing — exactly as <see cref="IToneDesignModelFactory.Create" /> does. The
@@ -57,7 +61,7 @@ public static class AiProviderResolution
         IToneDesignModelFactory factory, Func<RigConfig>? config, out AiProviderSettings settings)
     {
         ArgumentNullException.ThrowIfNull(factory);
-        settings = SettingsOf(config);
+        settings = SettingsOf(config) with { WebResearch = false };
         return factory.Create(settings);
     }
 

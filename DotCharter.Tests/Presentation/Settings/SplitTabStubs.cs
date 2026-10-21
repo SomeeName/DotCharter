@@ -68,6 +68,7 @@ public static class SplitTabStubs
     {
         public List<string> Calls { get; } = [];
         public Exception? Throw { get; set; }
+        public IReadOnlyList<string> NotRestoredSettings { get; set; } = [];
 
         public ConfigBackupResult Export(string archivePath)
         {
@@ -80,7 +81,7 @@ public static class SplitTabStubs
         {
             Calls.Add("import:" + archivePath);
             if (Throw is not null) throw Throw;
-            return new ConfigBackupResult(7, ["credentials.json"]);
+            return new ConfigBackupResult(7, ["credentials.json"]) { NotRestoredSettings = NotRestoredSettings };
         }
     }
 

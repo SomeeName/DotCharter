@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:linking="clr-namespace:DotCharter.UI.ViewModels.Editor.Linking"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Linking.LinkBannerView"
+             x:CompileBindings="True"
+             x:DataType="linking:LinkedMeasuresViewModel">
+    <!-- The host shows it only while IsBannerVisible (as the shell does the launch card).
+         The Inspector's linked line (mockup C_inspector_and_panel): the selection
+         sits in a linked placement, so an edit here is copied to every other one.
+         "Only this one" unlinks this placement first; "Panel" opens the link panel. -->
+    <Border x:Name="LinkBanner"
+            Background="{DynamicResource FireSurfaceRaised}"
+            BorderBrush="{Binding BannerBrush}"
+            BorderThickness="2,0,0,0" CornerRadius="3" Padding="8,4"
+            AutomationProperties.Name="{localization:Loc LinkToast_Linked}">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="4">
+            <PathIcon Grid.Column="0" Data="{DynamicResource IconLink}" Width="12" Height="12"
+                      Foreground="{Binding BannerBrush}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{localization:Loc LinkToast_Linked}" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{DynamicResource FireTextBright}" VerticalAlignment="Center" />
+            <TextBlock x:Name="LinkBannerText" Grid.Column="2" Text="{Binding BannerText}" FontSize="12"
+                       Foreground="{DynamicResource FireTextSecondary}" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BannerText}" />
+            <Button x:Name="LinkBannerOnlyThisOne" Grid.Column="3" Command="{Binding OnlyThisOneCommand}"
+                    Content="{localization:Loc LinkBanner_OnlyThisOne}" FontSize="11" Padding="8,2"
+                    VerticalAlignment="Center" />
+            <Button x:Name="LinkBannerPanel" Grid.Column="4" Command="{Binding OpenBannerPanelCommand}"
+                    Content="{localization:Loc LinkBanner_Panel}" FontSize="11" Padding="8,2"
+                    VerticalAlignment="Center" />
+        </Grid>
+    </Border>
+</UserControl>

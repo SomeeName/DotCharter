@@ -20,17 +20,32 @@ public sealed class UpdateInstaller
     private readonly string _installDir;
     private readonly IAppLogger? _logger;
     private readonly IReadOnlyList<string> _pluginFiles;
+    private readonly string? _downloadDir;
+    private readonly string _scriptDir;
 
     /// <param name="installDir">The install's TOP, not <c>app\</c> — the
     /// folder the payload goes over.</param>
     /// <param name="logger">Where every refusal and the launch are logged.</param>
     /// <param name="pluginFiles">The plugin files the running app declares
     /// (<see cref="PluginUpdateGuard" />); none by default.</param>
-    public UpdateInstaller(string installDir, IAppLogger? logger = null, IReadOnlyList<string>? pluginFiles = null)
+    /// <param name="downloadDir">Where downloaded update zips live. The ONLY place
+    /// a pending record's zip may point (and so the only place Discard deletes a
+    /// zip from); null means a record may name no zip at all.</param>
+    /// <param name="scriptDir">The per-user folder the updater script is written
+    /// to under a random name; <see cref="UpdaterScriptBuilder.DefaultScriptDirectory" />
+    /// by default.</param>
+    public UpdateInstaller(
+        string installDir,
+        IAppLogger? logger = null,
+        IReadOnlyList<string>? pluginFiles = null,
+        string? downloadDir = null,
+        string? scriptDir = null)
     {
         _installDir = installDir;
         _logger = logger;
         _pluginFiles = pluginFiles ?? [];
+        _downloadDir = downloadDir;
+        _scriptDir = scriptDir ?? UpdaterScriptBuilder.DefaultScriptDirectory();
     }
 
     /// <summary>Overrides the extraction budget <see cref="ApplyDownloadedUpdate" />
@@ -51,11 +66,33 @@ public sealed class UpdateInstaller
         return UpdateApplyBlockReason.None;
     }
 
-    public void ApplyDownloadedUpdate(string zipPath)
+    /// <summary>
+    ///     Stages <paramref name="zipPath" /> and launches the updater.
+    /// </summary>
+    /// <param name="zipPath">The downloaded update.</param>
+    /// <param name="expectedSha256">The SHA-256 the zip had when it was verified
+    /// against the signed release digests. The zip is re-hashed here, with a
+    /// handle that keeps it from being rewritten until it is staged, and refused
+    /// on any difference: it sat in a user-writable folder in between.</param>
+    public void ApplyDownloadedUpdate(string zipPath, string expectedSha256)
     {
         var block = GetApplyBlockReason();
         if (block != UpdateApplyBlockReason.None)
             throw new InvalidOperationException($"Cannot apply update in place: {block}.");
+
+        // FileShare.Read: nobody may open the zip for writing between this hash
+        // and the end of the extraction below, which reads it by path.
+        using var pinned = new FileStream(zipPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(pinned)).ToLowerInvariant();
+        if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger?.Warning(AppLogCategory.Application,
+                $"Refused update '{Path.GetFileName(zipPath)}': it changed after it was verified " +
+                $"(expected {expectedSha256}, now {actual}).");
+            throw new InvalidDataException(
+                $"Refusing to apply '{Path.GetFileName(zipPath)}': the file changed after it was verified " +
+                "against the signed release digests.");
+        }
 
         // Non-Unknown, because GetApplyBlockReason just said so.
         var installLayout = AppPayload.ClassifyDirectory(_installDir);
@@ -197,6 +234,27 @@ public sealed class UpdateInstaller
                     LogTail: ReadLogTail());
             }
 
+            // Every path in the record is DATA in a user-writable file, and Resume
+            // copies from it while Discard deletes it. Only paths inside the
+            // canonical staging and download folders are believed.
+            var outside = DescribeForeignPath(state);
+            if (outside != null)
+            {
+                _logger?.Warning(AppLogCategory.Application,
+                    $"Ignoring the staged-update record: {outside}.");
+                return new PendingUpdateApply(
+                    new UpdateApplyState
+                    {
+                        StagingRoot = UpdaterScriptBuilder.StagingRootFor(_installDir),
+                        StagedUtc = state.StagedUtc,
+                        TargetVersion = state.TargetVersion,
+                    },
+                    CanResume: false,
+                    Problem: outside,
+                    LogPath: ExistingLogPath(),
+                    LogTail: ReadLogTail());
+            }
+
             var problem = DescribePendingProblem(state);
             return new PendingUpdateApply(
                 state, problem == null, problem, ExistingLogPath(), ReadLogTail());
@@ -237,19 +295,20 @@ public sealed class UpdateInstaller
 
     /// <summary>Throws away a staged update: the payload, the script, the probe
     /// file and the record. The transcript is KEPT — it is the only evidence of
-    /// why the update did not happen.</summary>
+    /// why the update did not happen. Only the CANONICAL staging root is deleted,
+    /// and the zip only when the record's path sits in the download folder: the
+    /// record is a user-writable file, not an authority on what to delete.</summary>
     public void DiscardPendingUpdateApply()
     {
         var state = GetPendingUpdateApply()?.State;
-        var staging = string.IsNullOrWhiteSpace(state?.StagingRoot)
-            ? UpdaterScriptBuilder.StagingRootFor(_installDir)
-            : state!.StagingRoot;
 
-        BestEffortDelete.Directory(staging);
-        BestEffortDelete.File(UpdaterScriptBuilder.ScriptPathFor(_installDir));
+        BestEffortDelete.Directory(UpdaterScriptBuilder.StagingRootFor(_installDir));
+        BestEffortDelete.File(UpdaterScriptBuilder.LegacyScriptPathFor(_installDir));
+        UpdaterScriptBuilder.DeleteStaleScripts(_scriptDir);
         BestEffortDelete.File(Path.Combine(_installDir, UpdaterScriptBuilder.WaitProbeFileName));
         BestEffortDelete.File(UpdaterScriptBuilder.PendingStatePathFor(_installDir));
-        if (!string.IsNullOrWhiteSpace(state?.ZipPath)) BestEffortDelete.File(state!.ZipPath);
+        if (!string.IsNullOrWhiteSpace(state?.ZipPath) && IsInDownloadDir(state!.ZipPath))
+            BestEffortDelete.File(state.ZipPath);
 
         _logger?.Info(AppLogCategory.Application, "Discarded the staged update at the user's request.");
     }
@@ -259,8 +318,48 @@ public sealed class UpdateInstaller
         if (!Directory.Exists(state.PayloadDir)) return "the staged payload is gone";
         var layout = AppPayload.ClassifyDirectory(_installDir);
         if (layout == InstallLayout.Unknown) return "this install's layout is not recognised";
-        return AppPayload.ValidateDirectory(state.PayloadDir, layout);
+        // The same receipt filter the apply ran: the staged tree sat on disk since,
+        // and a resume must not copy user data or credential stores over the install.
+        return AppPayload.ValidateDirectory(state.PayloadDir, layout)
+               ?? PayloadReceiptFilter.FindRefusal(state.PayloadDir);
     }
+
+    /// <summary>Why a record's paths are not believed, or null: the staging root
+    /// must BE the canonical one, the payload must sit inside it, and the zip (if
+    /// any) inside the download folder.</summary>
+    private string? DescribeForeignPath(UpdateApplyState state)
+    {
+        var staging = UpdaterScriptBuilder.StagingRootFor(_installDir);
+        if (!SamePath(state.StagingRoot, staging))
+            return "the staged-update record names a staging folder that is not this install's";
+        if (!SamePath(state.PayloadDir, staging) && !IsUnder(state.PayloadDir, staging))
+            return "the staged-update record names a payload outside this install's staging folder";
+        if (!string.IsNullOrWhiteSpace(state.ZipPath) && !IsInDownloadDir(state.ZipPath))
+            return "the staged-update record names a download outside the update download folder";
+        return null;
+    }
+
+    private bool IsInDownloadDir(string path) => _downloadDir != null && IsUnder(path, _downloadDir);
+
+    private static string? Canonical(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) return null;
+        try
+        {
+            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
+    private static bool SamePath(string? a, string b)
+        => Canonical(a) is { } full && string.Equals(full, Canonical(b), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUnder(string? path, string root)
+        => Canonical(path) is { } full && Canonical(root) is { } top &&
+           full.StartsWith(top + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
     private string? ExistingLogPath()
     {
@@ -288,9 +387,12 @@ public sealed class UpdateInstaller
         var script = UpdaterScriptBuilder.Build(
             Environment.ProcessId, state.PayloadDir, state.StagingRoot,
             _installDir, AppPayload.ExeName, state.ZipPath, state.Deletions);
-        var scriptPath = UpdaterScriptBuilder.ScriptPathFor(_installDir);
-        // Plain ASCII content — safe with cmd.exe's default codepage.
-        File.WriteAllText(scriptPath, script);
+        // A RANDOM name in a per-user folder, created with CreateNew: a
+        // fixed name beside the install is a file anyone who can write there can
+        // pre-plant or swap between this write and cmd.exe reading it. A leftover
+        // from an older version is removed so it cannot be mistaken for ours.
+        BestEffortDelete.File(UpdaterScriptBuilder.LegacyScriptPathFor(_installDir));
+        var scriptPath = UpdaterScriptBuilder.CreateScriptFile(_scriptDir, script);
 
         // Hidden, cwd OUTSIDE the install dir (a cwd inside it would keep handles
         // that block the staging cleanup).

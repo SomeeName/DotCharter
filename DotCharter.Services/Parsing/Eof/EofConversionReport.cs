@@ -25,6 +25,7 @@ public enum EofLoss
     MeasureStart,
     UnplacedPhrase,
     PhraseMaxDifficulty,
+    MoverPhrase,
     ExtraVocalTrack,
     LyricPitch,
     CentOffset,

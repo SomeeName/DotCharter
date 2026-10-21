@@ -83,7 +83,7 @@ internal sealed class GpChordDiagrams
     /// </summary>
     public static GpChordDiagrams Read(XElement trackNode, int stringCount, int capo)
     {
-        var staffProps = trackNode.Element("Staves")?.Element("Staff")?.Element("Properties");
+        var staffProps = GpArrangementParser.StaffProperties(trackNode);
         var trackProps = trackNode.Element("Properties");
         var collection = FindProperty(staffProps, "DiagramCollection") ?? FindProperty(trackProps, "DiagramCollection");
         if (collection == null || stringCount <= 0) return Empty;

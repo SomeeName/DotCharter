@@ -37,6 +37,13 @@ public sealed class GpArrangementParser
     /// <summary>The chord diagrams of the track being parsed (re-read per track).</summary>
     private GpChordDiagrams _diagrams = GpChordDiagrams.Empty;
 
+    /// <summary>Per parsed arrangement, the slide-in ornaments its import materialized
+    /// (<see cref="GpPostProcessor.MaterializeSlideIns"/>).</summary>
+    public Dictionary<Arrangement, int> SlideInsMaterialized { get; } = [];
+
+    /// <summary>Most notes plus chords one voice of a track may emit; a test lowers it.</summary>
+    internal int MaxNotesPerTrack { get; init; } = GpFormatBounds.MaxNotesPerTrack;
+
     public List<Arrangement> Parse(XDocument doc, List<int> trackIds, GpImportSettings? settings = null)
     {
         settings ??= GpImportSettings.Default;
@@ -83,7 +90,7 @@ public sealed class GpArrangementParser
 
             var arr = new Arrangement { Name = name };
 
-            ApplyTrackProperties(trackNode, arr);
+            ApplyTrackProperties(trackNode, arr, name);
             // The NAME decides the type (bass/rhythm/combo/vocal/lead — the
             // shared tab-import heuristic); the string count is only the
             // fallback for a keyword-less name, mirroring the GP3-5 binary
@@ -119,7 +126,8 @@ public sealed class GpArrangementParser
             // hammer-ons) — hand them to Run so AdjustSustains never re-derives a
             // descending one into a pull-off. Right-hand taps stay HopoType.Tap and
             // are deliberately NOT here.
-            GpPostProcessor.Run(level, arr, settings, tapOriginated: NoteParser.LeftHandTappedNotes,
+            SlideInsMaterialized[arr] = GpPostProcessor.Run(level, arr, settings,
+                tapOriginated: NoteParser.LeftHandTappedNotes,
                 authoredFingers: _authoredFingers, authoredChordNames: _authoredChordNames);
             // Sidecar voices get the NOTATION-relevant passes only: tied beats
             // merge (summing their authored NotationDuration) and slide targets
@@ -245,14 +253,22 @@ public sealed class GpArrangementParser
     /// <summary>The staff's <c>&lt;Property name="FretCount"&gt;&lt;Number&gt;</c>, or null.</summary>
     private static int? ReadFretCount(XElement trackNode)
     {
-        var value = trackNode.Element("Staves")?.Element("Staff")?.Element("Properties")?.Elements("Property")
+        var value = StaffProperties(trackNode)?.Elements("Property")
             .FirstOrDefault(p => p.Attribute("name")?.Value == "FretCount")?.Element("Number")?.Value;
         return int.TryParse(value, CultureInfo.InvariantCulture, out var count) ? count : null;
     }
 
-    private static void ApplyTrackProperties(XElement trackNode, Arrangement arr)
+    /// <summary>
+    ///     The <c>&lt;Properties&gt;</c> holding a track's tuning, capo, fret count and
+    ///     chord diagrams: under <c>Staves/Staff</c> in GP7+, directly under the
+    ///     <c>&lt;Track&gt;</c> in GP6 (<c>.gpx</c>).
+    /// </summary>
+    internal static XElement? StaffProperties(XElement trackNode) =>
+        trackNode.Element("Staves")?.Element("Staff")?.Element("Properties") ?? trackNode.Element("Properties");
+
+    private static void ApplyTrackProperties(XElement trackNode, Arrangement arr, string name)
     {
-        var props = trackNode.Element("Staves")?.Element("Staff")?.Element("Properties");
+        var props = StaffProperties(trackNode);
         if (props == null) return;
 
         var tuningProp = props.Elements("Property").FirstOrDefault(p => p.Attribute("name")?.Value == "Tuning");
@@ -274,12 +290,13 @@ public sealed class GpArrangementParser
             // subtracting a different standard than the namer adds produces a
             // tuning whose offsets and letters disagree, which is what a local
             // 4/5/7-and-fall-back-to-6 table did to every 8-string tab.
-            // 5 is the sanctioned override — the tab formats measure a 5-string
-            // bass against B E A D G, the RS SNG path against E A D G B.
-            int[] standardBass5 = [23, 28, 33, 38, 43];
-            var standard = pitchValues.Length == 5
-                ? standardBass5
-                : TuningUtilities.GetStandardMidiPitches(pitchValues.Length);
+            // 5 strings included: the app reads them as E A D G B, so a B E A D G
+            // bass imports as -5 -5 -5 -5 -4 and sounds right.
+            // The octave follows the type the caller derives right after this (name first,
+            // string count as the fallback), so a bass reads one octave down.
+            var standard = TuningUtilities.GetStandardMidiPitchesFor(pitchValues.Length,
+                ArrangementTypeHeuristics.FromTrackName(name,
+                    pitchValues.Length <= 5 ? ArrangementType.Bass : ArrangementType.Lead));
 
             var offsets = new int[pitchValues.Length];
             for (var i = 0; i < pitchValues.Length; i++)
@@ -527,6 +544,11 @@ public sealed class GpArrangementParser
                 CaptureGrace(timeline[i], source, slot);
             else
                 ParseTimedBeat(timeline[i], PlaceBeat(timeline, swung, i), source, bar, target, slot);
+
+            // Beats, repeats and trills multiply into notes the file never
+            // spells out, so the bound is on what has been EMITTED.
+            if (target.Notes.Count + target.Chords.Count > MaxNotesPerTrack)
+                throw new InvalidDataException($"The track expands to more than {MaxNotesPerTrack} notes and chords.");
         }
     }
 
@@ -700,6 +722,8 @@ public sealed class GpArrangementParser
             EmitChord(notesList, entry, place, hasTremolo, technique, source, target, slot);
         }
 
+        ApplyBeatBassPicking(beatNode, target, emittedNotesFrom, emittedChordsFrom);
+
         ObserveBeatCarries(entry, placementPos, notesList is { Length: > 0 }, emittedNotesFrom,
             target.Chords.Count > emittedChordsFrom, settings, target, slot);
 
@@ -797,6 +821,38 @@ public sealed class GpArrangementParser
         {
             GpBeatCarry.ObserveStaccatoBeat(slot.StaccatoCarry, target.Notes, emittedNotesFrom, placementPos,
                 beatSounded, entry.Rhythm, beatEmittedChord);
+        }
+    }
+
+    /// <summary>
+    ///     Guitar Pro 7+ writes slap and pop as BEAT properties (<c>Slapped</c> / <c>Popped</c>
+    ///     under the beat's <c>Properties</c>), as alphaTab's writer and parser do; the note
+    ///     properties of the same name <c>GpNoteParser</c> reads are the older spelling. A
+    ///     note's own property wins; the beat's fills every sound the beat emitted.
+    /// </summary>
+    private static void ApplyBeatBassPicking(XElement beatNode, VoiceTarget target, int notesFrom, int chordsFrom)
+    {
+        var picking = BassPickingType.None;
+        foreach (var property in beatNode.Element("Properties")?.Elements("Property") ?? [])
+        {
+            var name = property.Attribute("name")?.Value;
+            if (name == "Slapped") picking = BassPickingType.Slap;
+            else if (name == "Popped") picking = BassPickingType.Pop;
+            if (picking != BassPickingType.None) break;
+        }
+
+        if (picking == BassPickingType.None) return;
+        for (var i = notesFrom; i < target.Notes.Count; i++)
+        {
+            if (target.Notes[i].BassPicking == BassPickingType.None) target.Notes[i].BassPicking = picking;
+        }
+
+        for (var i = chordsFrom; i < target.Chords.Count; i++)
+        {
+            foreach (var chordNote in target.Chords[i].ChordNotes)
+            {
+                if (chordNote.BassPicking == BassPickingType.None) chordNote.BassPicking = picking;
+            }
         }
     }
 

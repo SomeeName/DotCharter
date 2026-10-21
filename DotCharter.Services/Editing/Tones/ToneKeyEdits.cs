@@ -239,8 +239,11 @@ public static class ToneKeyEdits
 
 /// <summary>Points tone changes at another key; undo gives each one back ITS OWN former spelling
 /// (a case-insensitive rename may have gathered "Clean" and "clean").</summary>
-public sealed class RetargetToneChangesAction : IChartAction
+public sealed class RetargetToneChangesAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly (ToneChange Change, string Before)[] _targets;
     private readonly string _after;
 

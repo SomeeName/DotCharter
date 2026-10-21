@@ -2,13 +2,15 @@ using System.Globalization;
 using System.Xml;
 using System.IO.Compression;
 using System.Xml.Linq;
+using DotCharter.Services.Infrastructure;
 using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 
 namespace DotCharter.Services.Parsing.GuitarPro;
 
 /// <summary>
-///     Imports Guitar Pro score files. Handles the modern XML-based GP6/GP7
-///     containers (<c>.gp</c>, <c>.gpx</c>) directly and dispatches the legacy
+///     Imports Guitar Pro score files. Handles the modern XML-based containers — GP7+
+///     <c>.gp</c> (a zip) and GP6 <c>.gpx</c> (BCFZ/BCFS, <see cref="GpxContainer"/>) —
+///     directly and dispatches the legacy
 ///     binary formats (<c>.gp3</c>, <c>.gp4</c>, <c>.gp5</c>) to
 ///     <see cref="GpLegacyImporter"/>. Either path produces the same
 ///     <see cref="GpImportResult"/> shape, after which the shared
@@ -28,11 +30,19 @@ public sealed class GpImporter
         if (IsLegacyBinaryFormat(gpFilePath))
             return new GpLegacyImporter().GetTracks(gpFilePath);
 
-        using var archive = ZipFile.OpenRead(gpFilePath);
+        if (GpxContainer.IsGpx(gpFilePath))
+        {
+            var score = GpxContainer.ReadScore(gpFilePath);
+            if (score == null) return [];
+            using var gpxStream = new MemoryStream(score, writable: false);
+            return ReadTracks(gpxStream);
+        }
+
+        using var archive = OpenArchive(gpFilePath, ImportSizeLimits.GpArchiveMaxEntries);
         var scoreEntry = FindScoreEntry(archive);
         if (scoreEntry == null) return [];
 
-        using var stream = scoreEntry.Open();
+        using var stream = OpenScoreEntry(scoreEntry, ImportSizeLimits.GpScoreEntryBytes);
         return ReadTracks(stream);
     }
 
@@ -145,7 +155,11 @@ public sealed class GpImporter
     {
         settings ??= GpImportSettings.Default;
         if (IsLegacyBinaryFormat(gpFilePath))
-            return new GpLegacyImporter().Import(gpFilePath, trackIdsToImport, settings);
+        {
+            var legacy = new GpLegacyImporter().Import(gpFilePath, trackIdsToImport, settings);
+            GpMeterGrid.ToBeatGrid(legacy, settings.ImportTimeSignatures);
+            return legacy;
+        }
 
         var doc = LoadScoreDocument(gpFilePath);
         if (doc == null) return new GpImportResult();
@@ -154,7 +168,10 @@ public sealed class GpImporter
         var arrangementParser = new GpArrangementParser();
 
         result.Arrangements.AddRange(arrangementParser.Parse(doc, trackIdsToImport, settings));
+        foreach (var (arrangement, slideIns) in arrangementParser.SlideInsMaterialized)
+            result.SlideInsMaterialized[arrangement] = slideIns;
         GpMetadataParser.Populate(doc, result.Metadata);
+        GpMeterGrid.ToBeatGrid(result, settings.ImportTimeSignatures);
         return result;
     }
 
@@ -192,13 +209,55 @@ public sealed class GpImporter
         archive.Entries.FirstOrDefault(e =>
             e.FullName.EndsWith("score.gpif", StringComparison.OrdinalIgnoreCase));
 
-    private static XDocument? LoadScoreDocument(string gpFilePath)
+    /// <summary>The <c>score.gpif</c> of a GP6 (<c>.gpx</c>) or GP7+ (<c>.gp</c>) file, or
+    /// null when the container holds none. Throws <see cref="InvalidDataException" /> for
+    /// a file that is neither container.</summary>
+    internal static XDocument? LoadScoreDocument(string gpFilePath)
+        => LoadScoreDocument(gpFilePath, ImportSizeLimits.GpScoreEntryBytes, ImportSizeLimits.GpArchiveMaxEntries);
+
+    /// <summary>The same, with the limits a caller (a test) chooses.</summary>
+    internal static XDocument? LoadScoreDocument(string gpFilePath, long maxScoreBytes, int maxEntries)
     {
-        using var archive = ZipFile.OpenRead(gpFilePath);
+        if (GpxContainer.IsGpx(gpFilePath))
+        {
+            var score = GpxContainer.ReadScore(gpFilePath);
+            if (score == null) return null;
+            using var gpxStream = new MemoryStream(score, writable: false);
+            return SafeXml.LoadFromStream(gpxStream);
+        }
+
+        using var archive = OpenArchive(gpFilePath, maxEntries);
         var scoreEntry = FindScoreEntry(archive);
         if (scoreEntry == null) return null;
 
-        using var stream = scoreEntry.Open();
+        using var stream = OpenScoreEntry(scoreEntry, maxScoreBytes);
         return SafeXml.LoadFromStream(stream);
+    }
+
+    /// <summary>
+    ///     Opens a <c>.gp</c> after bounding its member count from the
+    ///     end-of-central-directory record, so a hostile archive of millions of
+    ///     empty members is refused BEFORE one entry object is built. A file with
+    ///     no readable record falls through to <see cref="ZipFile" />, which
+    ///     reports "not a zip" in its own words.
+    /// </summary>
+    internal static ZipArchive OpenArchive(string gpFilePath, int maxEntries)
+    {
+        if (BoundedZipExtractor.CheckDeclaredEntryCount(gpFilePath, maxEntries) == ZipExtractionRefusal.TooManyEntries)
+            throw new InvalidDataException("The Guitar Pro file declares too many archive entries to be a score.");
+        return ZipFile.OpenRead(gpFilePath);
+    }
+
+    /// <summary>
+    ///     The score entry as a stream that refuses more than
+    ///     <paramref name="maxBytes" />: the declared size is checked first (the
+    ///     runtime inflates no further than that), and the bytes actually
+    ///     produced are counted as a second line.
+    /// </summary>
+    private static Stream OpenScoreEntry(ZipArchiveEntry entry, long maxBytes)
+    {
+        const string what = "The Guitar Pro score";
+        ImportSizeLimits.RequireWithin(entry.Length, maxBytes, what);
+        return new LimitedReadStream(entry.Open(), maxBytes, what);
     }
 }

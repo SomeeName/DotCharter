@@ -22,8 +22,11 @@ namespace DotCharter.UI.Input.Actions;
 ///         have.
 ///     </para>
 /// </summary>
-public sealed class ResizeHandShapesAction : IChartAction, IMergeableAction
+public sealed class ResizeHandShapesAction : IChartAction, IMergeableAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly ObservableCollection<ChordTemplate> _templates;
     private readonly MutateHandShapesAction _spans;
     private readonly List<GripRewrite> _grips;

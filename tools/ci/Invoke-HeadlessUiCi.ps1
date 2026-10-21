@@ -211,6 +211,7 @@ function Invoke-HeadlessUiRun([string[]]$RunFilter, [string]$Label) {
     Add-Member -InputObject $results -NotePropertyName Elapsed -NotePropertyValue $elapsed
     Add-Member -InputObject $results -NotePropertyName PeakRssBytes -NotePropertyValue $peakBytes
     Add-Member -InputObject $results -NotePropertyName LogPath -NotePropertyValue $logPath
+    Add-Member -InputObject $results -NotePropertyName TrxPath -NotePropertyValue $trxPath
     Write-Info ('[{0}] {1} cases: {2} passed, {3} failed, {4} skipped in {5:mm\:ss}; peak testhost RSS {6:0.0} GB' -f `
         $Label, $results.Total, $results.Passed, $results.Failed, $results.Skipped, $elapsed, ($peakBytes / 1GB))
     return $results
@@ -240,6 +241,16 @@ $harness = @($run.Failures | Where-Object { $_.IsHarness })
 $unverified = @()
 
 $absent = @($discovered | Where-Object { @($run.RanClasses) -notcontains $_ })
+# Keep the first run's evidence (#55) before any retry or isolated re-run: the TRX,
+# every failed case's message, stack and stdout, and the shard logs. The workflow
+# uploads this folder as the `headless-failures` artifact when the job fails;
+# DOTCHARTER_HEADLESS_FAILURES_DIR points the module at it, else %TEMP%.
+$evidenceDir = $null
+if ($run.Failed -gt 0 -or $absent.Count -gt 0) {
+    $evidenceDir = Save-HeadlessFailureEvidence -TrxPath @($run.Shards | ForEach-Object { $_.TrxPath }) `
+        -LogPath @($run.Shards | ForEach-Object { $_.LogPath }) -Label 'first-run' -Always
+    Write-Info "failure evidence kept: $evidenceDir"
+}
 if ($absent.Count -gt 0) {
     Write-Warn2 "$($absent.Count) DISCOVERED class(es) reported no result at all: $($absent -join ', ')"
 }
@@ -250,6 +261,7 @@ if ($harness.Count -gt 0 -or $absent.Count -gt 0) {
                  "never reported. Re-running $($classes.Count) class(es) in a fresh process.")
     $retry = Invoke-HeadlessUiRun -RunFilter (Join-ClassFilter $classes) -Label 'retry'
     if ($retry.PeakRssBytes -gt $peak) { $peak = $retry.PeakRssBytes }
+    if ($retry.Failed -gt 0 -and $evidenceDir) { $null = Save-HeadlessFailureEvidence -TrxPath @($retry.TrxPath) -LogPath @($retry.LogPath) -Label 'retry' -Folder $evidenceDir }
     $product += @($retry.Failures | Where-Object { -not $_.IsHarness })
     $unverified = @($retry.Failures | Where-Object { $_.IsHarness } | Select-Object -ExpandProperty Name)
     $stillAbsent = @($absent | Where-Object { @($retry.RanClasses) -notcontains $_ })
@@ -268,6 +280,7 @@ if ($orderCandidates.Count -gt 0) {
     Write-Warn2 "$($orderCandidates.Count) case(s) FAILED their assertions. Re-running $($classes.Count) class(es) in isolation."
     $isolated = Invoke-HeadlessUiRun -RunFilter (Join-ClassFilter $classes) -Label 'isolated'
     if ($isolated.PeakRssBytes -gt $peak) { $peak = $isolated.PeakRssBytes }
+    if ($isolated.Failed -gt 0 -and $evidenceDir) { $null = Save-HeadlessFailureEvidence -TrxPath @($isolated.TrxPath) -LogPath @($isolated.LogPath) -Label 'isolated' -Folder $evidenceDir }
     $isolatedFailed = @($isolated.Failures | Select-Object -ExpandProperty Name)
     $orderDependent = @($orderCandidates | Where-Object {
         (@($isolated.RanClasses) -contains $_.Class) -and ($isolatedFailed -notcontains $_.Name) })
@@ -295,6 +308,7 @@ $summary = @(
     ("| order-dependent (non-blocking) | {0} |" -f $orderDependent.Count),
     ("| BLOCKING product failures | {0} |" -f $product.Count)
 )
+if ($evidenceDir) { $summary += ("| failure evidence | {0} |" -f $evidenceDir) }
 $summary | ForEach-Object { Write-Host $_ }
 if ($env:GITHUB_STEP_SUMMARY) { $summary | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
 "peak_rss_bytes=$peak" | Set-Content -LiteralPath (Join-Path $ResultsDir 'headless-ui-metrics.txt')
@@ -305,6 +319,7 @@ if ($product.Count -gt 0) {
     Write-Host "  $($product.Count) headless UI test(s) FAILED:" -ForegroundColor Red
     foreach ($failure in $product) { Write-Failure $failure }
     Write-Host "  Full output: $($run.LogPath)" -ForegroundColor DarkGray
+    if ($evidenceDir) { Write-Host "  Failure evidence (TRX, messages, stacks, stdout): $evidenceDir" -ForegroundColor DarkGray }
     exit 1
 }
 

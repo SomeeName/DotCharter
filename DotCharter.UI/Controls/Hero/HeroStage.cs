@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using DotCharter.Services.Infrastructure;
 using DotCharter.Tone.UI.Controls;
 using DotCharter.UI.ViewModels.Panels;
 using SkiaSharp;
@@ -246,6 +247,9 @@ public sealed class HeroStage : Control
         {
             using var stream = Artwork.Open(ArtworkKey.File(path));
             if (stream is null) return (null, 0, 0);
+            // The header is checked before Skia is asked to allocate: the buffer
+            // below is the codec's full declared size, whatever the file weighs.
+            if (!ImageHeaderProbe.IsDecodable(stream)) return (null, 0, 0);
             using var codec = SKCodec.Create(stream);
             if (codec is null) return (null, 0, 0);
             var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);

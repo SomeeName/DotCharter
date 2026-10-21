@@ -271,14 +271,14 @@ public sealed class LibraryService : ILibraryService, ILibraryAudioPreparer, ILi
         return null;
     }
 
-    private IReadOnlyList<LibrarySongEntry> ParseForScan(string path) =>
+    private IReadOnlyList<LibrarySongEntry> ParseForScan(string path, CancellationToken cancellationToken) =>
         ScanParseInterceptorForTests is { } intercept
-            ? intercept(path, () => ReadSongs(path))
-            : ReadSongs(path);
+            ? intercept(path, () => ReadSongs(path, cancellationToken))
+            : ReadSongs(path, cancellationToken);
 
-    private IReadOnlyList<LibrarySongEntry> ReadSongs(string path) =>
+    private IReadOnlyList<LibrarySongEntry> ReadSongs(string path, CancellationToken cancellationToken) =>
         SourceFor(path) is { } source
-            ? source.ReadForIndex(path)
+            ? source.ReadForIndex(path, cancellationToken)
             : throw new NotSupportedException($"No library package source reads '{path}'.");
 
     /// <summary>The index is a cache: a failed write costs a re-parse next scan, never the songs.</summary>

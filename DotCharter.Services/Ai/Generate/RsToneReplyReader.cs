@@ -65,9 +65,11 @@ public static class RsToneReplyReader
             if (root.ValueKind != JsonValueKind.Object)
                 throw Fault("the reply was not a JSON object", key);
 
-            rationale = Text(root, "rationale") ?? string.Empty;
-            var name = Text(root, "name");
-            if (string.IsNullOrWhiteSpace(name)) name = fallbackName;
+            // A name and a reason are a model's words: one capped line each, because both reach the
+            // tone list, the confirmation, the status rail and the log.
+            rationale = AiUntrustedText.Clean(Text(root, "rationale"), AiUntrustedText.MaxRationaleLength);
+            var name = AiUntrustedText.Clean(Text(root, "name"), AiUntrustedText.MaxNameLength);
+            if (name.Length == 0) name = fallbackName;
 
             var volume = root.TryGetProperty("volumeDb", out var v) && v.ValueKind == JsonValueKind.Number
                 ? (float)v.GetDouble()
@@ -82,7 +84,7 @@ public static class RsToneReplyReader
 
             var tone = new RsTone(
                 key,
-                name!,
+                name,
                 volume,
                 descriptors,
                 new RsAmp(ampKey, catalog.GetCategory(ampKey), ampKnobs),

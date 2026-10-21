@@ -153,4 +153,58 @@ public sealed class ReleasePackChecksLintTests
         foreach (var source in Regex.Matches(build, @"Sha256 = '(?<h>[^']*)'").Select(m => m.Groups["h"].Value))
             Assert.Matches(new Regex("^[0-9a-f]{64}$"), source);
     }
+
+    /// <summary>
+    ///     yt-dlp ships in the release, so it is pinned like the ffmpeg sources:
+    ///     <c>tools/release/yt-dlp.json</c> names the version, the URL and the
+    ///     SHA-256, the download goes through <c>Save-PinnedFile</c> (a cached or
+    ///     fresh exe that does not hash to the pin is deleted, never run), and the
+    ///     exe is RUN for its version only after that. No other download in the
+    ///     release script bypasses a pin.
+    /// </summary>
+    [Fact]
+    public void The_bundled_yt_dlp_is_hash_pinned_and_verified_before_it_runs()
+    {
+        var script = Script();
+        Assert.DoesNotContain("Invoke-WebRequest", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadFile", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Get-RemoteFile", script, StringComparison.Ordinal);
+        Assert.Contains("Import-Module (Join-Path $PSScriptRoot 'PinnedDownload.psm1')", script, StringComparison.Ordinal);
+
+        var ensure = IndexOf(script, "function Ensure-RedistTools");
+        var body = script[ensure..IndexOf(script, "function Add-BundledTools")];
+        var pinned = body.IndexOf("Save-PinnedFile -Urls @($YtDlpPin.url) -Dest $ytDlp -Sha256 $YtDlpPin.sha256", StringComparison.Ordinal);
+        var run = body.IndexOf("Get-ToolVersionLine $ytDlp", StringComparison.Ordinal);
+        Assert.True(pinned >= 0, "yt-dlp is not fetched through Save-PinnedFile with its pin.");
+        Assert.True(run > pinned, "yt-dlp.exe runs before its SHA-256 is checked.");
+
+        var bundle = script[IndexOf(script, "function Add-BundledTools")..];
+        Assert.Contains("Assert-YtDlpPin $Redist.YtDlp", bundle[..bundle.IndexOf("Copy-Item $Redist.YtDlp", StringComparison.Ordinal)], StringComparison.Ordinal);
+
+        using var pin = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "tools", "release", "yt-dlp.json")));
+        var version = pin.RootElement.GetProperty("version").GetString()!;
+        Assert.Matches(new Regex(@"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$"), version);
+        Assert.Equal($"https://github.com/yt-dlp/yt-dlp/releases/download/{version}/yt-dlp.exe", pin.RootElement.GetProperty("url").GetString());
+        Assert.Matches(new Regex("^[0-9a-f]{64}$"), pin.RootElement.GetProperty("sha256").GetString()!);
+    }
+
+    /// <summary>
+    ///     The release restores the graph the committed packages.lock.json files
+    ///     pin and nothing else: the public UI publish and the launcher publish
+    ///     both restore in locked mode (a plugin build keeps its own, uncommitted
+    ///     lock under obj/, so -WithPlugins cannot be locked to the committed one).
+    /// </summary>
+    [Fact]
+    public void The_release_publishes_restore_in_locked_mode()
+    {
+        var script = Script();
+        Assert.Contains("$LockedRestoreArgs = @(if (-not $WithPlugins) { '-p:RestoreLockedMode=true' })", script, StringComparison.Ordinal);
+
+        var ui = IndexOf(script, "& dotnet publish (Join-Path $RepoRoot 'DotCharter.UI/DotCharter.UI.csproj')");
+        Assert.Contains("@LockedRestoreArgs", script[ui..script.IndexOf("if ($LASTEXITCODE", ui, StringComparison.Ordinal)], StringComparison.Ordinal);
+        var launcher = IndexOf(script, "& dotnet publish (Join-Path $RepoRoot 'DotCharter.Launcher/DotCharter.Launcher.csproj')");
+        var launcherCall = script[launcher..script.IndexOf("if ($LASTEXITCODE", launcher, StringComparison.Ordinal)];
+        Assert.Contains("-p:DotCharterPlugins=false", launcherCall, StringComparison.Ordinal);
+        Assert.Contains("-p:RestoreLockedMode=true", launcherCall, StringComparison.Ordinal);
+    }
 }

@@ -561,6 +561,11 @@ public class HighwayInteractionTool : IEditorTool, IDisposable
             {
                 vm.ApplyDlcBuilderFixesCommand.Execute(null);
                 viewport.RequestNextFrameRendering();
+            },
+            LinkIdentical: () =>
+            {
+                vm.ChartEditor.LinkedMeasures?.LinkIdentical();
+                viewport.RequestNextFrameRendering();
             });
 
         var items = hitChord != null || hitNote != null

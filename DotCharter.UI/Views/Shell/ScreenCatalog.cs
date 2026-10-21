@@ -114,6 +114,8 @@ public sealed class ScreenCatalog
         Dialog<IShowlightsScreen, ShowlightsDialogView>(Dialogs, "Showlights"),
         Dialog<ICheckpointsScreen, CheckpointsDialogView>(Dialogs, "Checkpoints"),
         Dialog<IGpImportScreen, GpImportDialogView>(Dialogs, "GpImport"),
+        Dialog<ILinkSuggestionsScreen, LinkSuggestionsDialogView>(Dialogs, "LinkSuggestions"),
+        Dialog<ILinkGroupsScreen, LinkGroupsDialogView>(Dialogs, "LinkGroups"),
         Dialog<IAboutScreen, AboutDialogView>(Dialogs, "About"),
         Dialog<ITextDocumentScreen, TextDocumentDialogView>(Dialogs, "TextDocument"),
         Dialog<ISongMetadataScreen, SongMetadataDialogView>(Dialogs, "SongMetadata"),

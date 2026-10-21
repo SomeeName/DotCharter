@@ -63,7 +63,7 @@ internal static class LibraryScanParallelParse
     internal static void Run(
         IReadOnlyList<string> paths,
         int degree,
-        Func<string, IReadOnlyList<LibrarySongEntry>> parse,
+        Func<string, CancellationToken, IReadOnlyList<LibrarySongEntry>> parse,
         Action<int, PsarcParseOutcome> commit,
         CancellationToken cancellationToken)
     {
@@ -87,7 +87,7 @@ internal static class LibraryScanParallelParse
                     PsarcParseOutcome outcome;
                     try
                     {
-                        outcome = new PsarcParseOutcome(parse(paths[i]), null);
+                        outcome = new PsarcParseOutcome(parse(paths[i], stop.Token), null);
                     }
                     catch (Exception ex)
                     {

@@ -172,6 +172,6 @@ public sealed class DcSongLibraryLoadTests : IDisposable
             lossless, cover, stems, audio);
         var packages = DcSongLibraryKit.Source(CacheRoot, decoder ?? new FakeDecoder(available: true), _logger);
         var service = TestLibraries.Create(_logger, null, new LibraryAudioCacheStore(_logger, CacheRoot), packages);
-        return (service, Assert.Single(packages.ReadForIndex(path)));
+        return (service, Assert.Single(packages.ReadForIndex(path, CancellationToken.None)));
     }
 }

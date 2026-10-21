@@ -34,7 +34,8 @@ public sealed record TimelineContextMenuActions(
     Action Paste,
     Action SelectAllInView,
     Action AddEventAtTime,
-    Action ApplyDlcBuilderFixes);
+    Action ApplyDlcBuilderFixes,
+    Action LinkIdentical);
 
 /// <summary>
 ///     Builds the timeline context menu for the two right-click contexts:
@@ -68,7 +69,9 @@ public static class TimelineContextMenuBuilder
             new TimelineMenuItem("Timeline_Ctx_SetFret", Children: frets),
             TimelineMenuItem.Separator,
             new TimelineMenuItem("Timeline_Ctx_AddHandShape", a.AddHandShape),
-            new TimelineMenuItem("Timeline_Ctx_AddFhpAnchor", a.AddFhpAnchor)
+            new TimelineMenuItem("Timeline_Ctx_AddFhpAnchor", a.AddFhpAnchor),
+            TimelineMenuItem.Separator,
+            new TimelineMenuItem("LinkIdentical_Title", a.LinkIdentical)
         ];
     }
 

@@ -5,7 +5,7 @@ One file per subject under `export-companions/`. Read the one you need:
 - [wem-and-audio-decode.md](export-companions/wem-and-audio-decode.md) — why we encode .wem ourselves, the two CDLC breakers, WwiseImaAdpcm, PcmAudioLoader
 - [save-companions.md](export-companions/save-companions.md) — save companions (SaveCompanionService)
 - [export-cost-and-open-items.md](export-companions/export-cost-and-open-items.md) — export cost measured, the four non-reproducible things, still open
-- [export-boundary-rules.md](export-companions/export-boundary-rules.md) — the export-boundary rules: linked chords, chord names, repeated chords, phrase names, chordId, error invention, arrangement properties, tuning, capo, songLength, tone events, average tempo, tuning stated twice, metadata, GP export
+- [export-boundary-rules.md](export-companions/export-boundary-rules.md) — the export-boundary rules: linked chords, chord names, repeated chords, phrase names, moveR phrases, chordId, error invention, arrangement properties, tuning, capo, songLength, tone events, average tempo, tuning stated twice, metadata, GP export
 - [dlc-builder-parity.md](export-companions/dlc-builder-parity.md) — the export dialog's DLC Builder surfaces: Version, test export, release file name, Auto volume
 
 **Play-only content is never exported (#822).** A chart a source marked play-only

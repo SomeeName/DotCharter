@@ -50,6 +50,11 @@
                   IsChecked="{Binding ChartEditor.ActiveRibbon.ShowTones, Mode=TwoWay}" />
         <MenuItem Header="{localization:Loc Ribbon_MeasureInfo}" ToggleType="CheckBox"
                   IsChecked="{Binding ChartEditor.ActiveRibbon.ShowMeasureMetadata, Mode=TwoWay}" />
+        <Separator />
+        <MenuItem Header="{localization:Loc TimelineLanes_AutoHide}" ToggleType="CheckBox"
+                  IsChecked="{Binding ChartEditor.ActiveRibbon.AutoHideEmpty, Mode=TwoWay}" />
+        <MenuItem Header="{localization:Loc TimelineLanes_Compact}" ToggleType="CheckBox"
+                  IsChecked="{Binding ChartEditor.ActiveRibbon.CompactRows, Mode=TwoWay}" />
     </MenuItem>
     <MenuItem Header="{localization:Loc Menu_ShowWaveform}" ToggleType="CheckBox"
               IsChecked="{Binding ProjectState.ShowWaveform, Mode=TwoWay}"

@@ -2,8 +2,11 @@ using System.Collections.ObjectModel;
 
 namespace DotCharter.Services.State;
 
-public class SetVocalPhrasesAction : IChartAction
+public class SetVocalPhrasesAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly ObservableCollection<LyricPhrase> _target;
     private readonly List<LyricPhrase> _newPhrases;
     private readonly List<LyricPhrase> _oldPhrases;

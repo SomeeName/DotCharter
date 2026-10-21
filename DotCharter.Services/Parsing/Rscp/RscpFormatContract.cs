@@ -76,7 +76,7 @@ public static class RscpFormatContract
         "dcReleaseDate", "dcCoverArt", "dcVersion", "dcBeatMapLocked",
         "dcKeyAccidentals", "dcKeyIsMinor",
         "dcAnnotations", "dcToneDefinitions", "dcNotationVoices", "dcSynthPlayStyle",
-        RscpProvenance.ProjectElement
+        RscpProvenance.ProjectElement, RscpLinkGroups.RootElement
     };
 
     /// <summary>

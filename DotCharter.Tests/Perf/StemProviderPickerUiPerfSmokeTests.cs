@@ -10,6 +10,7 @@ using DotCharter.Presentation.Screens.Settings;
 using DotCharter.Services.Audio.StemSeparation;
 using DotCharter.Services.Audio.StemSeparation.Gpu;
 using DotCharter.Services.Update;
+using DotCharter.Tests.Presentation.Dialogs;
 using DotCharter.Tone.Diagnostics;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.UI.Views.Settings;
@@ -209,8 +210,9 @@ public sealed class StemProviderPickerUiPerfSmokeTests : IDisposable
         var ui = new InlineUiDispatcher();
         var backend = new StemBackendViewModel(manager, config, localization, gpu: new FakeGpuEnvironment(adapters));
         var gpuRuntime = new GpuRuntimeViewModel(localization, ui, legacy);
-        var vm = new StemModelsSettingsViewModel(manager, localization, ui, backend, gpuRuntime,
-            new StemCacheViewModel(localization, ui));
+        var vm = new StemModelsSettingsViewModel(manager, localization, ui,
+            new StemModelsBlocks(backend, gpuRuntime, new StemCacheViewModel(localization, ui)),
+            new ScriptedDialogs(_ => throw new InvalidOperationException("no dialog expected")));
         vm.Load();
         await backend.RefreshHardwareAsync();
         await gpuRuntime.RefreshStatusAsync();

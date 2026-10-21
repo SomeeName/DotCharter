@@ -51,6 +51,10 @@ project that saved perfectly.
   one after. It still runs **after** `SaveDlcBuilderXmlBundle` and refuses when
   the bundle is absent, because a project file naming XML that does not exist
   reads in DLC Builder as an EMPTY project rather than as a missing file.
+  **The same project is also written on request** by `DlcBuilderProjectWriter` (the Rocksmith
+  export dialog's "Export DLC Builder project"): the bundle and the `.rs2dlc` into a folder the user
+  picked, regardless of the companion setting, replacing what is there. Both writers take the file name,
+  the vocals/charter fallbacks and the audio / cover references from `DlcBuilderProjectFile`.
 
 ### `ExportIncludeVocals` has ONE reader: `Export/VocalsExportPolicy`
 

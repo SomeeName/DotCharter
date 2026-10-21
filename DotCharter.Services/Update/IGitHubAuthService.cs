@@ -25,7 +25,8 @@ public interface IGitHubAuthService
     string? GetToken();
 
     /// <summary>Requests a device + user code pair from GitHub
-    /// (POST github.com/login/device/code, scope "repo").</summary>
+    /// (POST github.com/login/device/code; scope "repo" for an OAuth app, none for a
+    /// GitHub App client id, whose reach is the app's own read-only permissions).</summary>
     Task<GitHubDeviceCode> StartDeviceFlowAsync(string clientId, CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -65,7 +65,7 @@ internal static class SngFromDomainMapper
         if (beats.Count == 0)
             throw new InvalidDataException("Cannot export an arrangement without a beat map.");
 
-        if (Rs7StringLayout.ExportRefusal(arrangement) is { } refusal) throw new InvalidDataException(refusal);
+        if (SngFormatLimits.ExportRefusal(arrangement) is { } refusal) throw new InvalidDataException(refusal);
 
         // A 7-string guitar maps through the rs7string layout first; the
         // strings past the sixth go to the RS7X block.
@@ -178,7 +178,7 @@ internal static class SngFromDomainMapper
 
             Sections = ExtractSections(arrangement, beats, Iterations, SongLengthMs);
             StringMasks = new sbyte[Sections.Count][];
-            for (var i = 0; i < Sections.Count; i++) StringMasks[i] = new sbyte[36];
+            for (var i = 0; i < Sections.Count; i++) StringMasks[i] = new sbyte[SngFormatLimits.MaxLevels];
 
             NotesInIterationsAll = CreateCountTable();
             NotesInIterationsExclIgnored = CreateCountTable();
@@ -398,13 +398,13 @@ internal static class SngFromDomainMapper
         foreach (var (stringIndex, fret) in template.Frets)
         {
             if (stringIndex is >= 0 and < 6)
-                frets[stringIndex] = (sbyte)fret;
+                frets[stringIndex] = (sbyte)Math.Clamp(fret, -1, SngFormatLimits.MaxStoredFret);
         }
 
         foreach (var (stringIndex, finger) in template.Fingers)
         {
             if (stringIndex is >= 0 and < 6)
-                fingers[stringIndex] = (sbyte)finger;
+                fingers[stringIndex] = (sbyte)Math.Clamp(finger, -1, SngFormatLimits.MaxFinger);
         }
 
         // A two-string shape ships unnamed when the suppression is on, however the
@@ -661,7 +661,7 @@ internal static class SngFromDomainMapper
         // "For whatever reason, the string masks from a section need to be
         // included in the section before it." — ConvertInstrumental.fs.
         var masks = context.StringMasks;
-        var levelCount = context.OrderedLevels.Count;
+        var levelCount = Math.Min(context.OrderedLevels.Count, SngFormatLimits.MaxLevels);
         for (var s = 0; s < masks.Length - 1; s++)
         {
             for (var d = 0; d < levelCount; d++)
@@ -795,6 +795,15 @@ internal static class SngFromDomainMapper
                 }))
             .OrderBy(e => e.TimeMs)
             .ToList();
+
+        // Note ids and the neighbour links between them are signed 16-bit: past this the ids
+        // would wrap onto other notes.
+        if (entities.Count > SngFormatLimits.MaxSoundsPerLevel)
+        {
+            throw new InvalidDataException(
+                $"'{context.Arrangement.Name}' level {difficulty} has {entities.Count} notes and chords; " +
+                $"a song file numbers at most {SngFormatLimits.MaxSoundsPerLevel} per level.");
+        }
 
         var noteTimes = entities.Select(e => e.TimeMs).ToArray();
 
@@ -1484,7 +1493,7 @@ internal static class SngFromDomainMapper
 
     private static void UpdateStringMask(BuildContext context, int sectionId, int difficulty, int stringIndex)
     {
-        if (difficulty >= 36) return;
+        if (difficulty >= SngFormatLimits.MaxLevels) return;
         context.StringMasks[sectionId][difficulty] |= (sbyte)(1 << stringIndex);
     }
 

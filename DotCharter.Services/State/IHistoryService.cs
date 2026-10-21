@@ -48,6 +48,19 @@ public interface IHistoryService
     /// </summary>
     event Action? ActionFailed;
 
+    /// <summary>
+    ///     Raised after a step copied an edit into other linked placements, with every group the
+    ///     step (the whole gesture so far) propagated into. The editor shows the "Linked" toast.
+    /// </summary>
+    event Action<IReadOnlyList<LinkPropagationReport>>? LinksPropagated;
+
+    /// <summary>
+    ///     "Only here": while the step that propagated <paramref name="report" /> is still the
+    ///     current one, keeps its edit, restores the placements it was copied to and unlinks the
+    ///     placement it was made in, as one new undo step. False when that step is not the current one.
+    /// </summary>
+    bool OnlyHere(LinkPropagationReport report);
+
     bool CanUndo { get; }
     bool CanRedo { get; }
     /// <summary>Id of the node the chart state currently corresponds to

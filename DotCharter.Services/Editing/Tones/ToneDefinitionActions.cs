@@ -9,8 +9,11 @@ namespace DotCharter.Services.Editing.Tones;
 /// <see cref="Arrangement"/> tone fields) so undo/redo and the dirty tracker
 /// work exactly like every other edit.
 /// </summary>
-public sealed class UpsertToneDefinitionAction : IChartAction
+public sealed class UpsertToneDefinitionAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly ChartProject _project;
     private readonly string? _removeKey;
     private readonly ToneDefinition? _newValue;
@@ -125,8 +128,11 @@ public sealed record ToneSlotAssignment(
 /// <summary>Assigns tone keys to one arrangement's Base/A–D slots (plus the
 /// derived ToneNames + StartingTone sync). Undo restores the captured
 /// pre-assignment state verbatim.</summary>
-public sealed class AssignArrangementTonesAction : IChartAction
+public sealed class AssignArrangementTonesAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly Arrangement _arrangement;
     private readonly ToneSlotAssignment _before;
     private readonly ToneSlotAssignment _after;

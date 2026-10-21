@@ -72,8 +72,8 @@ public sealed class TimelineGutterLayoutTests
             }
         }
 
-        // Anti-vacuity: 32 ribbons × 2 flips × (4+5+6+7) strings × 3 heights.
-        Assert.Equal(32 * 2 * 22 * 3, compared);
+        // Anti-vacuity: 32 ribbons × 2 densities × 2 flips × (4+5+6+7) strings × 3 heights.
+        Assert.Equal(32 * 2 * 2 * 22 * 3, compared);
     }
 
     // ── the ribbon's vertical budget (0.51) ─────────────────────────────────
@@ -162,9 +162,7 @@ public sealed class TimelineGutterLayoutTests
     public void TheRibbon_CostsNoMoreHeightThanTheDesignItWasMeasuredAgainst()
     {
         // The reference's own row set: tones off, the other four on.
-        var asDesigned = new RibbonLayout(
-            showTones: false, showSections: true, showPhrases: true, showLyrics: true,
-            showMeasureMetadata: true);
+        var asDesigned = new RibbonLayout(RibbonLanes.All & ~RibbonLanes.Tones);
         Assert.True(asDesigned.TotalHeight <= 100f,
             $"the ribbon spends {asDesigned.TotalHeight} px on the reference's four lanes, which it " +
             "draws in 96 + a 1 px rule");
@@ -175,7 +173,7 @@ public sealed class TimelineGutterLayoutTests
 
         // Hiding a row really gives its height back to the chart — the
         // auto-collapse behaviour the reflow exists for.
-        var noLyrics = new RibbonLayout(true, true, true, false, true);
+        var noLyrics = new RibbonLayout(RibbonLanes.All & ~RibbonLanes.Lyrics);
         Assert.Equal(everything.TotalHeight - RibbonLayout.RowHeight, noLyrics.TotalHeight, 5);
     }
 
@@ -282,6 +280,11 @@ public sealed class TimelineGutterLayoutTests
             Assert.False(a.SameShapeAs(TimelineGutterLayout.For(600, changed, 6, false, BottomMargin)),
                 $"hiding ribbon row {bit} did not register as a reflow");
         }
+
+        // Compact rows move every caption (#81).
+        Assert.False(a.SameShapeAs(TimelineGutterLayout.For(600,
+                new RibbonLayout(RibbonLanes.All, RibbonDensity.Compact), 6, false, BottomMargin)),
+            "switching to compact rows did not register as a reflow");
     }
 
     /// <summary>
@@ -363,9 +366,13 @@ public sealed class TimelineGutterLayoutTests
 
     private static IEnumerable<RibbonLayout> AllRibbons()
     {
-        for (var mask = 0; mask < 32; mask++) yield return RibbonFor(mask);
+        // Every lane combination, at both densities (#81): compact rows must tile too.
+        foreach (var density in new[] { RibbonDensity.Normal, RibbonDensity.Compact })
+        {
+            for (var mask = 0; mask < 32; mask++) yield return RibbonFor(mask, density);
+        }
     }
 
-    private static RibbonLayout RibbonFor(int mask) => new(
-        (mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0, (mask & 8) != 0, (mask & 16) != 0);
+    private static RibbonLayout RibbonFor(int mask, RibbonDensity density = RibbonDensity.Normal) =>
+        new((RibbonLanes)mask, density);
 }

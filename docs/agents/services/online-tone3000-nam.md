@@ -171,7 +171,11 @@ The designer never sees a PATH: the validator resolves an id to the file name an
   (2) **`Tone3000OAuth.TryParseCallback` validates `state` FIRST.** It read the
   provider's `error` ahead of the CSRF check, so any page the user had open
   could `GET` the loopback prefix with `?error=access_denied` and end a sign-in
-  that was going fine.
+  that was going fine. The listener itself only ends its wait on a request for the
+  callback path whose query carries THIS flow's `state` (`Tone3000OAuth.CarriesState`,
+  passed to `IOAuthCallbackListener.WaitForCallbackAsync` as its gate); every other
+  request gets a 404 and the wait runs on to the timeout, so a stray page cannot end
+  the sign-in either.
   (3) **A sign-in is cancellable and single-flight.** The listener owns port
   47821 for the whole five-minute `CallbackTimeout`;
   `UI/ViewModels/Online/Tone3000SettingsViewModel` owns the flow's CTS, refuses

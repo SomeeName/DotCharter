@@ -86,7 +86,11 @@ public class ProjectDocumentService : IProjectDocumentService
         // "RS XML for 6-string tools": the file the user saves as .xml is often headed
         // for EOF, which aborts on a 7th string. Off by default: the spec XML keeps all of them.
         if (serializer is XmlChartSerializer xml)
-            xml.SixStringProjection = TryLoadAppConfig()?.RsXmlSixStringProjection ?? false;
+        {
+            var config = TryLoadAppConfig();
+            xml.SixStringProjection = config?.RsXmlSixStringProjection ?? false;
+            xml.MoverPhrases = config?.RsXmlMoverPhrases ?? false;
+        }
         var stopwatch = Stopwatch.StartNew();
         try
         {
@@ -138,14 +142,15 @@ public class ProjectDocumentService : IProjectDocumentService
         // DLC Builder is the bundle's consumer and indexes six-wide arrays, so a 7-/8-string
         // guitar goes in as its six-string projection. Six-string guitars and basses
         // are written exactly as before.
-        var arrangementWriter = new RsXmlSongWriter { SixStringProjection = true };
+        var config = TryLoadAppConfig() ?? new AppConfig();
+        var arrangementWriter = new RsXmlSongWriter { SixStringProjection = true, MoverPhrases = config.RsXmlMoverPhrases };
         var vocalsWriter = new RsXmlVocalsWriter();
         var showlightsWriter = new RsXmlShowlightsWriter();
 
         var arrangementCount = 0;
         // The bundle is what DLC Builder builds from, and the .rs2dlc names it: each
         // arrangement goes in with the fixes and levels the package export gives it.
-        var steps = DlcBuilderSteps.FromConfig(TryLoadAppConfig() ?? new AppConfig());
+        var steps = DlcBuilderSteps.FromConfig(config);
         try
         {
             var songLengthMs = project.Beats.Count > 0 ? project.Beats[^1].Time : 0;

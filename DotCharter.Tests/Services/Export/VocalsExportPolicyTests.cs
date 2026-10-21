@@ -189,6 +189,8 @@ public sealed class VocalsExportPolicyTests : IDisposable
                 // dialog is the one WRITER (the checkbox the charter ticks).
                 if (name is "AppConfig.cs") { declarations++; continue; }
                 if (name is "VocalsExportPolicy.cs" or "RocksmithExportViewModel.cs" or "RocksmithExportViewModel.Build.cs" or "RocksmithExportSupport.cs") continue;
+                // The backup filter names the key as a JSON string to classify it; it reads no value.
+                if (name is "AppConfigBackupFilter.cs") continue;
 
                 offenders.Add(Path.GetRelativePath(TestPaths.RepoRoot(), file));
             }

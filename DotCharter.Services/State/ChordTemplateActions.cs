@@ -8,8 +8,11 @@ namespace DotCharter.Services.State;
 /// (name / arpeggio flag / fret + finger pattern) AND propagates the new chord
 /// notes to every <see cref="Chord"/> currently bound to that template.
 /// </summary>
-public sealed class EditTemplateGlobalAction : IMergeableAction
+public sealed class EditTemplateGlobalAction : IMergeableAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     /// <summary>The verb a chord-NAME keystroke opts into, so a run of them
     /// within <c>HistoryService.MergeWindow</c> is ONE undo node — the way a
     /// sustain drag or a wheel run already is. Without merging, an
@@ -118,8 +121,11 @@ public sealed class EditTemplateGlobalAction : IMergeableAction
 /// on a batch of selected items to point at a different existing template,
 /// and refreshes their <see cref="Chord.ChordNotes"/> to match.
 /// </summary>
-public sealed class SwitchTemplateAction : IChartAction
+public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly IChartEditorSurface _editor;
     private readonly List<Chord> _newChords;
     private readonly List<HandShape> _newHandShapes;
@@ -200,8 +206,11 @@ public sealed class SwitchTemplateAction : IChartAction
 ///         they adopt its shape.
 ///     </para>
 /// </remarks>
-public sealed class CreateAndSwitchTemplateAction : IChartAction
+public sealed class CreateAndSwitchTemplateAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly ObservableCollection<ChordTemplate> _templates;
     private readonly IChartEditorSurface _editor;
     private readonly List<Chord> _newChords;
@@ -284,8 +293,11 @@ public sealed class CreateAndSwitchTemplateAction : IChartAction
 /// longer fingerless once someone fingers it.
 /// </para>
 /// </summary>
-public sealed class SetTemplateFingersAction : IChartAction
+public sealed class SetTemplateFingersAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly IChartEditorSurface _editor;
     private readonly Dictionary<int, int> _newFingers;
     private readonly Dictionary<int, int> _oldFingers;
@@ -335,8 +347,11 @@ public sealed class SetTemplateFingersAction : IChartAction
 /// — used by the auto-fill generator to fill EMPTY names from the pitch-based
 /// suggester (a user-authored name is never overwritten there).
 /// </summary>
-public sealed class SetTemplateNameAction : IChartAction
+public sealed class SetTemplateNameAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly IChartEditorSurface _editor;
     private readonly string _newName;
     private readonly string _oldName;
@@ -371,8 +386,11 @@ public sealed class SetTemplateNameAction : IChartAction
 /// the auto-fill generator when an untemplated chord gets a freshly-built
 /// template attached.
 /// </summary>
-public sealed class SetTemplateIdsAction : IChartAction
+public sealed class SetTemplateIdsAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly IChartEditorSurface _editor;
     private readonly List<(Chord chord, int oldId, int newId)> _entries;
 
@@ -400,8 +418,11 @@ public sealed class SetTemplateIdsAction : IChartAction
 /// <summary>
 /// Reassigns <see cref="HandShape.TemplateId"/> on a batch of handshapes.
 /// </summary>
-public sealed class SetHandShapeTemplateIdsAction : IChartAction
+public sealed class SetHandShapeTemplateIdsAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly IChartEditorSurface _editor;
     private readonly List<(HandShape hs, int oldId, int newId)> _entries;
 

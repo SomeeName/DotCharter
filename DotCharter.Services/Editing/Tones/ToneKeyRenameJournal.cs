@@ -93,8 +93,11 @@ public sealed class ToneKeyRenameJournal
 
 /// <summary>The last child of a rename's undo node: tells the project's
 /// <see cref="ToneKeyRenameJournal" /> the rename ran (do, redo) or was taken back (undo).</summary>
-public sealed class ToneKeyRenameJournalStep(ChartProject project, string from, string to) : IChartAction
+public sealed class ToneKeyRenameJournalStep(ChartProject project, string from, string to) : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     public void Execute() => ToneKeyRenameJournal.For(project).Record(from, to);
 
     public void Undo() => ToneKeyRenameJournal.For(project).Record(to, from);

@@ -5,6 +5,7 @@
              xmlns:inspector="clr-namespace:DotCharter.UI.ViewModels.Editor.Inspector;assembly=DotCharter"
              xmlns:local="using:DotCharter.UI.Views.Editor.Inspector"
              xmlns:shell="using:DotCharter.UI.Views.Shell"
+             xmlns:linkViews="using:DotCharter.UI.Views.Editor.Linking"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.SoundInspectorView"
              x:DataType="viewModels:InspectorViewModel">
@@ -177,7 +178,7 @@
             </StackPanel>
         </Border>
 
-        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*">
             <!-- ── ONE slim row: the selection, its place in the queue, ‹ ›, the filter ── -->
             <Border x:Name="SoundNavRow" Grid.Row="0" MinHeight="28" Padding="{StaticResource FirePadTag}"
                     BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
@@ -237,15 +238,20 @@
                 </Grid>
             </Border>
 
+            <!-- ── the selection is in a linked placement: an edit lands in N places ── -->
+            <linkViews:LinkBannerView x:Name="SoundLinkBanner" Grid.Row="1" Margin="6,4,6,0"
+                                      DataContext="{Binding LinkedMeasures}"
+                                      IsVisible="{Binding IsBannerVisible, FallbackValue=False}" />
+
             <!-- ── ONE pinned "Apply to" row, over a chord's Shape, Technique and Bends only ── -->
-            <Border x:Name="SoundApplyBar" Grid.Row="1" Padding="{StaticResource FirePadTag}"
+            <Border x:Name="SoundApplyBar" Grid.Row="2" Padding="{StaticResource FirePadTag}"
                     IsVisible="{Binding Sections.ShowApplyBar}"
                     BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
                 <local:SoundApplyBarView x:Name="SoundApplyScope" DataContext="{Binding ChordTemplateEditor}" />
             </Border>
 
             <!-- ── the content: ONE section ── -->
-            <ScrollViewer x:Name="SoundSectionScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+            <ScrollViewer x:Name="SoundSectionScroll" Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                           Padding="{StaticResource PaddingRow}">
                 <Panel>
                     <local:SoundTaskView x:Name="SoundTaskBody" IsVisible="{Binding Sections.IsTask}" />

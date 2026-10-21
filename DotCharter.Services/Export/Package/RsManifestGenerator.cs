@@ -389,21 +389,36 @@ internal static class RsManifestGenerator
     }
 
     /// <summary>Sum of all regions of DNA ID → DNA None (or the end of the
-    /// song) — the iteration version 2 algorithm.</summary>
-    private static double GetDnaTime(RocksmithSng sng, int dnaId)
+    /// song) — the iteration version 2 algorithm. One forward walk: a chart can carry
+    /// tens of thousands of DNA events, so nothing here recurses or rescans.</summary>
+    internal static double GetDnaTime(RocksmithSng sng, int dnaId)
     {
-        float GetTotal(int i, float time)
+        var dnas = sng.Dnas;
+        var regions = new List<float>();
+        var tail = 0f;
+        var from = 0;
+
+        while (from < dnas.Count)
         {
-            var next = sng.Dnas.FindIndex(i, dna => dna.DnaId == dnaId);
-            if (next < 0) return time;
+            var next = dnas.FindIndex(from, dna => dna.DnaId == dnaId);
+            if (next < 0) break;
 
-            var none = sng.Dnas.FindIndex(next, dna => dna.DnaId == 0);
-            if (none < 0) return time + (sng.MetaData.SongLength - sng.Dnas[next].Time);
+            var none = dnas.FindIndex(next, dna => dna.DnaId == 0);
+            if (none < 0)
+            {
+                tail = sng.MetaData.SongLength - dnas[next].Time;
+                break;
+            }
 
-            return time + GetTotal(none, sng.Dnas[none].Time - sng.Dnas[next].Time);
+            regions.Add(dnas[none].Time - dnas[next].Time);
+            from = none + 1;
         }
 
-        return Math.Round((double)GetTotal(0, 0f), 3);
+        // Folded from the last region back, the order the recursive form added them in, so a
+        // package built before this change gets the same float sum.
+        var total = tail;
+        for (var i = regions.Count - 1; i >= 0; i--) total = regions[i] + total;
+        return Math.Round((double)total, 3);
     }
 
     private static (double Chords, double Riffs, double Solo) CalculateDnas(RocksmithSng sng) => (GetDnaTime(sng, 3), GetDnaTime(sng, 2), GetDnaTime(sng, 1));

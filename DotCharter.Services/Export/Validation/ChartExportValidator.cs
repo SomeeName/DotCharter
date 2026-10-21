@@ -58,6 +58,11 @@ public sealed class ChartExportValidator
     public const string KeyFirstPhraseNotAtStart = "Export.Validation.FirstPhraseNotAtStart";
     public const string KeyLyricTooLong = "Export.Validation.LyricTooLong";
     public const string KeyDisplayNameGlyphs = "Export.Validation.DisplayNameGlyphs";
+    public const string KeyTooManyLevels = "Export.Validation.TooManyLevels";
+    public const string KeyTooManyNotes = "Export.Validation.TooManyNotes";
+    public const string KeyFingerOutOfRange = "Export.Validation.FingerOutOfRange";
+    public const string KeyStringBeyondTuning = "Export.Validation.StringBeyondTuning";
+    public const string KeyStringCountUnsupported = "Export.Validation.StringCountUnsupported";
 
     private const int MaxFret = 24;
 
@@ -129,6 +134,8 @@ public sealed class ChartExportValidator
         if (arrangement.ToneChanges.Count > 0)
             CheckTones(project, arrangement, beats, sink);
         CheckFretsAndStrings(arrangement, beats, sink);
+        CheckFormatLimits(arrangement, sink);
+        CheckChordTemplates(arrangement, sink);
 
         // ---- first-note silence rule -------------------------------------------
         var firstNoteMs = ContentTimesMs(arrangement, beats).DefaultIfEmpty(double.MaxValue).Min();
@@ -319,6 +326,76 @@ public sealed class ChartExportValidator
     }
 
     /// <summary>
+    ///     The widths the song file fixes (<see cref="SngFormatLimits" />): the difficulty levels, the notes
+    ///     and chords one level can number, and the strings the package can spell. The mapper refuses each
+    ///     on its own; this makes it a finding the charter sees before the export starts.
+    /// </summary>
+    private static void CheckFormatLimits(Arrangement arrangement, ArrangementFindings sink)
+    {
+        if (arrangement.Levels.Count > SngFormatLimits.MaxLevels)
+        {
+            sink.Add(ExportFindingSeverity.Error, KeyTooManyLevels, null,
+                arrangement.Levels.Count.ToString(CultureInfo.InvariantCulture));
+        }
+
+        var busiest = arrangement.Levels.Select(l => l.Notes.Count + l.Chords.Count).DefaultIfEmpty(0).Max();
+        if (busiest > SngFormatLimits.MaxSoundsPerLevel)
+            sink.Add(ExportFindingSeverity.Error, KeyTooManyNotes, null, busiest.ToString(CultureInfo.InvariantCulture));
+
+        if (Rs7StringLayout.HasUnsupportedStringCount(arrangement))
+        {
+            sink.Add(ExportFindingSeverity.Error, KeyStringCountUnsupported, null,
+                arrangement.StringCount.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>A chord template's frets and fingers are written into signed bytes: a value outside
+    /// the playable range would wrap there, so it is an error rather than a clamp nobody sees.</summary>
+    private static void CheckChordTemplates(Arrangement arrangement, ArrangementFindings sink)
+    {
+        foreach (var template in arrangement.ChordTemplates)
+        {
+            foreach (var fret in template.Frets.Values.Where(f => f is < -1 or > MaxFret).Distinct())
+                sink.Add(ExportFindingSeverity.Error, KeyFretOutOfRange, null, fret.ToString(CultureInfo.InvariantCulture));
+
+            foreach (var finger in template.Fingers.Values.Where(f => f is < -1 or > SngFormatLimits.MaxFinger).Distinct())
+                sink.Add(ExportFindingSeverity.Error, KeyFingerOutOfRange, null, finger.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>
+    ///     What a Guitar Pro export of one level needs of the chart: every sound on a string the
+    ///     arrangement's tuning has. Narrower than <see cref="Validate" /> on purpose: Guitar Pro has
+    ///     no phrase, anchor or difficulty-ladder rules, and frets above the Rocksmith 24 are legal there.
+    /// </summary>
+    public IReadOnlyList<ExportValidationFinding> ValidateGuitarPro(
+        Arrangement arrangement, ChartLevel level, IList<BeatMarker> beats)
+    {
+        var findings = new List<ExportValidationFinding>();
+        var sink = new ArrangementFindings(arrangement.Name, findings);
+
+        foreach (var note in level.Notes)
+            CheckTuningString(arrangement, sink, note.Position.GetPositionMs(beats), note);
+
+        foreach (var chord in level.Chords)
+        {
+            foreach (var chordNote in chord.ChordNotes)
+                CheckTuningString(arrangement, sink, chord.Position.GetPositionMs(beats), chordNote);
+        }
+
+        return findings;
+    }
+
+    private static void CheckTuningString(Arrangement arrangement, ArrangementFindings sink, double timeMs, IGuitarSound sound)
+    {
+        if (sound.StringIndex < 0 || (arrangement.StringCount > 0 && sound.StringIndex >= arrangement.StringCount))
+        {
+            sink.Add(ExportFindingSeverity.Error, KeyStringBeyondTuning, timeMs,
+                sound.StringIndex.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>
     ///     One note or chord note's fret and string. A NON-ZERO fret below the capo
     ///     is physically unplayable (the capo already stops the string higher up), and
     ///     a sound's pitch derives from max(fret, capo), so the chart says one thing and
@@ -342,6 +419,8 @@ public sealed class ChartExportValidator
 
         if (sound.StringIndex < 0 || sound.StringIndex > maxStringIndex)
             sink.Add(ExportFindingSeverity.Error, KeyStringOutOfRange, timeMs, sound.StringIndex.ToString());
+        else
+            CheckTuningString(arrangement, sink, timeMs, sound);
     }
 
     private void ValidateVocals(ChartProject project, VocalTrack track, List<ExportValidationFinding> findings)

@@ -14,6 +14,7 @@ public sealed partial class FakeFilesSettingsScreen : ObservableObject, IFilesSe
     [ObservableProperty] private int _saveCompanionPsarcCodecIndex;
     [ObservableProperty] private bool _saveCompanionRs2Dlc = true;
     [ObservableProperty] private bool _rsXmlSixStringProjection;
+    [ObservableProperty] private bool _rsXmlMoverPhrases;
     [ObservableProperty] private bool _exportGenerateDynamicDifficulty = true;
     [ObservableProperty] private bool _exportDdUseMlModel;
     [ObservableProperty] private bool _exportApplyDlcBuilderFixes = true;

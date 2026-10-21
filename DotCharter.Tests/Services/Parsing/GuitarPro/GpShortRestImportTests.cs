@@ -272,4 +272,56 @@ public sealed class GpShortRestImportTests
         ChordHandShapeBuilder.BuildAndTrim(level, arr, splitRunsOnRests: true);
         Assert.Single(level.HandShapes);
     }
+
+    // ---- the GP3-5 binary path --------------------------------------------
+
+    private static ChartLevel ImportGp5(bool preserveShortRests, params FxMeasure[] measures)
+    {
+        var path = LegacyGpFixtureBuilder.WriteFile("5.10", measures);
+        try
+        {
+            var settings = GpImportSettings.Default with { PreserveShortRests = preserveShortRests };
+            var importer = new GpImporter();
+            var result = importer.ImportTracksWithMetadata(path, [.. importer.GetAvailableTracks(path).Select(t => t.Id)],
+                settings);
+            return Assert.Single(result.Arrangements).Levels[^1];
+        }
+        finally
+        {
+            BestEffortDelete.File(path);
+        }
+    }
+
+    /// <summary>The riff above as a GP5: the binary reader applies the same rule. It never
+    /// did, so the same score imported differently as .gp5 and as .gp.</summary>
+    [Fact]
+    public void Gp5_NoteFollowedByAShortRest_ImportsAccented()
+    {
+        var level = ImportGp5(true, new FxMeasure().AddVoice(
+            FxBeat.Note(1, 3, 11), FxBeat.RestBeat(1), FxBeat.Note(1, 3, 9), FxBeat.Note(1, 3, 10),
+            FxBeat.RestBeat(-1)));
+
+        Assert.Equal([true, false, false], level.Notes.OrderBy(n => n.Position).Select(n => n.Accent));
+    }
+
+    /// <summary>A rest longer than the note, and a rest the setting turns off, stay plain;
+    /// the rest of a bar's last note falls in the next bar.</summary>
+    [Fact]
+    public void Gp5_TheLengthRule_TheSetting_AndTheNextBar()
+    {
+        var phraseEnd = ImportGp5(true, new FxMeasure().AddVoice(
+            FxBeat.Note(1, 3, 11), FxBeat.RestBeat(-1), FxBeat.Note(1, 3, 9), FxBeat.RestBeat(1), FxBeat.RestBeat(0)));
+        Assert.All(phraseEnd.Notes, n => Assert.False(n.Accent));
+
+        var off = ImportGp5(false, new FxMeasure().AddVoice(
+            FxBeat.Note(1, 3, 11), FxBeat.RestBeat(1), FxBeat.Note(1, 3, 9), FxBeat.Note(1, 3, 10), FxBeat.RestBeat(-1)));
+        Assert.All(off.Notes, n => Assert.False(n.Accent));
+
+        var crossBar = ImportGp5(true,
+            new FxMeasure().AddVoice(FxBeat.Note(-1, 3, 5), FxBeat.Note(0, 3, 7), FxBeat.Note(1, 3, 9), FxBeat.Note(1, 3, 11)),
+            new FxMeasure().AddVoice(FxBeat.RestBeat(1), FxBeat.Note(1, 3, 9), FxBeat.RestBeat(0), FxBeat.RestBeat(-1)));
+        var crossNotes = crossBar.Notes.OrderBy(n => n.Position).ToList();
+        Assert.True(crossNotes[3].Accent, "the bar's last eighth, articulated by the next bar's rest");
+        Assert.False(crossNotes[4].Accent); // a quarter rest then silence: nothing sounds again
+    }
 }

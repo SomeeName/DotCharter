@@ -92,7 +92,8 @@ public sealed partial class ToneRigViewModel : ViewModelBase, IDisposable, IChar
         _reamp = reamp;
         _tones = tones;
         _aiToneGeneration = new AiToneGenerationRun(
-            projectState, chartMaintenance, statusBarService, localization, logger, toneGenerator);
+            projectState, chartMaintenance, statusBarService, localization, logger, toneGenerator,
+            (title, message) => dialogs.MessageAsync(title, message, isConfirmation: true));
         TunerReadout = tunerReadout;
 
         // The built-in chart synth always plays through the chart's own tones:

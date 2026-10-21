@@ -41,6 +41,10 @@ internal sealed class RsXmlSongReader
         var song = doc.Root;
         if (song == null) return project;
 
+        // moveR<N> phrases move to their note BEFORE anything reads a time, exactly as
+        // DLC Builder would build them, and lose the name that would move them twice.
+        RsXmlPhraseMover.ResolveForImport(doc);
+
         // ── Title / artist / album ──────────────────────────────────────
         project.Chart.SongName = song.Element(E.Title)?.Value ?? project.Chart.SongName;
 

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using DotCharter.Services.Export.Sng.Model;
+using DotCharter.Services.Infrastructure;
 using DotCharter.Services.Infrastructure.Psarc;
 
 namespace DotCharter.Services.Export.Sng;
@@ -359,14 +360,14 @@ internal static class RocksmithSngWriter
     }
 
     /// <summary>Writes a zero-terminated UTF-8 string into a fixed-size field,
-    /// truncating so at least one zero terminator always remains.
+    /// truncating so at least one zero terminator always remains, and never inside a
+    /// multi-byte character (a split character reads back as garbage in the game's font).
     /// Reference: Rocksmith2014.NET BinaryHelpers.fs `writeZeroTerminatedUTF8String`.</summary>
-    private static void WriteFixedString(BinaryWriter writer, string value, int length)
+    internal static void WriteFixedString(BinaryWriter writer, string value, int length)
     {
         var buffer = new byte[length];
-        var utf8 = Encoding.UTF8.GetBytes(value);
-        var copyLength = Math.Min(utf8.Length, length - 1);
-        Array.Copy(utf8, buffer, copyLength);
+        var utf8 = Utf8Truncation.GetBytes(value, length - 1);
+        Array.Copy(utf8, buffer, utf8.Length);
         writer.Write(buffer);
     }
 }

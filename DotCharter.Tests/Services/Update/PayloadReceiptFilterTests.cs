@@ -150,6 +150,7 @@ public sealed class PayloadReceiptFilterTests : IDisposable
         using var service = new GitHubUpdateService(
             new Version(0, 48, 0), installDir: install, downloadDir: _dir);
 
+        service.TrustDownloadForTests(zipPath);
         var error = Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
 
         Assert.Contains("appconfig.json", error.Message, StringComparison.OrdinalIgnoreCase);
@@ -170,6 +171,7 @@ public sealed class PayloadReceiptFilterTests : IDisposable
         using var service = new GitHubUpdateService(
             new Version(0, 48, 0), installDir: install, downloadDir: _dir);
 
+        service.TrustDownloadForTests(zipPath);
         var error = Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
 
         Assert.Contains("profiles/x.json", error.Message, StringComparison.OrdinalIgnoreCase);

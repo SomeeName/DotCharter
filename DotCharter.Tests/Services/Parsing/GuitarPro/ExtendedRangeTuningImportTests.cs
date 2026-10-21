@@ -18,9 +18,9 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 ///     exported <c>stringN</c> disagreed with the notes.
 ///     <para>
 ///     There is ONE table now (<see cref="TuningUtilities.GetStandardMidiPitches" />)
-///     and the namer derives its pitch classes from it. The 5-string bass row is
-///     the sanctioned per-importer override — the tab formats measure it against
-///     B E A D G, the RS SNG path against E A D G B.
+///     and the namer derives its pitch classes from it. That includes 5 strings
+///     (E A D G B): a B E A D G bass imports as <c>-5 -5 -5 -5 -4</c>
+///     (<see cref="GpFiveStringBassTuningTests" />).
 ///     </para>
 /// </summary>
 public sealed class ExtendedRangeTuningImportTests

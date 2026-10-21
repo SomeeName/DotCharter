@@ -116,6 +116,10 @@ public sealed class BackupMigrateViewModel : ObservableObject, IBackupMigratePar
         IsBusy = true;
         try
         {
+            // The import reads this machine's appconfig.json (it keeps the local
+            // value of every path / executable setting), so a write still queued
+            // behind the coalescing writer has to reach the file first.
+            _config.Flush();
             var result = await Task.Run(() => _backup.Import(path)).ConfigureAwait(true);
             _stores.Reload();
             var config = _config.LoadAppConfig();
@@ -124,8 +128,17 @@ public sealed class BackupMigrateViewModel : ObservableObject, IBackupMigratePar
             _session.RequestReload();
             StatusText = _localization.Plural(
                 "Settings_BackupMigrate_ImportedOne", "Settings_BackupMigrate_Imported", result.FileCount);
+            // Say what was left alone: the user gets a restore that quietly ignored their
+            // plug-in and tool paths otherwise, and no hint to set them again.
+            if (result.NotRestoredSettings.Count > 0)
+            {
+                StatusText += " " + _localization.Format(
+                    "Settings_BackupMigrate_NotRestored", string.Join(", ", result.NotRestoredSettings));
+            }
+
             _logger?.Info(AppLogCategory.Settings,
-                $"Backup imported: {result.FileCount} file(s) from '{path}', {result.SkippedEntries.Count} skipped.");
+                $"Backup imported: {result.FileCount} file(s) from '{path}', {result.SkippedEntries.Count} skipped, " +
+                $"{result.NotRestoredSettings.Count} setting(s) not restored ({string.Join(", ", result.NotRestoredSettings)}).");
         }
         catch (Exception ex)
         {

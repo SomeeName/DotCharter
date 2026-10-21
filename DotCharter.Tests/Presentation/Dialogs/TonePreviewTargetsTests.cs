@@ -135,12 +135,13 @@ public sealed class TonePreviewTargetsTests : IDisposable
     }
 
     [Fact]
-    public void AReadyGame_CanBeChosen_AndAProbeThatFindsOne_EnablesIt()
+    public async Task AReadyGame_CanBeChosen_AndAProbeThatFindsOne_EnablesIt()
     {
         var session = new FakeTonelabSession { ProbeTo = TonelabSessionState.Ready };
         using var targets = Targets(session);
 
-        Assert.True(SpinWait.SpinUntil(() => targets.CanUseInGame, TimeSpan.FromSeconds(5)));   // the probe ran off-thread
+        await targets.InitialProbe;
+        Assert.True(targets.CanUseInGame);
         Assert.False(targets.HasInGameUnavailableReason);
 
         targets.IsInGame = true;

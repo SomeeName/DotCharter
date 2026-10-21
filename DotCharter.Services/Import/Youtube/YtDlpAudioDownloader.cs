@@ -38,7 +38,8 @@ public interface IYtDlpAudioDownloader
 /// <summary>
 ///     <see cref="IYtDlpAudioDownloader" /> backed by the yt-dlp + ffmpeg CLIs.
 ///     Both are resolved via <see cref="MediaToolResolver" /> (configured path →
-///     bundled next to the app → app <c>tools/</c> folder → PATH). Downloading
+///     bundled next to the app → app <c>tools/</c> folder → dev packer cache; PATH only
+///     when <c>DOTCHARTER_TOOLS_FROM_PATH=1</c>). Downloading
 ///     YouTube audio is subject to
 ///     YouTube's Terms of Service — this is a user-driven, personal-use feature.
 /// </summary>

@@ -10,7 +10,8 @@ namespace DotCharter.Tone.Infrastructure.Storage;
 ///     personal best and phrase-mastery record the player has ever earned, it is the
 ///     whole database.</para>
 ///
-///     <para>So: serialize to a sibling temp file, force it to the platter, then RENAME
+///     <para>So: serialize to a randomly named sibling temp file (created exclusively),
+///     force it to the platter, then RENAME
 ///     over the target. A rename within a volume is atomic on NTFS, so a reader either
 ///     sees the whole old file or the whole new one — never a torn one — and a crash at
 ///     any point leaves the previous version intact.</para>
@@ -54,6 +55,16 @@ public static class AtomicFile
     private const int MoveBackoffBaseMs = 2;
     private const int MoveBackoffCapMs = 48;
 
+    /// <summary>
+    ///     A sibling stage name no other process can know in advance:
+    ///     <c>&lt;target&gt;.&lt;random&gt;.tmp</c>. The writers create it with
+    ///     <see cref="FileMode.CreateNew" />, so a file or link planted at a guessed name is
+    ///     never opened, truncated or written through - a collision (vanishingly unlikely
+    ///     with 128 random bits) is an error, not a takeover of someone else's file.
+    /// </summary>
+    private static string NewTempPath(string path)
+        => path + "." + Guid.NewGuid().ToString("N") + TempSuffix;
+
     /// <summary>Atomically replaces <paramref name="path"/> with
     /// <paramref name="contents"/>. Creates the directory if needed.</summary>
     public static void WriteAllText(string path, string contents)
@@ -61,11 +72,11 @@ public static class AtomicFile
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-        var temp = path + TempSuffix;
+        var temp = NewTempPath(path);
 
         // Written through a FileStream rather than File.WriteAllText purely so the
         // contents can be forced durable BEFORE the rename makes them visible.
-        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+        using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         using (var writer = new StreamWriter(stream))
         {
             writer.Write(contents);
@@ -82,9 +93,9 @@ public static class AtomicFile
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-        var temp = path + TempSuffix;
+        var temp = NewTempPath(path);
 
-        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+        using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
             stream.Write(contents, 0, contents.Length);
             stream.Flush(true);

@@ -1,0 +1,111 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:tracks="clr-namespace:DotCharter.Services.Editing.Tracks;assembly=DotCharter.Services"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.TimelineLaneMenuView"
+             x:CompileBindings="True"
+             x:DataType="tracks:RibbonVisibility"
+             DataContext="{x:Null}"
+             OneToneHint="{localization:Loc TimelineLanes_HiddenOneTone}"
+             EmptyHint="{localization:Loc TimelineLanes_HiddenEmpty}"
+             AutomationProperties.Name="{localization:Loc TimelineLanes_MenuName}">
+    <!-- THE LANE MENU (mockup 06_lane_menu_1080): right-click a timeline lane
+         header. A checkbox per lane, then the two lane-wide options, then
+         "Show all lanes". Each lane that is ON but has no row right now says why
+         ("auto-hidden: one tone"), so a checked lane that is not on screen is not
+         a mystery.
+
+         The DataContext is the RibbonVisibility of the track the gutter labels,
+         set by the code-behind each time the menu opens (null while closed, so the
+         prewarm realizes it without binding to the shell's view model). It is the
+         SAME object View > Timeline Rows and the command palette toggle, so the
+         three can never disagree. -->
+    <UserControl.Styles>
+        <Style Selector=":is(Button).LaneRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource FireTextBody}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontFamily" Value="{StaticResource FireFontUi}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="RowBg" Background="{TemplateBinding Background}" CornerRadius="4"
+                            MinHeight="28" Padding="10,0,12,0">
+                        <Grid ColumnDefinitions="22,*,Auto" ColumnSpacing="6">
+                            <Path Name="Check" Grid.Column="0" IsVisible="False"
+                                  VerticalAlignment="Center" HorizontalAlignment="Left"
+                                  Data="{DynamicResource IconCheckStroke}" StrokeThickness="1.7"
+                                  StrokeLineCap="Round" StrokeJoin="Round"
+                                  Stroke="{DynamicResource FireTextBody}" />
+                            <ContentPresenter Name="LaneLabel" Grid.Column="1"
+                                              Content="{TemplateBinding Content}"
+                                              VerticalAlignment="Center" />
+                            <ContentPresenter Name="Hint" Grid.Column="2"
+                                              Content="{TemplateBinding Tag}"
+                                              VerticalAlignment="Center"
+                                              FontSize="11"
+                                              Foreground="{DynamicResource FireTextFaint}" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector=":is(Button).LaneRow:pointerover /template/ Border#RowBg">
+            <Setter Property="Background" Value="{DynamicResource FireSurfaceHover}" />
+        </Style>
+        <Style Selector="ToggleButton.LaneRow:checked /template/ Path#Check">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <!-- A lane that is on but auto-hidden reads dim, with its reason on the right. -->
+        <Style Selector="ToggleButton.LaneRow.AutoHidden /template/ ContentPresenter#LaneLabel">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="ToggleButton.LaneRow.AutoHidden /template/ Path#Check">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="Border.LaneRule">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Margin" Value="8,5" />
+            <Setter Property="Background" Value="{DynamicResource FireBorder}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border x:Name="LaneMenuCard"
+            Background="{DynamicResource FireSurfaceMenu}"
+            BorderBrush="{DynamicResource FireBorder}"
+            BorderThickness="1" CornerRadius="6" Padding="4" MinWidth="296">
+        <StackPanel>
+            <ToggleButton x:Name="LaneTones" Classes="LaneRow"
+                          Content="{localization:Loc Ribbon_Tones}"
+                          IsChecked="{Binding ShowTones, Mode=TwoWay}" />
+            <ToggleButton x:Name="LaneSections" Classes="LaneRow"
+                          Content="{localization:Loc Ribbon_Sections}"
+                          IsChecked="{Binding ShowSections, Mode=TwoWay}" />
+            <ToggleButton x:Name="LanePhrases" Classes="LaneRow"
+                          Content="{localization:Loc Ribbon_Phrases}"
+                          IsChecked="{Binding ShowPhrases, Mode=TwoWay}" />
+            <ToggleButton x:Name="LaneLyrics" Classes="LaneRow"
+                          Content="{localization:Loc Ribbon_Lyrics}"
+                          IsChecked="{Binding ShowLyrics, Mode=TwoWay}" />
+            <ToggleButton x:Name="LaneLinks" Classes="LaneRow"
+                          Content="{localization:Loc Ribbon_Links}"
+                          IsChecked="{Binding ShowLinks, Mode=TwoWay}" />
+            <ToggleButton x:Name="LaneMeasures" Classes="LaneRow"
+                          Content="{localization:Loc Timeline_Gutter_Measures}"
+                          IsChecked="{Binding ShowMeasureMetadata, Mode=TwoWay}" />
+            <Border Classes="LaneRule" />
+            <ToggleButton x:Name="LaneAutoHide" Classes="LaneRow"
+                          Content="{localization:Loc TimelineLanes_AutoHide}"
+                          IsChecked="{Binding AutoHideEmpty, Mode=TwoWay}" />
+            <ToggleButton x:Name="LaneCompact" Classes="LaneRow"
+                          Content="{localization:Loc TimelineLanes_Compact}"
+                          IsChecked="{Binding CompactRows, Mode=TwoWay}" />
+            <Border Classes="LaneRule" />
+            <Button x:Name="LaneShowAll" Classes="LaneRow"
+                    Content="{localization:Loc TimelineLanes_ShowAll}"
+                    Click="ShowAll_Click" />
+        </StackPanel>
+    </Border>
+</UserControl>

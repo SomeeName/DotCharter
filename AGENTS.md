@@ -156,14 +156,33 @@ and `DotCharter.Tests/AGENTS.md`.
 two `dotnet test`s in different jobs. It is not in the commit gate; run it
 yourself after a view change.
 
-**CI runs only when started by hand** — the "Run workflow" button, or
-`gh workflow run build.yml --ref <branch>` (add `-f native-tests=true` for the
-native suite + RT gate). A push, a pull request or a merge starts nothing: the
-private repo gets 2,000 free minutes a month, Windows minutes bill at 2x, and
-merges are decided on the local gate + headless run above. `CiWorkflowLintTests`
-fails any workflow with another trigger. The native runtime is built once per
-run and cached on the JuceSharp gitlink, so a run that does not bump the
-submodule compiles no C++.
+**CI runs on its own only on the PUBLIC repos; the private dev repos run it by
+hand.** `build.yml` triggers on `workflow_dispatch`, push to `main` and
+`pull_request`, and every job carries
+`if: github.event_name == 'workflow_dispatch' || !github.event.repository.private`:
+on the public `SomeeName/DotCharter` (free minutes) a push or PR runs it all; on
+the private dev repo it produces a run whose jobs are all SKIPPED (0 minutes —
+2,000 free a month there, Windows billing at 2x). Start a dev-repo run with the
+"Run workflow" button or `gh workflow run build.yml --ref <branch>` (add
+`-f native-tests=true` for the native suite + RT gate); merges there are decided
+on the local gate + headless run above. `CiWorkflowLintTests` fails a workflow
+with a non-manual trigger and a job without that gate (the one exception is
+`public-sync-watch.yml`: schedule or dispatch, and only in the `*-Dev` repos;
+JuceSharp's own `CiWorkflowLintTests` holds its workflow to the same rule).
+`SUBMODULES_TOKEN`
+is optional: with it the submodule comes from the private dev JuceSharp, without
+it (public repo, fork PRs) anonymously from the public one. It lives for ONE git
+command (`git -c credential.helper= -c url…insteadOf=… submodule update`, never
+a global git config), and only the submodule checkout and, on the private repo
+alone, the native fetch may read a secret. Every CI restore is `--locked-mode`
+against the committed `packages.lock.json` files (`Directory.Build.props`; a
+package change commits its lock-file update). Every action is
+pinned by full commit SHA, every checkout sets `persist-credentials: false`, the
+concurrency group includes the event (a skipped push run never cancels a manual
+one) and the artifact-pruning job never runs on a pull request — all linted by
+`CiWorkflowLintTests`. The native runtime
+is built once per run and cached on the JuceSharp gitlink, so a run that does
+not bump the submodule compiles no C++.
 
 **The public variant** (#887): the git-ignored `plugins/<name>/` folders may hold
 optional plugins (each its own repository) that `DotCharter.UI` references and
@@ -306,10 +325,13 @@ generic `cmake -G "Visual Studio 17 2022"` line does not work there.
   and `Directory.Build.targets`) runs `tools/setup/Get-NativeRuntime.ps1`: it
   downloads the pair for the gitlink from JuceSharp's `native-prebuilt` release
   and installs it only if its SHA-256s match `tools/setup/native-runtime.json` and
-  `dca_abi_version()` matches the header. A present DLL is never touched; the
+  `dca_abi_version()` matches the header. The manifest may name only
+  `SomeeName/JuceSharp` or `SomeeName/JuceSharp`, and the ABI probe loads the
+  DLL only after both hashes matched, in a child PowerShell without any GitHub
+  token. A present DLL is never touched; the
   build in CI never fetches unless `DotCharterFetchNative=true` (CI's `native` job
-  calls the script as a step instead, with `SUBMODULES_TOKEN` as `GH_TOKEN` while
-  the release is private, and compiles C++ only if that fails or the native suite
+  calls the script as a step instead, with `SUBMODULES_TOKEN` as `GH_TOKEN` on the
+  private repo only, and compiles C++ only if that fails or the native suite
   is asked for); `DotCharterSkipNativeFetch=true`
   turns it off. **A gitlink bump publishes its pair**
   (`tools/release/Publish-NativeRuntime.ps1 -Upload`) and commits the pin with
@@ -387,8 +409,9 @@ assignee is `SomeeName`.
      proofs), known limits. It is the report, never a dated file in the repo.
    - Put `Fixes #n` / `Closes #n` on their own lines (`Refs #n` for partial
      work), so merging closes the issue.
-   - **Push once, when the work is verified.** No push starts CI (see
-     Validation); the PR body carries the local gate and headless numbers.
+   - **Push once, when the work is verified.** On the private dev repo no
+     push starts CI (see Validation); the PR body carries the local gate and
+     headless numbers.
 4. **Before merging,** check the branch contains current `main`
    (`git merge-base --is-ancestor origin/main <branch>`); a stale branch goes
    back to be rebased, OR goes in a merge train (`tools/agent/Merge-Train.ps1`:
@@ -400,6 +423,16 @@ assignee is `SomeeName`.
    PR body says `Fixes SomeeName/DotCharter#n` (or `Refs`) so the issue's timeline
    shows it. Native-only work (RT gate, a flaky native test, ABI or toolchain
    cleanup, a submodule doc) gets its issue in `SomeeName/JuceSharp`.
+6. **Public → dev sync (#77).** A commit merged on a PUBLIC repo is imported
+   into dev before the next release: `tools/release/Import-PublicCommit.ps1
+   -Repo DotCharter|JuceSharp -Commit <sha> | -Pr <n>` makes the dev branch and
+   PR with a `Public-Commit: <Repo>@<sha>` trailer. `Export-PublicSnapshot.ps1`
+   REFUSES while a public commit since the last snapshot has no such trailer and
+   prints the import command, and `New-Release.ps1`'s preflight runs the same check
+   (`Find-UnimportedPublicCommits.ps1 -FailOnMissing`). The scheduled
+   `public-sync-watch.yml` does NOT run: Actions is off on the dev repos. To skip one
+   on purpose, commit an empty dev commit with the trailer saying why. Never edit
+   the guard to get past it.
 
 ## Bounded agent work
 

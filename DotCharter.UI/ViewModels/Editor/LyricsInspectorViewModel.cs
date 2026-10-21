@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using DotCharter.Analysis.Lyrics;
 using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Services.Export;
+using DotCharter.Services.Infrastructure;
 using DotCharter.Services.Parsing.Lrc;
 using DotCharter.Services.Parsing.UltraStar;
 using DotCharter.Tone.UI.ViewModels.Shell;
@@ -264,7 +265,7 @@ public partial class LyricsInspectorViewModel : ViewModelBase
 
         try
         {
-            var content = await _files.ReadAllTextAsync(filePath);
+            var content = await ReadLyricsTextAsync(filePath);
             var phrases = _lrcParser.Parse(content, _chartEditor.Beats);
             if (phrases.Count == 0)
             {
@@ -285,11 +286,36 @@ public partial class LyricsInspectorViewModel : ViewModelBase
                     $"Imported LRC lyrics from '{filePath}'. phrases={phrases.Count}, lyrics={phrases.Sum(p => p.Lyrics.Count)}.");
             }
         }
+        catch (ImportFileTooLargeException tooLarge)
+        {
+            ReportTooLarge(tooLarge, filePath);
+        }
         catch (Exception ex)
         {
             _logger.Error(AppLogCategory.Import, $"LRC import failed for '{filePath}'.", ex);
             _projectState.SetMessage(_localization.Format("Status_LrcImport_Failed", ex.Message), StatusSeverity.Error);
         }
+    }
+
+    /// <summary>
+    ///     A lyrics file as text, refused when the file system reports it longer
+    ///     than <see cref="ImportSizeLimits.LyricsTextFileBytes" /> — the length is
+    ///     asked of the same seam as the read and BEFORE it, off the UI thread.
+    /// </summary>
+    internal async Task<string> ReadLyricsTextAsync(string filePath)
+    {
+        var length = await Task.Run(() => _files.FileLength(filePath));
+        ImportSizeLimits.RequireWithin(length, ImportSizeLimits.LyricsTextFileBytes, "The lyrics file");
+        return await _files.ReadAllTextAsync(filePath);
+    }
+
+    private void ReportTooLarge(ImportFileTooLargeException tooLarge, string filePath)
+    {
+        _logger.Warning(AppLogCategory.Import, $"Lyrics import refused: {tooLarge.Message} File='{filePath}'.");
+        _projectState.SetMessage(
+            _localization.Format("Status_ImportFileTooLarge", Path.GetFileName(filePath),
+                ImportSizeLimits.ToMegabytes(tooLarge.Length), ImportSizeLimits.ToMegabytes(tooLarge.Cap)),
+            StatusSeverity.Error);
     }
 
     [RelayCommand]
@@ -351,7 +377,7 @@ public partial class LyricsInspectorViewModel : ViewModelBase
 
         try
         {
-            var content = await _files.ReadAllTextAsync(filePath);
+            var content = await ReadLyricsTextAsync(filePath);
             var song = new UltraStarLyricsParser().Parse(content);
             // One track per voice: a duet's second singer goes into a NEW vocal track
             // rather than interleaving with the first in the active one.
@@ -380,6 +406,10 @@ public partial class LyricsInspectorViewModel : ViewModelBase
                     $"Imported UltraStar lyrics from '{filePath}'. voices={voices.Count}, relative={song.IsRelative}, " +
                     $"phrases={phraseCount}, lyrics={lyricCount}.");
             }
+        }
+        catch (ImportFileTooLargeException tooLarge)
+        {
+            ReportTooLarge(tooLarge, filePath);
         }
         catch (Exception ex)
         {
@@ -914,8 +944,11 @@ public partial class LyricsInspectorViewModel : ViewModelBase
 /// in-place LyricPhrase mutation isn't covered by SetVocalPhrasesAction)
 /// or the inspector queue advances past the recovered syllable.
 /// </summary>
-internal sealed class LyricTapAction : IChartAction
+internal sealed class LyricTapAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     private readonly LyricsInspectorViewModel _vm;
     private readonly ObservableCollection<LyricPhrase> _trackPhrases;
     private readonly LyricPhrase _targetPhrase;

@@ -87,6 +87,11 @@ public sealed class Tone3000CaptureSource : INamCaptureSource
     {
         var text = NormalizeQuery(query);
         if (text.Length == 0) return NamCaptureSourcing.Failed("The capture search was empty.");
+
+        // The query is a model's text and goes to a third party: an amp name is not an address, and
+        // one that is can only be carrying something out.
+        if (LooksLikeAddress(query))
+            return NamCaptureSourcing.Failed("The capture search looked like a web address, so it was not run.");
         if (!IsAvailable)
         {
             return NamCaptureSourcing.Failed(
@@ -172,6 +177,13 @@ public sealed class Tone3000CaptureSource : INamCaptureSource
         return string.Equals(extension, ".nam", StringComparison.OrdinalIgnoreCase)
                || string.Equals(extension, ".aidax", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>True when the query holds a URL scheme, a <c>www.</c> host or an e-mail address.</summary>
+    internal static bool LooksLikeAddress(string? query)
+        => query is not null &&
+           (query.Contains("://", StringComparison.Ordinal) ||
+            query.Contains("www.", StringComparison.OrdinalIgnoreCase) ||
+            query.Contains('@', StringComparison.Ordinal));
 
     /// <summary>One line, trimmed and capped, quotes stripped — the field is
     /// free text from a model.</summary>

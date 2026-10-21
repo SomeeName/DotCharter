@@ -23,6 +23,10 @@ public enum GpImportMode
 /// <summary>One chosen track, and the arrangement it merges into (technique-only and diff-compare).</summary>
 public sealed record GpTrackTarget(string Name, Arrangement? Target);
 
+/// <summary>What an add-new import created: its arrangements, and per measure of the score's grid the
+/// written bar it plays (null when the beat map was not replaced, so the measures are not the score's).</summary>
+public sealed record GpImportedScore(IReadOnlyList<Arrangement> Arrangements, IReadOnlyList<int>? SourceBars);
+
 /// <summary>
 ///     The apply half of a Guitar Pro import, run on the UI thread against the
 ///     LIVE project after the score was parsed off it — and always as ONE undo
@@ -39,10 +43,21 @@ public sealed class GpImportApplier(
     IAppLogger logger,
     ILocalizationService localization)
 {
+    private GpImportedScore? _lastImport;
+
+    /// <summary>The last add-new import, handed out once (the link suggestions read it).</summary>
+    public GpImportedScore? TakeLastImport()
+    {
+        var last = _lastImport;
+        _lastImport = null;
+        return last;
+    }
+
     public void Apply(GpImportMode mode, string filePath, IReadOnlyList<GpTrackTarget> tracks, GpImportResult parsed,
         GpImportResult? older)
     {
         var appConfig = config.LoadAppConfig();
+        _lastImport = null;
         maintenance.RunAsSingleUndoStep(() =>
         {
             switch (mode)
@@ -70,7 +85,7 @@ public sealed class GpImportApplier(
         // enforcing first measured the chart against a grid thrown away one call
         // later. ApplyTempoAndKey still reads the OLD first beat for its start
         // offset, so this is a resequence, never a clear-first.
-        ApplyTempoAndKey(result.Metadata);
+        var gridReplaced = ApplyTempoAndKey(result.Metadata);
 
         foreach (var arrangement in imported)
             ChartSpacingEnforcer.EnforceArrangement(arrangement, state.Beats, appConfig);
@@ -81,6 +96,8 @@ public sealed class GpImportApplier(
         if (project == null) return;
         RemoveDefaultEmptyArrangement(project);
         foreach (var arrangement in imported) project.Arrangements.Add(arrangement);
+        _lastImport = new GpImportedScore([.. imported],
+            gridReplaced ? [.. result.Metadata.Bars.Select(b => b.SourceBarIndex)] : null);
         if (state.ActiveArrangement == null && project.Arrangements.Count > 0)
             state.ActiveArrangement = project.Arrangements[0];
 
@@ -144,12 +161,13 @@ public sealed class GpImportApplier(
     ///     Replaces the beat map with the score's tempo/time-signature map (unless
     ///     it is locked) and copies the key and the song metadata over. Never
     ///     touches the arrangements, which is why it can run before they are
-    ///     enforced and added.
+    ///     enforced and added. True when the beat map is now the score's.
     /// </summary>
-    private void ApplyTempoAndKey(GpImportMetadata meta)
+    private bool ApplyTempoAndKey(GpImportMetadata meta)
     {
         var project = state.ActiveProject;
-        if (project == null) return;
+        if (project == null) return false;
+        var replaced = false;
 
         if (project.IsBeatMapLocked)
         {
@@ -170,6 +188,7 @@ public sealed class GpImportApplier(
 
             project.Bpm = initialBpm;
             transport.Bpm = initialBpm;
+            replaced = true;
             logger.Info(AppLogCategory.Import,
                 $"Applied Guitar Pro tempo map. bars={meta.Bars.Count}, tempoPoints={meta.TempoPoints.Count}, initialBpm={initialBpm:0.###}, beats={newBeats.Count}, importTs={appConfig.GpImportTimeSignatures}, dropMidBeatTempo={appConfig.GpImportDropMidBeatTempoChanges}.");
         }
@@ -178,6 +197,7 @@ public sealed class GpImportApplier(
         project.Chart.KeyAccidentals = meta.KeyAccidentals;
         project.Chart.KeyIsMinor = meta.KeyIsMinor;
         ApplyScoreMetadata(project, meta);
+        return replaced;
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Settings;
+using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Navigation;
 using DotCharter.Services.Audio.StemSeparation;
 using DotCharter.Tone.Diagnostics;
@@ -32,6 +33,7 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
     private readonly GpuRuntimeViewModel _gpu;
     private readonly StemCacheViewModel _cache;
     private readonly IAppLogger? _logger;
+    private readonly IDialogs _dialogs;
     private readonly List<StemModelRowViewModel> _models = [];
     private readonly EventHandler _onModelsChanged;
     private int _probed;
@@ -40,18 +42,19 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
         StemModelManager manager,
         ILocalizationService localization,
         IUiDispatcher ui,
-        StemBackendViewModel backend,
-        GpuRuntimeViewModel gpu,
-        StemCacheViewModel cache,
+        StemModelsBlocks blocks,
+        IDialogs dialogs,
         IAppLogger? logger = null)
     {
         _manager = manager;
         _localization = localization;
         _ui = ui;
-        _backend = backend;
-        _gpu = gpu;
-        _cache = cache;
+        _backend = blocks.Backend;
+        _gpu = blocks.Gpu;
+        _cache = blocks.Cache;
         _logger = logger;
+        _dialogs = dialogs;
+        ImportCheckpoint = (url, progress) => _manager.ImportCheckpointFromUrlAsync(url, progress);
 
         _onModelsChanged = (_, _) => _ui.PostNormal(OnModelsChanged);
         _manager.ModelsChanged += _onModelsChanged;
@@ -89,6 +92,9 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
     [ObservableProperty] private bool _isCustomModelImportInProgress;
 
     public bool HasCustomModelImportStatus => CustomModelImportStatus.Length > 0;
+
+    /// <summary>The download + convert step; a test replaces it to see whether an import was attempted.</summary>
+    internal Func<string, IProgress<ModelDownloadProgress>, Task<StemModelDescriptor>> ImportCheckpoint { get; set; }
 
     ICommand IStemModelsSettingsScreen.ImportCustomModelCommand => ImportCustomModelCommand;
 
@@ -221,6 +227,7 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
     private async Task ImportCheckpointAsync(string url)
     {
         if (IsCustomModelImportInProgress) return;
+        if (!await ConfirmPickleAsync(url).ConfigureAwait(true)) return;
         IsCustomModelImportInProgress = true;
         CustomModelImportProgress = 0;
         CustomModelImportStatus = _localization["Settings_StemModels_CustomBootstrapping"];
@@ -234,11 +241,16 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
         });
         try
         {
-            var descriptor = await _manager.ImportCheckpointFromUrlAsync(url, progress).ConfigureAwait(true);
+            var descriptor = await ImportCheckpoint(url, progress).ConfigureAwait(true);
             CustomModelImportStatus = _localization.Format(
                 "Settings_StemModels_CustomConverted", descriptor.DisplayName, descriptor.SourceCount);
             CustomModelUrl = "";
             CustomModelImportProgress = 1.0;
+        }
+        catch (CheckpointConsentException ex)
+        {
+            CustomModelImportStatus = _localization["Settings_StemModels_PickleChanged"];
+            _logger?.Warning(AppLogCategory.Audio, $"Checkpoint import refused for '{url}': {ex.Message}");
         }
         catch (Exception ex)
         {
@@ -249,5 +261,33 @@ public sealed partial class StemModelsSettingsViewModel : ObservableObject,
         {
             IsCustomModelImportInProgress = false;
         }
+    }
+
+    /// <summary>
+    ///     A <c>.ckpt</c> / <c>.pt</c> / <c>.pth</c> is a pickle and can run code when loaded.
+    ///     Importing one needs the user to accept that risk for that URL first; the
+    ///     answer is remembered per URL (and pinned to the file's hash by the manager).
+    ///     <c>.safetensors</c> is not a pickle and is never asked about.
+    /// </summary>
+    private async Task<bool> ConfirmPickleAsync(string url)
+    {
+        if (!CheckpointPickleConsent.IsPickleFormat(url) || _manager.PickleConsent.IsGranted(url)) return true;
+
+        var name = Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? Path.GetFileName(Uri.UnescapeDataString(uri.AbsolutePath))
+            : url;
+        var allowed = await _dialogs.MessageAsync(
+            _localization["Settings_StemModels_PickleConfirmTitle"],
+            _localization.Format("Settings_StemModels_PickleConfirmMessage", name, url),
+            isConfirmation: true).ConfigureAwait(true);
+        if (!allowed)
+        {
+            CustomModelImportStatus = _localization["Settings_StemModels_PickleDeclined"];
+            return false;
+        }
+
+        _manager.PickleConsent.Grant(url);
+        _logger?.Info(AppLogCategory.Audio, $"User allowed checkpoint '{url}' to run code on load.");
+        return true;
     }
 }

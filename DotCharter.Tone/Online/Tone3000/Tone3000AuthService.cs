@@ -60,9 +60,12 @@ public interface ITone3000AuthService
 /// <see cref="HttpListenerOAuthCallbackListener"/>.</summary>
 public interface IOAuthCallbackListener
 {
-    /// <summary>Listens on <paramref name="prefix"/> until one request arrives
-    /// and returns its raw query string ("?code=…"), or null on timeout.</summary>
-    Task<string?> WaitForCallbackAsync(string prefix, TimeSpan timeout, CancellationToken ct);
+    /// <summary>Listens on <paramref name="prefix"/> until a request arrives that is for the
+    /// callback path AND whose raw query string ("?code=…&amp;state=…") satisfies
+    /// <paramref name="accept"/>, and returns that query string; null on timeout.
+    /// Every other request is answered with a 404 and ignored, so a stray page that
+    /// knocks on the loopback port cannot end the sign-in.</summary>
+    Task<string?> WaitForCallbackAsync(string prefix, Func<string, bool> accept, TimeSpan timeout, CancellationToken ct);
 }
 
 /// <summary>
@@ -70,11 +73,14 @@ public interface IOAuthCallbackListener
 ///     TONE3000 callback prefix (<c>http://localhost:47821/…</c> — inside the
 ///     firewall-allowed 47810–47829 range; HTTP.SYS permits non-admin
 ///     localhost listeners). Answers the browser with a tiny "you can close
-///     this window" page and resolves with the request's query string.
+///     this window" page and resolves with the query string of the first request
+///     that is for the callback path and passes the caller's gate; every other
+///     request gets a 404 and the wait goes on until the timeout.
 /// </summary>
 public sealed class HttpListenerOAuthCallbackListener : IOAuthCallbackListener
 {
-    public async Task<string?> WaitForCallbackAsync(string prefix, TimeSpan timeout, CancellationToken ct)
+    public async Task<string?> WaitForCallbackAsync(
+        string prefix, Func<string, bool> accept, TimeSpan timeout, CancellationToken ct)
     {
         using var listener = new HttpListener();
         listener.Prefixes.Add(prefix);
@@ -83,20 +89,36 @@ public sealed class HttpListenerOAuthCallbackListener : IOAuthCallbackListener
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(timeout);
-            var context = await listener.GetContextAsync()
-                .WaitAsync(timeoutCts.Token).ConfigureAwait(false);
 
-            var query = context.Request.Url?.Query;
-            var body = Encoding.UTF8.GetBytes(
-                "<!doctype html><html><body style=\"font-family:sans-serif;background:#16181d;color:#e6e8ec;" +
-                "display:flex;align-items:center;justify-content:center;height:100vh\">" +
-                "<div><h2>DotCharter</h2><p>Sign-in received &mdash; you can close this window.</p></div>" +
-                "</body></html>");
-            context.Response.ContentType = "text/html; charset=utf-8";
-            context.Response.ContentLength64 = body.Length;
-            await context.Response.OutputStream.WriteAsync(body, CancellationToken.None).ConfigureAwait(false);
-            context.Response.Close();
-            return query;
+            // Only the request the sign-in is waiting for ends the wait: the
+            // callback path, carrying the caller's state. Anything else that
+            // knocks on the loopback port is answered with a 404 and ignored, so
+            // a stray page cannot complete or abort the sign-in; the timeout is
+            // the only other way out.
+            var callbackPath = new Uri(prefix).AbsolutePath;
+            while (true)
+            {
+                var context = await listener.GetContextAsync()
+                    .WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+
+                var url = context.Request.Url;
+                var query = url?.Query ?? string.Empty;
+                var isCallback = url != null &&
+                                 string.Equals(url.AbsolutePath, callbackPath, StringComparison.OrdinalIgnoreCase) &&
+                                 accept(query);
+                if (!isCallback)
+                {
+                    await RespondAsync(context, HttpStatusCode.NotFound, "Not found.").ConfigureAwait(false);
+                    continue;
+                }
+
+                await RespondAsync(context, HttpStatusCode.OK,
+                    "<!doctype html><html><body style=\"font-family:sans-serif;background:#16181d;color:#e6e8ec;" +
+                    "display:flex;align-items:center;justify-content:center;height:100vh\">" +
+                    "<div><h2>DotCharter</h2><p>Sign-in received &mdash; you can close this window.</p></div>" +
+                    "</body></html>").ConfigureAwait(false);
+                return query;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -105,6 +127,23 @@ public sealed class HttpListenerOAuthCallbackListener : IOAuthCallbackListener
         finally
         {
             try { listener.Stop(); } catch { /* teardown best-effort */ }
+        }
+    }
+
+    private static async Task RespondAsync(HttpListenerContext context, HttpStatusCode status, string html)
+    {
+        try
+        {
+            var body = Encoding.UTF8.GetBytes(html);
+            context.Response.StatusCode = (int)status;
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.ContentLength64 = body.Length;
+            await context.Response.OutputStream.WriteAsync(body, CancellationToken.None).ConfigureAwait(false);
+            context.Response.Close();
+        }
+        catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or IOException)
+        {
+            // The peer went away before the answer: nothing to keep.
         }
     }
 }
@@ -195,7 +234,8 @@ public sealed class Tone3000AuthService : ITone3000AuthService, IDisposable
             // P2-12).
             using var callbackCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var callbackTask = _listener.WaitForCallbackAsync(
-                Tone3000OAuth.RedirectUri, CallbackTimeout, callbackCts.Token);
+                Tone3000OAuth.RedirectUri, query => Tone3000OAuth.CarriesState(query, state),
+                CallbackTimeout, callbackCts.Token);
 
             if (!_openBrowser(authorizeUrl))
             {

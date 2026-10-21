@@ -28,6 +28,8 @@ public sealed class UnusedResxKeyTests
         "Dialog_Export_Stage_", "EofLoss_", "History_",
         "Inspector_EqPreset_", "Inspector_EqTypeName_", "Inspector_EqTypeShort_",
         "Inspector_Queue_Filter_", "Inspector_RepeatReason_",
+        // Link identical measures shows why it refused: LinkCreate_<LinkCreateRefusal>.
+        "LinkCreate_",
         "RigImport_Loss_", "RigImport_Rail_", "ToneMatch_Block_"
     ];
 

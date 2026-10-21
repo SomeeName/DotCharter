@@ -343,7 +343,7 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
             {
                 level = levelIndex >= 0 && levelIndex < arrangement.Levels.Count
                     ? arrangement.Levels[levelIndex]
-                    : arrangement.Levels.FirstOrDefault();
+                    : ChartLevels.Hardest(arrangement);
             }
 
             if (level != null) _projectState.ActiveLevel = level;
@@ -413,8 +413,10 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
         Arrangement newArrangement,
         int levelIndex,
         int vocalTrackIndex)
-        : IChartAction
+        : IChartAction, ILinkPolicyAction
     {
+        public LinkPolicy LinkPolicy => LinkPolicy.UnlinkOnDivergence;
+
         public bool HasEffect => true;
 
         public long EstimatedBytes { get; } =
@@ -434,8 +436,10 @@ public sealed partial class ChartMaintenanceService : IChartMaintenanceService
         int arrangementIndex,
         int levelIndex,
         int vocalTrackIndex)
-        : IChartAction
+        : IChartAction, ILinkPolicyAction
     {
+        public LinkPolicy LinkPolicy => LinkPolicy.UnlinkOnDivergence;
+
         public bool HasEffect => true;
 
         /// <summary>Both clones stay alive for as long as the step is in the history.</summary>

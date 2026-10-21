@@ -60,7 +60,7 @@ public sealed class PendingUpdateApplyTests
             TargetVersion = "0.46.0",
         };
         File.WriteAllText(UpdaterScriptBuilder.PendingStatePathFor(install), state.ToJson());
-        File.WriteAllText(UpdaterScriptBuilder.ScriptPathFor(install), "@echo off\r\n");
+        File.WriteAllText(UpdaterScriptBuilder.LegacyScriptPathFor(install), "@echo off\r\n");
         return payloadDir;
     }
 
@@ -221,7 +221,7 @@ public sealed class PendingUpdateApplyTests
         service.DiscardPendingUpdateApply();
 
         Assert.False(Directory.Exists(UpdaterScriptBuilder.StagingRootFor(temp.Path)));
-        Assert.False(File.Exists(UpdaterScriptBuilder.ScriptPathFor(temp.Path)));
+        Assert.False(File.Exists(UpdaterScriptBuilder.LegacyScriptPathFor(temp.Path)));
         Assert.False(File.Exists(UpdaterScriptBuilder.PendingStatePathFor(temp.Path)));
         Assert.False(File.Exists(Path.Combine(temp.Path, "update.zip")));
         Assert.True(File.Exists(UpdaterScriptBuilder.LogPathFor(temp.Path)));
@@ -256,6 +256,7 @@ public sealed class PendingUpdateApplyTests
         var junk = Path.Combine(temp.Path, "not-an-archive.zip");
         File.WriteAllText(junk, "PK-ish, but not a zip");
 
+        service.TrustDownloadForTests(junk);
         Assert.ThrowsAny<Exception>(() => service.ApplyDownloadedUpdate(junk));
 
         // Nothing is staged any more, so nothing may claim to be.

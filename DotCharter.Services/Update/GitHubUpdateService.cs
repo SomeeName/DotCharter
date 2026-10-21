@@ -1,4 +1,5 @@
 ﻿using System.IO.Compression;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -50,24 +51,6 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
     public const int MaxPayloadManifestBytes = 4 * 1024 * 1024;
 
     /// <summary>
-    ///     The first release whose assets were published with a
-    ///     <c>SHA256SUMS.txt</c> beside them (<c>New-Release.ps1</c>, 0.41).
-    ///     <para>
-    ///         <b>This is what makes the digest check fail CLOSED without breaking
-    ///         history.</b> An unreachable or silent digest manifest must not be a
-    ///         logged warning and an applied update — which handed a doctored
-    ///         release document a trivial way out of the one content check there
-    ///         is: rename the asset out of the manifest, or make the manifest
-    ///         unreachable, and the update applies anyway. At or above this
-    ///         version the digests MUST be there and MUST match; below it the
-    ///         escape hatch stays, because those releases genuinely published
-    ///         nothing to check against and refusing them would strand every old
-    ///         install to defend against nothing.
-    ///     </para>
-    /// </summary>
-    public static readonly Version FirstDigestPublishingVersion = new(0, 41, 0);
-
-    /// <summary>
     ///     Deadline for one metadata exchange — the release JSON, the payload
     ///     manifest — covering headers AND body. <see cref="HttpClient.Timeout" />
     ///     cannot be that deadline for this service: the downloads stream with
@@ -106,6 +89,15 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
     private readonly TimeSpan _rangeTimeout;
     private readonly UpdateInstaller _installer;
     private readonly IReadOnlyList<string> _pluginFiles;
+    private readonly byte[] _releaseSigningKey;
+
+    /// <summary>
+    ///     Every zip this service produced and verified, by full path, with the
+    ///     SHA-256 it had at that moment. <see cref="ApplyDownloadedUpdate" /> applies
+    ///     nothing else, and re-hashes against this before staging: the zip
+    ///     sits in a user-writable folder between download and apply.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, string> _verifiedDownloads = new(StringComparer.OrdinalIgnoreCase);
 
     public GitHubUpdateService(
         Version currentVersion,
@@ -121,7 +113,8 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
         TimeSpan? rangeTimeout = null,
         bool requiresSignIn = false,
         string? currentVersionText = null,
-        IReadOnlyList<string>? pluginFiles = null)
+        IReadOnlyList<string>? pluginFiles = null,
+        byte[]? releaseSigningKey = null)
     {
         CurrentVersion = currentVersion;
         CurrentVersionText = GitHubReleaseRules.TryParseVersionFromTag(currentVersionText ?? GitHubReleaseRules.FormatVersion(currentVersion))
@@ -143,7 +136,9 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
         // The plugins this app declares; an install carrying one never takes a payload
         // without it (PluginUpdateGuard).
         _pluginFiles = pluginFiles ?? PluginLoader.DeclaredFiles(Assembly.GetEntryAssembly());
-        _installer = new UpdateInstaller(_installDir, logger, _pluginFiles);
+        _installer = new UpdateInstaller(_installDir, logger, _pluginFiles, _downloadDir);
+        // The key every release's SHA256SUMS.txt must be signed with; tests pass their own.
+        _releaseSigningKey = releaseSigningKey ?? ReleaseSignature.PinnedPublicKey();
 
         // Through OnlineHttp.CreateClient, which applies MaxResponseContentBufferSize:
         // the release JSON and the payload manifest are read with ReadAsStringAsync,
@@ -311,9 +306,9 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
         if (!string.IsNullOrWhiteSpace(update.ManifestAssetApiUrl))
             RefuseAForeignHost(update.ManifestAssetApiUrl, update);
 
-        // …and WHAT they must hash to, fetched once for both download paths. For a
-        // release at or above FirstDigestPublishingVersion this THROWS rather than
-        // proceeding unverified.
+        // …and WHAT they must hash to, fetched once for both download paths and
+        // signature-checked against the pinned key. A release without a valid
+        // signature THROWS here rather than proceeding unverified.
         var digests = await ResolveReleaseDigestsAsync(update, cancellationToken).ConfigureAwait(false);
 
         // Only the bytes this install is missing, out of the one full zip. Any
@@ -345,45 +340,52 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
     }
 
     /// <summary>
-    ///     Whether this release must have published digests. See
-    ///     <see cref="FirstDigestPublishingVersion" />.
+    ///     The release's published digests, fetched ONCE for both download paths,
+    ///     and only after the publisher signature over them verifies against the
+    ///     pinned key (<see cref="ReleaseSignature" />). Every failure THROWS:
+    ///     an unreachable manifest, a missing or wrong signature and a manifest
+    ///     signed for another tag are all states someone who controls the release
+    ///     page can arrange, and the bytes these digests vouch for are copied over
+    ///     the install.
     /// </summary>
-    private static bool RequiresPublishedDigests(Version version)
-        => version >= FirstDigestPublishingVersion;
-
-    /// <summary>
-    ///     The release's published digests, fetched ONCE for both download paths.
-    ///     Null means the release publishes none — which is only legal below
-    ///     <see cref="FirstDigestPublishingVersion" />; at or above it, an
-    ///     unreachable or empty manifest THROWS, because that is exactly the state
-    ///     an attacker who controls the release document would arrange.
-    /// </summary>
-    private async Task<IReadOnlyDictionary<string, string>?> ResolveReleaseDigestsAsync(
+    private async Task<IReadOnlyDictionary<string, string>> ResolveReleaseDigestsAsync(
         UpdateInfo update, CancellationToken cancellationToken)
     {
-        var text = await TryFetchReleaseAssetTextAsync(update.TagName, ReleaseChecksums.AssetName,
+        var manifest = await TryFetchReleaseAssetBytesAsync(update.TagName, ReleaseChecksums.AssetName,
             MaxChecksumManifestBytes, cancellationToken).ConfigureAwait(false);
-        var digests = text == null ? null : ReleaseChecksums.Parse(text);
-        if (digests is { Count: > 0 }) return digests;
-
-        if (RequiresPublishedDigests(update.Version))
+        if (manifest == null || manifest.Length == 0)
         {
             throw new InvalidDataException(
-                $"{update.TagName}: the SHA-256 digests published with every release since " +
-                $"v{GitHubReleaseRules.FormatVersion(FirstDigestPublishingVersion)} could not be read, so nothing can say these " +
-                "bytes are the build they claim to be. This is usually a network or rate-limit problem — " +
-                "try again; the download is refused rather than applied unverified.");
+                $"{update.TagName}: the signed SHA-256 digests every release publishes could not be read, so " +
+                "nothing can say these bytes are the build they claim to be. This is usually a network or " +
+                "rate-limit problem — try again; the download is refused rather than applied unverified.");
         }
 
-        _logger?.Warning(AppLogCategory.Application,
-            $"{update.TagName} predates published digests (v{GitHubReleaseRules.FormatVersion(FirstDigestPublishingVersion)}), " +
-            "so this download is UNVERIFIED. Applying it anyway — an older release has nothing to check against.");
-        return null;
+        var signature = await TryFetchReleaseAssetBytesAsync(update.TagName, ReleaseSignature.AssetName,
+            ReleaseSignature.MaxSignatureBytes, cancellationToken).ConfigureAwait(false);
+        var problem = ReleaseSignature.Check(manifest, signature, update.TagName, _releaseSigningKey);
+        if (problem != null)
+        {
+            _logger?.Warning(AppLogCategory.Application, $"Refused {update.TagName}: {problem}.");
+            throw new InvalidDataException(
+                $"Refusing {update.TagName}: {problem}. The update is not applied.");
+        }
+
+        var digests = ReleaseChecksums.Parse(DecodeUtf8(manifest));
+        if (digests.Count == 0)
+        {
+            throw new InvalidDataException(
+                $"{update.TagName}: the signed {ReleaseChecksums.AssetName} lists no digests.");
+        }
+
+        _logger?.Info(AppLogCategory.Application,
+            $"{update.TagName}: {ReleaseChecksums.AssetName} carries a valid release signature.");
+        return digests;
     }
 
     private async Task<string> DownloadFullAsync(
         UpdateInfo update,
-        IReadOnlyDictionary<string, string>? digests,
+        IReadOnlyDictionary<string, string> digests,
         IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
@@ -506,50 +508,25 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
     }
 
     /// <summary>
-    ///     Checks a downloaded full asset against the release's published
-    ///     <c>SHA256SUMS.txt</c>. Throws <see cref="InvalidDataException" /> when
-    ///     the digests disagree — the caller deletes the file.
-    ///     <para>
-    ///         <b>It fails CLOSED at or above <see cref="FirstDigestPublishingVersion" />
-    ///         </b> A mismatch is fatal, and an unreachable
-    ///         digest manifest or a release that lists no such asset must not
-    ///         proceed with a warning — both are states an attacker who
-    ///         controls the release document can ARRANGE, by renaming the asset out
-    ///         of the manifest or by making the manifest unreachable. So the escape
-    ///         hatch is now version-gated: below 0.41 it stays (those releases
-    ///         published nothing to check against, and refusing them would strand
-    ///         every old install), at or above it every one of the three is a
-    ///         refusal.
-    ///     </para>
+    ///     Checks a downloaded full asset against the release's signed
+    ///     <c>SHA256SUMS.txt</c> and remembers the digest for the re-hash at apply.
+    ///     Throws <see cref="InvalidDataException" /> when the digests disagree or
+    ///     the manifest does not list the asset — renaming the asset out of the
+    ///     manifest must not be a way around the check. The caller deletes the file.
     /// </summary>
     private async Task VerifyAgainstReleaseChecksumsAsync(
         string archivePath,
         UpdateInfo update,
-        IReadOnlyDictionary<string, string>? digests,
+        IReadOnlyDictionary<string, string> digests,
         CancellationToken cancellationToken)
     {
-        if (digests == null)
-        {
-            // Only reachable below FirstDigestPublishingVersion — ResolveReleaseDigestsAsync
-            // throws for anything newer — and already warned about there.
-            return;
-        }
-
         var assetName = Path.GetFileName(update.AssetName);
         if (!digests.TryGetValue(assetName, out var expected))
         {
-            if (RequiresPublishedDigests(update.Version))
-            {
-                throw new InvalidDataException(
-                    $"{update.TagName}: {ReleaseChecksums.AssetName} does not list '{assetName}', so nothing " +
-                    "says these bytes are the build they claim to be. A release that publishes digests must " +
-                    "digest the asset it ships.");
-            }
-
-            _logger?.Warning(AppLogCategory.Application,
-                $"{update.TagName}: {ReleaseChecksums.AssetName} does not list '{assetName}', " +
-                "so the download is UNVERIFIED.");
-            return;
+            throw new InvalidDataException(
+                $"{update.TagName}: {ReleaseChecksums.AssetName} does not list '{assetName}', so nothing " +
+                "says these bytes are the build they claim to be. A release that publishes digests must " +
+                "digest the asset it ships.");
         }
 
         var actual = await ReleaseChecksums.ComputeSha256Async(archivePath, cancellationToken)
@@ -561,9 +538,27 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
                 $"(expected {expected}, got {actual}). This is not the build it claims to be.");
         }
 
+        RememberVerified(archivePath, actual);
         _logger?.Info(AppLogCategory.Application,
             $"'{assetName}' matches the SHA-256 published for {update.TagName}.");
     }
+
+    /// <summary>Records a zip this service verified (or assembled from verified
+    /// parts), so <see cref="ApplyDownloadedUpdate" /> can re-hash against it.</summary>
+    private void RememberVerified(string zipPath, string sha256)
+        => _verifiedDownloads[Path.GetFullPath(zipPath)] = sha256;
+
+    /// <summary>Every member of a partial zip was hashed against the signed manifest
+    /// as it landed; the zip itself is ours, so its digest is taken now, for the
+    /// re-hash at apply.</summary>
+    private async Task RememberAssembledAsync(string zipPath, CancellationToken cancellationToken)
+        => RememberVerified(zipPath, await ReleaseChecksums.ComputeSha256Async(zipPath, cancellationToken)
+            .ConfigureAwait(false));
+
+    /// <summary>Test seam: marks a hand-built zip as if this service had downloaded
+    /// and verified it, so the apply path's OTHER refusals stay reachable.</summary>
+    internal void TrustDownloadForTests(string zipPath)
+        => RememberVerified(zipPath, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zipPath))).ToLowerInvariant());
 
     /// <summary>
     ///     Builds the update payload out of only the bytes this install does not
@@ -580,7 +575,7 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
     /// </summary>
     private async Task<string?> TryDownloadPartialAsync(
         UpdateInfo update,
-        IReadOnlyDictionary<string, string>? digests,
+        IReadOnlyDictionary<string, string> digests,
         IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
@@ -708,6 +703,7 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
                 return null;
             }
 
+            await RememberAssembledAsync(zipPath, cancellationToken).ConfigureAwait(false);
             progress?.Report(1.0);
             _logger?.Info(AppLogCategory.Application,
                 $"Update {update.TagName} assembled from {result.BytesFetched:N0} downloaded bytes " +
@@ -738,35 +734,6 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
             BestEffortDelete.File(zipPath);
             return null;
         }
-    }
-
-    /// <summary>
-    ///     One metadata GET under its own deadline, bounded by
-    ///     <paramref name="maxBytes" />. A budget expiry here throws, and every
-    ///     caller degrades a fault to the full download — so a stalled host costs
-    ///     one timeout instead of the whole update.
-    ///     <para>
-    ///         The unbounded overload is GONE: the payload-manifest
-    ///         fetch was its only caller and passed <c>null</c>, leaving
-    ///         <c>MaxResponseContentBufferSize</c> as the sole ceiling on a body
-    ///         read whole off a host we do not control. It reads bytes now, via
-    ///         <see cref="GetBytesAsync" />, so the digest check has the actual
-    ///         file to hash.
-    ///     </para>
-    /// </summary>
-    private async Task<string?> GetStringAsync(string url, long? maxBytes, CancellationToken cancellationToken)
-    {
-        using var budget = Budget(_apiTimeout, cancellationToken);
-        using var request = CreateRequest(url, "application/octet-stream");
-        using var response = await _http.SendAsync(request, budget.Token).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode) return null;
-
-        // A declared length past the caller's ceiling is refused BEFORE the body
-        // is buffered; the client's MaxResponseContentBufferSize is the backstop
-        // for a host that declares nothing.
-        if (maxBytes != null && response.Content.Headers.ContentLength > maxBytes) return null;
-
-        return await response.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -809,27 +776,19 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
 
     /// <summary>
     ///     Cross-checks the release's <c>payload-manifest.json</c> against the
-    ///     digest published for it in <c>SHA256SUMS.txt</c> — the same document,
-    ///     and the same three-outcome policy, the full-asset path already uses
-    ///     (<see cref="VerifyAgainstReleaseChecksumsAsync" />). An unreachable
-    ///     manifest of digests and a release that lists no such asset both PROCEED
-    ///     with a warning, because refusing there would break every release older
-    ///     than 0.41 and every captive portal.
+    ///     digest published for it in the signed <c>SHA256SUMS.txt</c> — the same
+    ///     document the full-asset path checks its zip against
+    ///     (<see cref="VerifyAgainstReleaseChecksumsAsync" />).
     ///     <para>
-    ///         False — the one refusal — means the digests are published, they name
-    ///         this file, and it is not the file we published. The caller then takes
+    ///         False means the signed digests do not name this file, or it is not
+    ///         the file we published. The caller then takes
     ///         the FULL download, which digests its own bytes and refuses a mismatch
     ///         outright; "fall back" is never "trust it".
     ///     </para>
     /// </summary>
     private bool PayloadManifestMatchesPublishedDigest(
-        byte[] manifestBytes, UpdateInfo update, IReadOnlyDictionary<string, string>? digests)
+        byte[] manifestBytes, UpdateInfo update, IReadOnlyDictionary<string, string> digests)
     {
-        // Below FirstDigestPublishingVersion there is nothing to check against —
-        // and no release that old publishes a payload manifest at all, so this arm
-        // is unreachable in practice.
-        if (digests == null) return true;
-
         if (!digests.TryGetValue(PayloadManifest.FileName, out var expected))
         {
             _logger?.Warning(AppLogCategory.Application,
@@ -864,13 +823,10 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
     ///         it, and a download that matches no published digest is refused.
     ///     </para>
     ///     <para>
-    ///         Null is the OFFLINE answer, not a failure: an unreachable manifest
-    ///         leaves the download unverified but applicable, because refusing
-    ///         there would break updating from behind a captive portal and from
-    ///         every release older than 0.41. So every fault here — a 404 for a tag
-    ///         that was never published, a release with no such asset, a timeout, a
-    ///         dropped connection — is logged and returns null rather than
-    ///         throwing.
+    ///         This text is NOT signature-checked: it is informational. The download
+    ///         path verifies the signature itself (<c>ResolveReleaseDigestsAsync</c>)
+    ///         and refuses an update without one. Every fault here is logged and
+    ///         returns null rather than throwing.
     ///     </para>
     /// </summary>
     public Task<string?> TryFetchReleaseChecksumsAsync(
@@ -888,6 +844,15 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
     ///     </para>
     /// </summary>
     private async Task<string?> TryFetchReleaseAssetTextAsync(
+        string tag, string assetName, int maxBytes, CancellationToken cancellationToken)
+        => await TryFetchReleaseAssetBytesAsync(tag, assetName, maxBytes, cancellationToken).ConfigureAwait(false)
+            is { } bytes
+            ? DecodeUtf8(bytes)
+            : null;
+
+    /// <summary>One small asset off the release carrying <paramref name="tag" />,
+    /// as its exact BYTES — a signature is over the file, not over its text.</summary>
+    private async Task<byte[]?> TryFetchReleaseAssetBytesAsync(
         string tag, string assetName, int maxBytes, CancellationToken cancellationToken)
     {
         try
@@ -930,7 +895,7 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
             }
 
             var url = string.IsNullOrWhiteSpace(asset.ApiUrl) ? asset.BrowserUrl : asset.ApiUrl;
-            return await GetStringAsync(url, maxBytes, cancellationToken).ConfigureAwait(false);
+            return await GetBytesAsync(url, maxBytes, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -950,7 +915,22 @@ public sealed class GitHubUpdateService : IAppUpdateService, IDisposable
 
     public UpdateApplyBlockReason GetApplyBlockReason() => _installer.GetApplyBlockReason();
 
-    public void ApplyDownloadedUpdate(string zipPath) => _installer.ApplyDownloadedUpdate(zipPath);
+    /// <summary>
+    ///     Applies a zip THIS service downloaded and verified, after re-hashing it
+    ///     against the digest it had then. Anything else — a path from
+    ///     elsewhere, or a zip changed since — is refused before a byte is staged.
+    /// </summary>
+    public void ApplyDownloadedUpdate(string zipPath)
+    {
+        if (!_verifiedDownloads.TryGetValue(Path.GetFullPath(zipPath), out var expected))
+        {
+            throw new InvalidDataException(
+                $"Refusing to apply '{Path.GetFileName(zipPath)}': it is not an update this session " +
+                "downloaded and verified against the signed release digests.");
+        }
+
+        _installer.ApplyDownloadedUpdate(zipPath, expected);
+    }
 
     public PendingUpdateApply? GetPendingUpdateApply() => _installer.GetPendingUpdateApply();
 

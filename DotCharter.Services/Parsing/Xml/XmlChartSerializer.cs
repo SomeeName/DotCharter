@@ -29,6 +29,12 @@ public class XmlChartSerializer : IChartSerializer
     /// </summary>
     public bool SixStringProjection { get; set; }
 
+    /// <summary>
+    ///     Write a phrase that starts on a note between two beats as moveR&lt;N&gt; on the beat
+    ///     before it. Set by the caller from <c>AppConfig.RsXmlMoverPhrases</c>.
+    /// </summary>
+    public bool MoverPhrases { get; set; }
+
     public ChartProject Load(string filePath)
     {
         using var _ = _logger?.BeginTimedOperation(AppLogCategory.Project, "XML Load", filePath);
@@ -91,7 +97,7 @@ public class XmlChartSerializer : IChartSerializer
     /// </param>
     private void SaveSong(string filePath, ChartProject project, double? audioLengthMs)
     {
-        var writer = new RsXmlSongWriter { SixStringProjection = SixStringProjection };
+        var writer = new RsXmlSongWriter { SixStringProjection = SixStringProjection, MoverPhrases = MoverPhrases };
         var doc = writer.Write(project, audioLengthMs);
         using var xw = XmlWriter.Create(filePath, Fmt.GetWriterSettings());
         doc.WriteTo(xw);

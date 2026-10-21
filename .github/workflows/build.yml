@@ -1,11 +1,15 @@
 name: Build
 
-# MANUAL ONLY: the "Run workflow" button (Actions tab, or
-# `gh workflow run build.yml --ref <branch>`). Nothing starts a run on its own,
-# not a push, not a pull request, not a merge (#63). The owner merges on the
-# local gate + headless run (AGENTS.md "Validation"), so an automatic run was
-# only ever minutes spent: Windows minutes bill at 2x against the 2,000 a month
-# this private repo gets free, and one PR run cost ~240 of them.
+# WHERE A RUN STARTS: the PUBLIC repo (SomeeName/DotCharter) runs on every
+# push to main and every pull request, because public repos get Actions minutes
+# free. The PRIVATE dev repo stays MANUAL ONLY: Windows minutes bill at 2x
+# against its 2,000 free a month and one PR run cost ~240 of them (#63).
+# Both repos carry this same file, so every job is gated on
+#   github.event_name == 'workflow_dispatch' || !github.event.repository.private
+# A push or a PR on the private repo creates a run whose jobs are all SKIPPED,
+# which bills nothing; the "Run workflow" button (`gh workflow run build.yml
+# --ref <branch>`) runs everything on either repo. CiWorkflowLintTests fails a
+# job without the gate whenever a trigger other than workflow_dispatch exists.
 on:
   workflow_dispatch:
     inputs:
@@ -17,11 +21,22 @@ on:
         description: Also run the headless GPU golden frames on the software Vulkan rasterizer (Mesa lavapipe; no GPU needed)
         type: boolean
         default: false
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege for the default GITHUB_TOKEN, which a pull_request run hands
+# to every action. Only the artifact-pruning job writes, and it asks for
+# `actions: write` on the JOB.
+permissions:
+  contents: read
 
 # A second run of the same branch cancels the one still in progress: only the
 # newest result matters, and the stale run would burn minutes to the end.
+# The event is part of the group: on the private repo a push creates a run of
+# skipped jobs, and it must never cancel a manual run of the same ref.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -36,6 +51,7 @@ jobs:
   # newest build tree and rebuilds incrementally.
   native:
     name: Native runtime (Windows x64)
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: windows-latest
     # A cold build (~36 min) plus, when asked for, the native suite (~25 min).
     timeout-minutes: 90
@@ -46,19 +62,29 @@ jobs:
       # JuceSharp repo ONLY, so using it for the main fetch 403s on
       # DotCharter itself.
       - name: Checkout
-        uses: actions/checkout@v7
-
-      # Fetch the private submodule with the narrowly-scoped PAT via a URL
-      # rewrite that applies to the JuceSharp remote only.
-      - name: Checkout submodules (private JuceSharp)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # The private dev repo's submodule (the private JuceSharp) needs the
+      # narrowly-scoped PAT, applied by a URL rewrite to that remote only and for
+      # this ONE git command (`git -c`, never the global git config): no later
+      # step - the build, the tests, any script the branch carries - can read it,
+      # and `credential.helper=` keeps a helper from storing it. The public
+      # repo's submodule is the public JuceSharp: no secret, and a fork's
+      # pull_request gets none anyway, so the token is optional.
+      - name: Checkout submodules (JuceSharp)
         shell: pwsh
         env:
           SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
         run: |
-          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
-          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
           git submodule sync --recursive
-          git submodule update --init --force --depth=1 --recursive
+          if ($env:SUBMODULES_TOKEN) {
+            git -c credential.helper= -c "url.https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp.insteadOf=https://github.com/SomeeName/JuceSharp" submodule update --init --force --depth=1 --recursive
+          } else {
+            Write-Host 'No SUBMODULES_TOKEN: cloning the submodule anonymously (the public JuceSharp needs no token).'
+            git submodule update --init --force --depth=1 --recursive
+          }
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed (exit $LASTEXITCODE)" }
 
       - name: JuceSharp gitlink
         id: gitlink
@@ -67,24 +93,27 @@ jobs:
 
       - name: Cache native runtime
         id: runtime
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: JuceSharp/src/JuceSharp/runtimes/win-x64/native
           key: native-runtime-${{ runner.os }}-${{ steps.gitlink.outputs.sha }}
 
       # The prebuilt pair for this gitlink (#832, tools/setup/native-runtime.json):
       # a download plus a SHA-256 and dca_abi_version() check instead of ~36 min
-      # of C++. The release is private while JuceSharp is, so the PAT that reads
-      # the submodule reads it too (gh takes GH_TOKEN); once the repos are public
-      # the token is unnecessary. A failure here (asset not uploaded for a new
-      # gitlink, no token) is not fatal: the steps below build from source.
+      # of C++. The script refuses any repository but JuceSharp / JuceSharp,
+      # checks every hash BEFORE the DLL is loaded, and loads it only in a child
+      # process that gets no token. Least token: only the PRIVATE repo (whose
+      # JuceSharp release is private) hands it the PAT; the public repo and
+      # a fork's pull request use the run's own read-only token.
+      # A failure here (asset not uploaded for a new gitlink) is not fatal: the
+      # steps below build from source.
       - name: Prebuilt native runtime
         id: prebuilt
         if: ${{ steps.runtime.outputs.cache-hit != 'true' && !inputs.native-tests }}
         continue-on-error: true
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
+          GH_TOKEN: ${{ github.event.repository.private && secrets.SUBMODULES_TOKEN || github.token }}
         run: |
           pwsh -NoProfile -File tools/setup/Get-NativeRuntime.ps1
           if ($LASTEXITCODE -ne 0) { throw "Get-NativeRuntime.ps1 failed (exit $LASTEXITCODE)" }
@@ -93,7 +122,7 @@ jobs:
       # build tree makes a rebuild after a JuceSharp bump incremental.
       - name: Cache native build tree
         if: ${{ inputs.native-tests || steps.prebuilt.outcome == 'failure' }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: JuceSharp/src/JuceSharp.Native/build-ci
           key: native-tree-${{ runner.os }}-${{ steps.gitlink.outputs.sha }}
@@ -127,7 +156,7 @@ jobs:
                 -C Release --output-on-failure --no-tests=error
 
       - name: Hand the runtime to the test jobs
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: native-runtime
           path: JuceSharp/src/JuceSharp/runtimes/win-x64/native/
@@ -136,6 +165,7 @@ jobs:
 
   build:
     name: Build & test (Windows x64)
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     needs: native
     runs-on: windows-latest
     timeout-minutes: 60
@@ -146,29 +176,39 @@ jobs:
       # JuceSharp repo ONLY, so using it for the main fetch 403s on
       # DotCharter itself.
       - name: Checkout
-        uses: actions/checkout@v7
-
-      # Fetch the private submodule with the narrowly-scoped PAT via a URL
-      # rewrite that applies to the JuceSharp remote only.
-      - name: Checkout submodules (private JuceSharp)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # The private dev repo's submodule (the private JuceSharp) needs the
+      # narrowly-scoped PAT, applied by a URL rewrite to that remote only and for
+      # this ONE git command (`git -c`, never the global git config): no later
+      # step - the build, the tests, any script the branch carries - can read it,
+      # and `credential.helper=` keeps a helper from storing it. The public
+      # repo's submodule is the public JuceSharp: no secret, and a fork's
+      # pull_request gets none anyway, so the token is optional.
+      - name: Checkout submodules (JuceSharp)
         shell: pwsh
         env:
           SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
         run: |
-          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
-          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
           git submodule sync --recursive
-          git submodule update --init --force --depth=1 --recursive
+          if ($env:SUBMODULES_TOKEN) {
+            git -c credential.helper= -c "url.https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp.insteadOf=https://github.com/SomeeName/JuceSharp" submodule update --init --force --depth=1 --recursive
+          } else {
+            Write-Host 'No SUBMODULES_TOKEN: cloning the submodule anonymously (the public JuceSharp needs no token).'
+            git submodule update --init --force --depth=1 --recursive
+          }
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed (exit $LASTEXITCODE)" }
 
       - name: Native runtime (from the native job)
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: native-runtime
           path: JuceSharp/src/JuceSharp/runtimes/win-x64/native
 
       # .NET 10 went GA in November 2025, so we pin to the stable 10.0.x channel.
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: '10.0.x'
 
@@ -183,10 +223,16 @@ jobs:
 
       # Fix: Target specific projects instead of the .sln to legally apply -r win-x64.
       # This ensures NuGet's runtime-asset resolver still only copies Windows x64 natives.
+      # The UI restore comes LAST and names the publish's own properties: the
+      # tests restore re-restores the UI project (a reference) without them,
+      # which drops the Crossgen2 pack from its assets, and on a runner with an
+      # empty NuGet cache the ReadyToRun publish then fails with NETSDK1094.
+      # Every restore is --locked-mode: the committed packages.lock.json files
+      # pin each package by version and content hash, and anything else fails.
       - name: Restore
         run: |
-          dotnet restore DotCharter.UI/DotCharter.UI.csproj -r win-x64
-          dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64
+          dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64 --locked-mode
+          dotnet restore DotCharter.UI/DotCharter.UI.csproj -r win-x64 --locked-mode -p:SelfContained=true -p:PublishReadyToRun=true
 
       # The UI is built SelfContained so the later `dotnet publish --no-build`
       # finds output of the shape it is asked to publish. Tests stay
@@ -216,7 +262,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-results
           path: '**/TestResults/*.trx'
@@ -271,6 +317,7 @@ jobs:
   # load it by path (the submodule tree).
   headless-ui:
     name: Headless UI suite (Windows x64)
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     needs: native
     runs-on: windows-latest
     # One process was 7–8 min on an idle box, 13+ under load; split over two
@@ -280,26 +327,31 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Checkout submodules (private JuceSharp)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Checkout submodules (JuceSharp)
         shell: pwsh
         env:
           SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
         run: |
-          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
-          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
           git submodule sync --recursive
-          git submodule update --init --force --depth=1 --recursive
+          if ($env:SUBMODULES_TOKEN) {
+            git -c credential.helper= -c "url.https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp.insteadOf=https://github.com/SomeeName/JuceSharp" submodule update --init --force --depth=1 --recursive
+          } else {
+            Write-Host 'No SUBMODULES_TOKEN: cloning the submodule anonymously (the public JuceSharp needs no token).'
+            git submodule update --init --force --depth=1 --recursive
+          }
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed (exit $LASTEXITCODE)" }
 
       - name: Native runtime (from the native job)
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: native-runtime
           path: JuceSharp/src/JuceSharp/runtimes/win-x64/native
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: '10.0.x'
 
@@ -310,24 +362,37 @@ jobs:
         run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1
 
       - name: Restore
-        run: dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64
+        run: dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64 --locked-mode
 
       - name: Build tests (Release)
         run: dotnet build DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-restore -p:ContinuousIntegrationBuild=true
 
       # Its OWN `dotnet test` processes — never in the same testhost as the
       # default gate. The script exits 1 on a blocking product failure.
-      # -Shards 2, not the 4 a 16-core dev box uses: this private repo's
+      # -Shards 2, not the 4 a 16-core dev box uses: the hosted
       # windows-latest runner has 2 vCPUs, each shard keeps one core busy, and
       # each holds its own app heap (the step summary records the peak RSS of
       # both together — raise this only against that number).
       - name: Headless UI suite (own testhosts, 2 shards)
         shell: pwsh
+        env:
+          # Where Invoke-HeadlessUiCi.ps1 keeps a failed run's TRX, messages,
+          # stacks and stdout (#55); the next step uploads it.
+          DOTCHARTER_HEADLESS_FAILURES_DIR: TestResults/headless-failures
         run: pwsh -NoProfile -File tools/ci/Invoke-HeadlessUiCi.ps1 -Configuration Release -Runtime win-x64 -Shards 2 -ResultsDir TestResults/headless-ui
+
+      - name: Upload headless failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: headless-failures
+          path: TestResults/headless-failures/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload headless UI results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: headless-ui-results
           path: TestResults/headless-ui/
@@ -343,28 +408,33 @@ jobs:
   # structural goldens as the GPU (docs/agents/testing-headless-rendering/).
   gpu-goldens-software:
     name: GPU goldens on software Vulkan (Windows x64)
-    if: ${{ inputs.software-gpu-tests }}
+    if: ${{ inputs.software-gpu-tests && (github.event_name == 'workflow_dispatch' || !github.event.repository.private) }}
     runs-on: windows-latest
     timeout-minutes: 45
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       # The test project references JuceSharp's managed projects, so the
-      # private submodule is needed to BUILD it; no test here opens the engine.
-      - name: Checkout submodules (private JuceSharp)
+      # submodule is needed to BUILD it; no test here opens the engine.
+      - name: Checkout submodules (JuceSharp)
         shell: pwsh
         env:
           SUBMODULES_TOKEN: ${{ secrets.SUBMODULES_TOKEN }}
         run: |
-          if (-not $env:SUBMODULES_TOKEN) { throw "SUBMODULES_TOKEN secret is not set (fine-grained PAT with Contents:read on SomeeName/JuceSharp)" }
-          git config --global url."https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp".insteadOf "https://github.com/SomeeName/JuceSharp"
           git submodule sync --recursive
-          git submodule update --init --force --depth=1 --recursive
+          if ($env:SUBMODULES_TOKEN) {
+            git -c credential.helper= -c "url.https://x-access-token:$($env:SUBMODULES_TOKEN)@github.com/SomeeName/JuceSharp.insteadOf=https://github.com/SomeeName/JuceSharp" submodule update --init --force --depth=1 --recursive
+          } else {
+            Write-Host 'No SUBMODULES_TOKEN: cloning the submodule anonymously (the public JuceSharp needs no token).'
+            git submodule update --init --force --depth=1 --recursive
+          }
+          if ($LASTEXITCODE -ne 0) { throw "git submodule update failed (exit $LASTEXITCODE)" }
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: '10.0.x'
 
@@ -375,7 +445,7 @@ jobs:
         run: pwsh -NoProfile -File tools/ci/Assert-DotnetSdk.ps1
 
       - name: Restore
-        run: dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64
+        run: dotnet restore DotCharter.Tests/DotCharter.Tests.csproj -r win-x64 --locked-mode
 
       - name: Build tests (Release)
         run: dotnet build DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-restore -p:ContinuousIntegrationBuild=true
@@ -398,7 +468,7 @@ jobs:
 
       - name: Upload frames and results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: gpu-goldens-software
           path: |
@@ -412,13 +482,17 @@ jobs:
   cleanup-artifacts:
     name: Prune old artifacts
     needs: [build, headless-ui]
-    if: always()
+    # always() alone would run this on a private-repo push whose other jobs
+    # were all skipped, and an ubuntu minute there is still a paid minute.
+    # Never on a pull_request: its token is read-only (a fork's always is),
+    # and a PR has no business deleting other runs' artifacts.
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name == 'workflow_dispatch' || !github.event.repository.private) }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
       - name: Delete artifacts from older workflow runs
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const KEEP_RUNS = 5;

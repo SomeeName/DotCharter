@@ -76,7 +76,7 @@ public sealed class ToneGenerationRun(IHistoryService history, IExportTargetWrit
         var stems = new List<(string Name, string Path)>();
         foreach (var stem in project.Stems)
         {
-            if (string.IsNullOrWhiteSpace(stem.Name) || string.IsNullOrWhiteSpace(stem.Path)) continue;
+            if (string.IsNullOrWhiteSpace(stem.Name) || !ProjectRelativePath.IsReadableMediaReference(stem.Path)) continue;
             if (!ToneAudioSource.IsGuitarish(stem.Name)) continue;
             stems.Add((stem.Name, Path.IsPathRooted(stem.Path) || string.IsNullOrEmpty(projectDir)
                 ? stem.Path
@@ -85,7 +85,7 @@ public sealed class ToneGenerationRun(IHistoryService history, IExportTargetWrit
 
         string? song = null;
         var name = project.AudioFileName;
-        if (!string.IsNullOrWhiteSpace(name))
+        if (ProjectRelativePath.IsReadableMediaReference(name))
         {
             if (Path.IsPathRooted(name)) song = name;
             else if (!string.IsNullOrEmpty(projectDir)) song = Path.Combine(projectDir, name);

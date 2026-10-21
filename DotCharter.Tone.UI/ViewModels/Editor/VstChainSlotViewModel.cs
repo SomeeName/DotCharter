@@ -18,7 +18,39 @@ public partial class VstChainSlotViewModel : ObservableObject
     // True while the native engine is still loading this plugin. The chain
     // slot becomes interactive (open-editor / bypass) once the engine
     // reports the slot is attached.
-    [ObservableProperty] private bool _isLoading = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanInteract))]
+    private bool _isLoading = true;
+
+    /// <summary>
+    ///     True for a slot the saved chain names but the startup scan did not find in
+    ///     the VST3 folders: it is kept in the chain (the entry is the user's choice and
+    ///     comes back when the plug-in is installed) but never handed to the engine.
+    ///     A chain entry is only ever loaded from a path the scanner reported, because
+    ///     the path in a settings file is not something the app may run on trust.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanInteract))]
+    private bool _isUnavailable;
+
+    /// <summary>What the row prints beside the name while <see cref="IsUnavailable" />.</summary>
+    [ObservableProperty] private string _unavailableLabel = string.Empty;
+
+    /// <summary>The longer explanation (tooltip) for <see cref="IsUnavailable" />.</summary>
+    [ObservableProperty] private string _unavailableReason = string.Empty;
+
+    /// <summary>Whether bypass / editor can be used: the engine has the plug-in loaded.
+    /// Remove stays available either way.</summary>
+    public bool CanInteract => !IsLoading && !IsUnavailable;
+
+    /// <summary>Marks the slot as not loadable and says why. Idempotent.</summary>
+    public void MarkUnavailable(string label, string reason)
+    {
+        UnavailableLabel = label;
+        UnavailableReason = reason;
+        IsLoading = false;
+        IsUnavailable = true;
+    }
 
     /// <summary>
     ///     The 1-based slot number the Tools popover prints — `Play Menus.dc.html`

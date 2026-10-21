@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:linking="clr-namespace:DotCharter.UI.ViewModels.Editor.Linking"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Linking.LinkPanelView"
+             x:CompileBindings="True"
+             x:DataType="linking:LinkPanelViewModel"
+             AutomationProperties.Name="{localization:Loc LinkPanel_Name}">
+    <!-- THE LINK PANEL (mockup C_inspector_and_panel): click a LINKS chip. The
+         group's placements per arrangement, a checkbox each, and the three group
+         edits. Each edit is one undo step. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.Faint">
+            <Setter Property="Foreground" Value="{DynamicResource FireTextFaint}" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <Style Selector="Button.PanelAction">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Padding" Value="8,3" />
+        </Style>
+        <Style Selector="Button.GoTo">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource FireAccent}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border x:Name="LinkPanelCard"
+            Background="{DynamicResource FireSurfaceMenu}"
+            BorderBrush="{DynamicResource FireBorder}"
+            BorderThickness="1" CornerRadius="6" Padding="14,12" Width="400">
+        <StackPanel Spacing="10">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Border Grid.Column="0" Width="12" Height="12" CornerRadius="2"
+                        Background="{Binding GroupBrush}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" x:Name="LinkPanelTitle" Text="{Binding Title}" FontSize="14"
+                           FontWeight="SemiBold" Foreground="{DynamicResource FireTextBody}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Classes="Faint" Text="{Binding Subtitle}" VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock Classes="Faint" TextWrapping="Wrap" Text="{localization:Loc LinkPanel_Description}" />
+
+            <ItemsControl x:Name="LinkPanelSections" ItemsSource="{Binding Sections}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="linking:LinkPanelSection">
+                        <StackPanel Margin="0,4,0,2">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,2">
+                                <TextBlock Classes="Faint" Text="{Binding Header}" />
+                                <TextBlock Grid.Column="1" Classes="Faint" Text="{Binding Count}" />
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Rows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="linking:LinkPanelRow">
+                                        <Grid ColumnDefinitions="Auto,92,*,Auto" ColumnSpacing="6" MinHeight="26">
+                                            <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}"
+                                                      AutomationProperties.Name="{Binding Range}"
+                                                      VerticalAlignment="Center" MinWidth="0" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Range}" FontSize="12"
+                                                       Foreground="{DynamicResource FireTextBody}"
+                                                       VerticalAlignment="Center" />
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Section}" FontSize="12"
+                                                           Foreground="{DynamicResource FireTextBody}" />
+                                                <TextBlock Classes="Faint" IsVisible="{Binding IsHere}"
+                                                           Text="{localization:Loc LinkPanel_Here}" />
+                                            </StackPanel>
+                                            <Button Grid.Column="3" Classes="GoTo" Command="{Binding GoToCommand}"
+                                                    Content="{localization:Loc LinkPanel_GoTo}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Runs that play the same as the group again (not in any group): Link each back. -->
+            <StackPanel x:Name="LinkPanelSuggestions" Spacing="2" IsVisible="{Binding HasSuggestions}">
+                <TextBlock Classes="Faint" Text="{localization:Loc LinkPanel_Suggestions}" />
+                <ItemsControl ItemsSource="{Binding Suggestions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="linking:LinkPanelSuggestion">
+                            <!-- Indented past the placement rows' checkbox, so the ranges line up. -->
+                            <Grid ColumnDefinitions="92,*,Auto,Auto" ColumnSpacing="6" MinHeight="26" Margin="34,0,0,0">
+                                <TextBlock Grid.Column="0" Text="{Binding Range}" FontSize="12"
+                                           Foreground="{DynamicResource FireTextBody}" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Arrangement}" FontSize="12"
+                                               Foreground="{DynamicResource FireTextBody}" />
+                                    <TextBlock Classes="Faint" Text="{Binding Section}" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Classes="GoTo" Command="{Binding GoToCommand}"
+                                        Content="{localization:Loc LinkPanel_GoTo}" />
+                                <Button Grid.Column="3" Classes="PanelAction" Command="{Binding LinkCommand}"
+                                        Content="{localization:Loc LinkPanel_Link}"
+                                        ToolTip.Tip="{localization:Loc LinkPanel_LinkTip}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
+                <Button x:Name="LinkPanelUnlink" Classes="PanelAction" Command="{Binding UnlinkSelectedCommand}"
+                        Content="{localization:Loc LinkPanel_Unlink}" />
+                <Button x:Name="LinkPanelNewGroup" Classes="PanelAction" Command="{Binding NewGroupFromSelectedCommand}"
+                        Content="{localization:Loc LinkPanel_NewGroup}" />
+                <Button x:Name="LinkPanelSplit" Classes="PanelAction" Command="{Binding SplitByArrangementCommand}"
+                        Content="{localization:Loc LinkPanel_Split}" />
+            </WrapPanel>
+            <TextBlock Classes="Faint" Text="{Binding SelectionSummary}" />
+        </StackPanel>
+    </Border>
+</UserControl>

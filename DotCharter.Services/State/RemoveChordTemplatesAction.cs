@@ -12,8 +12,11 @@ namespace DotCharter.Services.State;
 ///         reconcile it is composed with (index-wise) and the chord panels holding instances need.
 ///     </para>
 /// </summary>
-public sealed class RemoveChordTemplatesAction : IChartAction
+public sealed class RemoveChordTemplatesAction : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly IList<ChordTemplate> _collection;
     private readonly List<(int Index, ChordTemplate Template)> _removed = [];
     private readonly List<ChordTemplate> _templates;

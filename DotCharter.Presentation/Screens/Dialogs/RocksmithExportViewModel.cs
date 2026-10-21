@@ -3,6 +3,7 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Core.Domain.Project;
+using DotCharter.Core.Utilities;
 using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Presentation.Shared;
@@ -10,10 +11,10 @@ using DotCharter.Services.Editing.Maintenance;
 using DotCharter.Services.Audio.Coordination;
 using DotCharter.Services.Diagnostics;
 using DotCharter.Services.Export;
+using DotCharter.Services.Export.DlcBuilder;
 using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Services.Export.Validation;
 using DotCharter.Services.Infrastructure.Documents;
-using DotCharter.Services.Infrastructure.Psarc;
 using DotCharter.Tone.Infrastructure.Configuration;
 using DotCharter.Tone.Infrastructure.Shell;
 using DotCharter.Tone.Infrastructure.Storage;
@@ -49,6 +50,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     private readonly AsyncRelayCommand _autoVolume;
     private readonly AsyncRelayCommand _autoPreviewVolume;
     private readonly RocksmithExportPickers _pickers;
+    private readonly RocksmithExportDlcBuilder _dlcBuilder;
     private string _derivedKey = "";
     private readonly AsyncRelayCommand _browseOutput;
     private IReadOnlyList<ExportValidationFinding> _findings = [];
@@ -72,7 +74,7 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
     [ObservableProperty] private string _dlcKeyWatermark = "";
 
     public RocksmithExportViewModel(ChartEditDialogServices edit, RocksmithExportServices io, IDialogs dialogs, DialogMemory memory,
-        IChartMaintenanceService maintenance)
+        IChartMaintenanceService maintenance, IDlcBuilderProjectWriter dlcBuilderWriter)
     {
         _edit = edit;
         _fixes = new RocksmithFixes(maintenance, edit.Editor, edit.State, dialogs, edit.Localization, edit.Logger);
@@ -92,6 +94,12 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
         _autoPreviewVolume = new AsyncRelayCommand(() => MeasureVolumeAsync(preview: true),
             () => !IsMeasuringVolume && !string.IsNullOrWhiteSpace(PreviewAudioPath));
         _pickers = new RocksmithExportPickers(edit, io);
+        _dlcBuilder = new RocksmithExportDlcBuilder(edit, io, dlcBuilderWriter, _pickers, DlcBuilderInput);
+        _dlcBuilder.PropertyChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(DlcBuilderProjectMessage));
+            OnPropertyChanged(nameof(HasDlcBuilderProjectMessage));
+        };
         BrowseTestFolderCommand = new AsyncRelayCommand(async () => TestFolder = await _pickers.FolderAsync(ResolvedTestFolder) ?? TestFolder);
         _cancelBuild = new RelayCommand(() => _buildCts?.Cancel(), () => IsBuilding);
         OpenToneDesignerCommand = new RelayCommand(OpenToneDesigner);
@@ -142,7 +150,17 @@ public sealed partial class RocksmithExportViewModel : DialogViewModel<bool>, IR
 
     public bool NothingSelectedToExport => !Arrangements.Any(a => a.IsSelected) && !(IncludeVocals && HasVocals);
 
-    public bool WritesUnencrypted { get; } = !RocksmithKeys.CanWriteEncrypted;
+    public ICommand ExportDlcBuilderProjectCommand => _dlcBuilder.Command;
+    public string DlcBuilderProjectMessage => _dlcBuilder.Message;
+    public bool HasDlcBuilderProjectMessage => _dlcBuilder.HasMessage;
+
+    /// <summary>The chart as the export sees it now, on a private copy the writer may refresh.</summary>
+    private DlcBuilderProjectInput? DlcBuilderInput()
+    {
+        if (_project is not { } project) return null;
+        Assemble(project);
+        return new DlcBuilderProjectInput(ChartProjectCloner.Clone(project), AudioPath, AlbumArtPath, OutputPath);
+    }
 
     /// <summary>Why no Mac package can be written right now: a ticked 7-/8-string
     /// guitar, or no Mac encryption. Null when it can.</summary>

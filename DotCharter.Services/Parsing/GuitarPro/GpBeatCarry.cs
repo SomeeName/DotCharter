@@ -400,6 +400,42 @@ internal static class GpBeatCarry
     }
 
     /// <summary>
+    ///     The SHORT-REST rule of <see cref="ObserveStaccatoBeat" /> over a finished level
+    ///     instead of a beat stream — the GP3-5 binary path's form of it. That reader
+    ///     never applied the rule, so a GP5 score and the same score saved by Guitar Pro 7
+    ///     disagreed on every staccato note; the corpus round trip measured it as the largest
+    ///     class of differing measures. Over the UNFOLDED level, each repeat pass is judged
+    ///     by what follows it in that pass, as the gpif path's beat stream does.
+    ///     <para>
+    ///     Same rule, in the parser's quarter-note positions: a single note (alone at its
+    ///     onset, not in a chord) whose authored value is followed by silence that is at most
+    ///     that value and at most a quarter before the next sound becomes ACCENTED. Runs
+    ///     before <see cref="GpPostProcessor.Run" />, while <see cref="GuitarNote.NotationDuration" />
+    ///     is still each beat's written value.
+    ///     </para>
+    /// </summary>
+    internal static void MarkStaccatoNotes(ChartLevel level)
+    {
+        var onsets = level.Notes.Select(n => n.Position).Concat(level.Chords.Select(c => c.Position))
+            .Distinct().Order().ToList();
+        var singles = level.Notes.GroupBy(n => n.Position).Where(g => g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.First());
+        var chordAt = level.Chords.Select(c => c.Position).ToHashSet();
+        var quarter = new FractionalPosition(1);
+
+        for (var i = 0; i + 1 < onsets.Count; i++)
+        {
+            var at = onsets[i];
+            if (chordAt.Contains(at) || !singles.TryGetValue(at, out var note)) continue;
+            if (note.NotationDuration is not { } value || value <= Fraction.Zero) continue;
+
+            var own = new FractionalPosition(value);
+            var rest = onsets[i + 1] - (at + own);
+            if (rest > FractionalPosition.Zero && rest <= own && rest <= quarter) note.Accent = true;
+        }
+    }
+
+    /// <summary>
     ///     Applies the SHORT-REST rule — the only way Rocksmith can spell an
     ///     articulation it has no mark for.
     ///     <para>

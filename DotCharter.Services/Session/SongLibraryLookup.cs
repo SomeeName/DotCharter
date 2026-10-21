@@ -49,10 +49,9 @@ public sealed class SongLibraryLookup(ILibraryIndex index) : ISongLibraryLookup
 
         if (facts.CoverArtPath.Length > 0)
         {
-            var declared = Path.IsPathRooted(facts.CoverArtPath)
-                ? facts.CoverArtPath
-                : Path.Combine(directory, facts.CoverArtPath);
-            if (File.Exists(declared)) return declared;
+            // Data from the file: a rooted, UNC or escaping name is never probed.
+            var declared = ProjectRelativePath.TryResolve(directory, facts.CoverArtPath);
+            if (declared != null && File.Exists(declared)) return declared;
         }
 
         var beside = Path.Combine(directory, DefaultCoverName);

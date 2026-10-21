@@ -122,6 +122,10 @@ points at (all under `docs/agents/services/`).
   `status?.Report(` / `progress?.Report(` in this project; a count goes through
   `Plural`. Log lines and run reports stay English.
   → `ServiceProgressLocalizationTests` (Tests/Localization)
+- **A path read out of a file (`.rscp`, `.eof`, an imported profile) goes through
+  `ProjectRelativePath` before ANY probe** — a UNC `File.Exists` leaks NTLM; nothing
+  a file declares is a write directory (#107).
+  → `infrastructure-update/storage.md`
 - **`ChartProjectCloner` is the single snapshot source of truth** (save, crash
   recovery, checkpoints); its one sanctioned sibling is `ChartProjectRestorer`.
   → `state-diagnostics.md`

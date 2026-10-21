@@ -89,7 +89,7 @@ public sealed class EventLayerPinnedLabelHitTests
             StringCount = 6,
             DrawLabels = true,
             RendererPixelsPerMs = Zoom,
-            Ribbon = new RibbonLayout(true, true, true, true, true),
+            Ribbon = new RibbonLayout(RibbonLanes.All),
             Snapshot = snapshot
         };
 
@@ -188,7 +188,7 @@ public sealed class EventLayerPinnedLabelHitTests
         // defines, so the test does not merely restate the layer's code.
         var (batcher, _, _) = RenderPinnedTone();
         var drawn = DrawnRectOf(batcher, ToneFill);
-        var ribbon = new RibbonLayout(true, true, true, true, true);
+        var ribbon = new RibbonLayout(RibbonLanes.All);
 
         Assert.Equal(RibbonLayout.BarTopIn(ribbon.ToneY), drawn.Y, 3);
         Assert.Equal(RibbonLayout.BarHeight, drawn.Height, 3);
@@ -232,7 +232,7 @@ public sealed class EventLayerPinnedLabelHitTests
         var (_, registry, owner) = RenderTones([ToneTimeMs, ViewStartMs + nextX / Zoom]);
 
         Assert.Equal(1, registry.CountFor(owner));
-        Assert.True(registry.TryHit(owner, new Point(0.5, RibbonLayout.BarTopIn(new RibbonLayout(true, true, true, true, true).ToneY) + 1),
+        Assert.True(registry.TryHit(owner, new Point(0.5, RibbonLayout.BarTopIn(new RibbonLayout(RibbonLanes.All).ToneY) + 1),
             out var pinned), "the pushed chip left the screen entirely although part of it still fits");
         Assert.True(pinned.Rect.Right <= nextX - StickyLabel.PushGapPx + 0.001,
             $"the pinned chip ends at {pinned.Rect.Right}, over the next chip that starts at {nextX}");

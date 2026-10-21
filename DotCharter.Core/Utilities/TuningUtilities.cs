@@ -1,4 +1,6 @@
-﻿namespace DotCharter.Core.Utilities;
+﻿using DotCharter.Core.Domain.Project;
+
+namespace DotCharter.Core.Utilities;
 
 public static class TuningUtilities
 {
@@ -20,11 +22,10 @@ public static class TuningUtilities
     ///     padded with.
     ///     </para>
     ///     <para>
-    ///     <b>5 is the one row an importer may legitimately override.</b> The tab
-    ///     importers measure a 5-string bass against B E A D G while the RS SNG
-    ///     path measures it against E A D G B; this table carries the SNG
-    ///     reading (the 6-string row truncated), which is what the namer has
-    ///     always used. Resolving that disagreement is a separate change.
+    ///     <b>5 reads E A D G B</b> (the 6-string row truncated), for every
+    ///     importer: the GP importers subtract this row too, so a standard
+    ///     B E A D G bass imports as offsets <c>-5 -5 -5 -5 -4</c> (see the
+    ///     <see cref="GetStandardMidiPitchesFor" /> for the octave).
     ///     </para>
     /// </summary>
     public static int[] GetStandardMidiPitches(int stringCount)
@@ -35,6 +36,22 @@ public static class TuningUtilities
         var lowE = stringCount == 4 ? StandardOpenStrings.BassLowEMidi : StandardOpenStrings.GuitarLowEMidi;
         var pitches = StandardOpenStrings.SemitonesAboveLowE(stringCount);
         for (var i = 0; i < pitches.Length; i++) pitches[i] += lowE;
+        return pitches;
+    }
+
+    /// <summary>
+    ///     <see cref="GetStandardMidiPitches" /> as the arrangement of
+    ///     <paramref name="type" /> sounds it. A bass drops an octave
+    ///     (<c>SoundingPitch</c> subtracts 12 for one), which only shows for 5
+    ///     strings: the 4-string row is already the bass octave, so a 5-string bass
+    ///     reads E1 A1 D2 G2 B2 and a B0 E1 A1 D2 G2 tuning is
+    ///     <c>-5 -5 -5 -5 -4</c> against it.
+    /// </summary>
+    public static int[] GetStandardMidiPitchesFor(int stringCount, ArrangementType type)
+    {
+        var pitches = GetStandardMidiPitches(stringCount);
+        if (stringCount == 5 && type == ArrangementType.Bass)
+            for (var i = 0; i < pitches.Length; i++) pitches[i] -= 12;
         return pitches;
     }
 
@@ -70,10 +87,9 @@ public static class TuningUtilities
         // strings the reference is not the 6-string one with E repeated: a
         // 7-string starts on B and an 8-string on F#.
         //
-        // 5 stays on the 6-string table deliberately: the importers do NOT agree on
-        // what a 5-string bass offset means (GP measures against B E A D G, the RS
-        // SNG path against E A D G B), so changing the reference here would fix one
-        // and break the other. That needs resolving at the importer, not here.
+        // 5 stays on the 6-string table (E A D G B), and every importer measures a
+        // 5-string track against it: the GP importers turn a B E A D G bass into
+        // offsets -5 -5 -5 -5 -4, the RS SNG path already read E A D G B.
         var stdPitches = GetStandardMidiPitches(stringCount);
 
         var names = new string[stringCount];

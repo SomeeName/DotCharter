@@ -337,14 +337,20 @@ public sealed class ToneDesignService : IToneDesignService
     {
         var sourcingWarnings = new List<string>();
         var downloaded = new List<NamCaptureManifest>();
-        if (_captureSource is not null)
-        {
-            (json, captures) = await SourceCaptureAsync(
-                _captureSource, json, captures, sourcingWarnings, downloaded, status, ct).ConfigureAwait(false);
-        }
 
         status?.Report(_localization["ToneDesign_Status_CheckingChain"]);
         var validation = ToneDraftValidator.Validate(json, captures);
+
+        // The TONE3000 search is a network call whose query a model wrote: it runs only for a draft
+        // that already holds a usable chain, never for one that is going to be refused anyway.
+        if (_captureSource is not null && validation.Preset is not null)
+        {
+            var before = json;
+            (json, captures) = await SourceCaptureAsync(
+                _captureSource, json, captures, sourcingWarnings, downloaded, status, ct).ConfigureAwait(false);
+            if (!ReferenceEquals(json, before)) validation = ToneDraftValidator.Validate(json, captures);
+        }
+
         var warnings = sourcingWarnings.Count == 0
             ? validation.Warnings
             : [.. sourcingWarnings, .. validation.Warnings];
@@ -377,7 +383,7 @@ public sealed class ToneDesignService : IToneDesignService
 
         return new ToneDesignResult(
             prepared,
-            validation.Draft?.Rationale ?? "",
+            prepared.Description,
             Math.Clamp(validation.Draft?.Confidence ?? 0.5, 0d, 1d),
             warnings,
             json,

@@ -104,6 +104,11 @@
       "license": "MIT"
     },
     {
+      "id": "BouncyCastle.Cryptography",
+      "version": "2.7.0",
+      "license": "MIT"
+    },
+    {
       "id": "CommunityToolkit.Mvvm",
       "version": "8.4.2",
       "license": "MIT"
@@ -255,6 +260,11 @@
       "license": "MIT"
     },
     {
+      "id": "Microsoft.DotNet.ILCompiler",
+      "version": "10.0.13",
+      "license": "MIT"
+    },
+    {
       "id": "Microsoft.DotNet.PlatformAbstractions",
       "version": "3.1.6",
       "license": "MIT",
@@ -296,6 +306,11 @@
       "version": "1.24.4",
       "license": "MIT",
       "note": "LICENSE.txt in the package"
+    },
+    {
+      "id": "Microsoft.NET.ILLink.Tasks",
+      "version": "10.0.13",
+      "license": "MIT"
     },
     {
       "id": "Microsoft.NET.Test.Sdk",
@@ -347,6 +362,11 @@
       "version": "0.10.5",
       "license": "MIT",
       "note": "LICENSE in the package"
+    },
+    {
+      "id": "runtime.win-x64.Microsoft.DotNet.ILCompiler",
+      "version": "10.0.13",
+      "license": "MIT"
     },
     {
       "id": "Serilog.Sinks.Async",

@@ -573,7 +573,7 @@ internal sealed class MainWindowPrewarm(
     /// <summary>
     ///     Third part of the prewarm: the TRANSPORT bar's and STATUS rail's
     ///     popovers — Mix, Tempo, Tools, Tracks, the two history previews, the two
-    ///     message panels and the profile switcher.
+    ///     message panels and the profile switcher — and the timeline's lane menu.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -600,7 +600,9 @@ internal sealed class MainWindowPrewarm(
         foreach (var rail in new Control?[]
                  {
                      DeferredChrome<ToolbarView>(_window.FindControl<ContentControl>("EditorToolbarHost")),
-                     DeferredChrome<StatusBar>(_window.FindControl<ContentControl>("StatusBarHost"))
+                     DeferredChrome<StatusBar>(_window.FindControl<ContentControl>("StatusBarHost")),
+                     // The timeline's right-click lane menu.
+                     _window.FindControl<Border>("TimelineGutterHost")
                  })
         {
             if (rail is not null)

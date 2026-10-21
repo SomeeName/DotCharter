@@ -211,11 +211,24 @@ public sealed partial class ChartMaintenanceService
             var before = CloneProject(project);
             var after = CloneProject(project);
 
-            var summary = ArrangementSoundSync.Apply(after.Arrangements[sourceIndex], after.Arrangements[targetIndex]);
+            var afterTarget = after.Arrangements[targetIndex];
+            var targetLevelCount = afterTarget.Levels.Count;
+            var summary = ArrangementSoundSync.Apply(after.Arrangements[sourceIndex], afterTarget);
             if (!summary.WouldChangeAnything)
             {
                 _projectState.MainDisplayMessage = L("Status_ArrangementSyncNothingToDo");
                 return summary;
+            }
+
+            // The sync wrote into the HARDEST level; every easier level of a ladder is
+            // derived from it and is now stale, so rebuild them from it. Without a
+            // generator result the stale levels stay as they were, which is logged.
+            if (targetLevelCount > 1 &&
+                !_levelGenerationService.TryGenerate(afterTarget, targetLevelCount, after.Beats))
+            {
+                _logger.Warning(AppLogCategory.Editing,
+                    $"Synced '{source.Name}' -> '{target.Name}', but its {targetLevelCount - 1} easier level(s) " +
+                    "could not be regenerated and are now out of date with the hardest one.");
             }
 
             _historyService.Do(new ProjectSnapshotAction(this, before, after, arrangementIndex, levelIndex,

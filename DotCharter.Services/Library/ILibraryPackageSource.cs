@@ -27,8 +27,9 @@ public interface ILibraryPackageSource
 
     /// <summary>The library rows of the package at <paramref name="path" />, for the index.
     /// Runs on a scan parser thread, several at once; throws for a package it cannot read
-    /// (the scan logs it as skipped and goes on).</summary>
-    IReadOnlyList<LibrarySongEntry> ReadForIndex(string path);
+    /// (the scan logs it as skipped and goes on). A source honours <paramref name="cancellationToken" />
+    /// (the scan's) by throwing <see cref="OperationCanceledException" />, returning no rows.</summary>
+    IReadOnlyList<LibrarySongEntry> ReadForIndex(string path, CancellationToken cancellationToken);
 
     /// <summary>Opens a library song to play or chart: the chart and its playable audio.</summary>
     Task<LibraryLoadedSong> LoadSongAsync(LibrarySongEntry song);

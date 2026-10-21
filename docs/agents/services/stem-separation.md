@@ -23,6 +23,14 @@ the two bases with `File.Exists`, so it runs inside `StemFolderProbe.Probe`, on
 the stem mixer's worker and never on the UI thread (`StemFolderProbeTests`); `StemPathBaseTests` covers both bases, the precedence, the
 missing-file answer, rooted paths and the persist side's base.
 
+**Where the WAVs are written (#107):** `ResolveOutputDirectory` is the audio's
+folder only when `musicFileName` is a plain relative name (or there is no saved
+project at all — a PSARC session). A project whose audio reference is rooted or
+`..` writes its stems into the PROJECT folder: a path read from a shared file is
+never a write location. A stored stem path that is UNC, device or on a network
+drive resolves to nothing, unprobed — see
+[infrastructure-update/storage.md](infrastructure-update/storage.md).
+
 ---
 
 - **A `.dcsong` opened as a project brings its stems as PROJECT stems, not as a cache
@@ -246,7 +254,7 @@ missing-file answer, rooted paths and the persist side's base.
     the user is blocked on; the concurrency cap arguably supersedes it, but that
     is a judgement about the audio thread, not a perf tidy-up, so it was left.
 
-    **ffmpeg is located by the shared pure `MediaToolResolver` — configured path (`AppConfig.FfmpegPath`) → exe dir → exe dir/`tools` → PATH → dev-tree `tools/redist/win-x64` — and NEVER by a local re-spelling.** Both `FfmpegStemEncoder` and `OnnxStemSeparationService` take a `configuredFfmpegPath` provider, wired in `App.axaml.cs`. The encoder used to hand-roll its own order that (a) ignored the configured path outright, (b) looped names-outer/dirs-inner so all of PATH beat the bundled `tools/` copy, and (c) had no dev-tree fallback — so a `bin/Debug` run with no PATH ffmpeg silently wrote the archive as WAV, and because **the cache is never regenerated that song stayed WAV forever**.
+    **ffmpeg is located by the shared pure `MediaToolResolver` — configured path (`AppConfig.FfmpegPath`) → exe dir → exe dir/`tools` → dev-tree `tools/redist/win-x64` → PATH (empty unless `DOTCHARTER_TOOLS_FROM_PATH=1`) — and NEVER by a local re-spelling.** Both `FfmpegStemEncoder` and `OnnxStemSeparationService` take a `configuredFfmpegPath` provider, wired in `App.axaml.cs`. The encoder used to hand-roll its own order that (a) ignored the configured path outright, (b) looped names-outer/dirs-inner so all of PATH beat the bundled `tools/` copy, and (c) had no dev-tree fallback — so a `bin/Debug` run with no PATH ffmpeg silently wrote the archive as WAV, and because **the cache is never regenerated that song stayed WAV forever**.
 - **htdemucs ONNX comes in two IO layouts, and JuceSharp drives both** (#254):
   the host-STFT export (`htdemucs_6s.onnx`: waveform + CAC spectrogram in,
   spectrogram + waveform out) and the in-graph-STFT one (`input [batch,2,time]`
@@ -501,6 +509,15 @@ missing-file answer, rooted paths and the persist side's base.
     `Adapt`, which maps `DownloadProgress` onto the UI's unchanged
     `ModelDownloadProgress` — a `null` total becomes 0, never the `-1` fraction
     JuceSharp uses for "indeterminate".
+  - **A pickled checkpoint can run code on load, so importing one needs consent.**
+    `.ckpt` / `.pt` / `.pth` are pickles; `Audio/StemSeparation/CheckpointPickleConsent`
+    holds the user's per-URL consent (AppConfig `StemCheckpointPickleConsent`, URL ->
+    SHA-256 pinned on first download; a changed file withdraws it).
+    `StemModelsSettingsViewModel` asks with a confirmation naming the risk before
+    anything is fetched, and `StemModelManager.ImportCheckpointAsync` refuses a pickle
+    without consent before downloading. The converter always tries a weights-only load
+    (torch 2.6+) first; `CkptToOnnxConverter.AllowUnsafePickleFallback` is set only for
+    a consented, hash-matching file. `.safetensors` is not a pickle and needs none.
   - `ApproxBytes` is still a UI hint and must never become the integrity bound,
     but for a derived row it now equals `ExactBytes`: there is no reason to keep
     a rounded second copy of a number we know precisely, and the rounded copy is

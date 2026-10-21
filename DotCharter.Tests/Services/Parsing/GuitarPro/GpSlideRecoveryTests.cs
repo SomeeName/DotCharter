@@ -251,10 +251,48 @@ public sealed class GpSlideRecoveryTests
         Assert.False(note.UnpitchedSlide);
     }
 
-    /// <summary>A slide-in inside a CHORD cannot be split into an origin note;
-    /// the sentinel is cleared so no negative fret reaches the chart.</summary>
+    /// <summary>
+    ///     A slide-in inside a CHORD: the sliding strings get one origin CHORD
+    ///     two frets below that slides into the strum, which moves back by the
+    ///     lead-in — the shape the GP3-5 path already gives a "sl." chord grace.
+    /// </summary>
     [Fact]
-    public void SlideInOnAChordNote_ClearsTheSentinel()
+    public void SlideInOnChordNotes_MaterializesAnOriginChord()
+    {
+        var gpif = Envelope(
+            "0",
+            """<Beat id="0"><Rhythm ref="0" /><Notes>0 1 2</Notes></Beat>""",
+            Note(0, 1, 5, Slide(16)) + Note(1, 2, 7, Slide(16)) + Note(2, 3, 7),
+            QuarterRhythm);
+        var path = WriteGpFile(gpif);
+        GpImportResult result;
+        try
+        {
+            var importer = new GpImporter();
+            result = importer.ImportTracksWithMetadata(path, [.. importer.GetAvailableTracks(path).Select(t => t.Id)]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        var arrangement = Assert.Single(result.Arrangements);
+        var chords = arrangement.Levels[0].Chords.OrderBy(c => c.Position).ToList();
+        Assert.Equal(2, chords.Count);
+        var origin = chords[0];
+        Assert.Equal(FractionalPosition.Zero, origin.Position);
+        Assert.Equal([(1, 3, 5), (2, 5, 7)],
+            origin.ChordNotes.OrderBy(cn => cn.StringIndex).Select(cn => (cn.StringIndex, cn.Fret, cn.SlideTo ?? -1)));
+        Assert.All(origin.ChordNotes, cn => Assert.True(cn.LinkNext));
+        Assert.True(chords[1].Position.CompareTo(FractionalPosition.Zero) > 0);
+        Assert.All(chords[1].ChordNotes, cn => Assert.Null(cn.SlideTo));
+        Assert.Equal(2, result.SlideInsMaterialized[arrangement]);
+    }
+
+    /// <summary>A lone sliding string inside a chord gets a single origin note, and no
+    /// negative sentinel survives.</summary>
+    [Fact]
+    public void SlideInOnOneChordNote_MaterializesAnOriginNote()
     {
         var level = new ChartLevel();
         var chord = new Chord { Position = FractionalPosition.Zero };
@@ -263,11 +301,15 @@ public sealed class GpSlideRecoveryTests
             StringIndex = 1, Fret = 5, SlideTo = GpNoteParser.SlideInFromBelow,
             Sustain = new FractionalPosition(1)
         });
+        chord.ChordNotes.Add(new ChordNote { StringIndex = 2, Fret = 0, Sustain = new FractionalPosition(1) });
         level.Chords.Add(chord);
 
-        GpPostProcessor.MaterializeSlideIns(level);
+        Assert.Equal(1, GpPostProcessor.MaterializeSlideIns(level));
 
         Assert.Null(chord.ChordNotes[0].SlideTo);
+        var origin = Assert.Single(level.Notes);
+        Assert.Equal((1, 3, 5, true), (origin.StringIndex, origin.Fret, origin.SlideTo ?? -1, origin.LinkNext));
+        Assert.Equal(origin.EndPosition, chord.Position);
     }
 
     /// <summary>An authored slide OUT wins the note's single RS slide slot — a

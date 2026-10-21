@@ -24,9 +24,13 @@
 
     <!-- NativeAOT, sized down: no globalization data, no stack-trace metadata,
          no resource strings, no EventSource. What is left is a P/Invoke shim
-         around CreateProcessW. -->
-    <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+         around CreateProcessW. PublishAot is UNCONDITIONAL so every restore
+         requests the NativeAOT compiler and linker packages and the committed
+         lock file covers the release publish, which restores in locked mode. -->
+    <PropertyGroup>
         <PublishAot>true</PublishAot>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
         <OptimizationPreference>Size</OptimizationPreference>
         <StackTraceSupport>false</StackTraceSupport>
         <UseSystemResourceKeys>true</UseSystemResourceKeys>

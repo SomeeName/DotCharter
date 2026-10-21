@@ -28,8 +28,10 @@ Prerequisites:
   `JuceSharp/src/JuceSharp/runtimes/win-x64/native/juce_sharp.dll`
   (the script refuses to publish without it and prints the cmake commands).
 - The version bump commit is in (see checklist below).
+- The release-signing key (see "Release signing" below). Without it the script
+  stops in preflight.
 
-The script builds the **4 release assets** into `artifacts/release/v<ver>/`,
+The script builds the **5 release assets** into `artifacts/release/v<ver>/`,
 writes a changelog stub (`notes-v<ver>.md`, grouped from `git log` since the
 last tag), and **prints** the exact `gh release create` command. It never runs
 `gh` itself — review the notes before you paste the command. Starting the packed
@@ -157,12 +159,37 @@ naming what is now unchecked. Do not use it to cut a real release.
 | `DotCharter-v<ver>-win-x64.zip` | `dotnet publish DotCharter.UI -c Release -r win-x64 --self-contained true` **into `app/`**, the NativeAOT launcher as the top-level `DotCharter.exe`, `voices/` and the bundled `tools/` at the top (see "The install layout" below), zipped folder-wrapped |
 | `DotCharter-RigLab-v<rigver>.zip` | The standalone rig: `Publish-RigLab.ps1` (its own `<Version>`, the publishable TONE3000 key from `-Tone3000ClientId`), zipped folder-wrapped. **Never name it `*win-x64*` / `*x64*`**: every DotCharter up to v0.56 (the last release before the rig shipped) installs the first zip containing `win-x64`, and `GitHubReleaseRules.SelectWinX64Asset` now also excludes `RigLab` by name (`GitHubUpdateServiceTests.SelectWinX64Asset_NeverPicksTheStandaloneRig`). `-SkipRigLab` leaves it out |
 | `payload-manifest.json` | `BuildPayloadManifest.cs manifest` — a SHA-256 per payload file, paths relative to the install's top. **Ships both INSIDE the zip (at `app/payload-manifest.json`) and as its own asset.** Load-bearing: it is what lets the in-app updater range-fetch only the changed members out of the full zip |
-| `SHA256SUMS.txt` | `Get-FileHash` over the three above, in `sha256sum` format. **Also load-bearing, not a convenience:** `GitHubUpdateService.TryFetchReleaseChecksumsAsync` fetches it by release TAG and `VerifyAgainstReleaseChecksumsAsync` refuses a downloaded asset whose digest disagrees — the zip is robocopied over the live install, so these digests are the only thing that says the bytes are the build they claim to be |
+| `SHA256SUMS.txt` | `Get-FileHash` over the three above, in `sha256sum` format, plus one `# release: v<ver>` line binding it to the tag. **Also load-bearing, not a convenience:** `GitHubUpdateService` fetches it by release TAG and refuses a downloaded asset whose digest disagrees — the zip is robocopied over the live install, so these digests are the only thing that says the bytes are the build they claim to be |
+| `SHA256SUMS.txt.sig` | `SignReleaseManifest.cs sign` — the Ed25519 signature over the exact bytes of `SHA256SUMS.txt`, made with the release-signing key. **Required:** from v1.1.0 on the app refuses a release whose signature is missing, malformed, made with another key, or over a manifest naming another tag (`ReleaseSignature`, `ReleaseSigningTests`) |
 
-> An unreachable `SHA256SUMS.txt` (offline, or a release without one) still
-> applies the update with a logged warning — that degraded path is deliberate,
-> which is why a silently unread asset would fail nothing.
-> `FullAssetChecksumTests` is what proves the comparison really runs.
+> Every failure is a refusal: an unreachable `SHA256SUMS.txt`, a missing or bad
+> signature, a manifest that does not list the asset, a digest that disagrees.
+> `FullAssetChecksumTests` and `ReleaseSigningTests` prove the checks run.
+
+## Release signing (#109)
+
+`SHA256SUMS.txt` comes from the same release page as the zip, so on its own it
+proves nothing about WHO published the release: a stolen GitHub token could
+publish a matching pair. The signature is what the release channel cannot forge.
+
+- **The private key lives outside the repository**, on the release machine:
+  `..\DotCharter-local\release-signing\dotcharter-release-ed25519.key` beside
+  the checkout (override with `-SigningKeyPath` or `DOTCHARTER_RELEASE_SIGNING_KEY`).
+  Base64 of the 32-byte Ed25519 seed; the folder's ACL is user-only. Never commit
+  it, print it or put it in a log. `SignReleaseManifest.cs` never echoes it.
+- **Back it up offline.** If it is lost, no install from v1.1.0 on can take
+  another update; a new key could only reach them in a release signed by the old
+  one. If it leaks, rotate the same way, at once.
+- **The public half is pinned** in
+  `DotCharter.Services/Update/ReleaseSignature.cs` (`PinnedPublicKeyBase64`).
+  Preflight compares the key's public half with it and stops on a mismatch.
+- **Signing** is the step after `SHA256SUMS.txt`: `SignReleaseManifest.cs sign`
+  refuses a key that is not the pinned one, signs, verifies the result with the
+  app's own `ReleaseSignature.Check` and writes `SHA256SUMS.txt.sig`.
+- **A new key** (only ever for a rotation): `dotnet run tools/release/SignReleaseManifest.cs keygen <keyFile>`
+  creates it with `CreateNew` (never overwrites) and prints only the public half.
+- v1.0.0 does not verify signatures, so 1.0.0 → 1.1.0 is unaffected; every
+  release from v1.1.0 on MUST be signed.
 
 ## The install layout
 
@@ -198,17 +225,26 @@ install's top, beside the launcher `DotCharter.exe`, plus ffmpeg's licence (`ffm
 record (`ffmpeg-BUILDINFO.txt`) and a `THIRD-PARTY-NOTICES.txt`. This makes stem
 **Opus** encoding (`FfmpegStemEncoder`), audio import and **YouTube import**
 (`YtDlpAudioDownloader`) work out of the box — the app resolves each tool
-**configured path → exe dir → exe dir/`tools` → PATH** (`MediaToolResolver`).
+**configured path → exe dir → exe dir/`tools` → dev packer cache** (`MediaToolResolver`);
+PATH is consulted only with `DOTCHARTER_TOOLS_FROM_PATH=1`.
 
 How the script does it (`Ensure-RedistTools` + `Add-BundledTools`):
 
 - Binaries are cached in the **git-ignored** repo folder `tools/redist/win-x64/`
-  and reused **only while each still passes when RUN**: `yt-dlp --version` must
-  report `$YtDlpVersion`, and `ffmpeg -version` must report the inventory's
+  and reused **only while each still passes when RUN**: `yt-dlp.exe` must first
+  hash to its pin and then `yt-dlp --version` must report the pinned version,
+  and `ffmpeg -version` must report the inventory's
   `<ffmpegVersion>-<extraVersion>` AND the exe must list every inventory
   component (below). Otherwise the next pack re-fetches / rebuilds by itself.
-- **yt-dlp** — a dated release tag (`$YtDlpVersion`, e.g. `2026.07.04`), single
-  ~18 MB exe, Unlicense/public-domain, from `github.com/yt-dlp/yt-dlp/releases`.
+- **yt-dlp** — pinned in `tools/release/yt-dlp.json`: the dated release tag
+  (e.g. `2026.07.04`), the asset URL and the exe's SHA-256 (the release's own
+  `SHA2-256SUMS` line). It is fetched through `Save-PinnedFile`, so a cached or
+  downloaded exe that does not hash to the pin is deleted and NEVER run;
+  `Add-BundledTools` checks the hash again before copying it into the payload.
+  To move the pin, change all three together after checking the new hash
+  against `SHA2-256SUMS`. Single ~18 MB exe, Unlicense/public-domain, from
+  `github.com/yt-dlp/yt-dlp/releases`. `ReleasePackChecksLintTests` fails a
+  download in `New-Release.ps1` that bypasses a pin.
 - **ffmpeg — our minimal LGPL static build, ~6 MB instead of BtbN's
   157 MB GPL build.** `tools/release/ffmpeg-min/components.json` is the
   inventory: every decoder, encoder, muxer, demuxer, parser, filter, protocol
@@ -220,9 +256,16 @@ How the script does it (`Ensure-RedistTools` + `Add-BundledTools`):
     tarballs pinned by URL + SHA-256 (ffmpeg, libogg, libvorbis, opus, lame,
     zlib), with a pinned portable MSYS2 (`msys2-base-x86_64-<date>.sfx.exe` +
     SHA-256) unpacked under `%LOCALAPPDATA%\DotCharter-build\ffmpeg-min` —
-    nothing is installed system-wide. Its gcc/nasm/make come from pacman at
-    build time; their versions are written into `ffmpeg-BUILDINFO.txt` with the
-    exact configure line. The first build takes ~10 minutes at `-Jobs 4` and
+    nothing is installed system-wide. Its toolchain is pinned the same way:
+    `ffmpeg-min/msys2-packages.json` names every package file (gcc, make,
+    diffutils, nasm, pkgconf and their whole dependency closure) with its
+    SHA-256; each is fetched through `Save-PinnedFile` and installed with
+    `pacman -U` from the verified file. pacman never syncs (`-S`), and the build
+    stops unless `pacman -Q` reports exactly the pinned versions and no
+    unpinned MinGW package (`Compare-MsysPinnedPackages`). To re-pin, install the
+    toolchain into a fresh MSYS2 base and copy every file from its
+    `/var/cache/pacman/pkg` with its hash, all at once. The versions are written
+    into `ffmpeg-BUILDINFO.txt` with the exact configure line. The first build takes ~10 minutes at `-Jobs 4` and
     runs at low priority; `New-Release.ps1` runs it in preflight when the cache
     is stale.
   - **Mirrors:** each pin is a list of URLs tried in order under ONE SHA-256
@@ -413,6 +456,27 @@ ways against a hand-written `.trx` — a discovered class that reported nothing 
 flagged, and a complete run is not — because a coverage check that never fires
 is worth nothing and one that always fires blocks every release.
 
+## NuGet lock files
+
+Every `DotCharter.*` project commits a `packages.lock.json` (version + content
+hash of every package, transitive ones included; `Directory.Build.props` sets
+`RestorePackagesWithLockFile` and `RuntimeIdentifiers=win-x64`, so a restore with
+or without `-r win-x64` reads the same file). CI restores with `--locked-mode`, and
+the release's public UI publish and launcher publish pass
+`-p:RestoreLockedMode=true` (`$LockedRestoreArgs`), so a graph that differs from
+the committed one fails the run instead of shipping. A checkout with a plugin in
+`plugins/` restores a different graph; its lock goes to `obj/packages.plugins.lock.json`
+and never rewrites the committed file, which is why `-WithPlugins` is not locked.
+After a package change, refresh the committed files with:
+
+```powershell
+dotnet restore DotCharter.sln -p:DotCharterPlugins=false --force-evaluate
+```
+
+`CiWorkflowLintTests` fails a CI restore without `--locked-mode` and a project
+without a committed lock file; `ReleasePackChecksLintTests` fails a release
+publish that is not locked.
+
 ## The prebuilt native runtime (`Publish-NativeRuntime.ps1`)
 
 Not part of an app release: it publishes the `juce_sharp.dll` +
@@ -433,6 +497,15 @@ needed and uploads the zip (never `--clobber`). Run it for every gitlink bump
 and commit the pin with it. A `PENDING` pin (written by the public export, below)
 is replaced, not compared.
 
+The fetch does not trust the manifest to say where to download from: only
+`SomeeName/JuceSharp` and `SomeeName/JuceSharp` are accepted and the release
+must be a plain tag (`NativeRuntime.psm1`'s `$AllowedRepositories`). Both
+hashes are checked BEFORE anything loads the DLL, and the `dca_abi_version()`
+probe runs in a child PowerShell started without `GH_TOKEN`/`GITHUB_TOKEN`/
+`SUBMODULES_TOKEN`. In CI only the private repo hands the fetch the PAT; the
+public repo uses the run's own token (`NativeRuntimeFetchTests`,
+`CiWorkflowLintTests`).
+
 ## The public export (`Export-PublicSnapshot.ps1`)
 
 Work happens in the `-Dev` repos; the public DotCharter and JuceSharp repos get ONE
@@ -442,6 +515,8 @@ time). No dev commit id, trailer or private name reaches them.
 ```powershell
 pwsh -NoProfile -File tools/release/Export-PublicSnapshot.ps1                       # dry run of origin/main
 pwsh -NoProfile -File tools/release/Export-PublicSnapshot.ps1 -NativeDir <pair> -Build  # real pin + public build of the snapshot
+pwsh -NoProfile -File tools/release/Export-PublicSnapshot.ps1 -PublicDotCharterUrl https://github.com/SomeeName/DotCharter.git `
+    -PublicJuceSharpUrl https://github.com/SomeeName/JuceSharp.git -NativeDir <pair> -Gate -Push   # publish
 pwsh -NoProfile -File tools/release/Test-PublicLeaks.ps1 -Path <folder>              # the leak check alone
 ```
 
@@ -460,26 +535,100 @@ pwsh -NoProfile -File tools/release/Test-PublicLeaks.ps1 -Path <folder>         
   whose message is the commit's, tagged by the owner; a JuceSharp snapshot whose tree did not
   change reuses the public commit AND its message, so its tag is the one already public.
 - **Identity:** author and committer are the dev checkout's `user.name`/`user.email`, dated
-  with the dev commit's date, so a re-run with the same inputs gives the same ids (the
+  with the dev commit's date (`-Push` refuses unless that is the snapshot identity in
+  `tools/release/public-snapshot-identity.json`), so a re-run with the same inputs gives the same ids (the
   uploaded native asset name depends on the JuceSharp id). An unchanged tree reuses the
   previous public commit instead of stacking an empty one.
 - **Leak check** (`Find-PublicTreeLeaks`, every finding as file:line, grouped by rule): the
   `-Dev` and archive repo names, the add-on's name and add-on folder paths, links to a
-  dev-repo pull request, issue or commit (`history-link`), Windows user-profile paths, and every `PersonalDataLintTests` pattern. No allow-list for the
+  dev-repo pull request, issue or commit (`history-link`), Windows user-profile paths, and every `PersonalDataLintTests` pattern. Nothing is skipped by
+  content: a file with a NUL is read as Latin-1 (so a name inside a binary or a source
+  file with a literal NUL is still found), and every gzip file (the `.gz` fixtures) is
+  read as stored AND decompressed in memory. No allow-list for the
   add-on; the one exemption is the user-folder names the tree uses as made-up examples
   (`Get-UserPathPlaceholders`, matched whole), so any other name under the profile folder fails. Key material
-  is gitleaks' job; the script runs it on the snapshot when it is installed. The dry run
-  exits 1 while there is a finding and writes `leak-report.txt` beside the scratch repos.
+  is gitleaks' job; the script runs it on the snapshot when it is installed (`-Push` refuses
+  without it). The dry run exits 1 while there is a finding and writes `leak-report.txt`
+  beside the scratch repos.
+- **Screenshots are a MANUAL check.** The leak check reads bytes, not pixels: a PNG/JPG
+  that SHOWS a private path, a real name, a dev repo name or a dev issue number (a title
+  bar, a file dialog, a log pane) passes it. Before every `-Push`, list the images the
+  snapshot adds or changes and look at each one:
+  `git -C <scratch>\DotCharter diff --name-only --diff-filter=AM refs/remotes/public/main main -- '*.png' '*.jpg' '*.jpeg' '*.gif' '*.webp'`
+  (no public main yet: `git -C <scratch>\DotCharter ls-files -- '*.png' '*.jpg' …`).
+- **Push preflight** (`Get-PublicPushPlan`, dry run included whenever the URLs are given):
+  `git ls-remote` of BOTH public repos before either is pushed. Public `main` must still be
+  the snapshot's parent, and the tag `v<version>` absent or already naming the snapshot
+  commit (an unchanged JuceSharp reuses its public commit and tag and pushes nothing). A
+  tag for another commit means the version was not bumped: the export refuses and exits 1.
 - **Scratch:** `%TEMP%\dotcharter-public-export\{JuceSharp.git,DotCharter}`, recreated per run.
   Both read the dev objects through `objects/info/alternates`: the dev checkout's working
   tree, index, branches and refs are never written. `-PublicDotCharterUrl` /
   `-PublicJuceSharpUrl` name the previous snapshots (fetched only).
 - **`-Build` / `-Gate`** copy the native pair into the scratch tree and run
   `tools/agent/Invoke-Gate.ps1 -Public -Build` (or `-Gate`) there.
-- **`-Push`** refuses without BOTH URLs and on any leak finding, never force-pushes, and
-  creates no repository and no release. The native publish command is printed, not run.
+- **`-Push`** pushes each repo with `git push --atomic` (JuceSharp first: DotCharter's
+  gitlink names it), after re-reading both preflights. It refuses, pushing nothing, without
+  BOTH URLs; without `-Gate` in the same run; on any leak finding; when gitleaks is missing
+  or reports findings; while the native pin is `PENDING`; when a commit or tag it would push
+  has an author, committer or tagger email other than the snapshot identity; and on any
+  preflight problem. Everything but the gate is checked before the gate runs.
+  **Gate evidence is the run itself:** `-Push` requires `-Gate`, which runs
+  `Invoke-Gate.ps1 -Public -Gate` in the very scratch tree being pushed, a moment before
+  the push. No recorded result is accepted, so there is no evidence file to go stale or
+  to match against a tree id. It never force-pushes, and creates no repository and no
+  release. The native publish command is printed, not run.
 
-`Infrastructure/PublicSnapshotExportTests` runs the module on fixture repos.
+`Infrastructure/PublicSnapshotExportTests` runs the module on fixture repos, including
+every `-Push` refusal against fixture public repos (gitleaks and the snapshot's gate are
+stubs there).
+
+### Public commits come back to dev first (`PublicSync.psm1`)
+
+A pull request merged on a PUBLIC repo exists nowhere in dev, and the next snapshot is the
+dev tree, so it would overwrite that change. The sync guard stops that:
+
+- **Marker:** every public commit after the last snapshot is imported as a dev commit with
+  the trailer `Public-Commit: <DotCharter|JuceSharp>@<full sha>` (and `Co-authored-by:`
+  for the contributor). A snapshot commit is one whose message is `Get-SnapshotMessage`'s
+  AND whose author = committer = the snapshot identity (`Get-PublicSnapshotIdentity`,
+  `tools/release/public-snapshot-identity.json`) or the author of the public root commit;
+  a contributor's commit titled `Update to v…` is not one. That ONE definition
+  (`Get-SnapshotIdentities`) is what the export, `Find-UnimportedPublicCommits.ps1` and
+  `Import-PublicCommit.ps1` (which refuses to import a snapshot) all use.
+  Merge commits are not listed; their non-merge commits are.
+- **Hard stop:** with `-PublicDotCharterUrl` / `-PublicJuceSharpUrl` (so always before
+  `-Push`), `Export-PublicSnapshot.ps1` lists the public `main` commits after the last
+  snapshot and REFUSES, dry run included, when one has no trailer in the history of
+  `-DevRef` (JuceSharp: also of the dev gitlink). It names each one with its import command.
+- **Import:** `pwsh -NoProfile -File tools/release/Import-PublicCommit.ps1 -Repo DotCharter -Commit <sha>`
+  (or `-Pr <n>` for a merged public pull request; `-Issue <n>` adds `Fixes #n`). It
+  fetches public `main`, turns each changed text file back into dev form with the reverse
+  rename map (`Convert-PublicTextToDev`: a public line that is the renamed form of a line
+  in the dev file becomes that line), applies the diff with `git apply -3 --index` on a new
+  branch from `origin/main`, commits once with the trailers, pushes and opens the dev PR.
+  For JuceSharp it commits in the submodule and also bumps the gitlink in the superproject
+  with the same trailers (pin the native pair before merging, as for any bump). A conflict
+  stops it with the trailer lines to commit with. `-NoPullRequest` stops after the commit.
+- **Skip on purpose:** an empty dev commit whose last paragraph is the trailer, saying why.
+- **Release preflight:** `New-Release.ps1` runs `Find-UnimportedPublicCommits.ps1 -DevRef HEAD
+  -FailOnMissing` and stops while a public commit is missing (`-SkipPublicSyncCheck` when
+  offline). Locally the check also reads the dev JuceSharp history at the gitlink, as the
+  export does.
+- **Watch:** `.github/workflows/public-sync-watch.yml` would run `Find-UnimportedPublicCommits.ps1
+  -OpenIssues` daily on ubuntu-latest and open one dev issue per missing commit
+  (deduplicated by its `Import public commit <Repo>@<sha12>` title prefix), but **Actions is
+  disabled on the dev repos (billing), so it does not run.** The release preflight and the
+  export's hard stop are what actually catch a missing import. On the runner it reads only
+  the superproject's history, which is why a JuceSharp import bumps the gitlink.
+- **Optional local schedule** (no script registers it; run this once by hand if wanted).
+  `-OpenIssues` opens the dev issues through `gh` (logged in, run from the dev checkout so
+  `gh` picks the dev repo); it compares against the local `origin/main`, so fetch first or
+  point `-DevRef` at a ref that is kept current:
+  `schtasks /Create /SC DAILY /ST 09:00 /TN DotCharterPublicSync /TR "pwsh -NoProfile -File <dev checkout>/tools/release/Find-UnimportedPublicCommits.ps1 -DevRef origin/main -OpenIssues"`
+
+`Infrastructure/PublicSyncGuardTests` runs the export refusal, the watch's check and the
+import on fixture repos; `PublicSyncWatchWorkflowLintTests` pins the watch's shape.
 
 ## Version-bump checklist (before running the script)
 

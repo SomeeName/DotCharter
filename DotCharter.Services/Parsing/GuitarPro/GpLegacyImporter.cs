@@ -182,10 +182,11 @@ internal sealed class GpLegacyImporter
             if (!_levelByTrack.TryGetValue(track.Id, out var level)) continue;
 
             var arr = BuildArrangement(track, level);
+            if (_settings.PreserveShortRests) GpBeatCarry.MarkStaccatoNotes(level);
             // _onBeatGraces carries GP5's per-grace BeforeBeat/OnBeat flavour into
             // the single-note materializer; without it every binary grace placed
             // before the beat regardless of what the file said.
-            GpPostProcessor.Run(level, arr, _settings, _onBeatGraces,
+            importResult.SlideInsMaterialized[arr] = GpPostProcessor.Run(level, arr, _settings, _onBeatGraces,
                 authoredFingers: AuthoredFingersFor(track.Id),
                 authoredChordNames: AuthoredChordNamesFor(track.Id));
             _state.LetRingByLevel.TryGetValue(level, out var letRingSet);
@@ -295,7 +296,9 @@ internal sealed class GpLegacyImporter
             {
                 BeatsInMeasure = mh.Numerator,
                 NoteDenominator = mh.Denominator,
-                TripletFeel = mh.TripletFeel
+                TripletFeel = mh.TripletFeel,
+                SourceBarIndex = entry.OriginalIndex,
+                RepeatPass = entry.RepeatPass
             });
         }
 
@@ -1108,11 +1111,14 @@ internal sealed class GpLegacyImporter
         IGuitarSound storedSound)
     {
         var key = (trackId, voice, stringIndex);
-        if (_state.TiedContinuations.Remove(parsedNote) &&
-            _state.LastSoundOnString.TryGetValue(key, out var previous))
-        {
-            previous.LinkNext = true;
-        }
+        var isTie = _state.TiedContinuations.Remove(parsedNote);
+        if (isTie && _state.LastSoundOnString.TryGetValue(key, out var previous)) previous.LinkNext = true;
+
+        // The slur's destination is the next NON-tied sound on the string, which
+        // may be in a later bar; a tie continuation keeps the origin pending.
+        if (!isTie && _state.PendingHopoDestinations.Remove(key) && storedSound.Hopo == HopoType.None)
+            storedSound.Hopo = HopoType.HammerOn;
+        if (_state.HopoOrigins.Remove(parsedNote)) _state.PendingHopoDestinations.Add(key);
 
         _state.LastSoundOnString[key] = storedSound;
     }
@@ -1201,7 +1207,9 @@ internal sealed class GpLegacyImporter
         var fx2 = _majorVersion >= 4 ? reader.ReadByte() : (byte)0;
 
         if ((fx1 & 0x01) != 0) ReadBendInto(reader, note);
-        if ((fx1 & 0x02) != 0) note.Hopo = HopoType.HammerOn; // hammer-on/pull-off
+        // GP3-5 put the slur bit on the ORIGIN note; the hammer/pull lands on the next
+        // note of the string (RetargetTieAndTrack), as gpif's HopoDestination does.
+        if ((fx1 & 0x02) != 0) _state.HopoOrigins.Add(note);
 
         if ((fx1 & 0x08) != 0) _state.PendingLetRingNotes.Add(note);
 
@@ -1504,12 +1512,9 @@ internal sealed class GpLegacyImporter
             Capo = track.Capo
         };
 
-        // The ONE reference table — see the note in GpArrangementParser and
-        // TuningUtilities.GetStandardMidiPitches. 5 is the sanctioned override.
-        int[] standardBass5 = [23, 28, 33, 38, 43];
-        var standard = track.StringCount == 5
-            ? standardBass5
-            : TuningUtilities.GetStandardMidiPitches(track.StringCount);
+        // The ONE reference table (TuningUtilities.GetStandardMidiPitches), 5-string
+        // included: the app reads 5 strings as E A D G B, so a B E A D G bass is -5 -5 -5 -5 -4.
+        var standard = TuningUtilities.GetStandardMidiPitchesFor(track.StringCount, arr.ArrangementType);
 
         arr.TuningPitches.Clear();
         // GP stores tunings highest pitch first; convert to lowest-first ordering.

@@ -215,6 +215,7 @@ public sealed class SplitInstallLayoutTests : IDisposable
         using var service = new GitHubUpdateService(new Version(0, 63, 0), installDir: _temp.Path,
             downloadDir: _temp.Path);
 
+        service.TrustDownloadForTests(zipPath);
         var error = Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
 
         Assert.Contains("flat payload", error.Message, StringComparison.Ordinal);

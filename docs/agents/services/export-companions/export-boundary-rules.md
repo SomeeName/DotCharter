@@ -1,4 +1,4 @@
-# Export: Wwise-free audio + the save companions — the export-boundary rules: linked chords, chord names, repeated chords, phrase names, chordId, error invention, arrangement properties, tuning, capo, songLength, tone events, average tempo, tuning stated twice, metadata, GP export
+# Export: Wwise-free audio + the save companions — the export-boundary rules: linked chords, chord names, repeated chords, phrase names, moveR phrases, chordId, error invention, arrangement properties, tuning, capo, songLength, tone events, average tempo, tuning stated twice, metadata, GP export
 
 ## A linked chord is legal to author — the LANDING is fixed at the export boundary
 
@@ -189,6 +189,55 @@
   `D10` (`PhraseNameRewrittenForRocksmith`), with the export's own spelling.
   Pinned by `Services/Export/RsPhraseNameTests` (both writers) and
   `ChartSpacingEnforcerTests.EnforceProject_KeepsAuthoredPhraseNames_AndTheirPhraseInfoStillResolves`.
+
+## A phrase between beats: the chart holds the real time, `moveR<N>` exists only in files
+
+- **A phrase (and the section on it) may start on a note between two beats.** The
+  editor places it there like any marker: the event dialog and the drag snap to
+  the grid and then to the nearest sound (`Editing/Snapping/SoundMagnetSnap`).
+  The chart stores that position; nothing in the model is called `moveR`.
+- **`moveR<N>` is the file form**: the phrase written on the beat before, its
+  iteration and the section on that beat really starting at the N-th note
+  counted FROM the beat, the note ON the beat being the 1st ("at or after":
+  DLC Builder's `Utils.getTimes` keeps `Time >= startTime`, EOF's
+  `eof_get_pos_num_notes_after_timestamp` skips only `pos < pos`). Notes at one
+  time count once. There is no moveL. `Parsing/MoverPhrases/MoverPhraseName`
+  reads both spellings — DLC Builder: name STARTS WITH `mover`, any case, rest an
+  integer; EOF: the first `mover` anywhere, then digits only, value above 0, and
+  the text before it is the phrase's own name (`riff moveR2`).
+- **Import resolves it.** RS XML: `Parsing/Xml/Song/RsXmlPhraseMover.ResolveForImport`,
+  run first in `RsXmlSongReader.ReadDocument`, is DLC Builder's `PhraseMover.improve`
+  on the sparse levels (count in the level at the phrase's `maxDifficulty`; in each
+  level up to it an anchor on the old time is copied to the new one when none is
+  there, and removed when no note or chord is left on it) — but only for an
+  iteration still ON a beat, because an XML converted from a package DLC Builder
+  built has it on the note already under the same name. EOF:
+  `Parsing/Eof/EofMoverPhrases.Resolve`, for an RS phrase attached to a beat
+  (never a floating one), counting the hardest level, with the same anchor rule.
+  The moved phrase loses the `moveR` name (a kept one would be moved AGAIN by
+  DLC Builder): its own name, else the section it starts, else `phrase`, unique.
+  A moveR without enough notes stays on its beat under its name, and the
+  validation's mover rules still see it. The package import lives in the reader
+  plugin; it should run the same resolver.
+- **Export.** SNG/package: the real time, always. `.eof`: a phrase between beats
+  that starts on a note goes on the beat before as plain `moveR<N>` (a name before
+  the token would stop DLC Builder moving it in EOF's own XML), its section too;
+  the phrase's name is lost and reported (`EofLoss.MoverPhrase`) and comes back as
+  the section's name. RS XML: the real time by default; `AppConfig.RsXmlMoverPhrases`
+  (Settings ▸ Files) writes `RsXmlPhraseMover.ToMoverForm` instead, for the saved
+  `.xml` and the DTRS XML bundle. **Why real time is the default**: no DLC Builder
+  check asks for a phrase or section on a beat (`InstrumentalChecker` only checks
+  `mover1` on a note, and excuses mover phrases from `PhraseChangeOnLinkNextNote`
+  and two anchor checks), and DLC Builder applies `PhraseMover` only in
+  `ArrangementImprover.applyAll` — with "apply improvements" off
+  (`applyMinimum`) a moveR phrase would ship on the beat.
+- **Both writers fall back to the real time** when moveR cannot say it exactly: no
+  note starts there, another phrase or section sits between the beat and it, or a
+  level has an anchor on the beat and none on the note (the move would change the
+  anchors). So a trip through either form comes back unchanged — pinned by
+  `Services/Parsing/MoverPhrases/MoverPhraseRoundTripTests` (EOF → DotCharter → EOF,
+  DotCharter → XML → `PhraseMover` → DotCharter, the SNG time) and
+  `RsXmlPhraseMoverTests` (the `PhraseMover` cases).
 
 ## A chart with sections but no `noguitar` gets EOF's closing one, in BOTH writers
 
@@ -386,8 +435,8 @@
 - **Every package is ENCRYPTED by default, 7-/8-string included (#804)**
   (`RocksmithBuildOptions.PlainPackage` null/false: TOC flag 4, SNG flags 3; the
   RS7X block sits inside the zlib body, which the game decrypts first). PLAIN
-  (TOC unencrypted, SNG flags 1; loads only with the CDLC enabler's plain-PSARC
-  patch) is the export dialog's explicit Package option (`ExportTargetViewModel`). Without the
+  (TOC unencrypted, SNG flags 1; loads only with the RS7String 7-string
+  mod) is the export dialog's explicit Package option (`ExportTargetViewModel`). Without the
   user's keys in appconfig.json EVERY package is plain with a warning, the
   picker is disabled on Plain and the dialog says so (#756, `RocksmithKeysTests`;
   the key rules are in [../parsing-psarc.md](../parsing-psarc.md)). A Mac package
@@ -417,6 +466,17 @@
 - **`ChartExportValidator` makes a 7-string guitar a WARNING naming the mod**
   (`KeyExtendedRangeGuitar`), an 8-string guitar an ERROR (above), and a string past the arrangement's own count stays an Error
   (`SngStringLimits.MaxNoteStringIndex`).
+- **The song file's fixed widths are `Export/Sng/SngFormatLimits`**: 36 difficulty
+  levels (the per-section string-mask table), 32,767 notes plus chords per level (note
+  ids and links are 16-bit), chord-template frets and fingers in signed bytes, and the
+  string counts a package spells (guitar 8, bass 6, `Rs7StringLayout.MaxStringsFor`).
+  The validator reports each as an Error (`KeyTooManyLevels`, `KeyTooManyNotes`,
+  `KeyFingerOutOfRange`, `KeyStringCountUnsupported`, `KeyStringBeyondTuning`); the mapper
+  throws `InvalidDataException` on levels, notes and string count, and clamps a template
+  fret or finger. A Guitar Pro export asks the narrower `ValidateGuitarPro` (a sound on a
+  string the tuning lacks) before the picker opens. Fixed-width and length-prefixed names
+  (`RocksmithSngWriter.WriteFixedString`, `EofPackWriter.WriteString`) cut through
+  `Infrastructure/Utf8Truncation`, on a code-point boundary. Pinned by `ExportBoundsTests`.
 
 ## Capo at the export boundary
 
@@ -547,14 +607,41 @@
 
 - **`Export/GuitarPro/GpExporter`** (GP7 via alphaTab). GP export
   (0.25) makes authored notation WIN: a note/chord's `NotationDuration` sets the
-  beat's duration/dots/tuplet (`GpRhythmFraction.TryUnfold`, else greedy 48-tpb
-  tick decomposition), a `GraceFret` becomes a before-beat grace beat (since
+  beat's duration/dots/tuplet (`GpRhythmFraction.TryUnfold`, else a tied chain on
+  the 48-tpb grid), a `GraceFret` becomes a before-beat grace beat (since
   0.33.2 a CHORD's per-string `ChordNote.GraceFret` hints all ride ONE grace beat
   — GP's own chord-grace shape, which the importer reads straight back), and
   `NotationVoices` sidecars export as GP voices 2+. Bars must be authored-full —
   Guitar Pro renormalizes a bar whose beats don't fill it (an isolated triplet
   won't survive; a complete 3-note group will). The capo half of the same
   exporter is [above](#capo-at-the-export-boundary).
+- **One tick grid per BAR, in that bar's beats.** `TicksPerBeat` (48) counts the
+  bar's own beat (an eighth in 6/8), while `NotationDuration` counts quarter
+  notes, so an authored length goes through `QuarterTicks(nd, denominator)`;
+  counting the quarter as a beat wrote every rhythm of an x/8 bar at half length.
+  **A sound longer than the rest of its bar CONTINUES into the next bar(s) as
+  tied beats** (`BarCarry`), as Guitar Pro writes it — cut at the bar line, the
+  re-import read the gap as a staccato rest and accented the note. **A
+  hammer-on/pull-off marks its ORIGIN, the previous sound on the destination's
+  string** (`Legato.Of`), wherever it is — not just the next event of the same
+  bar. Pinned by `GpExporterBarLineTests` and `GpMeterGridImportTests`; measured
+  over the private corpus with `tools/tab-corpus` (round trip).
+- **Techniques (#93).** A hammer-on with NO earlier sound on its string has no
+  origin to mark: it goes out as Guitar Pro's LEFT-hand tapping (`LeftHandTapped`),
+  which the importer reads back as a hammer-on. Right-hand tap, slap and pop are
+  BEAT techniques in Guitar Pro (`Beat.Tap` → `Tapped` on every note, `Beat.Slap` /
+  `Beat.Pop` → `Slapped` / `Popped` on the beat), so any sound of a slot carrying
+  one marks the beat. alphaTab writes a harmonic as `HarmonicType` + `HarmonicFret`
+  only (no `Harmonic` switch), so the importer keys on either. Pinned by
+  `GpExporterTechniqueRoundTripTests`.
+- **Every written length is an EXACT tied chain** (`GpTickChain`, #93). Longest
+  value first, over and over, could not spell some lengths (7 ticks: 6, then 1
+  that no value writes, though 4 + 3 is exact) and DROPPED the tick, so the bar
+  came out short and every later onset in it moved. `TrySpell` keeps the
+  longest-first spelling when it is exact and otherwise finds the shortest exact
+  chain; `Fit` picks a sound's written length as the writable length nearest its
+  sustain whose rest up to the next onset is writable too (a one-tick rest is
+  held instead). Pinned by `GpTickChainTests`.
 
 ## The DLC key is ASCII, and every package name comes from it
 

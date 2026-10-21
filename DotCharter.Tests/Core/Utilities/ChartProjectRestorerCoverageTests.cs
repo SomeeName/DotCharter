@@ -153,7 +153,21 @@ public sealed class ChartProjectRestorerCoverageTests
         {
             var written = new HashSet<string>(StringComparer.Ordinal);
             PopulateInto(instance, instance.GetType().Name, seed, written);
+            if (instance is ChartProject project) PointPlacementsIntoTheProject(project);
             return written;
+        }
+
+        /// <summary>
+        ///     A link placement names its arrangement by REFERENCE, and only an arrangement of the same
+        ///     project is a link (the restorer maps it to the restored project's arrangement at the same
+        ///     index; any other reference is a dead placement and is dropped). A blind fill hands it a
+        ///     stray arrangement, so the fixture points it into the project, as the editor would.
+        /// </summary>
+        private static void PointPlacementsIntoTheProject(ChartProject project)
+        {
+            var i = 0;
+            foreach (var placement in project.LinkGroups.SelectMany(g => g.Placements))
+                placement.Arrangement = project.Arrangements[i++ % project.Arrangements.Count];
         }
 
         private static void PopulateInto(object instance, string path, int seed, HashSet<string> written)

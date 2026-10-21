@@ -66,18 +66,18 @@ public static class AlphaTexExporter
 
     // Standard-tuning MIDI pitches per string count, lowest string first —
     // the same tables the GP importer folds TuningOffset.Step over.
-    private static int[] StandardMidiPitches(int stringCount) => stringCount switch
+    private static int[] StandardMidiPitches(int stringCount, ArrangementType type) => stringCount switch
     {
         4 => [28, 33, 38, 43],                     // bass E1 A1 D2 G2
-        5 => [23, 28, 33, 38, 43],                 // 5-string bass B0 E1 A1 D2 G2
+        5 => TuningUtilities.GetStandardMidiPitchesFor(5, type), // bass E1 A1 D2 G2 B2 (guitar: E2 .. B3)
         // 7-string B1 E2 A2 D3 G3 B3 E4, 8-string F#1 B1 E2 ... — read from the one
         // table (Core/Utilities/StandardOpenStrings) the importers compute their
         // offsets against and the tuning chips print. An 8-string must NOT fall to the
         // `_` six-string row: the `Math.Min(domainString, Length - 1)` clamp in
         // AppendStaffMetadata then handed both extra low strings the top E4.
         // Arrangement.StringCount tops out at 8 (Services/Editing/StringEditMask).
-        // Only the 5-string row deliberately differs (this one reads 5 as a BASS,
-        // which is also what IsBassArrangement and the emitted instrument program say).
+        // 5 is E A D G B (an octave down for a bass): the app reads 5 strings that way and
+        // the GP importers subtract it, so a B E A D G bass carries offsets -5 -5 -5 -5 -4.
         >= 7 => TuningUtilities.GetStandardMidiPitches(Math.Min(stringCount, StandardOpenStrings.MaxStringCount)),
         _ => [40, 45, 50, 55, 59, 64]              // guitar E2 A2 D3 G3 B3 E4
     };
@@ -276,7 +276,7 @@ public static class AlphaTexExporter
 
     private static void AppendStaffMetadata(StringBuilder sb, Arrangement arrangement, int stringCount)
     {
-        var standard = StandardMidiPitches(stringCount);
+        var standard = StandardMidiPitches(stringCount, arrangement.ArrangementType);
         // Through TuningOffsetResolution, not TuningPitches directly. A chart
         // states its tuning TWICE — per-string OFFSETS and note LETTERS — and an
         // arrangement carrying only the letters has an EMPTY offsets vector, so

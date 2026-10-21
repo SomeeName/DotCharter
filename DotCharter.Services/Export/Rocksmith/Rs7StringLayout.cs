@@ -66,11 +66,29 @@ internal static class Rs7StringLayout
     ///     (RS7X v1 spells it, but the mod plays 7 strings and such a package may crash
     ///     the game).
     /// </summary>
-    public static string? ExportRefusal(Arrangement arrangement) =>
-        IsExtendedGuitar(arrangement) && arrangement.StringCount > ModPlayableStrings
-            ? $"{arrangement.StringCount}-string guitar '{arrangement.Name}' is not exported yet: the rs7string " +
-              "mod plays 7 strings, and the RS7X block for 8 strings waits for a later mod build."
+    public static string? ExportRefusal(Arrangement arrangement)
+    {
+        if (IsExtendedGuitar(arrangement) && arrangement.StringCount > ModPlayableStrings)
+        {
+            return $"{arrangement.StringCount}-string guitar '{arrangement.Name}' is not exported yet: the rs7string " +
+                   "mod plays 7 strings, and the RS7X block for 8 strings waits for a later mod build.";
+        }
+
+        return HasUnsupportedStringCount(arrangement)
+            ? $"'{arrangement.Name}' has {arrangement.StringCount} strings; a song file spells at most " +
+              $"{MaxStringsFor(arrangement.ArrangementType)} for this instrument."
             : null;
+    }
+
+    /// <summary>The most strings a package can spell for this kind of part: eight for a guitar,
+    /// the stock six for a bass.</summary>
+    public static int MaxStringsFor(ArrangementType type) => type is ArrangementType.Bass ? NativeStrings : MaxStrings;
+
+    /// <summary>A string count past <see cref="MaxStringsFor" />: no layout spells it, and its
+    /// notes would fold onto the last string the package has.</summary>
+    public static bool HasUnsupportedStringCount(Arrangement arrangement) =>
+        arrangement.ArrangementType is not ArrangementType.Vocal &&
+        arrangement.StringCount > MaxStringsFor(arrangement.ArrangementType);
 
     /// <summary>The package string index of chart string <paramref name="domainIndex" />.
     /// Identity for six strings or fewer.</summary>

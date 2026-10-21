@@ -102,6 +102,35 @@ public sealed class PublishPayloadSettingsTests
         Assert.DoesNotContain(" or ", rest, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    ///     The release publishes in NuGet locked mode, so the committed lock file
+    ///     must already hold the toolchain packages the SDK adds for a publish.
+    ///     A property that requests them only under a runtime identifier is missing
+    ///     from the plain restore that writes the lock, and the publish fails NU1004.
+    /// </summary>
+    [Theory]
+    [InlineData("DotCharter.UI", "_RequiresILLinkPack", new[] { "Microsoft.NET.ILLink.Tasks" })]
+    [InlineData("DotCharter.Launcher", "PublishAot", new[] { "Microsoft.DotNet.ILCompiler", "Microsoft.NET.ILLink.Tasks" })]
+    public void Publish_toolchain_packages_are_requested_by_every_restore_and_locked(string project, string property, string[] packages)
+    {
+        var root = TestPaths.RepoRoot();
+        var doc = XDocument.Load(Path.Combine(root, project, project + ".csproj"));
+        var settings = Named(doc, property).Where(e => !InsideTarget(e) && e.Value.Trim() == "true").ToList();
+
+        Assert.NotEmpty(settings);
+        Assert.All(settings, e => Assert.DoesNotContain(e.AncestorsAndSelf(),
+            a => ((string?)a.Attribute("Condition") ?? "").Contains("RuntimeIdentifier", StringComparison.Ordinal)));
+
+        var pinned = Named(XDocument.Load(Path.Combine(root, "Directory.Build.targets")), "DotCharterPublishToolchainVersion")
+            .Single().Value.Trim();
+        var lockFile = File.ReadAllText(Path.Combine(root, project, "packages.lock.json"));
+        foreach (var package in packages)
+        {
+            Assert.Contains($"\"{package}\": {{\n        \"type\": \"Direct\",\n        \"requested\": \"[{pinned}, )\"",
+                lockFile.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void The_release_script_checks_the_published_trim()
     {

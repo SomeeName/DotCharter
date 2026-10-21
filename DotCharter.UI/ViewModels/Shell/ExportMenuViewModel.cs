@@ -5,6 +5,7 @@ using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Services.Export;
 using DotCharter.Services.Export.Sheet;
+using DotCharter.Services.Export.Validation;
 using DotCharter.Services.Parsing.Eof;
 using DotCharter.Tone.UI.ViewModels.Shell;
 using DotCharter.UI.ViewModels.Editor;
@@ -76,6 +77,19 @@ public sealed partial class ExportMenuViewModel : ViewModelBase
         if (_fileStorage == null || arrangement == null || level == null || _projectState.Beats.Count == 0)
         {
             _projectState.SetMessage(_localization["GpExport_NoChart"]);
+            return;
+        }
+
+        // The pre-export check the Rocksmith export runs, limited to what a .gp needs (a sound on
+        // a string the tuning has): a crafted chart is refused before the picker opens, with the
+        // finding the charter can act on.
+        var blocking = new ChartExportValidator().ValidateGuitarPro(arrangement, level, _projectState.Beats)
+            .FirstOrDefault(f => f.Severity == ExportFindingSeverity.Error);
+        if (blocking != null)
+        {
+            _projectState.SetMessage(_localization.Format(
+                "GpExport_Failed", ExportFindingFormatter.FormatMessage(blocking, _localization)), StatusSeverity.Error);
+            _logger.Warning(AppLogCategory.Project, $"Guitar Pro export refused: {blocking.MessageKey} ({blocking.Detail}).");
             return;
         }
 

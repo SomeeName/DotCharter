@@ -72,7 +72,7 @@ public sealed class RigLabAiSettingsTests : IDisposable
     }
 
     /// <summary>Online research: offered for the two CLIs (the only providers with
-    /// web tools), on by default, and switching it off is saved at once.</summary>
+    /// web tools), off by default, and switching it on is saved at once.</summary>
     [Fact]
     public void TheResearchSwitch_IsForTheClis_AndIsSavedAtOnce()
     {
@@ -82,13 +82,13 @@ public sealed class RigLabAiSettingsTests : IDisposable
 
         vm.SelectedProvider = Row(vm, AiProviderKind.CodexCli);
         Assert.True(vm.IsWebResearchRowVisible);
-        Assert.True(vm.WebResearch);
-        Assert.True(_config.Load().Ai.WebResearch);
-
-        vm.WebResearch = false;
-        Assert.False(_config.Load().Ai.WebResearch);
-        vm.Load();
         Assert.False(vm.WebResearch);
+        Assert.False(_config.Load().Ai.WebResearch);
+
+        vm.WebResearch = true;
+        Assert.True(_config.Load().Ai.WebResearch);
+        vm.Load();
+        Assert.True(vm.WebResearch);
     }
 
     [Fact]

@@ -50,7 +50,8 @@ public static class GpPostProcessor
     /// pitch-class guess. Only the GP3-5 BINARY importer fills it so far — gpif
     /// chord diagrams and the Songsterr payload are both still unread, and both
     /// pass null, which leaves those paths byte-for-byte unchanged.</param>
-    public static void Run(ChartLevel level, Arrangement arrangement,
+    /// <returns>The slide-in ornaments materialized (<see cref="MaterializeSlideIns"/>).</returns>
+    public static int Run(ChartLevel level, Arrangement arrangement,
         GpImportSettings? settings = null, IReadOnlySet<GuitarNote>? onBeatGraces = null,
         IReadOnlySet<IGuitarSound>? tapOriginated = null,
         GpAuthoredFingering? authoredFingers = null,
@@ -65,7 +66,7 @@ public static class GpPostProcessor
         // Turn slide-in ornaments and "sl." grace hints into real sliding notes
         // FIRST, so every later pass (merge, link, handshape, sustain) sees them
         // as ordinary sounds — and so no slide-in sentinel can leak downstream.
-        MaterializeSlideIns(level, settings.SlideInFretDistance, arrangement.Capo);
+        var slideIns = MaterializeSlideIns(level, settings.SlideInFretDistance, arrangement.Capo);
         MaterializeGraceSlides(level, onBeatGraces);
         // Materialization inserts sounds; a same-string/same-instant collision
         // (authored or inserted) is physically impossible and poisons every
@@ -95,6 +96,7 @@ public static class GpPostProcessor
         // renders on the NEXT sound (owner report). Clamp last, once
         // sustains are final.
         ClampBendsToSustain(level);
+        return slideIns;
     }
 
     /// <summary>
@@ -347,10 +349,12 @@ public static class GpPostProcessor
     ///     back by the lead-in. Both references materialize the ornament this way
     ///     — leaving it unhandled rendered a static note and lost the gesture.
     ///     <para>
-    ///     Chord notes cannot be split like this (the origin would need a whole
-    ///     origin chord, and no reference output exists to match), so a slide-in
-    ///     inside a chord has its sentinel cleared and nothing else. The sentinel
-    ///     NEVER survives this pass.
+    ///     A slide-in inside a CHORD materializes the same way the GP3-5 path's
+    ///     "sl." chord grace does (<c>GpLegacyImporter.ApplyChordGraces</c>): one
+    ///     origin CHORD holding just the sliding strings, each sliding into its
+    ///     own target, with the whole strum pushed back by the lead-in (a lone
+    ///     sliding string gets a single origin note); clearing only the sentinel would
+    ///     lose every strummed slide-in. The sentinel NEVER survives this pass.
     ///     </para>
     /// </summary>
     /// <param name="level">The level whose slide-in sentinels are materialized.</param>
@@ -363,24 +367,31 @@ public static class GpPostProcessor
     /// not a hard <c>1</c> — a fret below the capo is an export-blocking
     /// <c>KeyNoteBelowCapo</c> error. Default <c>0</c> ⇒ the historical fret-1
     /// floor, so a direct caller is unchanged.</param>
-    public static void MaterializeSlideIns(ChartLevel level, int originFretDistance = DefaultSlideInFretDistance,
+    /// <returns>How many slide-in ornaments became real slides (one per target
+    /// note or chord note) — the import's own tally, which the tab-corpus census
+    /// compares with what the score authored.</returns>
+    public static int MaterializeSlideIns(ChartLevel level, int originFretDistance = DefaultSlideInFretDistance,
         int capo = 0)
     {
         var distance = Math.Clamp(originFretDistance, MinSlideInFretDistance, MaxSlideInFretDistance);
         var minFret = GpCapoFrets.MinFrettedFret(capo);
         var added = new List<GuitarNote>();
+        var addedChords = new List<Chord>();
+        var materialized = 0;
 
-        foreach (var target in level.Notes.OrderBy(n => n.Position).ToList())
+        // The origin fret of a slide-in sentinel, or null when the ornament
+        // cannot become a slide. The sentinel is consumed either way — it is not
+        // a fret.
+        int? Origin(IGuitarSound sound)
         {
-            var direction = target.SlideTo switch
+            var direction = sound.SlideTo switch
             {
                 GpNoteParser.SlideInFromBelow => -1,
                 GpNoteParser.SlideInFromAbove => 1,
                 _ => 0
             };
-            if (direction == 0) continue;
-
-            target.SlideTo = null; // consumed either way — a sentinel is not a fret
+            if (direction == 0) return null;
+            sound.SlideTo = null;
 
             // The LANDING must be a real fret. GpNoteParser sets the slide-in
             // sentinel even on an OPEN note (deliberately — the L09 "no slide
@@ -392,39 +403,81 @@ public static class GpPostProcessor
             // through it, and every later pass tests `SlideTo is > 0`, so the
             // zero was invisible all the way to SngFromDomainMapper, which sets
             // RsNoteMask.Slide for anything that is not -1.
-            if (target.Fret <= 0) continue;
+            if (sound.Fret <= 0) return null;
+            var originFret = sound.Fret + direction * distance;
+            return originFret < minFret || originFret > GpCapoFrets.MaxAbsoluteFret ? null : originFret;
+        }
 
-            var originFret = target.Fret + direction * distance;
-            if (originFret < minFret || originFret > GpCapoFrets.MaxAbsoluteFret) continue;
+        foreach (var target in level.Notes.OrderBy(n => n.Position).ToList())
+        {
+            if (Origin(target) is not { } originFret) continue;
 
             var place = PlaceGrace(target.Position, target.Sustain, SlideInLeadIn,
                 beforeBeat: false, FractionalPosition.Zero);
             if (place.GraceLength.CompareTo(FractionalPosition.Zero) <= 0) continue;
 
-            added.Add(new GuitarNote
-            {
-                Position = place.GracePosition,
-                Sustain = place.GraceLength,
-                StringIndex = target.StringIndex,
-                Fret = originFret,
-                SlideTo = target.Fret,
-                LinkNext = true,
-                NotationDuration = SlideInLeadIn
-            });
+            added.Add(SlideInOrigin(target.StringIndex, originFret, target.Fret, place));
             target.Position += place.TargetShift;
             target.Sustain = ShortenSustain(target.Sustain, place.TargetShift);
+            materialized++;
         }
 
-        foreach (var chord in level.Chords)
+        foreach (var chord in level.Chords.OrderBy(c => c.Position).ToList())
         {
+            List<(ChordNote Target, int OriginFret)>? pairs = null;
             foreach (var cn in chord.ChordNotes)
             {
-                if (cn.SlideTo is GpNoteParser.SlideInFromBelow or GpNoteParser.SlideInFromAbove)
-                    cn.SlideTo = null;
+                if (Origin(cn) is { } originFret) (pairs ??= []).Add((cn, originFret));
             }
+
+            if (pairs == null) continue;
+
+            var place = PlaceGrace(chord.Position, chord.GetMaxSustain(), SlideInLeadIn,
+                beforeBeat: false, FractionalPosition.Zero);
+            if (place.GraceLength.CompareTo(FractionalPosition.Zero) <= 0) continue;
+
+            if (pairs.Count == 1)
+            {
+                var (target, originFret) = pairs[0];
+                added.Add(SlideInOrigin(target.StringIndex, originFret, target.Fret, place));
+            }
+            else
+            {
+                var origin = new Chord { Position = place.GracePosition, NotationDuration = SlideInLeadIn };
+                foreach (var (target, originFret) in pairs)
+                {
+                    origin.ChordNotes.Add(new ChordNote
+                    {
+                        StringIndex = target.StringIndex,
+                        Fret = originFret,
+                        Sustain = place.GraceLength,
+                        SlideTo = target.Fret,
+                        LinkNext = true
+                    });
+                }
+
+                addedChords.Add(origin);
+            }
+
+            chord.Position += place.TargetShift;
+            foreach (var cn in chord.ChordNotes) cn.Sustain = ShortenSustain(cn.Sustain, place.TargetShift);
+            materialized += pairs.Count;
         }
 
         foreach (var g in added) level.Notes.Add(g);
+        foreach (var c in addedChords) level.Chords.Add(c);
+        return materialized;
+
+        static GuitarNote SlideInOrigin(int stringIndex, int originFret, int targetFret, GracePlacement place) => new()
+        {
+            Position = place.GracePosition,
+            Sustain = place.GraceLength,
+            StringIndex = stringIndex,
+            Fret = originFret,
+            SlideTo = targetFret,
+            LinkNext = true,
+            NotationDuration = SlideInLeadIn
+        };
     }
 
     /// <summary>

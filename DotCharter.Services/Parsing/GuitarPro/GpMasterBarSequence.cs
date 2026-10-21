@@ -58,7 +58,17 @@ internal static class GpMasterBarSequence
     /// <summary>The shared unfold. Pure: bar markers in, playback order out.</summary>
     public static List<UnfoldedIndex> Unfold(IReadOnlyList<BarRepeat> bars)
     {
-        var unfolded = new List<UnfoldedIndex>(bars.Count);
+        var unfolded = new List<UnfoldedIndex>(Math.Min(bars.Count, GpFormatBounds.MaxUnfoldedBars));
+        // Checked after each straight run and each pass, so the list never
+        // grows past the cap by more than one run of the input's own bars.
+        void Bound()
+        {
+            if (unfolded.Count > GpFormatBounds.MaxUnfoldedBars)
+            {
+                throw new InvalidDataException(
+                    $"The score unfolds to more than {GpFormatBounds.MaxUnfoldedBars} bars once its repeats are expanded.");
+            }
+        }
 
         var i = 0;
         while (i < bars.Count)
@@ -89,12 +99,14 @@ internal static class GpMasterBarSequence
                 // No more repeats — emit the remaining bars verbatim.
                 for (var k = i; k < bars.Count; k++)
                     unfolded.Add(new UnfoldedIndex(k, 1));
+                Bound();
                 break;
             }
 
             // Emit any straight bars before the repeat start.
             for (var k = i; k < repeatStart; k++)
                 unfolded.Add(new UnfoldedIndex(k, 1));
+            Bound();
 
             // Find matching repeat end on or after repeatStart.
             var repeatEnd = -1;
@@ -120,6 +132,7 @@ internal static class GpMasterBarSequence
                 // Malformed — treat as straight playback to avoid losing bars.
                 for (var k = repeatStart; k < bars.Count; k++)
                     unfolded.Add(new UnfoldedIndex(k, 1));
+                Bound();
                 break;
             }
 
@@ -134,6 +147,8 @@ internal static class GpMasterBarSequence
                         continue;
                     unfolded.Add(new UnfoldedIndex(k, pass));
                 }
+
+                Bound();
             }
 
             i = repeatEnd + 1;

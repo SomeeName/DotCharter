@@ -42,6 +42,13 @@ internal sealed class RsXmlSongWriter
     /// </summary>
     public bool SixStringProjection { get; init; }
 
+    /// <summary>
+    ///     Writes a phrase that starts on a note between two beats as moveR&lt;N&gt; on the
+    ///     beat before it (<see cref="RsXmlPhraseMover.ToMoverForm" />), for tools that
+    ///     expect that form. Off: the real time, which DLC Builder accepts either way.
+    /// </summary>
+    public bool MoverPhrases { get; init; }
+
     /// <summary>What the last <see cref="Write(ChartProject, double?)" /> dropped when
     /// <see cref="SixStringProjection" /> applied to it; null otherwise.</summary>
     public SixStringLoss? LastLoss { get; private set; }
@@ -205,9 +212,9 @@ internal sealed class RsXmlSongWriter
         song.Add(Fmt.CountedList(E.Levels, levels,
             lvl => WriteLevel(lvl, beats, chordTemplates, phraseStartMs)));
 
-        return new XDocument(
-            new XDeclaration("1.0", "UTF-8", "yes"),
-            song);
+        var doc = new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), song);
+        if (MoverPhrases) RsXmlPhraseMover.ToMoverForm(doc);
+        return doc;
     }
 
     public void WriteTo(ChartProject project, string filePath) => WriteTo(project, filePath, null);

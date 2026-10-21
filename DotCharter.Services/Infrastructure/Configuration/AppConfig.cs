@@ -677,6 +677,10 @@ public class AppConfig : RigConfig
     public bool RibbonShowPhrases { get; set; } = true;
     public bool RibbonShowLyrics { get; set; } = true;
     public bool RibbonShowMeasureInfo { get; set; } = true;
+    public bool RibbonShowLinks { get; set; } = true;
+    // Timeline lane menu: global, like the five row toggles above.
+    public bool RibbonAutoHideEmpty { get; set; } = true;
+    public bool RibbonCompactRows { get; set; }
 
     // ------ Stem separation -------------------------------------------------
     // The Active stem model id (from StemModelCatalog), read by both backends. Empty =
@@ -688,6 +692,9 @@ public class AppConfig : RigConfig
     // default user who already separates with another default) the user said no to, so Separate
     // Stems does not ask again. Empty = never declined. Never changes the Active model.
     public string StemDefaultUpgradeDeclinedId { get; set; } = string.Empty;
+    // Pickled-checkpoint import consent: URL -> SHA-256 of the file the user allowed to
+    // run code ("" until the first download pins it). See CheckpointPickleConsent.
+    public Dictionary<string, string> StemCheckpointPickleConsent { get; set; } = [];
     // Execution provider the managed ONNX stem-separation backend should use.
     // Values: "Auto", "DirectML", "Cpu". Case-insensitive. Defaults to Auto.
     // Auto and DirectML resolve to DirectML on the chosen (or fastest) DirectX 12 GPU,
@@ -748,6 +755,12 @@ public class AppConfig : RigConfig
     // the dock height alone is enough to fully restore the vertical layout.
     public double? LayoutDockHeight { get; set; }
 
+    // The timeline area (sheet strip + timeline + song map, MainSplitGrid row 0)
+    // at the same moment. Saved WITH the dock height, the pair restores the
+    // user's splitter as an exact ratio; the dock height alone cannot, because the
+    // space the two rows share is not the window height minus a constant.
+    public double? LayoutTimelineAreaHeight { get; set; }
+
     // Inspector column width in pixels.
     public double? LayoutInspectorWidth { get; set; }
 
@@ -790,7 +803,8 @@ public class AppConfig : RigConfig
 
     // ------ External media tools (YouTube audio import) ----------------------
     // Optional overrides for the yt-dlp / ffmpeg executables. Empty = resolve
-    // the bundled copy next to the app, then PATH (see MediaToolResolver).
+    // the bundled copy next to the app, then the dev packer cache (see
+    // MediaToolResolver; PATH only on the explicit DOTCHARTER_TOOLS_FROM_PATH=1 opt-in).
     public string YtDlpPath { get; set; } = string.Empty;
     public string FfmpegPath { get; set; } = string.Empty;
 
@@ -948,6 +962,14 @@ public class AppConfig : RigConfig
     ///     the six-string projection (DLC Builder is their consumer).
     /// </summary>
     public bool RsXmlSixStringProjection { get; set; }
+
+    /// <summary>
+    ///     "RS XML phrases between beats as moveR": write a phrase that starts on a note
+    ///     between two beats as moveR&lt;N&gt; on the beat before it (the XML save and the DTRS
+    ///     XML bundle). Off by default — the real time, which DLC Builder's checks accept and
+    ///     which needs no improvement step to land; the package export always uses it.
+    /// </summary>
+    public bool RsXmlMoverPhrases { get; set; }
 
     /// <summary>
     ///     "Generate dynamic difficulty for single-level arrangements": every Rocksmith

@@ -486,7 +486,7 @@ public sealed class ToneDesignServiceTests
     [Fact]
     public async Task TheCopiedPrompt_AsksForResearchOnlyWhileTheSettingAllowsIt()
     {
-        var config = new AppConfig();
+        var config = new AppConfig { Ai = AiProviderSettings.Disabled with { WebResearch = true } };
         var service = new ToneDesignService(() => config, new NoModelFactory(), localization: FakeLocalization.English());
         var request = new ToneDesignRequest("that tone", [], null, "Little Wing", "Jimi Hendrix");
 

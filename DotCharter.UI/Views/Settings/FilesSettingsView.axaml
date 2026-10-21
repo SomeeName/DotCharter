@@ -96,6 +96,16 @@
                                       IsChecked="{Binding RsXmlSixStringProjection, Mode=TwoWay}" />
                     </Grid>
 
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.rsXmlMoverPhrases}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_RsXmlMoverPhrases_RowLabel}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_RsXmlMoverPhrases}" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="RsXmlMoverPhrasesSwitch" VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_RsXmlMoverPhrases_RowLabel}"
+                                      IsChecked="{Binding RsXmlMoverPhrases, Mode=TwoWay}" />
+                    </Grid>
+
                     <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.dlcBuilderFixes}"
                           Classes="FormRow" ColumnDefinitions="*,300">
                         <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">

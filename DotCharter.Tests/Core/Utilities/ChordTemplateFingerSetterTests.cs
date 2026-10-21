@@ -72,10 +72,11 @@ public class ChordTemplateFingerSetterTests
         AssertFingers(Fingered((0, 5), (1, 7), (2, 5)), (0, 1), (1, 3), (2, 1));
 
     [Fact]
-    public void PressGroups_DoesNotBarreThroughAStringOutsideTheChord() =>
-        // A barre across strings 0..2 would make string 1 ring, and it is not
-        // part of the chord — so the two fret-5 notes need separate fingers.
-        AssertFingers(Fingered((0, 5), (2, 5)), (0, 1), (2, 2));
+    public void SameFretPairAcrossAMutedString_IsOneIndexBarre() =>
+        // Two fret-5 notes with a string between that is not in the chord: the
+        // index lies across all three and mutes the middle one with its flat,
+        // never a second finger on its own fret (the charters' grip).
+        AssertFingers(Fingered((0, 5), (2, 5)), (0, 1), (2, 1));
 
     [Fact]
     public void PressGroups_DoesNotBarreThroughAnOpenString() =>

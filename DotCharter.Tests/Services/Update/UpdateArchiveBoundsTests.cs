@@ -220,6 +220,7 @@ public sealed class UpdateArchiveBoundsTests : IDisposable
             ExtractionBudgetOverrideForTests = 1024 * 1024
         };
 
+        service.TrustDownloadForTests(zipPath);
         var error = Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
 
         Assert.Contains("BudgetExceeded", error.Message, StringComparison.Ordinal);
@@ -244,6 +245,7 @@ public sealed class UpdateArchiveBoundsTests : IDisposable
         using var service = new GitHubUpdateService(
             new Version(0, 1, 0), installDir: install, downloadDir: _dir);
 
+        service.TrustDownloadForTests(zipPath);
         Assert.Throws<InvalidDataException>(() => service.ApplyDownloadedUpdate(zipPath));
         Assert.False(Directory.Exists(Path.Combine(install, UpdaterScriptBuilder.StagingDirName)));
     }

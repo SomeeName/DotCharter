@@ -143,6 +143,27 @@ invariant itself)
     bitmask, and a gpif twin asserting both paths agree on the bar count.
     `LegacyGpFixtureBuilder`'s `FxMeasure` can author all three header bits.
 
+- **The parsers count in QUARTER notes; the chart counts BEATS
+  (`GpMeterGrid`).** Both readers advance a bar by `numerator × 4 / denominator`
+  and every rhythm, `NotationDuration` and sustain heuristic is a quarter-note
+  fraction, while `GpBeatMapBuilder` gives a bar one beat per time-signature
+  unit (6/8 = six eighth beats). `GpImporter` therefore converts the FINISHED
+  import bar by bar (`GpMeterGrid.ToBeatGrid`: every position
+  `ChartProjectPositions.Remap` walks, plus the relative sustains). Identity for
+  an all-x/4 score, and for `GpImportSettings.ImportTimeSignatures = false`
+  (from `AppConfig.GpImportTimeSignatures`), where the builder lays four quarter
+  beats per bar. Without it an x/8 bar played twice as fast and pushed the rest
+  of the song into the wrong bars (`GpMeterGridImportTests`, both formats).
+  `NotationDuration` itself stays in quarters (its documented unit); the GP
+  EXPORT scales it by the bar's denominator (`GpExporter.QuarterTicks`).
+- **GP6 `.gpx` is not a zip (`GpxContainer`).** It is a BCFS sector file system,
+  normally BCFZ-compressed (bit-level LZ77); `GpImporter` (track list and score)
+  and the tab-corpus census read `score.gpif` through it, and GP6 keeps a
+  track's tuning/capo/diagrams in `Track/Properties` rather than
+  `Track/Staves/Staff/Properties` (`GpArrangementParser.StaffProperties`).
+  Bounds-checked: a hostile file ends as `InvalidDataException`
+  (`GpxContainerTests`, synthetic containers only).
+
 - **Read one note's `<Property>` children ONCE (0.49).**
   `GpNoteParser.ApplyNoteAttributes` used to ask the same child list up to
   TWENTY-THREE separate
@@ -281,9 +302,13 @@ invariant itself)
   (EOF) and `3` are pinned directly on `MaterializeSlideIns`. The sentinel
   must NEVER survive — `MaterializeSlideIns` runs FIRST in `Run` and `LinkSlides`
   scrubs any leftover negative slide target (the notation-only sidecar voices run
-  `LinkSlides` without `MaterializeSlideIns`). A slide-in inside a CHORD only has
-  its sentinel cleared; splitting a chord into an origin chord has no reference
-  output to match. **A chord where only SOME strings slide stays per-string**
+  `LinkSlides` without `MaterializeSlideIns`). A slide-in inside a CHORD
+  materializes an origin CHORD of just the sliding strings (a single origin note
+  for one string), the shape `ApplyChordGraces` gives a GP5 "sl." chord grace.
+  `MaterializeSlideIns` returns how many it made; `GpImportResult.
+  SlideInsMaterialized` carries that per arrangement, because in the chart the
+  origin is an ordinary slide and the tab-corpus census has no other way to
+  count slide-ins. **A chord where only SOME strings slide stays per-string**
   (#474): `LinkSlides` resolves each string on its own, so in 5(sl.)+8~ → 6+~8
   only the 5 gets `SlideTo = 6`; the tied 8 keeps no slide and links on, and
   `LinkLandingBreakup` writes the 6+8 landing as single notes. That is the
@@ -590,8 +615,10 @@ invariant itself)
   `BassPicking` onto its `ChordNote`s, which it previously did not. This matters
   most on bass, exactly where it was being lost; the 0.33 "beat text `S`/`P`"
   feature stays as the manual override for files that lack the flag.
-  **GP7+ spells the same two as NOTE properties (`Slapped`/`Popped`) and
-  `GpNoteParser` reads them (0.35)** — it did not, so the binary reader gaining
+  **GP7+ spells the same two as BEAT properties (`Slapped`/`Popped` under the
+  beat's `Properties`, read by `GpArrangementParser.ApplyBeatBassPicking`, #93);
+  the NOTE properties of the same name `GpNoteParser` reads (0.35) are the older
+  spelling, and a note's own wins** — before 0.35 neither was read, so the binary reader gaining
   (8) left the two importers disagreeing on the one arrangement type the
   technique defines, which is exactly what this parity rule exists to prevent.
   Change one side, change the other.
@@ -728,7 +755,11 @@ invariant itself)
   2026-10-09 all 52 GP files in `TestData` imported to byte-identical `.rscp`
   (18,205 hand shapes). The planner's editor-only switches
   (`ChordHandShapePlanOptions.CoverEveryChord`, `KeepAnchorsOutside`) are OFF on
-  the import path; its clip at an EXISTING bar never fires there (the pass runs
+  the import path. `ContinueThroughGripTones` (a run continues across single
+  notes the grip itself plays) is OFF everywhere: on the tab-vs-chart corpus it
+  moved neither FHP nor measure-link precision/recall (held out: 2 fewer false link
+  pairs of 3,811, recall unchanged), so it stays a switch. `Plan(..., breaks)`
+  counts why each run ended (`HandShapeRunBreak`); its clip at an EXISTING bar never fires there (the pass runs
   before any other shape exists).
   **Auto-handshapes (0.25): `GpPostProcessor.Run` (the pass EVERY tab importer
   shares — gpif, legacy binary, Songsterr) now runs `ChordHandShapeBuilder`
@@ -910,6 +941,27 @@ invariant itself)
   over a whole measure that covered its own rest. That parameter defaults OFF for
   a direct caller (the historical merge); the product default is the settings
   flag, and `GpPostProcessor.Run` is what passes it.
+  **(c) The GP3-5 binary path applies (a) too**, as `GpBeatCarry.
+  MarkStaccatoNotes` over the UNFOLDED level before `Run` (each repeat pass is
+  judged by what follows it in that pass). It never did before, so a `.gp5` and
+  the same score saved by Guitar Pro 7 disagreed on every staccato note — the
+  largest class of the tab-corpus round-trip diff. The open-string slide-OUT
+  drop above is likewise applied by `GpLegacyNoteEffectsHelpers.ApplySlide`.
+
+### Measuring the importer against finished charts
+
+`Import/GuitarPro/Report/AnswerKey/` (`TabChartMatching`, `TabChartAligner`,
+`TabChartComparer`, `TabChartSections`) is the engine of `tools/tab-vs-chart`
+(#91): a tab's import against a finished RS2 XML of the same song, aligned by
+measure content (no audio), scored per measure for onsets, string + fret, pitch,
+techniques, chords, FHP, fingering and #76 links. It holds no rule of its own
+that the importer also has: the chart is read through `RsXmlSongReader` (moveR
+phrases moved by `RsXmlPhraseMover`), a slide-in ornament is the shape
+`GpPostProcessor.MaterializeSlideIns` writes (its lead-in and fret-distance
+constants), strings are compared by sounding pitch when the string counts differ
+(`TabChartStrings`), and bars the two sides cut differently are compared by time
+(`TabChartBarring`). Nothing in the app calls it; the sources are private (see
+`tools/tab-vs-chart/README.md`).
 
 ## `Import/` — YouTube, audio + metadata
 
@@ -922,10 +974,13 @@ invariant itself)
   ([contested-features.md](contested-features.md)) and the one-time rights notice
   (`AppConfig.YoutubeRightsAccepted`, #821). Both tools are
   located by the pure `MediaToolResolver` (which lives under `Import/Youtube/`
-  despite being shared): **configured path → exe dir → exe dir/`tools` → PATH →
-  the dev-tree `tools/redist/win-x64`** — five steps, the same order the stem
-  `FfmpegStemEncoder` uses. The last one is why a developer build finds ffmpeg
-  without a release layout, and it was missing from this line. Releases
+  despite being shared): **configured path → exe dir → exe dir/`tools` →
+  the dev-tree `tools/redist/win-x64` → PATH** — five steps, the same order the stem
+  `FfmpegStemEncoder` uses, but PATH is EMPTY unless `DOTCHARTER_TOOLS_FROM_PATH=1`
+  (`MediaToolResolver.PathDirsFrom`): an executable found by walking PATH is whatever an
+  earlier directory holds, so the app never reaches for one on its own; a tool installed
+  elsewhere is named in `AppConfig.FfmpegPath` / `YtDlpPath`. The dev-tree step is why a
+  developer build finds ffmpeg without a release layout. Releases
   bundle ffmpeg and yt-dlp (NOT ffprobe) in the app's `tools/` folder
   (`tools/release/New-Release.ps1`), so import works out of the box. **The
   shipped ffmpeg is a minimal LGPL build with ONLY the components in

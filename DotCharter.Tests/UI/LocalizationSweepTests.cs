@@ -650,6 +650,11 @@ public sealed class LocalizationSweepTests
         foreach (var stage in Enum.GetNames<RocksmithBuildStage>())
             expected.Add($"Dialog_Export_Stage_{stage}");
 
+        // Why linking measures was refused, via LinkedMeasuresViewModel.LinkIdentical
+        // (LinkCreate_<refusal>; None is success and has no text).
+        foreach (var refusal in Enum.GetNames<DotCharter.Services.Editing.Linking.LinkCreateRefusal>().Where(n => n != "None"))
+            expected.Add($"LinkCreate_{refusal}");
+
         // The history's step names (#185), via HistoryActionText.LabelKeyFor: one
         // per undoable action type, one per merge verb, one per labelled composite.
         expected.AddRange(HistoryLabelKeys.All());

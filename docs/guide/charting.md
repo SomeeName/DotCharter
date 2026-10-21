@@ -147,6 +147,11 @@ Everything snaps to beats, so the beat map comes first.
 2. Fill in the song's details under **File ▸ Song metadata…**
 3. Export under **File ▸ Export**: a DotCharter song file to share or play, a Guitar Pro or Editor on
    Fire file, or sheet music as PDF.
+4. In **File ▸ Export ▸ Rocksmith package…**, watch for the amber box under **Package form**. It
+   appears whenever the package will be written unencrypted: Rocksmith 2014 only loads an
+   unencrypted package with the RS7String 7-string mod. For a standard chart, press **Export DLC
+   Builder project…** in that box. It writes the chart as a DLC Builder project (`.rs2dlc`) with
+   its Rocksmith XML into a folder you pick; open it in DLC Builder and build the package there.
 
 ## Every menu
 

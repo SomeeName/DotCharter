@@ -33,6 +33,7 @@ public sealed class PlayOnlyExportGuardCoverageTests
         ("Sheet PDF (alphaTex)", "DotCharter.Services/Export/Sheet/SheetPdfExporter.cs", Guard),
         ("DotCharter song (.dcsong)", "DotCharter.Services/Package/DcSong/DcSongWriter.cs", Guard),
         ("Save companions (.eof, .rs2dlc, .psarc)", "DotCharter.Services/Export/SaveCompanionService.cs", Guard),
+        ("DLC Builder project (export dialog)", "DotCharter.Services/Export/DlcBuilder/DlcBuilderProjectWriter.cs", Guard),
         ("Phrase catalog (note data on disk)", "DotCharter.Services/Editing/Catalog/PhraseCatalogService.cs", Guard),
         ("Clipboard / phrase paste into another chart", "DotCharter.Services/Editing/Catalog/PhrasePasteCompatibility.cs", "KeyPlayOnly"),
         ("Save As .xml message", "DotCharter.Services/Session/ProjectSaver.cs", "PlayOnlyContentException"),

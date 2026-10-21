@@ -58,10 +58,11 @@ public static class ArrangementSoundSync
         if (source == null || target == null || ReferenceEquals(source, target))
             return ArrangementSyncSummary.Empty;
 
-        // Level 0 is where charting happens; the difficulty levels above it are
-        // generated FROM it, so syncing them would be writing into derived data.
-        var sourceLevel = source.Levels.FirstOrDefault();
-        var targetLevel = target.Levels.FirstOrDefault();
+        // The HARDEST level is the whole song and where charting happens; the
+        // easier levels are generated FROM it, so syncing them would be writing
+        // into derived data (the caller regenerates them, see SyncArrangement).
+        var sourceLevel = ChartLevels.Hardest(source);
+        var targetLevel = ChartLevels.Hardest(target);
         if (sourceLevel == null || targetLevel == null) return ArrangementSyncSummary.Empty;
 
         var targetNotes = new Dictionary<string, GuitarNote>(StringComparer.Ordinal);

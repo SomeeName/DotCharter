@@ -58,6 +58,11 @@ public static class ExportFindingFixes
         [ChartExportValidator.KeyFirstNoteTooEarly] = "Moving the first note means padding the audio too: a deliberate tempo-map operation.",
         [ChartExportValidator.KeyFirstPhraseNotAtStart] = "Where the first phrase starts decides which phrase the early notes belong to.",
         [ChartExportValidator.KeyLyricTooLong] = "Only the charter can split a lyric syllable.",
+        [ChartExportValidator.KeyTooManyLevels] = "Which difficulty levels to drop changes what the player is offered; the charter picks them.",
+        [ChartExportValidator.KeyTooManyNotes] = "Thinning a level this dense is a musical decision, and a split into arrangements is the charter's.",
+        [ChartExportValidator.KeyFingerOutOfRange] = "A finger past the little finger is a typo in the chord box; only the charter knows which finger was meant.",
+        [ChartExportValidator.KeyStringBeyondTuning] = "A note on a string the tuning lacks has no string to move to without changing what is played.",
+        [ChartExportValidator.KeyStringCountUnsupported] = "A package spells six strings (eight for a guitar); dropping strings is a rearrangement the charter decides.",
         [ChartExportValidator.KeyDisplayNameGlyphs] = "A romanised or English title is a choice of words, never a transliteration a machine should guess (#747)."
     };
 

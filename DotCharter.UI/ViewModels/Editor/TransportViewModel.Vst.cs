@@ -186,11 +186,22 @@ public partial class TransportViewModel
     /// constructor); re-pushing here would be idempotent but would queue a
     /// redundant chain-apply behind the multi-second native plugin loads.
     /// </summary>
-    private void RestoreLastVstSelections(List<VstChainEntry> chain, string? instrumentPath)
+    private void RestoreLastVstSelections(
+        List<VstChainEntry> chain, List<VstChainEntry> loadable, string? instrumentPath)
     {
         foreach (var entry in chain)
         {
             AddGuitarChainSlot(entry, persist: false, pushToEngine: false);
+            if (!loadable.Contains(entry))
+            {
+                // Not in the scanner's list, so it was never pushed to the engine: show
+                // the slot as not loaded, with the reason, instead of a spinner that
+                // never ends or a control that looks live.
+                GuitarVstChain[^1].MarkUnavailable(
+                    _localization["Toolbar_FxChain_NotLoaded"], _localization["Toolbar_FxChain_NotLoadedTip"]);
+                continue;
+            }
+
             // The engine push raced ahead on the scan worker; if this slot
             // already finished loading, its GuitarVstSlotLoadChanged event
             // fired before the slot VM existed. Sync the flag directly so the
@@ -231,6 +242,8 @@ public partial class TransportViewModel
     private void PushGuitarChainToEngine()
     {
         var snapshot = GuitarVstChain
+            // A slot the scan did not find stays in the saved chain but never reaches the engine.
+            .Where(s => !s.IsUnavailable)
             .Select(s => new VstChainEntry
             { Id = s.Id, PluginPath = s.PluginPath, Bypass = s.Bypass, Player = s.Player })
             .ToList();

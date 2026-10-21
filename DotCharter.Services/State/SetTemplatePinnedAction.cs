@@ -5,8 +5,11 @@ namespace DotCharter.Services.State;
 ///     inspector's "Authored" box. In place, deliberately: the pin is a statement about this
 ///     template wherever it is used, not a grip, so there is nothing to resolve-or-create.
 /// </summary>
-public sealed class SetTemplatePinnedAction(ChordTemplate template, bool pinned) : IChartAction
+public sealed class SetTemplatePinnedAction(ChordTemplate template, bool pinned) : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
+
     private readonly bool _was = template.Pinned;
 
     public bool HasEffect => _was != pinned;

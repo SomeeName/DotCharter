@@ -97,6 +97,67 @@ public class CustomStemModelStoreTests : IDisposable
         Assert.Equal("c", loaded[0].Id);
     }
 
+    /// <summary>
+    ///     <c>custom_models.json</c> is a file the user may have received from someone
+    ///     else, and a model's file name is joined onto the models folder to decide
+    ///     where a download is written and what gets loaded or deleted. A name that is
+    ///     not a bare file name (a rooted path, a "..", a separator, a drive/stream
+    ///     colon, an empty or illegal name) is dropped on load, never joined.
+    /// </summary>
+    [Theory]
+    [InlineData("..\\..\\evil.dll")]
+    [InlineData("../evil.dll")]
+    [InlineData("sub/model.onnx")]
+    [InlineData("sub\\model.onnx")]
+    [InlineData("C:\\Windows\\evil.dll")]
+    [InlineData("\\\\server\\share\\evil.dll")]
+    [InlineData("/etc/evil")]
+    [InlineData("model.onnx:stream")]
+    [InlineData("..")]
+    [InlineData(".")]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("model\u0000.onnx")]
+    public void Load_DropsAModelWhoseFileNameIsNotABareFileName(string fileName)
+    {
+        var entries = new[] { ("good", "good.onnx"), ("bad", fileName), ("good2", "good2.onnx") }
+            .Select(e => new Dictionary<string, object>
+            {
+                ["id"] = e.Item1,
+                ["displayName"] = e.Item1,
+                ["description"] = "",
+                ["downloadUrl"] = "",
+                ["fileName"] = e.Item2,
+                ["approxBytes"] = 0,
+                ["sourceCount"] = 4,
+                ["kind"] = "MdxNetOnnx"
+            });
+        File.WriteAllText(Path.Combine(_dir, "custom_models.json"),
+            System.Text.Json.JsonSerializer.Serialize(entries));
+
+        var loaded = new CustomStemModelStore(_dir).Load();
+
+        Assert.Equal(new[] { "good", "good2" }, loaded.Select(d => d.Id).ToArray());
+    }
+
+    [Fact]
+    public void GetLocalPath_NeverLeavesTheModelsFolder()
+    {
+        var modelsDir = Path.Combine(_dir, "models");
+        var manager = new StemModelManager(modelsDirectoryOverride: modelsDir);
+        var escape = new StemModelDescriptor
+        {
+            Id = "x", DisplayName = "x", Description = "", DownloadUrl = "",
+            FileName = Path.Combine("..", "..", "evil.dll"),
+        };
+
+        var path = Path.GetFullPath(manager.GetLocalPath(escape));
+
+        Assert.Equal(Path.GetFullPath(modelsDir), Path.GetDirectoryName(path));
+        Assert.Equal(Path.Combine(Path.GetFullPath(modelsDir), "model.bin"),
+            Path.GetFullPath(manager.GetLocalPath(Make("model"))));
+    }
+
     private static StemModelDescriptor Make(string id) => new()
     {
         Id = id,

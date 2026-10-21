@@ -33,6 +33,8 @@ public sealed partial class FixtureProvenanceLintTests
     internal static bool NeedsRecord(string path, Func<string, long> sizeOf)
     {
         if (path.StartsWith("JuceSharp/", StringComparison.Ordinal) || path == ProvenancePath) return false;
+        // NuGet writes the lock files; they are build input, not test data.
+        if (Path.GetFileName(path) == "packages.lock.json") return false;
 
         var extension = Path.GetExtension(path);
         if (BinaryExtensions.Contains(extension)) return true;
@@ -115,6 +117,7 @@ public sealed partial class FixtureProvenanceLintTests
         Assert.False(NeedsRecord("DotCharter.Core/Foo.cs", Small));
         Assert.False(NeedsRecord("JuceSharp/tests/clip.ogg", Small));
         Assert.False(NeedsRecord("DotCharter.Tests/Fixtures/PROVENANCE.md", Small));
+        Assert.False(NeedsRecord("DotCharter.Tests/packages.lock.json", Big));
     }
 
     [GeneratedRegex(@"^\|\s*`([^`]+)`", RegexOptions.Multiline)]

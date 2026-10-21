@@ -32,7 +32,7 @@ public sealed class CodexCliToneModelTests : IDisposable
         """;
 
     private CodexCliToneModel Model(ScriptedRunner runner, string modelId = "") =>
-        new(new AiProviderSettings(AiProviderKind.CodexCli, modelId, null), @"C:\bin\codex.exe", runner,
+        new(new AiProviderSettings(AiProviderKind.CodexCli, modelId, null, WebResearch: true), @"C:\bin\codex.exe", runner,
             workingDirectory: _dir);
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class CodexCliToneModelTests : IDisposable
             "exec", "--skip-git-repo-check", "--ephemeral", "--ignore-user-config", "--ignore-rules",
             "--sandbox", "read-only", "--color", "never", "--json",
             "--output-schema", @"C:\t\schema.json", "-o", @"C:\t\reply.json",
-            // research is on by default: Codex's live web search
+            // research on: Codex's live web search
             "-c", "web_search=\"live\"",
             "-m", "gpt-5.5", "-"
         ], args);

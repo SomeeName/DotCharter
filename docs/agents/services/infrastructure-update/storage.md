@@ -1,6 +1,6 @@
-# `Infrastructure/` + `Update/` — config, backup, crash reports, library doctor, auto-update (deep reference) — `Infrastructure/Storage/`: three footguns with their own helper
+# `Infrastructure/` + `Update/` — config, backup, crash reports, library doctor, auto-update (deep reference) — `Infrastructure/Storage/`: four footguns with their own helper
 
-## `Infrastructure/Storage/` — three footguns with their own helper
+## `Infrastructure/Storage/` — four footguns with their own helper
 
 - **`AtomicFile` is the ONLY durable-state writer, and its swap is a POSIX
   rename first, `File.Move` second** (`Infrastructure/Storage/WindowsPosixRename`,
@@ -99,6 +99,56 @@
   The `.dcsong` reader (`Package/DcSong/DcSongPackage`) READS members and
   expands nothing, so it is not on this list; its own caps and checksums are in
   [../dcsong-format.md](../dcsong-format.md).
+
+- **A file the app did not make is size-checked BEFORE it is decoded or read whole.**
+  Two shared homes, so a reader that grows a cap and its sibling that does not are
+  visible together:
+  - `Infrastructure/ImageHeaderProbe.IsDecodable` - every `SKBitmap.Decode`,
+    `SKCodec` buffer or Avalonia `Bitmap` decode of a cover, an embedded tag
+    picture or a charter's art asks it first: a recognised header declaring at most
+    `MaxDecodeDimension` (8192) on either edge, else refuse (an unrecognised header
+    is refused too). A decoder allocates width x height x 4 before it reads a pixel,
+    so a few-hundred-byte PNG can declare 14 GB. Sites: `SongCoverImage.DecodeGuard`,
+    `HeroStage.DecodeRgba`, `AudioMetadataExtractor.ResizeToPng`, `DdsEncoder`.
+    A new decode site asks the probe first; the avatar path has its own
+    height-aware `ProfileAvatarImage.DecodeGuard`.
+  - `Infrastructure/ImportSizeLimits` - the byte caps (MIDI 64 MiB, lyrics text
+    16 MiB, WAV 512 MiB, `.gpx` 128 MiB, a `.gp` score entry 128 MiB and 1024
+    members) checked on the LENGTH the file system reports, through
+    `IExportTargetWriter.FileLength` where there is a seam, and refused with
+    `ImportFileTooLargeException` (an `IOException`; launchers show the localized
+    `Status_ImportFileTooLarge`). `.gp` goes through `GpImporter.OpenArchive`
+    (member count from the end-of-central-directory record) and a
+    `LimitedReadStream` over the score entry; the GPIF unfold is bounded on its
+    output (`GpFormatBounds.MaxUnfoldedBars`, `MaxNotesPerTrack`) and an EOF track's
+    note and section counts on the bytes that remain.
+
+- **A path read out of a file is DATA, and only `Infrastructure/Storage/ProjectRelativePath`
+  turns it into a location (#107).** That covers an `.rscp`'s `musicFileName`,
+  `dcCoverArt`, stem paths and `arrangementFiles`, an `.eof`'s companion audio and
+  an imported profile's `AvatarFileName`. The check is pure string work and runs
+  BEFORE any probe: on Windows a `File.Exists` on a UNC path already sends the
+  user's NTLM credentials to that host. Two strengths:
+  - `TryResolve(baseDir, declared)` — strict: a plain relative path under the base
+    folder (no rooted, UNC `\\`/`//`, device `\\?\`/`\\.\`, drive-relative `C:x`,
+    `..`, reserved device name, stream `:` or wildcard). Anything copied into an
+    export, merged into the project or deleted uses this: cover art
+    (`SongLibraryLookup`, `SaveCompanionService`, `ExportPathDefaults`,
+    `DcSongWriter`), `RscpMigrations`' arrangement files, `EofProjectCreator.FindCompanionAudio`,
+    `PlayerProfileService` avatars (an invalid one is cleared on import).
+  - `IsReadableMediaReference(declared)` — for audio and stems, which the app ITSELF
+    writes as an absolute LOCAL path (Save As out of the audio's folder, audio
+    attached to an unsaved session, crash snapshots) or a `..` stem path. Such a
+    path is READ as audio; a UNC, device, drive-relative or network-drive one is
+    refused unprobed and the normal "audio missing" flow takes over
+    (`ProjectAudioLocator`, `StemFolderProbe.ResolveStemPath`,
+    `ProjectSilencePadder`, `ToneGenerationRun`, `ExportPathDefaults.ProjectAudio`).
+  - **Nothing a file declares is a write directory.** `ProjectAudioLocator.ResolveOutputDirectory`
+    returns the project folder unless the audio is a plain relative name; only an
+    unsaved session (no project path — its rooted audio was made by the session)
+    writes beside its audio. The parent-folder walk is for a BARE name only.
+  Tests: `ProjectRelativePathTests` (the table), `DeclaredPathSinkTests` (one per
+  sink; remote paths never reach the real file system there).
 
 ## User folders: `UserDataFolders` is the only way to `%APPDATA%` / `%LOCALAPPDATA%` (#439)
 

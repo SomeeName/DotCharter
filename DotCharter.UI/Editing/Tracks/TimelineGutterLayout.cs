@@ -94,9 +94,6 @@ public readonly struct TimelineGutterLayout
            && LaneHeight.Equals(other.LaneHeight)
            && StringCount == other.StringCount
            && FlipStrings == other.FlipStrings
-           && Ribbon.ShowTones == other.Ribbon.ShowTones
-           && Ribbon.ShowSections == other.Ribbon.ShowSections
-           && Ribbon.ShowPhrases == other.Ribbon.ShowPhrases
-           && Ribbon.ShowLyrics == other.Ribbon.ShowLyrics
-           && Ribbon.ShowMeasureMetadata == other.Ribbon.ShowMeasureMetadata;
+           && Ribbon.Lanes == other.Ribbon.Lanes
+           && Ribbon.Density == other.Ribbon.Density;
 }

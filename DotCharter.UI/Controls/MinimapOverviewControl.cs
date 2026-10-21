@@ -104,6 +104,12 @@ public class MinimapOverviewControl : Control
     // bar colour with a stronger bar along the bottom edge; both alpha copies of a ChartTheme
     // colour, so OnThemeChanged repaints them like EditTargetWashBrush.
     private readonly HandShapeSuggestionLatch _suggestedHandShapes = new();
+
+    // The emphasised link group's placements (hover or selection only): refilled per frame, and
+    // only while a group is emphasised.
+    private readonly List<SongMapLinkMark> _linkMarks = [];
+    private readonly SongMapLinkPainter _linkPainter = new();
+    private string? _drawnLinkEmphasis;
     private readonly List<SongMapMark> _suggestionMarks = [];
     internal const byte SuggestionWashAlpha = 40;
     internal const byte SuggestionBarAlpha = 150;
@@ -320,6 +326,7 @@ public class MinimapOverviewControl : Control
             _subscribedEditor.SelectedChords.CollectionChanged -= OnSelectionChanged;
             _subscribedEditor.SelectedHandShapes.CollectionChanged -= OnSelectionChanged;
             _subscribedEditor.UseHighlightChanged -= OnUseHighlightChanged;
+            _subscribedEditor.LinkHighlight.Changed -= OnLinkHighlightChanged;
         }
 
         _subscribedEditor = target;
@@ -332,8 +339,24 @@ public class MinimapOverviewControl : Control
             // selects bars, and the map never showed them.
             _subscribedEditor.SelectedHandShapes.CollectionChanged += OnSelectionChanged;
             _subscribedEditor.UseHighlightChanged += OnUseHighlightChanged;
+            _subscribedEditor.LinkHighlight.Changed += OnLinkHighlightChanged;
         }
     }
+
+    /// <summary>The hovered or selected link group changed: repaint once. A pointer moving over the
+    /// same chip also raises Changed, and repaints nothing here.</summary>
+    private void OnLinkHighlightChanged()
+    {
+        LinkHighlightHandlerInvocations++;
+        if (Editor?.LinkHighlight.EmphasisGroupId == _drawnLinkEmphasis) return;
+        RequestRepaint();
+    }
+
+    /// <summary>Test seam: how many times the link-highlight handler has run.</summary>
+    internal int LinkHighlightHandlerInvocations { get; private set; }
+
+    /// <summary>Test seam: the link marks the last frame drew.</summary>
+    internal IReadOnlyList<SongMapLinkMark> LinkMarks => _linkMarks;
 
     /// <summary>The bulk-edit preview changed: one repaint through the funnel, like
     /// a selection change — a discrete event, not the throttled playhead path.</summary>
@@ -482,6 +505,7 @@ public class MinimapOverviewControl : Control
 
         DrawViewport(context, scale, width, height);
         DrawSuggestions(context, editor, scale, height);
+        DrawLinkMarks(context, editor, scale, height);
         DrawSelection(context, editor, scale, height, MinimapFlipStrings);
         DrawUseMarks(context, editor, scale, height);
         DrawBookmarks(context, editor, scale, height);
@@ -504,6 +528,15 @@ public class MinimapOverviewControl : Control
             context.DrawRectangle(SuggestionBarBrush, null,
                 new Rect(band.X, height - SongMapMarks.BarHeight, band.Width, SongMapMarks.BarHeight));
         }
+    }
+
+    /// <summary>The emphasised link group's placements in the arrangement on screen (<see cref="SongMapLinkMarks" />).</summary>
+    private void DrawLinkMarks(DrawingContext context, ChartEditorViewModel editor, double scale, double height)
+    {
+        _drawnLinkEmphasis = editor.LinkHighlight.EmphasisGroupId;
+        SongMapLinkMarks.Collect(editor.ActiveProject, editor.ActiveArrangement, _drawnLinkEmphasis, scale,
+            SectionBandHeight, height, _linkMarks);
+        _linkPainter.Draw(context, _linkMarks);
     }
 
     /// <summary>

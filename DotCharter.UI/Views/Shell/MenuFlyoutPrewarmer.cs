@@ -145,8 +145,8 @@ public static class MenuFlyoutPrewarmer
 
     /// <summary>
     ///     Every <see cref="PrewarmableFlyout" /> declared under
-    ///     <paramref name="root" />, whether it hangs off a <c>Button.Flyout</c>
-    ///     or off <c>FlyoutBase.AttachedFlyout</c>.
+    ///     <paramref name="root" />, whether it hangs off a <c>Button.Flyout</c>,
+    ///     off <c>FlyoutBase.AttachedFlyout</c> or off a <c>ContextFlyout</c>.
     /// </summary>
     /// <remarks>
     ///     DERIVED from the markup rather than hand-listed, so a popover added to
@@ -166,6 +166,10 @@ public static class MenuFlyoutPrewarmer
 
             if (FlyoutBase.GetAttachedFlyout(control) is PrewarmableFlyout attached)
                 found.Add(new FlyoutTarget(control, attached));
+
+            // A right-click popover (the timeline's lane menu).
+            if (control.ContextFlyout is PrewarmableFlyout context)
+                found.Add(new FlyoutTarget(control, context));
         }
 
         return found;

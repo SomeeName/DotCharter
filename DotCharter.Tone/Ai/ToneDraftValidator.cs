@@ -81,8 +81,12 @@ public static class ToneDraftValidator
             return new ToneDraftValidation(null, draft, warnings);
         }
 
-        var name = string.IsNullOrWhiteSpace(draft.Name) ? "AI Tone" : draft.Name.Trim();
-        var rationale = draft.Rationale?.Trim() ?? "";
+        // A name and a reason are a model's words: one capped line each, because both reach the
+        // tone list, the status rail and the log.
+        var name = AiUntrustedText.Clean(draft.Name, AiUntrustedText.MaxNameLength) is { Length: > 0 } named
+            ? named
+            : "AI Tone";
+        var rationale = AiUntrustedText.Clean(draft.Rationale, AiUntrustedText.MaxRationaleLength);
 
         var preset = new DspTonePreset(
             $"ai-{Guid.NewGuid():N}",

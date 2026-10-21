@@ -37,11 +37,14 @@ namespace DotCharter.Tests.Services.Parsing.GuitarPro;
 // of fx2. Accent (the record's own flag) is a different bit entirely: the note
 // HEADER's 0x40.
 // Dead writes note type 3, the "x" note the reader imports as MuteType.Full.
+// HammerOrigin sets NOTE-effects fx1 bit 0x02 — the slur's ORIGIN note (flag-only);
+// the destination is the next note on the same string.
 // PalmMute sets NOTE-effects fx2 bit 0x02 — flag-only like Staccato, GP4+ only.
 internal readonly record struct FxNote(int StringIndex, int Fret, int? GraceFret = null, bool Tied = false,
     bool Accent = false, bool LetRing = false, int? Slide = null, bool GraceSlide = false,
     bool GraceOnBeat = false, bool TremoloPicking = false, int? TrillUpperFret = null,
-    int? LeftFinger = null, bool Staccato = false, bool Dead = false, bool PalmMute = false);
+    int? LeftFinger = null, bool Staccato = false, bool Dead = false, bool PalmMute = false,
+    bool HammerOrigin = false);
 
 internal sealed class FxBeat
 {
@@ -133,6 +136,9 @@ internal sealed class LegacyGpFixtureBuilder
     // The track header's fret count (GP's own default is 24).
     private int _frets = 24;
 
+    // The track header's tuning, highest pitch first (null = 6-string E standard).
+    private int[]? _tuningHighFirst;
+
     private LegacyGpFixtureBuilder(int major, int minor)
     {
         _major = major;
@@ -149,7 +155,8 @@ internal sealed class LegacyGpFixtureBuilder
     /// exactly where the reader's <c>ReadSongAttributes</c> consumes them.</summary>
     public static string WriteFile(string version, IReadOnlyList<FxMeasure> measures,
         string trackName = "Guitar", int stringCount = 6, int capo = 0, bool globalShuffle = false,
-        string title = "", string artist = "", string album = "", string tab = "", int frets = 24)
+        string title = "", string artist = "", string album = "", string tab = "", int frets = 24,
+        int[]? tuningHighFirst = null)
     {
         var dot = version.IndexOf('.');
         var major = int.Parse(version[..dot]);
@@ -160,7 +167,8 @@ internal sealed class LegacyGpFixtureBuilder
             _artist = artist,
             _album = album,
             _tab = tab,
-            _frets = frets
+            _frets = frets,
+            _tuningHighFirst = tuningHighFirst
         };
         var bytes = builder.Build(version, measures, trackName, stringCount, capo, globalShuffle,
             extraTracks: null);
@@ -334,8 +342,8 @@ internal sealed class LegacyGpFixtureBuilder
         W32(stringCount);
 
         // GP stores tunings highest-pitch first; standard 6-string E-standard.
-        int[] tuningHighFirst = [64, 59, 55, 50, 45, 40, 0];
-        for (var s = 0; s < 7; s++) W32(tuningHighFirst[s]);
+        var tuningHighFirst = _tuningHighFirst ?? [64, 59, 55, 50, 45, 40, 0];
+        for (var s = 0; s < 7; s++) W32(s < tuningHighFirst.Length ? tuningHighFirst[s] : 0);
 
         W32(0); // midi port
         W32(0); // midi channel
@@ -446,7 +454,8 @@ internal sealed class LegacyGpFixtureBuilder
     private void WriteNote(FxNote note)
     {
         var hasEffects = note.GraceFret.HasValue || note.LetRing || note.Slide.HasValue ||
-                         note.TremoloPicking || note.TrillUpperFret.HasValue || note.Staccato || note.PalmMute;
+                         note.TremoloPicking || note.TrillUpperFret.HasValue || note.Staccato || note.PalmMute ||
+                         note.HammerOrigin;
         var bitmask = 0x20 | (hasEffects ? 0x08 : 0); // 0x20 => note type + fret present
         if (note.Accent) bitmask |= 0x40;             // flag-only accent bit
         if (note.LeftFinger.HasValue) bitmask |= 0x80; // fingering block present
@@ -491,7 +500,7 @@ internal sealed class LegacyGpFixtureBuilder
 
     private void WriteNoteEffects(FxNote note)
     {
-        var fx1 = (note.GraceFret.HasValue ? 0x10 : 0) | (note.LetRing ? 0x08 : 0);
+        var fx1 = (note.GraceFret.HasValue ? 0x10 : 0) | (note.LetRing ? 0x08 : 0) | (note.HammerOrigin ? 0x02 : 0);
         // The slide VALUE lives behind fx2 bit 0x08 and only exists from GP4 on
         // (GP3 has a flag-only slide in fx1 and no value byte at all). Tremolo
         // PICKING (0x04) and the trill (0x20) are GP4+ only for the same reason.

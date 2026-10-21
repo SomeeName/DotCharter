@@ -607,7 +607,7 @@ public partial class SoundQueueViewModel : ViewModelBase
     /// <summary>
     ///     The level the charter is looking at.
     ///     <para>
-    ///         This is not <c>arr.Levels.FirstOrDefault()</c> — level 0, the
+    ///         This is not the arrangement's first level — level 0, the
     ///         THINNEST difficulty, not the one being edited. On any multi-level
     ///         chart (every multi-level package import, and everything after Tools →
     ///         Generate Levels, which deliberately leaves the editor on level
@@ -617,7 +617,7 @@ public partial class SoundQueueViewModel : ViewModelBase
     ///         the wrong level.
     ///     </para>
     ///     <para>
-    ///         Falls back to the first level when the ambient level is null or
+    ///         Falls back to the HARDEST level (<see cref="ChartLevels.Hardest" />) when the ambient level is null or
     ///         belongs to some OTHER arrangement: the two seams are read
     ///         independently and can disagree for a dispatcher turn during an
     ///         arrangement switch, and a queue over a level this arrangement does
@@ -628,6 +628,6 @@ public partial class SoundQueueViewModel : ViewModelBase
     {
         if (arr == null) return null;
         var level = _level();
-        return level != null && arr.Levels.Contains(level) ? level : arr.Levels.FirstOrDefault();
+        return level != null && arr.Levels.Contains(level) ? level : ChartLevels.Hardest(arr);
     }
 }

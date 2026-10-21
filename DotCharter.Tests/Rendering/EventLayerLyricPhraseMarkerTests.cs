@@ -77,7 +77,7 @@ public sealed class EventLayerLyricPhraseMarkerTests
             StringCount = 6,
             DrawLabels = true,
             RendererPixelsPerMs = Zoom,
-            Ribbon = new RibbonLayout(true, true, true, showLyrics, true),
+            Ribbon = new RibbonLayout(showLyrics ? RibbonLanes.All : RibbonLanes.All & ~RibbonLanes.Lyrics),
             Snapshot = snapshot
         };
 
@@ -153,7 +153,7 @@ public sealed class EventLayerLyricPhraseMarkerTests
     {
         // Full-height lines mean sections / guitar phrases; a VOCAL phrase stays in its row.
         var batcher = Render([PhraseAt(2, 6, "la", "la")]);
-        var ribbon = new RibbonLayout(true, true, true, true, true);
+        var ribbon = new RibbonLayout(RibbonLanes.All);
         XsOf(batcher, EventLayer.LyricPhraseRegionFill, out var ys);
 
         Assert.NotEmpty(ys);

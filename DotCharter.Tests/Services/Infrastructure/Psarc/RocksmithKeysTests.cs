@@ -66,7 +66,7 @@ public sealed partial class RocksmithKeysTests
         {
             var values = XDocument.Load(Path.Combine(TestPaths.RepoRoot(), "DotCharter.Localization", $"Resources{culture}.resx"))
                 .Root!.Elements("data").ToDictionary(d => (string)d.Attribute("name")!, d => (string?)d.Element("value"));
-            foreach (var key in new[] { EncryptedUnreadableKey, "Dialog_Export_WrittenUnencrypted" })
+            foreach (var key in new[] { EncryptedUnreadableKey, "Dialog_Export_PlainPackageWarning" })
                 Assert.False(string.IsNullOrWhiteSpace(values.GetValueOrDefault(key)), $"{key} is missing from Resources{culture}.resx");
         }
 

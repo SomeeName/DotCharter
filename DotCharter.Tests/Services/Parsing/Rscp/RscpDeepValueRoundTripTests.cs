@@ -222,6 +222,27 @@ internal static class RichProjectFactory
         project.VocalTracks.Add(vocals);
 
         project.Arrangements.Add(BuildArrangement());
+
+        // Linked measures: the first two bars of the hardest level are both empty 4/4 bars, so they
+        // hold equal copies and the load check keeps the link (a link the check would unlink could
+        // not round-trip).
+        var link = new LinkGroup
+        {
+            Id = "0123456789abcdef0123456789abcdef",
+            Letter = "B",
+            Name = "Intro riff",
+            Rule = DotCharter.Core.Linking.MeasureContentOptions.Detection.Header()
+        };
+        foreach (var start in new[] { 0, 4 })
+        {
+            link.Placements.Add(new LinkPlacement
+            {
+                Arrangement = project.Arrangements[0],
+                Position = new FractionalPosition(start),
+                EndPosition = new FractionalPosition(start + 4)
+            });
+        }
+        project.LinkGroups.Add(link);
         return project;
     }
 

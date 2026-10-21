@@ -43,10 +43,15 @@ public class EventLayer : ITimelineRenderLayer
     private int _pinSection = -1;
     private int _pinPhrase = -1;
 
+    // This frame's ribbon: its density decides the chip height and inset,
+    // so every chip, hit rect and drop-line start reads it from here.
+    private RibbonLayout _ribbon = RibbonLayout.Default;
+
     public void Render(TimelineBatcher batcher, ChartRenderContext rc)
     {
         if (!rc.DrawLabels) return;
 
+        _ribbon = rc.Ribbon;
         _polish = Timeline2DVisuals.PolishEnabled;
         _activeSectionTime = FindActiveSectionTime(rc);
         FindPins(rc);
@@ -114,7 +119,7 @@ public class EventLayer : ITimelineRenderLayer
             }
 
             DrawDashedVerticalLine(batcher, x,
-                RibbonLayout.BarBottomIn(rc.Ribbon.ToneY),
+                rc.Ribbon.BarBottom(rc.Ribbon.ToneY),
                 (float)rc.Height,
                 ChartEditorConstants.RenderMetrics.EventLineThickness,
                 ToneLineCol);
@@ -160,7 +165,7 @@ public class EventLayer : ITimelineRenderLayer
         // groups syllables of one word. LyricPillLayout sizes each pill and
         // stops it before the next syllable, so short syllables never overlap.
         const float defaultEndMs = (float)LyricPillMetrics.DefaultDurationMs;
-        var height = RibbonLayout.BarHeight;
+        var height = rc.Ribbon.Bar;
 
         for (var i = 0; i < rc.Snapshot.LyricPhraseCount; i++)
         {
@@ -180,7 +185,7 @@ public class EventLayer : ITimelineRenderLayer
                 var pill = LyricPillLayout.Layout(startX, endX, NextSyllableX(rc, i, w),
                     batcher.MeasureTextWidth(word.Text));
                 var width = pill.Width;
-                var pillY = RibbonLayout.BarTopIn(rc.Ribbon.LyricY);
+                var pillY = rc.Ribbon.BarTop(rc.Ribbon.LyricY);
 
                 if (word.IsWordPart && w + 1 < phrase.WordCount)
                 {
@@ -259,8 +264,10 @@ public class EventLayer : ITimelineRenderLayer
         // Squeezed to nothing by the next phrase (LyricPillLayout.PhraseRegion): no band, and no accent.
         if (x1 <= x0) return;
 
-        var y = RibbonLayout.BarTopIn(rc.Ribbon.LyricY) - 2f;
-        var h = RibbonLayout.BarHeight + 4f;
+        // The whole row less a half-pixel inset each side: at normal density that is
+        // exactly the chip grown by 2 px each way, and it stays inside a compact row.
+        var y = rc.Ribbon.LyricY + 0.5f;
+        var h = rc.Ribbon.RowPitch - 1f;
         const float radius = 5f;
         batcher.AddRoundRect(x0, y, x1 - x0, h, radius, LyricPhraseRegionFill);
         batcher.AddRect(x0 + 1f, y + 4f, 2f, h - 8f, LyricPhraseRegionAccent);
@@ -394,7 +401,7 @@ public class EventLayer : ITimelineRenderLayer
     ///         It must not be restated at each of the three call sites as
     ///         <c>new Rect(x, rowY, MeasureTextWidth(text) + 12, BarHeight)</c> and
     ///         both numbers would be wrong: the chip is drawn at
-    ///         <see cref="RibbonLayout.BarTopIn" /> (rowY + 2.5, the row's own
+    ///         <see cref="RibbonLayout.BarTop" /> (rowY + 2.5, the row's own
     ///         centring inset), and <c>DrawBadge</c> pads the text by
     ///         9 px per SIDE, so that rect would sit 2.5 px above the badge and stop
     ///         6 px short of its right edge. Clicking the bottom-right of a
@@ -402,8 +409,8 @@ public class EventLayer : ITimelineRenderLayer
     ///         handler and create an event instead of opening the one clicked.
     ///     </para>
     /// </summary>
-    private static Rect PinnedRect(float x, float rowY, float w)
-        => new(x, RibbonLayout.BarTopIn(rowY), w, RibbonLayout.BarHeight);
+    private Rect PinnedRect(float x, float rowY, float w)
+        => new(x, _ribbon.BarTop(rowY), w, _ribbon.Bar);
 
     private void DrawEventPoint(TimelineBatcher batcher, ChartRenderContext rc, RenderEventPoint ev, bool isPreview,
         bool pinnedSection, bool pinnedPhrase, bool proposal = false)
@@ -424,7 +431,7 @@ public class EventLayer : ITimelineRenderLayer
             {
                 if (!rc.Ribbon.ShowTones) return;
                 DrawDashedVerticalLine(batcher, x,
-                    RibbonLayout.BarBottomIn(rc.Ribbon.ToneY),
+                    rc.Ribbon.BarBottom(rc.Ribbon.ToneY),
                     (float)rc.Height,
                     ChartEditorConstants.RenderMetrics.EventLineThickness, ToneLineCol);
                 var previewBg = Color.FromArgb(150, ToneFill.R, ToneFill.G, ToneFill.B);
@@ -435,7 +442,7 @@ public class EventLayer : ITimelineRenderLayer
                 if (!rc.Ribbon.ShowSections) goto AfterSection;
                 // Coloured by NAME, like the song map (SectionColors).
                 DrawDashedVerticalLine(batcher, x,
-                    RibbonLayout.BarBottomIn(rc.Ribbon.SectionY),
+                    rc.Ribbon.BarBottom(rc.Ribbon.SectionY),
                     (float)rc.Height,
                     ChartEditorConstants.RenderMetrics.EventLineThickness,
                     proposal ? Proposal(150) : SectionColors.DropLine());
@@ -461,7 +468,7 @@ public class EventLayer : ITimelineRenderLayer
         if (!string.IsNullOrEmpty(ev.Phrase) && rc.Ribbon.ShowPhrases)
         {
             DrawDashedVerticalLine(batcher, x,
-                RibbonLayout.BarBottomIn(rc.Ribbon.PhraseY),
+                rc.Ribbon.BarBottom(rc.Ribbon.PhraseY),
                 (float)rc.Height,
                 ChartEditorConstants.RenderMetrics.EventLineThickness, proposal ? Proposal(150) : PhraseLineCol);
             var bg = proposal ? Proposal(235)
@@ -519,8 +526,8 @@ public class EventLayer : ITimelineRenderLayer
     {
         var w = BadgeWidth(batcher, text);
         DrawChip(batcher, x, rowY, w, bgBrush, selected);
-        var y = RibbonLayout.BarTopIn(rowY);
-        batcher.AddText(text, x + BadgeHPad, y + RibbonLayout.BarHeight * 0.5f, textBrush, centerY: true);
+        var y = _ribbon.BarTop(rowY);
+        batcher.AddText(text, x + BadgeHPad, y + _ribbon.Bar * 0.5f, textBrush, centerY: true);
         return w;
     }
 
@@ -536,11 +543,11 @@ public class EventLayer : ITimelineRenderLayer
     /// offset shadow, no hairline border drawn as four straight strips (which notch the corners)
     /// and no light stripe on pinned badges; at 20 px high all three read as smudge, not depth.
     /// </summary>
-    private static void DrawChip(TimelineBatcher batcher, float x, float rowY, float w, Color fill, bool selected)
+    private void DrawChip(TimelineBatcher batcher, float x, float rowY, float w, Color fill, bool selected)
     {
-        var h = RibbonLayout.BarHeight;
+        var h = _ribbon.Bar;
         const float radius = 4f;
-        var y = RibbonLayout.BarTopIn(rowY);
+        var y = _ribbon.BarTop(rowY);
         var solid = OnLane(fill);
 
         if (selected)

@@ -96,6 +96,10 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
                 _prompt, Game);
         }
 
+        /// <summary>Records the folder and chart the dialog asked a DLC Builder project for; writes nothing unless a test swaps it.</summary>
+        public DotCharter.Services.Export.DlcBuilder.IDlcBuilderProjectWriter DlcBuilderWriter { get; set; } =
+            DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Services.Export.DlcBuilder.IDlcBuilderProjectWriter>().Proxy;
+
         /// <summary>The running-game answer a test export asks; closed unless a test opens it.</summary>
         public FakeGameProbe Game { get; } = new();
 
@@ -120,7 +124,7 @@ public sealed class RocksmithExportDialogViewModelTests : IDisposable
 
         public RocksmithExportViewModel Open()
         {
-            _vm = new RocksmithExportViewModel(_services, _io, Dialogs, Memory, _maintenance);
+            _vm = new RocksmithExportViewModel(_services, _io, Dialogs, Memory, _maintenance, DlcBuilderWriter);
             _prompt.Observe = () => _vm.IsBuilding;
             return _vm;
         }

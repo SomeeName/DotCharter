@@ -90,9 +90,13 @@ internal static class FakeRelease
 /// </summary>
 internal static class FakeReleaseHttp
 {
+    /// <summary>Pass as <c>signature</c> to serve a release with no signature asset.</summary>
+    public const string Unsigned = "<unsigned>";
+
     public const string AssetUrl = "https://api.github.com/repos/o/r/releases/assets/1";
     public const string ManifestUrl = "https://api.github.com/repos/o/r/releases/assets/2";
     public const string ChecksumUrl = "https://api.github.com/repos/o/r/releases/assets/3";
+    public const string SignatureUrl = "https://api.github.com/repos/o/r/releases/assets/4";
 
     /// <summary>A <c>sha256sum</c>-format manifest over the given assets.</summary>
     public static string Digests(params (string Name, byte[] Bytes)[] assets)
@@ -101,7 +105,11 @@ internal static class FakeReleaseHttp
     /// <summary>
     ///     <paramref name="checksums" /> is the <c>SHA256SUMS.txt</c> body, or null
     ///     for a release that publishes none — which a modern release may not do,
-    ///     and being able to SAY that is the point of the parameter.
+    ///     and being able to SAY that is the point of the parameter. It is served
+    ///     the way <c>New-Release.ps1</c> publishes it: bound to <paramref name="tag" />
+    ///     and signed with <see cref="TestReleaseSigning" />'s key, unless
+    ///     <paramref name="signature" /> says otherwise (<see cref="Unsigned" /> for
+    ///     none at all).
     /// </summary>
     public static FakeHttpMessageHandler Serve(
         string tag,
@@ -109,8 +117,13 @@ internal static class FakeReleaseHttp
         byte[] assetZip,
         byte[]? manifestBytes = null,
         string? checksums = null,
-        bool honourRanges = true)
+        bool honourRanges = true,
+        string? signature = null)
     {
+        if (checksums != null) checksums = TestReleaseSigning.Bind(checksums, tag);
+        var sig = checksums == null ? null : signature ?? TestReleaseSigning.Sign(checksums);
+        if (sig == Unsigned) sig = null;
+
         var assets = new List<string>
         {
             $$"""{"name":"{{assetName}}","url":"{{AssetUrl}}","size":{{assetZip.Length}}}"""
@@ -123,6 +136,8 @@ internal static class FakeReleaseHttp
 
         if (checksums != null)
             assets.Add($$"""{"name":"SHA256SUMS.txt","url":"{{ChecksumUrl}}","size":{{checksums.Length}}}""");
+        if (sig != null)
+            assets.Add($$"""{"name":"SHA256SUMS.txt.sig","url":"{{SignatureUrl}}","size":{{sig.Length}}}""");
 
         var releaseJson = $$"""{"tag_name":"{{tag}}","assets":[{{string.Join(",", assets)}}]}""";
 
@@ -149,6 +164,14 @@ internal static class FakeReleaseHttp
                 };
             }
 
+            if (url == SignatureUrl && sig != null)
+            {
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(sig, Encoding.ASCII)
+                };
+            }
+
             if (url == ChecksumUrl)
             {
                 return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
@@ -162,6 +185,32 @@ internal static class FakeReleaseHttp
 
         return handler;
     }
+}
+
+/// <summary>
+///     The release-signing key of the tests: a fixed Ed25519 key that is NOT
+///     the pinned one, so a test service is built with
+///     <c>releaseSigningKey: TestReleaseSigning.PublicKey</c> and the fakes sign
+///     what they serve with it.
+/// </summary>
+internal static class TestReleaseSigning
+{
+    public static readonly byte[] PrivateKey = SHA256.HashData(Encoding.ASCII.GetBytes("dotcharter test release key"));
+
+    public static readonly byte[] PublicKey = ReleaseSignature.PublicKeyOf(PrivateKey);
+
+    /// <summary>A second key: what an attacker with the release page but not the key signs with.</summary>
+    public static readonly byte[] OtherPrivateKey = SHA256.HashData(Encoding.ASCII.GetBytes("somebody else"));
+
+    /// <summary>Appends the <c># release:</c> line New-Release.ps1 writes, unless the
+    /// body already carries one.</summary>
+    public static string Bind(string checksums, string tag)
+        => checksums.Contains(ReleaseSignature.ReleaseLinePrefix, StringComparison.Ordinal)
+            ? checksums
+            : checksums.TrimEnd('\n') + "\n" + ReleaseSignature.ReleaseLine(tag) + "\n";
+
+    public static string Sign(string checksums, byte[]? privateKey = null)
+        => ReleaseSignature.Sign(Encoding.ASCII.GetBytes(checksums), privateKey ?? PrivateKey);
 }
 
 /// <summary>A scratch directory that cleans itself up.</summary>

@@ -341,15 +341,15 @@ public sealed class RocksmithPackageBuilder
         // package is plain — the export dialog says so before the export starts.
         if (!plain && !RocksmithKeys.CanWriteEncrypted)
         {
-            warnings.Add("Written as a PLAIN package (unencrypted): it loads only with the CDLC enabler's " +
-                         "plain-PSARC support.");
+            warnings.Add("Written as a PLAIN package (unencrypted): it loads only with the RS7String " +
+                         "7-string mod.");
             return true;
         }
 
         if (plain)
         {
             warnings.Add("Written as a PLAIN package (unencrypted, as asked): it loads only with " +
-                         "the CDLC enabler's plain-PSARC support.");
+                         "the RS7String 7-string mod.");
         }
 
         return plain;

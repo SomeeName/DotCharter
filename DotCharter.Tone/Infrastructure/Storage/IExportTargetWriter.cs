@@ -21,6 +21,10 @@ public interface IExportTargetWriter
     void WriteAllBytes(string path, byte[] bytes);
     byte[] ReadAllBytes(string path);
     Task<string> ReadAllTextAsync(string path);
+
+    /// <summary>The size of <paramref name="path" /> in bytes, so an import can
+    /// refuse an oversized file before it is read whole.</summary>
+    long FileLength(string path) => new FileInfo(path).Length;
     Task WriteAllTextAsync(string path, string text);
 
     /// <summary>Creates the parent folder when missing, then creates (or
@@ -51,6 +55,8 @@ public sealed class ExportTargetWriter : IExportTargetWriter
     public void WriteAllBytes(string path, byte[] bytes) => File.WriteAllBytes(path, bytes);
 
     public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
+
+    public long FileLength(string path) => new FileInfo(path).Length;
 
     public Task<string> ReadAllTextAsync(string path) => File.ReadAllTextAsync(path);
 

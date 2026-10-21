@@ -128,14 +128,20 @@ Fill in the pull request template. In short:
   relevant `AGENTS.md` / `docs/agents/` guide in the same change, and let the
   pull request description be the report.
 
-CI does not run on push; a maintainer starts it by hand. Your local gate and
-headless numbers are what the review relies on.
+CI runs on every push to `main` and every pull request here (the private
+development repository runs the same workflow only by hand). Your local gate and
+headless numbers are still what the review relies on.
 
 ## Dependencies
 
 Every NuGet version lives in `Directory.Packages.props` (Central Package
 Management); a `.csproj` names the package and never the version. To bump or add
-a package, edit that one file, rebuild and run the gate. Adding a package also
+a package, edit that one file, rebuild and run the gate, and commit the
+`packages.lock.json` files the build updated: they pin every package (transitive
+ones too) by version and content hash, and CI restores with `--locked-mode`, so a
+stale lock file fails CI. With a plugin in `plugins/`, refresh them with a
+plugin-free restore: `dotnet restore DotCharter.sln -p:DotCharterPlugins=false
+--force-evaluate` (a plugin build keeps its own lock under `obj/`). Adding a package also
 means regenerating the licence inventory with
 `tools/release/Update-DependencyInventory.ps1` (`-Check` fails when
 `licenses/dependencies.json` is stale). Dependabot opens a weekly pull request

@@ -158,6 +158,21 @@
                     Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
             </MenuItem.Icon>
         </MenuItem>
+        <!-- Links the selected measures with every run that plays the same (linked measures). -->
+        <MenuItem Header="{localization:Loc LinkIdentical_Title}"
+                  Command="{Binding ChartEditor.LinkedMeasures.LinkIdenticalCommand, FallbackValue={x:Null}}"
+                  ToolTip.Tip="{localization:Loc LinkIdentical_Tip}">
+            <MenuItem.Icon>
+                <PathIcon Data="{DynamicResource IconLink}" Width="14" Height="14"
+                          Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="{localization:Loc Menu_LinkedMeasures}" Command="{Binding ShellDialogs.OpenLinkGroupsCommand}"
+                  ToolTip.Tip="{localization:Loc Menu_LinkedMeasures_Tip}">
+            <MenuItem.Icon>
+                <PathIcon Data="{DynamicResource IconLink}" Width="14" Height="14" Foreground="{DynamicResource TextMuted}" />
+            </MenuItem.Icon>
+        </MenuItem>
         <Separator />
         <MenuItem Header="{localization:Loc Menu_GenerateLevels}"
                   Command="{Binding ShellDialogs.OpenLevelGenerationCommand}"

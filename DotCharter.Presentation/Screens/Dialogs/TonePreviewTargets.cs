@@ -61,7 +61,7 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
         session.StateChanged += _sessionRelay;
         ReconnectCommand = new AsyncRelayCommand(ReconnectAsync);
         LaunchCommand = new AsyncRelayCommand(LaunchAsync);
-        if (session.State != TonelabSessionState.Ready) _ = ProbeAsync(session, logger);
+        InitialProbe = session.State != TonelabSessionState.Ready ? ProbeAsync(session, logger) : Task.CompletedTask;
     }
 
     /// <summary>Raised on the UI thread when the target the preview goes to changes.</summary>
@@ -139,6 +139,9 @@ public sealed class TonePreviewTargets : ObservableObject, IToneDesignerPreviewT
     internal ITonePreviewTarget Current => _isInGame ? _inGame : Clone;
 
     internal TonelabTonePreview InGame => _inGame;
+
+    /// <summary>The off-thread availability probe started at construction (completed when none was needed); lets a test await it.</summary>
+    internal Task InitialProbe { get; }
 
     /// <summary>The chosen target's availability: the rig needs the native chain, the game a ready session.</summary>
     public bool IsAvailable => Current.IsAvailable;

@@ -52,6 +52,13 @@ public static class Tone3000OAuth
         $"&code_challenge_method=S256" +
         $"&state={Uri.EscapeDataString(state)}";
 
+    /// <summary>Whether a loopback request's query string carries the state this
+    /// sign-in generated. The listener's gate: a request without it is not ours and
+    /// does not end the wait.</summary>
+    public static bool CarriesState(string? query, string expectedState) =>
+        string.Equals(HttpUtility.ParseQueryString(query ?? string.Empty).Get("state"),
+            expectedState, StringComparison.Ordinal);
+
     /// <summary>
     ///     Parses the loopback redirect's query string ("?code=…&amp;state=…").
     ///     Returns the authorization code, or null with <paramref name="error"/>

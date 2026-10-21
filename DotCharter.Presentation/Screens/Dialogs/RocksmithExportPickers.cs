@@ -45,8 +45,8 @@ internal sealed class RocksmithExportPickers(ChartEditDialogServices edit, Rocks
         return path;
     }
 
-    public Task<string?> FolderAsync(string start) =>
-        io.Storage.OpenFolderPickerAsync(edit.Localization["Picker_SelectTestFolder"], start);
+    public Task<string?> FolderAsync(string start, string titleKey = "Picker_SelectTestFolder") =>
+        io.Storage.OpenFolderPickerAsync(edit.Localization[titleKey], start);
 }
 
 /// <summary>Where a test export goes and what it changes on the private copy of the chart it builds.</summary>

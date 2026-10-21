@@ -52,7 +52,8 @@ DotCharter additive extensions, appended after that order:
 `dcWriterVersion`, `dcJapaneseTitle`, `dcJapaneseArtist`, `dcCharter`,
 `dcGenre`, `dcReleaseDate`, `dcCoverArt`, `dcBeatMapLocked`,
 `dcKeyAccidentals`, `dcKeyIsMinor`, `dcAnnotations`, `dcToneDefinitions`,
-`dcNotationVoices`, `dcSynthPlayStyle`, `dcProjectId`, `dcProvenance`, `dcVersion`.
+`dcNotationVoices`, `dcSynthPlayStyle`, `dcProjectId`, `dcProvenance`, `dcVersion`,
+`dcLinkGroups`.
 <!-- frozen-root-elements: end -->
 
 **The `<project>` root carries NO attributes**, and that is frozen too
@@ -235,6 +236,37 @@ examples, and they are the shape to copy:
 sentinel is the ABSENT attribute, chosen because both readers already default a
 missing attribute to `-1`, so absence and the intended meaning coincide and
 writing `-1` would break RsCharter outright.
+
+## Linked measures — `dcLinkGroups` (#76)
+
+A link group keeps runs of whole measures equal across their copies. **The copies are real**:
+every placement's notes stay in its arrangement's levels, so the node only names the runs
+(`RscpLinkGroups`):
+
+```xml
+<dcLinkGroups v="1">
+  <linkGroup id="…" letter="A" name="Chorus" rule="mc2;det;mf64;snap5;AHF" hash="…">
+    <linkPlacement arr="0" p="16" ep="32"/>
+  </linkGroup>
+</dcLinkGroups>
+```
+
+- `arr` is the arrangement's index, `p`/`ep` the run's barlines (positions, like every
+  other position in the file). `rule` is the comparison rule the copies are held equal
+  under (`MeasureContentOptions.Header`, self-describing: format version, spacing gap,
+  what is compared), `hash` the content hash of the copies under that rule. `v` is the
+  node's own version: the node is new DATA, so `chartFormatVersion` does not move (see
+  the versioning policy below); a reader that does not know `v` keeps no links from it.
+- **An older build** reads the whole chart (the copies are plain notes) and keeps the
+  node verbatim as residue (above). It does not keep the copies equal, so:
+- **The load check** (`LinkGroupVerifier`, run by `RscpChartSerializer.Load`): every copy
+  is compared under the stored rule; the copies whose content matches the stored hash stay
+  linked, every other copy is UNLINKED with its content kept (copies still equal to each
+  other keep a group of their own), and the load logs a warning per group. A placement
+  whose arrangement index is out of range, whose barlines are not barlines any more, or
+  that overlaps another is dropped the same way. Pinned by
+  `RscpLinkGroupsTests.An_older_build_keeps_the_node_and_a_copy_it_edited_is_unlinked_on_load`.
+- RsCharter, EOF, RS XML and Guitar Pro do not carry links; the export writes plain copies.
 
 ## Round-trip stability (same build, between machines)
 

@@ -28,6 +28,7 @@ public sealed class HeadlessVulkanTimelineRenderer : IDisposable
     {
         _renderer = new Timeline2DHeadlessRenderer(width, height);
         _batcher.FontAtlas = _renderer.FontAtlas;
+        _renderer.FontAtlas.RegisterCharacters(LinkLayer.Glyphs);
     }
 
     public int Width => _renderer.Width;
@@ -55,6 +56,7 @@ public sealed class HeadlessVulkanTimelineRenderer : IDisposable
             new HandShapeLayer(),
             new FretAnchorLayer(),
             new NoteLayer(),
+            new LinkLayer(),
             new PlayheadLayer()
         };
     }

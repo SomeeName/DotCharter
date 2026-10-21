@@ -37,6 +37,9 @@
         <PackageReference Include="AlphaTab" />
         <PackageReference Include="Anthropic" />
         <PackageReference Include="Avalonia" />
+        <!-- Ed25519 verification of the release signature (Update/ReleaseSignature):
+             .NET 10 has no built-in Ed25519. Pure managed, MIT. -->
+        <PackageReference Include="BouncyCastle.Cryptography" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <!-- 0.12.0 library index (library-index.db). The explicit SQLitePCLRaw
              bundle overrides Microsoft.Data.Sqlite's 2.1.11 transitive pin,

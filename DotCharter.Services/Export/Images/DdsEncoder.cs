@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using DotCharter.Services.Infrastructure;
 using SkiaSharp;
 
 namespace DotCharter.Services.Export.Images;
@@ -105,9 +106,20 @@ public static class DdsEncoder
         return results;
     }
 
-    private static SKBitmap Decode(string sourceImagePath) =>
-        SKBitmap.Decode(sourceImagePath)
-        ?? throw new InvalidDataException($"Could not decode image: {sourceImagePath}");
+    private static SKBitmap Decode(string sourceImagePath)
+    {
+        // The probe runs before the decoder is asked to allocate: the source is a
+        // picture a package or a charter supplied, and its declared size is the
+        // allocation, however few bytes it takes on disk.
+        if (!ImageHeaderProbe.IsDecodable(sourceImagePath))
+        {
+            throw new InvalidDataException(
+                $"Image is unreadable or declares dimensions beyond {ImageHeaderProbe.MaxDecodeDimension} px: {sourceImagePath}");
+        }
+
+        return SKBitmap.Decode(sourceImagePath)
+               ?? throw new InvalidDataException($"Could not decode image: {sourceImagePath}");
+    }
 
     private static byte[] EncodeCoverArt(SKBitmap source, int size, string sourceImagePath)
     {

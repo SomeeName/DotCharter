@@ -30,6 +30,11 @@ public class RscpArrangementParser
     /// so nothing downstream turns it back into an offset.</summary>
     internal const string UnknownStringName = "?";
 
+    /// <summary>The highest capo fret read from a file. A capo only feeds arithmetic,
+    /// but a garbage value (two billion) would overflow it; a real capo sits on the
+    /// fretboard.</summary>
+    internal const int MaxCapo = 24;
+
     public void ParseArrangements(XDocument doc, ChartProject project)
     {
         var arrangementsRootNode = doc.Root?.Element("arrangements");
@@ -90,9 +95,9 @@ public class RscpArrangementParser
                 if (soundsNode != null)
                 {
                     foreach (var noteNode in soundsNode.Elements("soundNote"))
-                        voice.Notes.Add(ParseGuitarNote(noteNode));
+                        voice.Notes.Add(ParseGuitarNote(noteNode, arr.StringCount));
                     foreach (var chordNode in soundsNode.Elements("soundChord"))
-                        voice.Chords.Add(ParseChord(chordNode, templates));
+                        voice.Chords.Add(ParseChord(chordNode, templates, arr.StringCount));
                 }
 
                 if (voice.Notes.Count > 0 || voice.Chords.Count > 0)
@@ -119,7 +124,9 @@ public class RscpArrangementParser
             Name = arrNode.Attribute("name")?.Value ?? aType.ToString(),
             ArrangementType = aType,
             Subtype = aSub,
-            Capo = int.TryParse(arrNode.Attribute("capo")?.Value, CultureInfo.InvariantCulture, out var capo) ? capo : 0,
+            Capo = int.TryParse(arrNode.Attribute("capo")?.Value, CultureInfo.InvariantCulture, out var capo)
+                ? Math.Clamp(capo, 0, MaxCapo)
+                : 0,
             CentOffset = double.TryParse(arrNode.Attribute("centOffset")?.Value, NumberStyles.Any,
                 CultureInfo.InvariantCulture, out var cent) ? cent : 0,
             // Absent (or unparseable) stays null = "the author said nothing", which
@@ -155,10 +162,10 @@ public class RscpArrangementParser
         ParseArrangementProperties(arrNode, arr);
         arr.Provenance = RscpProvenance.Parse(arrNode.Element(RscpProvenance.ArrangementElement)?.Value);
 
-        var templates = ParseChordTemplates(arrNode);
+        var templates = ParseChordTemplates(arrNode, stc);
         foreach (var t in templates) arr.ChordTemplates.Add(t);
 
-        foreach (var t in ParseChordTemplateContainer(arrNode.Element("dcFretHandMuteTemplates")))
+        foreach (var t in ParseChordTemplateContainer(arrNode.Element("dcFretHandMuteTemplates"), stc))
             arr.FretHandMuteTemplates.Add(t);
 
         var levelsNode = arrNode.Element("levels");
@@ -169,7 +176,7 @@ public class RscpArrangementParser
             {
                 var level = new ChartLevel { DifficultyIndex = i };
 
-                ParseLevelData(levelNode, level, templates);
+                ParseLevelData(levelNode, level, templates, stc);
 
                 var sortedNotes = level.Notes.OrderBy(n => n.Position).ToList();
                 level.Notes.Clear();
@@ -319,12 +326,12 @@ public class RscpArrangementParser
         }
     }
 
-    private List<ChordTemplate> ParseChordTemplates(XElement arrNode)
-        => ParseChordTemplateContainer(arrNode.Element("chordTemplates"));
+    private List<ChordTemplate> ParseChordTemplates(XElement arrNode, int stringCount)
+        => ParseChordTemplateContainer(arrNode.Element("chordTemplates"), stringCount);
 
     /// <summary>Parses every <c>chordTemplate</c> child of a container element.
     /// Shared by the regular template set and the fret-hand-mute set.</summary>
-    private List<ChordTemplate> ParseChordTemplateContainer(XElement? templatesNode)
+    private List<ChordTemplate> ParseChordTemplateContainer(XElement? templatesNode, int stringCount)
     {
         var templates = new List<ChordTemplate>();
 
@@ -355,8 +362,11 @@ public class RscpArrangementParser
                 foreach (var pair in fretsAttr.Split(',', StringSplitOptions.RemoveEmptyEntries))
                 {
                     var parts = pair.Split('=');
-                    if (parts.Length == 2 && int.TryParse(parts[0], CultureInfo.InvariantCulture, out var s) && int.TryParse(parts[1], CultureInfo.InvariantCulture, out var f))
+                    if (parts.Length == 2 && int.TryParse(parts[0], CultureInfo.InvariantCulture, out var s) &&
+                        s >= 0 && s < stringCount && int.TryParse(parts[1], CultureInfo.InvariantCulture, out var f))
+                    {
                         template.Frets[s] = f;
+                    }
                 }
 
                 var fingersAttr = ctNode.Attribute("fingers")?.Value ?? "";
@@ -365,6 +375,7 @@ public class RscpArrangementParser
                     var parts = pair.Split('=');
                     if (parts.Length == 2 &&
                         int.TryParse(parts[0], CultureInfo.InvariantCulture, out var s) &&
+                        s >= 0 && s < stringCount &&
                         int.TryParse(parts[1], CultureInfo.InvariantCulture, out var f) &&
                         ChordTemplate.FingerNames.ContainsKey(f))
                     {
@@ -379,12 +390,12 @@ public class RscpArrangementParser
         return templates;
     }
 
-    private void ParseLevelData(XElement levelNode, ChartLevel level, List<ChordTemplate> templates)
+    private void ParseLevelData(XElement levelNode, ChartLevel level, List<ChordTemplate> templates, int stringCount)
     {
         ParseAnchors(levelNode, level);
         ParseHandShapes(levelNode, level);
         ParseFretHandMutes(levelNode, level);
-        ParseSounds(levelNode, level, templates);
+        ParseSounds(levelNode, level, templates, stringCount);
     }
 
     /// <summary>Per-level fret-hand-mute positions (DotCharter extension node).
@@ -433,25 +444,25 @@ public class RscpArrangementParser
         }
     }
 
-    private void ParseSounds(XElement levelNode, ChartLevel level, List<ChordTemplate> templates)
+    private void ParseSounds(XElement levelNode, ChartLevel level, List<ChordTemplate> templates, int stringCount)
     {
         var soundsNode = levelNode.Element("sounds");
         if (soundsNode == null) return;
 
         foreach (var noteNode in soundsNode.Elements("soundNote"))
         {
-            var note = ParseGuitarNote(noteNode);
+            var note = ParseGuitarNote(noteNode, stringCount);
             level.Notes.Add(note);
         }
 
         foreach (var chordNode in soundsNode.Elements("soundChord"))
         {
-            var chord = ParseChord(chordNode, templates);
+            var chord = ParseChord(chordNode, templates, stringCount);
             level.Chords.Add(chord);
         }
     }
 
-    private GuitarNote ParseGuitarNote(XElement noteNode)
+    private GuitarNote ParseGuitarNote(XElement noteNode, int stringCount)
     {
         var pos = RscpParsingUtilities.ParseFraction(noteNode.Attribute("p")?.Value);
         var endPos = RscpParsingUtilities.ParseFraction(noteNode.Attribute("ep")?.Value);
@@ -460,7 +471,7 @@ public class RscpArrangementParser
         {
             Position = pos,
             Sustain = FractionalPosition.Max(FractionalPosition.Zero, endPos - pos),
-            StringIndex = ParseIntAttribute(noteNode, "string", 0),
+            StringIndex = ParseStringIndex(noteNode, stringCount),
             Fret = ParseIntAttribute(noteNode, "fret", 0),
             Accent = noteNode.Attribute("accent")?.Value == "T",
             Ignore = noteNode.Attribute("ignore")?.Value == "T",
@@ -505,7 +516,7 @@ public class RscpArrangementParser
         _ => PickDirectionType.None
     };
 
-    private Chord ParseChord(XElement chordNode, List<ChordTemplate> templates)
+    private Chord ParseChord(XElement chordNode, List<ChordTemplate> templates, int stringCount)
     {
         var pos = RscpParsingUtilities.ParseFraction(chordNode.Attribute("p")?.Value);
         var templateId = ParseIntAttribute(chordNode, "templateId", -1);
@@ -530,16 +541,17 @@ public class RscpArrangementParser
 
         foreach (var chordNoteNode in chordNode.Elements("chordNote"))
         {
-            var chordNote = ParseChordNote(chordNoteNode, pos, template);
+            var chordNote = ParseChordNote(chordNoteNode, pos, template, stringCount);
             chord.ChordNotes.Add(chordNote);
         }
 
         return chord;
     }
 
-    private ChordNote ParseChordNote(XElement chordNoteNode, FractionalPosition chordPos, ChordTemplate? template)
+    private ChordNote ParseChordNote(
+        XElement chordNoteNode, FractionalPosition chordPos, ChordTemplate? template, int stringCount)
     {
-        var stringIdx = ParseIntAttribute(chordNoteNode, "string", 0);
+        var stringIdx = ParseStringIndex(chordNoteNode, stringCount);
         var endPos = RscpParsingUtilities.ParseFraction(chordNoteNode.Attribute("ep")?.Value);
 
         var chordNote = new ChordNote
@@ -603,6 +615,15 @@ public class RscpArrangementParser
 
         return result;
     }
+
+    /// <summary>
+    ///     A note's <c>string</c> attribute, clamped into the arrangement (0 to
+    ///     <paramref name="stringCount" /> - 1). It lands in per-string arrays downstream, so an
+    ///     out-of-range value from a damaged or hostile file must not travel on as an index;
+    ///     clamping keeps the note (and the chord's note count) where rejecting would drop it.
+    /// </summary>
+    private static int ParseStringIndex(XElement element, int stringCount)
+        => Math.Clamp(ParseIntAttribute(element, "string", 0), 0, Math.Max(0, stringCount - 1));
 
     private static int ParseIntAttribute(XElement element, string name, int defaultValue)
     {

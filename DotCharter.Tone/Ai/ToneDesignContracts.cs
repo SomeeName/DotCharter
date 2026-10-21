@@ -55,8 +55,10 @@ public enum AiProviderKind
 /// the feature ON rather than silently losing it.</param>
 /// <param name="WebResearch">Whether a provider that CAN search the web (the Claude
 /// Code and Codex CLIs) may look a named song's recorded rig up before designing
-/// (<see cref="ToneDesignResearch" />). Default TRUE and additive, like
-/// <paramref name="UseLibraryTones" />. The API providers ignore it.</param>
+/// (<see cref="ToneDesignResearch" />). Default FALSE: the model reads text a project file may carry
+/// and a model with web tools can be steered into fetching an address, so the player opts in.
+/// The API providers ignore it, and the lanes that print project text into a prompt
+/// (<see cref="AiProviderResolution.Create" />) force it off.</param>
 /// <param name="Effort">How hard the model reasons before it answers:
 /// <see cref="AiReasoningEffort.Default" /> sends nothing and leaves it to the
 /// provider. ADDITIVE with a default, so a config written before it reads as
@@ -67,7 +69,7 @@ public sealed record AiProviderSettings(
     string ModelId,
     string? BaseUrl,
     bool UseLibraryTones = true,
-    bool WebResearch = true,
+    bool WebResearch = false,
     AiReasoningEffort Effort = AiReasoningEffort.Default)
 {
     public static AiProviderSettings Disabled { get; } = new(AiProviderKind.None, "", null);

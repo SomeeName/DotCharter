@@ -71,8 +71,9 @@ public sealed class DcSongLibrarySource : ILibraryPackageSource
 
     /// <summary>The library row of the package at <paramref name="path" />. Throws
     /// <see cref="DcSongReadException" /> for a package that is damaged, tampered or newer.</summary>
-    public IReadOnlyList<LibrarySongEntry> ReadForIndex(string path)
+    public IReadOnlyList<LibrarySongEntry> ReadForIndex(string path, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var package = DcSongPackage.Open(path);
         package.VerifyAll();
         var project = package.LoadChart(_logger);

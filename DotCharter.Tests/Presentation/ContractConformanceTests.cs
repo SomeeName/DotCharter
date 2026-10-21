@@ -138,6 +138,7 @@ public sealed class ContractConformanceTests
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Infrastructure.Shell.IBundledDocuments>().Proxy);
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Tone.Infrastructure.Shell.IShellLauncher>().Proxy);
         services.AddSingleton<DotCharter.Services.Package.DcSong.IDcSongExporter>(new Dialogs.FakeDcSongExporter());
+        services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Export.DlcBuilder.IDlcBuilderProjectWriter>().Proxy);
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Tone.Infrastructure.Shell.ISystemClipboard>().Proxy);
         services.AddSingleton<DotCharter.Services.Import.GuitarPro.GpImportApplier>();
         services.AddSingleton(Dialogs.RecordingProxy.Create<DotCharter.Services.Infrastructure.Recovery.ICrashRecoveryService>().Proxy);

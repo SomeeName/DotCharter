@@ -73,6 +73,39 @@ public sealed class SongCoverImageTests
     }
 
     [Fact]
+    public void TheGuard_RefusesACoverPastTheSharedCeiling_BeforeAnyDecode()
+    {
+        // Real PNGs, one pixel either side of the ceiling: the decoder would take
+        // both, so the verdict can only come from the header probe.
+        using var fine = new MemoryStream(TinyPng.Encode(8192, 1));
+        using var tooWide = new MemoryStream(TinyPng.Encode(8193, 1));
+        using var tooTall = new MemoryStream(TinyPng.Encode(1, 8193));
+        using var unknown = new MemoryStream(new byte[2048]);
+
+        Assert.True(SongCoverImage.DecodeGuard(fine));
+        Assert.False(SongCoverImage.DecodeGuard(tooWide));
+        Assert.False(SongCoverImage.DecodeGuard(tooTall));
+        Assert.False(SongCoverImage.DecodeGuard(unknown));
+        Assert.Equal(0, tooWide.Position);
+    }
+
+    [Fact]
+    public void Load_ConsultsTheGuardBeforeTheDecoder()
+    {
+        // Source lint - the decode needs a Skia platform the default gate does not
+        // boot. The guard must come first, and refusing must be a null, not a throw.
+        var helper = ReadSource("DotCharter.UI", "ViewModels", "Panels", "SongCoverImage.cs");
+        var load = helper.IndexOf("public static Bitmap? Load(", StringComparison.Ordinal);
+        Assert.True(load >= 0, "SongCoverImage.Load is gone");
+        var body = helper[load..];
+        var guard = body.IndexOf("if (!DecodeGuard(stream)) return null;", StringComparison.Ordinal);
+        var decode = body.IndexOf("new Bitmap(stream)", StringComparison.Ordinal);
+        Assert.True(guard >= 0, "Load no longer consults DecodeGuard");
+        Assert.True(decode >= 0, "Load no longer decodes");
+        Assert.True(guard < decode, "Load decodes before it consults DecodeGuard");
+    }
+
+    [Fact]
     public void PlayModesList_ReleasesCoversWhenRowsRecycle()
     {
         // The browser has always wired BOTH halves (ContainerPrepared loads,

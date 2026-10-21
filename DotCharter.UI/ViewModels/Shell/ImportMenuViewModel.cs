@@ -17,6 +17,7 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
     private readonly GpImportLauncher? _gpImport;
     private readonly YoutubeAudioLauncher? _youtubeAudio;
     private readonly AlignToRecordingOffer _alignOffer;
+    private readonly GpLinkSuggestionOffer? _linkOffer;
 
     public ImportMenuViewModel(
         IAppLogger logger,
@@ -26,7 +27,8 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
         RsXmlImportLauncher? rsXmlImport = null,
         MidiImportLauncher? midiImport = null,
         GpImportLauncher? gpImport = null,
-        YoutubeAudioLauncher? youtubeAudio = null)
+        YoutubeAudioLauncher? youtubeAudio = null,
+        GpLinkSuggestionOffer? linkOffer = null)
     {
         _logger = logger;
         _alignOffer = alignOffer;
@@ -36,6 +38,7 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
         _midiImport = midiImport;
         _gpImport = gpImport;
         _youtubeAudio = youtubeAudio;
+        _linkOffer = linkOffer;
     }
 
     /// <summary>File ▸ New project, from the menu, the launch card, the palette and its keybind.</summary>
@@ -57,7 +60,7 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
     /// <summary>File ▸ Import ▸ Guitar Pro: the picker, the track list read off the UI thread, then the dialog.</summary>
     [RelayCommand]
     private void ImportGuitarPro() =>
-        LaunchImport(_gpImport, async l => OfferAlignment(await l.PickAsync(), "Guitar Pro import"), "Guitar Pro import");
+        LaunchImport(_gpImport, async l => await AfterGpImportAsync(await l.PickAsync()), "Guitar Pro import");
 
     /// <summary>A dropped or recent .eof, straight to its track list.</summary>
     internal void OpenEofImport(string filePath) => LaunchImport(_eofImport, l => l.OpenAsync(filePath), "Editor on Fire import");
@@ -71,7 +74,14 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
 
     /// <summary>A dropped Guitar Pro score, straight to its track list — no picker.</summary>
     internal void OpenGpImport(string filePath) =>
-        LaunchImport(_gpImport, async l => OfferAlignment(await l.OpenAsync(filePath), "Guitar Pro import"), "Guitar Pro import");
+        LaunchImport(_gpImport, async l => await AfterGpImportAsync(await l.OpenAsync(filePath)), "Guitar Pro import");
+
+    /// <summary>A Guitar Pro import: first what can be linked, then Align to recording on the status rail.</summary>
+    private async Task AfterGpImportAsync(bool imported)
+    {
+        if (imported && _linkOffer != null) await _linkOffer.OfferAsync();
+        OfferAlignment(imported, "Guitar Pro import");
+    }
 
     /// <summary>A tab import lands on the WRITTEN tempo: offer Align to recording next.</summary>
     private void OfferAlignment(bool imported, string what)

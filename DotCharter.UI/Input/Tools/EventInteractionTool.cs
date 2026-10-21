@@ -1,5 +1,6 @@
 ﻿using Avalonia.Input;
 using DotCharter.UI.Controls.Layers;
+using DotCharter.UI.Editing.Linking;
 using DotCharter.UI.Editing.Tracks;
 using DotCharter.UI.Input.Tools.EventInteractionGestures;
 
@@ -11,6 +12,7 @@ public enum EventRowType
     Section,
     Phrase,
     Lyric,
+    Link,
     Other
 }
 
@@ -97,6 +99,18 @@ public class EventInteractionTool : IEditorTool
         {
             HandleLyricPress(context);
             context.Viewport.RequestNextFrameRendering();
+            return;
+        }
+
+        if (rowType == EventRowType.Link)
+        {
+            if (LinkAt(context) is { } span)
+            {
+                _logger.Info(AppLogCategory.Events, $"Clicked link chip {span.Letter}; opening the link panel.");
+                vm.ChartEditor.LinkHighlight.RequestPanel(new LinkPanelRequest(span.Group.Id, context.Viewport,
+                    context.Position, context.Track.Arrangement, span.Placement.Position));
+            }
+
             return;
         }
 
@@ -413,6 +427,8 @@ public class EventInteractionTool : IEditorTool
 
         var rowType = GetRowType(context.Position.Y, context);
         var selection = track.Selection;
+        context.ViewModel.ChartEditor.LinkHighlight.SetHovered(
+            rowType == EventRowType.Link ? LinkAt(context)?.Group.Id : null, context.Viewport, context.Position);
 
         selection.HoveredEventPoint = EventInteractionHitTester.HitTestEvent(
             track.EventPoints, track.Beats, rowType, context.ExactTimeMs, context.ViewModel.ProjectState.PixelsPerMs);
@@ -431,7 +447,7 @@ public class EventInteractionTool : IEditorTool
         }
 
         if (selection.HoveredEventPoint == null && selection.HoveredTone == null &&
-            rowType != EventRowType.Other && rowType != EventRowType.Lyric)
+            rowType is not (EventRowType.Other or EventRowType.Lyric or EventRowType.Link))
         {
             selection.PreviewEventPoints.Add(new EventPoint
             {
@@ -464,6 +480,7 @@ public class EventInteractionTool : IEditorTool
         var track = context.Track;
         track.Selection.PreviewEventPoints.Clear();
         track.Selection.ClearHovers();
+        context.ViewModel.ChartEditor.LinkHighlight.SetHovered(null);
         context.Viewport.RequestNextFrameRendering();
     }
 
@@ -496,9 +513,15 @@ public class EventInteractionTool : IEditorTool
             EventRow.Section => EventRowType.Section,
             EventRow.Phrase => EventRowType.Phrase,
             EventRow.Lyric => EventRowType.Lyric,
+            EventRow.Link => EventRowType.Link,
             _ => EventRowType.Other
         };
     }
+
+    /// <summary>The LINKS-row chip span under the pointer, in this track's arrangement.</summary>
+    private static LinkSpan? LinkAt(ToolContext context) =>
+        LinkLaneModel.HitTest(
+            LinkLaneModel.Spans(context.ViewModel.ProjectState.ActiveProject, context.Track.Arrangement), context.ExactTimeMs);
 
     private static string FormatPosition(FractionalPosition position, TrackEditorContext track)
         => position.FormatWithMs(track.Beats);

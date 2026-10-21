@@ -27,4 +27,22 @@
       </AssemblyAttribute>
     </ItemGroup>
   </Target>
+
+  <!--
+    The publish toolchain packages (the linker and the NativeAOT compiler) are
+    PackageReferences the SDK adds itself, at the version of the runtime it
+    bundles. DotCharter.UI (_RequiresILLinkPack) and DotCharter.Launcher
+    (PublishAot) request them on EVERY restore, so the committed
+    packages.lock.json covers the release publish graph; pinned here, that lock
+    does not go stale each time a machine or CI picks up a newer SDK patch.
+    Every project here targets net10.0, so the pin updates each TFM's entry alike.
+    Bump this with the lock files (dotnet restore - -force-evaluate).
+  -->
+  <PropertyGroup>
+    <DotCharterPublishToolchainVersion>10.0.13</DotCharterPublishToolchainVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks" ILLinkPackVersion="$(DotCharterPublishToolchainVersion)" />
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler" ILCompilerPackVersion="$(DotCharterPublishToolchainVersion)" />
+  </ItemGroup>
 </Project>

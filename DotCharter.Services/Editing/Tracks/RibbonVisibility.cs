@@ -30,4 +30,31 @@ public partial class RibbonVisibility : ObservableObject
     /// the same information at the same scroll position.
     /// </summary>
     [ObservableProperty] private bool _showMeasureMetadata = true;
+
+    /// <summary>The LINKS row (linked measures). It only ever takes height while the
+    /// track has link groups.</summary>
+    [ObservableProperty] private bool _showLinks = true;
+
+    /// <summary>
+    /// "Hide empty lanes automatically" (on by default): a lane whose
+    /// toggle is on still gives its height back while the track has nothing
+    /// for it — no lyrics, no phrases, only ONE tone. Off, every toggled lane
+    /// keeps its row. Sections stays the entry point either way.
+    /// </summary>
+    [ObservableProperty] private bool _autoHideEmpty = true;
+
+    /// <summary>"Compact rows": every ribbon row drawn shorter, the
+    /// difference handed to the note lanes.</summary>
+    [ObservableProperty] private bool _compactRows;
+
+    /// <summary>"Show all lanes": every lane toggle back on.</summary>
+    public void ShowAllLanes()
+    {
+        ShowTones = true;
+        ShowSections = true;
+        ShowPhrases = true;
+        ShowLyrics = true;
+        ShowMeasureMetadata = true;
+        ShowLinks = true;
+    }
 }

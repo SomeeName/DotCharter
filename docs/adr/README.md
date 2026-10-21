@@ -16,6 +16,6 @@ the issue or pull request that carried the discussion instead of repeating it.
 | [0004](0004-rscp-and-dcsong-formats.md) | `.rscp` is the project format, `.dcsong` is the song package |
 | [0005](0005-package-writer-only.md) | The repository holds the package writer; reading game packages is not part of it |
 | [0006](0006-stems-never-regenerated.md) | Separated stems are cached per song and never regenerated |
-| [0007](0007-ci-on-manual-trigger.md) | CI runs only when started by hand |
+| [0007](0007-ci-on-manual-trigger.md) | CI runs unattended only on the public repo |
 | [0008](0008-contested-features-build-switch.md) | One build property removes the contested features |
 | [0009](0009-gpl-3-and-directml-permission.md) | GPL-3.0-or-later, with a section 7 permission for DirectML |

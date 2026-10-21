@@ -165,8 +165,11 @@ public sealed class VocalTrackSettingsViewModel : DialogViewModel<bool>, IVocalT
         }
     }
 
-    private sealed class SetStyleAction(VocalTrack track, StyleFields before, StyleFields after) : IChartAction
+    private sealed class SetStyleAction(VocalTrack track, StyleFields before, StyleFields after) : IChartAction, ILinkPolicyAction
     {
+        /// <summary>Linked measures: cannot change linked content in beats.</summary>
+        public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
         public bool HasEffect => before != after;
 
         public void Execute() => after.ApplyTo(track);
@@ -176,8 +179,11 @@ public sealed class VocalTrackSettingsViewModel : DialogViewModel<bool>, IVocalT
 
     /// <summary>The add and the active-track switch are one node; undo restores the previous pick.</summary>
     private sealed class AddVocalTrackAction(IChartEditorSurface editor, IList<VocalTrack> tracks, VocalTrack track)
-        : IChartAction
+        : IChartAction, ILinkPolicyAction
     {
+        /// <summary>Linked measures: cannot change linked content in beats.</summary>
+        public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
         private readonly VocalTrack? _previousActive = editor.ActiveVocalTrack;
 
         public void Execute()

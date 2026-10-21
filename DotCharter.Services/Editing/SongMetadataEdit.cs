@@ -55,8 +55,11 @@ public sealed record SongMetadataFields(
 ///     the dialog owns.
 /// </summary>
 public sealed class SetSongMetadataAction(ChartData chart, SongMetadataFields before, SongMetadataFields after)
-    : IChartAction
+    : IChartAction, ILinkPolicyAction
 {
+    /// <summary>Linked measures: cannot change linked content in beats.</summary>
+    public LinkPolicy LinkPolicy => LinkPolicy.Retain;
+
     public bool HasEffect => before != after;
 
     public void Execute() => after.ApplyTo(chart);

@@ -94,6 +94,66 @@ public sealed partial class NativeRuntimeFetchTests : IDisposable
         Assert.Empty(Strings(result, "installed"));
     }
 
+    [Theory]
+    [InlineData("SomeeName/JuceSharp-Evil")]
+    [InlineData("Attacker/JuceSharp")]
+    [InlineData("SomeeName/JuceSharp/../Other")]
+    public void A_manifest_naming_another_repository_downloads_nothing(string repository)
+    {
+        var result = Install(Zip(DllBytes, ExeBytes), Manifest(Sha(DllBytes), Sha(ExeBytes), repository: repository));
+
+        Assert.Contains("is not one of the allowed repositories", result.GetProperty("error").GetString()!, StringComparison.Ordinal);
+        Assert.Empty(Strings(result, "calls"));
+        Assert.Empty(Strings(result, "probes"));
+        Assert.Empty(Strings(result, "installed"));
+    }
+
+    [Fact]
+    public void A_release_name_that_is_not_a_plain_tag_downloads_nothing()
+    {
+        var result = Install(Zip(DllBytes, ExeBytes), Manifest(Sha(DllBytes), Sha(ExeBytes), release: "../../evil"));
+
+        Assert.Contains("is not a plain release tag", result.GetProperty("error").GetString()!, StringComparison.Ordinal);
+        Assert.Empty(Strings(result, "calls"));
+    }
+
+    [Fact]
+    public void The_dll_is_probed_only_after_every_hash_matched()
+    {
+        var good = Install(Zip(DllBytes, ExeBytes), Manifest(Sha(DllBytes), Sha(ExeBytes)));
+        Assert.Single(Strings(good, "probes"));
+
+        var tamperedExe = Install(Zip(DllBytes, Encoding.ASCII.GetBytes("MZ other exe")), Manifest(Sha(DllBytes), Sha(ExeBytes)));
+        Assert.Contains("SHA-256 mismatch for juce_vst_host.exe", tamperedExe.GetProperty("error").GetString()!, StringComparison.Ordinal);
+        Assert.Empty(Strings(tamperedExe, "probes"));
+    }
+
+    /// <summary>
+    ///     The real ABI reader loads the DLL in a CHILD PowerShell, never in the
+    ///     process that runs the build (or holds a CI token), and hands that child
+    ///     no GitHub token.
+    /// </summary>
+    [Fact]
+    public void The_abi_probe_loads_the_dll_in_a_child_process_that_gets_no_token()
+    {
+        var notADll = Path.Combine(_scratch, "not-a-dll.dll");
+        File.WriteAllBytes(notADll, DllBytes);
+        var result = RunScript($$"""
+            $env:GH_TOKEN = 'gh-secret'; $env:GITHUB_TOKEN = 'run-secret'; $env:SUBMODULES_TOKEN = 'pat-secret'
+            $result = [ordered]@{ error = $null }
+            try { [void](Read-DllAbiVersion -DllPath '{{Escape(notADll)}}') } catch { $result.error = $_.Exception.Message }
+            $result.loadedHere = [bool]('DotCharterNativeRuntime.Kernel32' -as [type])
+            $info = New-DllAbiProbeStartInfo -DllPath '{{Escape(notADll)}}'
+            $result.childTokens = @(foreach ($name in 'GH_TOKEN', 'GITHUB_TOKEN', 'SUBMODULES_TOKEN') { if ($info.EnvironmentVariables.ContainsKey($name)) { $name } })
+            $result.parentToken = $env:GH_TOKEN
+            """);
+
+        Assert.Contains("Could not load", result.GetProperty("error").GetString()!, StringComparison.Ordinal);
+        Assert.False(result.GetProperty("loadedHere").GetBoolean(), "the DLL was loaded into the calling PowerShell");
+        Assert.Empty(Strings(result, "childTokens"));
+        Assert.Equal("gh-secret", result.GetProperty("parentToken").GetString());
+    }
+
     [Fact]
     public void The_asset_name_is_keyed_on_the_full_gitlink_and_refuses_anything_else()
     {
@@ -167,7 +227,7 @@ public sealed partial class NativeRuntimeFetchTests : IDisposable
 
     private string Zip(byte[] dll, byte[]? exe)
     {
-        var dir = Path.Combine(_scratch, "assets");
+        var dir = Path.Combine(_scratch, "assets-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, Asset);
         using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
@@ -182,11 +242,12 @@ public sealed partial class NativeRuntimeFetchTests : IDisposable
         }
     }
 
-    private string Manifest(string dllSha, string exeSha, string commit = Commit, int abi = 46)
+    private string Manifest(string dllSha, string exeSha, string commit = Commit, int abi = 46,
+        string repository = "SomeeName/JuceSharp", string release = "native-prebuilt")
     {
         var path = Path.Combine(_scratch, "native-runtime.json");
         File.WriteAllText(path, $$"""
-            { "repository": "SomeeName/JuceSharp", "release": "native-prebuilt",
+            { "repository": "{{repository}}", "release": "{{release}}",
               "runtimes": [ { "commit": "{{commit}}", "abi": {{abi}},
                 "files": { "juce_sharp.dll": "{{dllSha}}", "juce_vst_host.exe": "{{exeSha}}" } } ] }
             """);
@@ -199,6 +260,7 @@ public sealed partial class NativeRuntimeFetchTests : IDisposable
         var dest = Path.Combine(_scratch, "dest");
         return RunScript($$"""
             $calls = [System.Collections.Generic.List[string]]::new()
+            $probes = [System.Collections.Generic.List[string]]::new()
             $fake = {
                 param($Repository, $Release, $Asset, $OutDir)
                 $calls.Add("$Repository|$Release|$Asset")
@@ -207,10 +269,11 @@ public sealed partial class NativeRuntimeFetchTests : IDisposable
             $result = [ordered]@{ error = $null }
             try {
                 [void](Install-NativeRuntime -Commit '{{Commit}}' -ManifestPath '{{Escape(manifest)}}' -HeaderAbi 46 `
-                    -Destination '{{Escape(dest)}}' -Download $fake -ReadAbi { param($p) {{dllAbi}} })
+                    -Destination '{{Escape(dest)}}' -Download $fake -ReadAbi { param($p) $probes.Add($p); {{dllAbi}} })
             }
             catch { $result.error = $_.Exception.Message }
             $result.calls = @($calls)
+            $result.probes = @($probes)
             $result.installed = @(if (Test-Path -LiteralPath '{{Escape(dest)}}') { Get-ChildItem -LiteralPath '{{Escape(dest)}}' -Force | Sort-Object Name | ForEach-Object Name })
             """);
     }

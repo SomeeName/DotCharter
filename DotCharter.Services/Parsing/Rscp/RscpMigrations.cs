@@ -127,7 +127,14 @@ public sealed class RscpMigrations
 
         foreach (var fileName in arrangementFiles.Where(f => !string.IsNullOrWhiteSpace(f)))
         {
-            var path = Path.Combine(directory, fileName);
+            // The name is data from the file: only a plain name under the project folder is read.
+            var path = ProjectRelativePath.TryResolve(directory, fileName);
+            if (path == null)
+            {
+                notes.Add($"Arrangement file '{fileName}' is outside the project folder — it was not read.");
+                continue;
+            }
+
             if (!File.Exists(path))
             {
                 notes.Add($"Arrangement file '{fileName}' is missing — that arrangement could not be recovered.");

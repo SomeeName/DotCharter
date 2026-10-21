@@ -214,20 +214,20 @@ public sealed class AppConfigAiRoundTripTests : IDisposable
         Assert.False(NewService().LoadAppConfig().Ai.UseLibraryTones);
     }
 
-    /// <summary>Online research: ON for a file that predates it, and an explicit
-    /// false survives — the same two rules as the library anchor.</summary>
+    /// <summary>Online research: OFF for a file that predates it, and an explicit
+    /// true survives.</summary>
     [Fact]
-    public void WebResearch_DefaultsOnForAnOlderFile_AndFalseRoundTrips()
+    public void WebResearch_DefaultsOffForAnOlderFile_AndTrueRoundTrips()
     {
         WriteConfig("""{ "Ai": { "Kind": "ClaudeCli", "ModelId": "claude-opus-5", "BaseUrl": null } }""");
-        Assert.True(NewService().LoadAppConfig().Ai.WebResearch);
+        Assert.False(NewService().LoadAppConfig().Ai.WebResearch);
 
         var writer = NewService();
         var config = writer.LoadAppConfig();
-        config.Ai = new AiProviderSettings(AiProviderKind.ClaudeCli, "claude-opus-5", null, WebResearch: false);
+        config.Ai = new AiProviderSettings(AiProviderKind.ClaudeCli, "claude-opus-5", null, WebResearch: true);
         writer.SaveAppConfig(config);
         writer.Flush();
 
-        Assert.False(NewService().LoadAppConfig().Ai.WebResearch);
+        Assert.True(NewService().LoadAppConfig().Ai.WebResearch);
     }
 }
