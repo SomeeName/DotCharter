@@ -112,7 +112,11 @@ RS_ASIO.ini, quit) is public too: see Lifecycle below.
   serialized per target; session and send events are posted to the UI thread through
   `IUiDispatcher`. Nothing here runs on the UI thread or on any audio thread.
 - **Validation happens before anything is written.** A tone that fails the gear
-  catalogue is reported as `Invalid` with the fault's message and never sent; the game's
+  catalogue (`RsToneCatalogValidation.FirstLoadFault`: volume, descriptors, gear, slots,
+  knobs) is reported as `Invalid` with the fault's message, logged as a warning, and never
+  sent. The KEY is not held to the authoring rule (`RsToneAuthoring.IsValidKey`, a letter
+  first): an official package keys its tones after the song code (`311allm_clean`), the
+  game loads those, and the full `FirstFault` would refuse every one of them. The game's
   own `err unknown-gear` (returned since tonelab M3/M4; M2 dropped unknown gear silently)
   is reported as `UnknownGear`, and the next edit re-sends the whole tone (the game's
   state is unknown after a refusal).

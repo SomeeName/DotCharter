@@ -111,9 +111,13 @@ public sealed class EditorRocksmithTonePreview : ObservableObject, IDisposable
 
     internal TonelabTonePreview InGame => _inGame;
 
-    /// <summary>The catalogue gate: a tone naming gear the game does not have, or a knob off its range, is never sent.</summary>
+    /// <summary>
+    ///     The catalogue gate: a tone naming gear the game does not have, or a knob off its range, is never sent.
+    ///     The key is not held to the authoring rule: the tone already exists, and an official package's key may
+    ///     start with a digit ('311allm_clean'), which the game loads.
+    /// </summary>
     public static TonelabResult? Validate(RsTone tone) =>
-        RsToneCatalogValidation.FirstFault(tone, RsGearCatalog.Shared) is { } fault
+        RsToneCatalogValidation.FirstLoadFault(tone, RsGearCatalog.Shared) is { } fault
             ? new TonelabResult(TonelabOutcome.Invalid, fault.Message) { ErrorCode = fault.Code }
             : null;
 

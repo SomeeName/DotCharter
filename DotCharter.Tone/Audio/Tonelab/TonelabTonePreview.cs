@@ -72,6 +72,8 @@ public sealed class TonelabTonePreview : ITonePreviewTarget, IDisposable
         if (_validate(tone) is { } refused)
         {
             _debouncer.Cancel();
+            // Logged as well as reported: the switch only shows it in a tooltip.
+            _logger.Warning(AppLogCategory.Audio, $"tonelab: tone '{tone.Key}' not sent ({refused.ErrorCode}): {refused.Detail}");
             Completed?.Invoke(this, refused);
             return;
         }

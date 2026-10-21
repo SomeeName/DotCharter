@@ -74,6 +74,23 @@ public static class RsToneCatalogValidation
                 $"or underscores, at most {RsToneAuthoring.MaxKeyLength} characters)");
         }
 
+        return FirstLoadFault(tone, catalog);
+    }
+
+    /// <summary>
+    ///     The first fault the GAME would refuse in <paramref name="tone" /> — volume, descriptors,
+    ///     gear, slots and knobs — without the authoring rule for the key. For a tone that already
+    ///     exists and is sent as it is (the in-game preview): official packages key their tones
+    ///     after the song code, and those keys may start with a digit ('311allm_clean'), which
+    ///     <see cref="RsToneAuthoring.IsValidKey" /> refuses for a key DotCharter writes.
+    /// </summary>
+    /// <param name="tone">The tone about to be sent.</param>
+    /// <param name="catalog">The gear catalogue to validate against.</param>
+    public static RsToneFault? FirstLoadFault(RsTone? tone, RsGearCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (tone is null) return new RsToneFault(RsToneFaultCodes.BadKey, null, null, "the tone is null");
+
         if (!float.IsFinite(tone.VolumeDb) ||
             tone.VolumeDb < RsToneAuthoring.MinVolumeDb || tone.VolumeDb > RsToneAuthoring.MaxVolumeDb)
         {

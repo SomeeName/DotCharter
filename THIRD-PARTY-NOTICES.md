@@ -295,6 +295,7 @@ tools use are listed separately: they are never part of a release.
 | `CommunityToolkit.Mvvm` | MIT | <https://github.com/CommunityToolkit/dotnet> |
 | `BouncyCastle.Cryptography` (Ed25519 verification of the release signature, `Update/ReleaseSignature`) | MIT | <https://github.com/bcgit/bc-csharp> |
 | `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.DependencyInjection.Abstractions`, `Microsoft.Extensions.Logging.Abstractions`, `System.Security.Cryptography.ProtectedData` | MIT | <https://github.com/dotnet/runtime> |
+| `Microsoft.NET.ILLink.Tasks`, `Microsoft.DotNet.ILCompiler`, `runtime.win-x64.Microsoft.DotNet.ILCompiler` (the release publish's trimmer and NativeAOT compiler; build-time only, not shipped) | MIT | <https://github.com/dotnet/runtime> |
 | `Silk.NET.Core`, `Silk.NET.Maths`, `Silk.NET.Vulkan`, `Silk.NET.Vulkan.Extensions.KHR`, `Silk.NET.Vulkan.Extensions.EXT`, `Silk.NET.DXGI`, `Silk.NET.Direct3D11` | MIT | <https://github.com/dotnet/Silk.NET> |
 | `SkiaSharp` | MIT | <https://github.com/mono/SkiaSharp> |
 | `AlphaTab` (carries the **Bravura** music font, SIL OFL 1.1, <https://github.com/steinbergmedia/bravura>) | MPL-2.0 | <https://github.com/CoderLine/alphaTab> |

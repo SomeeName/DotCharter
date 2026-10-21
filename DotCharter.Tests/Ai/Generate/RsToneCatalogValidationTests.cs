@@ -166,6 +166,15 @@ public sealed class RsToneCatalogValidationTests
     }
 
     [Fact]
+    public void AnOfficialDigitFirstKey_FailsTheAuthoringRule_ButNotTheGameLoadCheck()
+    {
+        Assert.Equal(RsToneFaultCodes.BadKey, RsToneCatalogValidation.FirstFault(Valid("311allm_clean"), Catalog)!.Code);
+        Assert.Null(RsToneCatalogValidation.FirstLoadFault(Valid("311allm_clean"), Catalog));
+        var unknownAmp = Valid("311allm_clean") with { Amp = Valid().Amp with { GearKey = "Amp_NotInTheGame" } };
+        Assert.Equal(RsToneFaultCodes.UnknownGear, RsToneCatalogValidation.FirstLoadFault(unknownAmp, Catalog)!.Code);
+    }
+
+    [Fact]
     public void RequireThrows_AndTheExceptionCarriesTheFault()
     {
         var tone = Valid() with

@@ -49,6 +49,56 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
         Assert.Contains("\"heavy\"", game.AppliedBodies.Last(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    ///     Official packages name their tones after the song code, and those keys may start with a
+    ///     digit ('311allm_clean', '38spcaug_drive'). The game loads them; the authoring key rule (a
+    ///     letter first, for keys DotCharter WRITES) must not keep them from the game.
+    /// </summary>
+    [Theory]
+    [InlineData("311allm_clean", "311allm_dist")]
+    [InlineData("38spcaug_drive", "38spcaug_solo")]
+    public async Task AnOfficialToneKeyStartingWithADigit_ReachesTheGame_AndRoutesTheAudio(string baseKey, string changeKey)
+    {
+        using var game = new TonelabGameMock();
+        var insert = new TonelabSessionTests.FakeInsert();
+        var (controller, rocksmith, state) = await Build(game, insert, baseKey, changeKey);
+
+        Assert.True(rocksmith.Choose(true));
+        Assert.True(controller.TurnOn());
+        await Flush(rocksmith);
+        Assert.Contains($"\"{baseKey}\"", Assert.Single(game.AppliedBodies), StringComparison.Ordinal);
+        Assert.True(insert.IsOpen);   // the guitar now goes through the game
+
+        state.CurrentTimeMs = 5000;   // past the tone change at beat 4
+        await Flush(rocksmith);
+        Assert.Contains($"\"{changeKey}\"", game.AppliedBodies.Last(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheGameGate_TakesAnyGameKey_ButStillRefusesGearTheGameDoesNotHave()
+    {
+        var tone = RsToneAuthoring.CreateDefaultTone("clean", "clean", RsGearCatalog.Shared);
+
+        Assert.Null(EditorRocksmithTonePreview.Validate(tone with { Key = "311allm_clean" }));
+        var refused = EditorRocksmithTonePreview.Validate(tone with { Amp = tone.Amp with { GearKey = "Amp_NotInTheGame" } });
+        Assert.Equal(TonelabOutcome.Invalid, refused?.Outcome);
+        Assert.Equal(DotCharter.Services.Ai.Generate.RsToneFaultCodes.UnknownGear, refused?.ErrorCode);
+    }
+
+    [Fact]
+    public void ARefusedTone_IsLogged_NotOnlyShownInTheTip()
+    {
+        var session = new FakeTonelabSession { State = TonelabSessionState.Ready };
+        var logger = new FakeAppLogger();
+        using var inGame = new TonelabTonePreview(session, EditorRocksmithTonePreview.Validate, new TonelabToneFiles(_dir), _scheduler, logger);
+        var tone = RsToneAuthoring.CreateDefaultTone("clean", "clean", RsGearCatalog.Shared);
+
+        inGame.Apply(tone with { Amp = tone.Amp with { GearKey = "Amp_NotInTheGame" } });
+
+        Assert.Empty(session.AppliedFiles);
+        Assert.Contains(logger.Entries, e => e.Level == "WARN" && e.Message.Contains("Amp_NotInTheGame", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task TurningThePreviewOff_RestoresTheGameTone_AndUnroutes()
     {
@@ -214,23 +264,28 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
         TonelabSessionTests.FakeInsert insert) => Build(game, insert, out _);
 
     private Task<(ChartTonePreviewController, EditorRocksmithTonePreview, ProjectState)> Build(TonelabGameMock game,
-        TonelabSessionTests.FakeInsert insert, out TonelabSession session)
+        TonelabSessionTests.FakeInsert insert, string baseKey, string changeKey) => Build(game, insert, out _, baseKey, changeKey);
+
+    private Task<(ChartTonePreviewController, EditorRocksmithTonePreview, ProjectState)> Build(TonelabGameMock game,
+        TonelabSessionTests.FakeInsert insert, out TonelabSession session, string baseKey = "clean", string changeKey = "heavy")
     {
         var s = new TonelabSession(() => [game.ProcessId], insert, null, TonelabSessionTests.Quick);
         _owned.Add(s);
         session = s;
-        return ReadyThenController(s);
+        return ReadyThenController(s, baseKey, changeKey);
     }
 
-    private async Task<(ChartTonePreviewController, EditorRocksmithTonePreview, ProjectState)> ReadyThenController(TonelabSession session)
+    private async Task<(ChartTonePreviewController, EditorRocksmithTonePreview, ProjectState)> ReadyThenController(TonelabSession session,
+        string baseKey, string changeKey)
     {
         Assert.Equal(TonelabSessionState.Ready, await session.ProbeAsync(Ct));
-        return Controller(session);
+        return Controller(session, baseKey, changeKey);
     }
 
-    private (ChartTonePreviewController, EditorRocksmithTonePreview, ProjectState) Controller(ITonelabSession session)
+    private (ChartTonePreviewController, EditorRocksmithTonePreview, ProjectState) Controller(ITonelabSession session,
+        string baseKey = "clean", string changeKey = "heavy")
     {
-        var (project, arrangement) = CleanToHeavyProject();
+        var (project, arrangement) = CleanToHeavyProject(baseKey, changeKey);
         var state = new ProjectState { ActiveProject = project, ActiveArrangement = arrangement };
         var chain = new FakeDspChainService();
         var tones = new RsTonePlaybackCoordinator(chain, new DcRigApplier(chain), state, new FakeConfigurationService());
@@ -251,18 +306,24 @@ public sealed class EditorRocksmithTonePreviewTests : IDisposable
         await rocksmith.InGame.LastTask;
     }
 
-    /// <summary>Base tone "clean", a change to "heavy" at beat 4 (4,000 ms at 60 BPM); both bodies the game accepts.</summary>
-    private static (ChartProject, Arrangement) CleanToHeavyProject()
+    /// <summary>Base tone <paramref name="baseKey" />, a change to <paramref name="changeKey" /> at beat 4 (4,000 ms at
+    /// 60 BPM); both bodies the game accepts. The keys go in as given, as a package's manifest names them.</summary>
+    private static (ChartProject, Arrangement) CleanToHeavyProject(string baseKey = "clean", string changeKey = "heavy")
     {
         var project = new ChartProject();
         for (var i = 0; i < 8; i++)
             project.Beats.Add(new BeatMarker { Time = i * 1000, IsMeasure = i % 4 == 0 });
-        var clean = RsToneAuthoring.CreateDefaultTone("clean", "clean", RsGearCatalog.Shared);
-        var heavy = RsToneAuthoring.CreateDefaultTone("heavy", "heavy", RsGearCatalog.Shared) with { VolumeDb = clean.VolumeDb - 6 };
-        project.ToneDefinitions.Add(new ToneDefinition { Key = "clean", Name = "clean", Json = RsToneJsonWriter.Write(clean) });
-        project.ToneDefinitions.Add(new ToneDefinition { Key = "heavy", Name = "heavy", Json = RsToneJsonWriter.Write(heavy) });
-        var arrangement = new Arrangement { Name = "Lead", ToneBase = "clean" };
-        arrangement.ToneChanges.Add(new ToneChange { Position = new FractionalPosition(4), ToneName = "heavy" });
+        var clean = RsToneAuthoring.CreateDefaultTone("clean", "clean", RsGearCatalog.Shared) with { Key = baseKey, Name = baseKey };
+        var heavy = RsToneAuthoring.CreateDefaultTone("heavy", "heavy", RsGearCatalog.Shared) with
+        {
+            Key = changeKey,
+            Name = changeKey,
+            VolumeDb = clean.VolumeDb - 6
+        };
+        project.ToneDefinitions.Add(new ToneDefinition { Key = baseKey, Name = baseKey, Json = RsToneJsonWriter.Write(clean) });
+        project.ToneDefinitions.Add(new ToneDefinition { Key = changeKey, Name = changeKey, Json = RsToneJsonWriter.Write(heavy) });
+        var arrangement = new Arrangement { Name = "Lead", ToneBase = baseKey };
+        arrangement.ToneChanges.Add(new ToneChange { Position = new FractionalPosition(4), ToneName = changeKey });
         project.Arrangements.Add(arrangement);
         return (project, arrangement);
     }
