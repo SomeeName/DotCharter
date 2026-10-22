@@ -46,7 +46,7 @@ The same tests run on **Mesa lavapipe**, a CPU Vulkan driver (#315):
 ```powershell
 pwsh -NoProfile -File tools/ci/Get-SoftwareVulkan.ps1   # once: pinned, SHA-256-checked, unpacked to %LOCALAPPDATA%\DotCharter\swvk\<version>
 $env:DOTCHARTER_GPU_TESTS = "sw"
-cmd /c start '""' /b /low /wait /affinity FF00 pwsh -NoProfile -File tools/agent/Invoke-Gate.ps1 -FilterClass "DotCharter.Tests.Rendering.Headless.*"
+pwsh -NoProfile -File tools/agent/Invoke-Gate.ps1 -FilterClass "DotCharter.Tests.Rendering.Headless.*"
 ```
 
 - `Rendering/Headless/SoftwareVulkanLane` resolves the lane; the first

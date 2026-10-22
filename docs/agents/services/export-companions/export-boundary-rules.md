@@ -136,7 +136,8 @@
   is the shipped decision for one level — `RsChordDensity` through the writer's
   own chord-id table (`RsChordTemplateExport`, which `RsXmlSongWriter.BuildChordTemplateExport`
   builds), plus `ForceNoNotes`, minus the chords `LinkLandingBreakup` writes as
-  notes — and `RepeatChordLatch` hands it to both render loops as data. Never
+  notes — and `RepeatChordLatch` hands it to both render loops as data (the editor's one shared
+  instance, thread-safe: a run per level and edit, not per loop). Never
   add a second repeat rule in a renderer.
 - **The rule returns a REASON, and the set is derived from it (#564).**
   `RsChordDensity.Explain` / `RepeatChords.Explain` give every chord a
@@ -370,9 +371,10 @@
   `strings` attribute and no `string6+`; `standardTuning` derives from the six-string
   copy. `Rs7Projection.Loss` (`SixStringLoss`: notes dropped, chords that sounded only
   there, chords that lost some strings) feeds `RsXmlSongWriter.LastLoss` and one log
-  WARNING per arrangement. Who uses it: the DTRS XML bundle and the `.rs2dlc` tuning ALWAYS
-  (DLC Builder); Save As `.xml` only with `AppConfig.RsXmlSixStringProjection` ("RS XML
-  for 6-string tools", Settings > Files; default off, the spec XML above). The rs7string
+  WARNING per arrangement. Who uses it: the DTRS XML bundle, the
+  `.rs2dlc` tuning (six slots on, every string in package order off) and Save As `.xml` only with
+  `AppConfig.RsXmlSixStringProjection` ("RS XML for 6-string tools", Settings > Files; default
+  off, the spec XML above). The rs7string
   package (SNG) and the `.rscp` keep every string. Charter (Lordszynencja) reads more than
   six strings but numbers them lowest first, so the spec order is wrong there too
   (finding on #911). Pinned by `RsXmlSixStringProjectionTests`.

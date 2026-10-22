@@ -41,7 +41,7 @@ public partial class App
             new DotCharter.Services.Gameplay.Stats.GameplayStatsService(
                 sp.GetRequiredService<DotCharter.Services.Audio.LivePlay.IPracticeProfileService>()));
         // Own-chart genres (the song browser's genre facet, the metadata
-        // dialog): the `dcGenre` header of each of the player's own `.rscp`
+        // dialog): the `dcGenre` header of each of the player's own `.dcproj`
         // projects, read ONCE per library scan on a pool thread. A singleton so
         // the cache survives the scans; the read never happens on the UI thread.
         services.AddSingleton<DotCharter.Services.Parsing.Rscp.IChartGenreIndex>(sp =>
@@ -54,5 +54,6 @@ public partial class App
             new DotCharter.Services.Gameplay.Setlists.PlaySetlistStore(
                 sp.GetRequiredService<DotCharter.Services.Gameplay.Profiles.IPlayerProfileService>(),
                 sp.GetService<IAppLogger>()));
+        services.AddSingleton<DotCharter.Services.Session.IProjectPathRekey, DotCharter.Services.Session.ProjectPathRekey>();
     }
 }

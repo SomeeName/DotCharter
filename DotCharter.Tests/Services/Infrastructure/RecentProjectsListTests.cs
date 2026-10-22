@@ -133,7 +133,9 @@ ew.rscp", "New", Now, _ => false);
         RecentProjectsList.Touch(list, @"C:\charts.rscp", "B", Now.AddMinutes(2));
 
         RecentProjectsList.TouchLive(list, @"C:\charts\c.rscp", "C", Now.AddMinutes(3),
-            p => !p.EndsWith("gone.rscp", StringComparison.OrdinalIgnoreCase));
+            // No .dcproj sits beside any of them, so none is a shadowed Charter companion.
+            p => !p.EndsWith("gone.rscp", StringComparison.OrdinalIgnoreCase) &&
+                 !p.EndsWith(".dcproj", StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(["C", "B", "A"], list.Select(e => e.DisplayName));
     }

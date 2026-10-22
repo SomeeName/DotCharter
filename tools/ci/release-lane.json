@@ -1,0 +1,81 @@
+{
+  "_comment": "The RELEASE LANE: slow corpus / integration / determinism classes that leave the default gate (tools/agent/Invoke-Gate.ps1 -Gate, plain dotnet test) and run in tools/agent/Invoke-Gate.ps1 -ReleaseLane instead - always in the merge train (Merge-Train.ps1), the release preflight (New-Release.ps1) and CI\u0027s test job. This file is the ONE declared list: tools/ci/GateShards.psm1 reads it for both lanes\u0027 filters, DotCharter.Tests/TestEntryPoint.cs for a plain dotnet test, and Infrastructure/ReleaseLaneLintTests proves every test class runs in exactly one lane. Keys are the class\u0027s FullName (a nested class joins with +). seconds = measured summed case time of an idle gate run, only used to balance the lane\u0027s shards (refresh: Invoke-Gate.ps1 -ReleaseLane -UpdateShardWeights); why = what the class tests and why it is not a per-change check. Move a class here by what it TESTS (a slow end-to-end, corpus or determinism check of one subsystem), never to hide a flaky or slow unit test: fix those.",
+  "classes": {
+    "DotCharter.Tests.Ai.Search.ToneMatcherTests+ExactPrior": {
+      "seconds": 60.1,
+      "why": "A full 1000-render tone match seeded with the exact prior; integration of the whole search pipeline."
+    },
+    "DotCharter.Tests.Ai.Search.ToneMatcherTests+HiddenRigRecovery": {
+      "seconds": 61.3,
+      "why": "A full 1000-render match that recovers a hidden rig to within a tenth of every knob: the one test that fails if any search stage is wrong, and the slowest."
+    },
+    "DotCharter.Tests.Analysis.AnalysisDeterminismTests": {
+      "seconds": 66.9,
+      "why": "Re-runs every DotCharter.Analysis pipeline over synthesized fixtures, in varied execution orders, and diffs the output: a repeatability guard. Only a change under DotCharter.Analysis can break it."
+    },
+    "DotCharter.Tests.Audio.Dsp.RsToneConversion.Fidelity.RsToneFidelityHarnessTests": {
+      "seconds": 197.4,
+      "why": "Renders the reference DI through converted Rocksmith tones on the real native rig and holds the result to relational fidelity targets: an end-to-end calibration harness for the tone conversion."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests": {
+      "seconds": 23.4,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests+EarlyPushRefusals": {
+      "seconds": 99.7,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests+GateRecord": {
+      "seconds": 97,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests+KeptWorkTree": {
+      "seconds": 78.7,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests+OneCommitOnThePreviousSnapshot": {
+      "seconds": 98.2,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests+PushThatHolds": {
+      "seconds": 72.5,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests+PushWhoseTargetMoves": {
+      "seconds": 52.2,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSnapshotExportTests+PushWithoutGitleaks": {
+      "seconds": 42.2,
+      "why": "Runs Export-PublicSnapshot.ps1 end to end over fixture git repositories under pwsh. Only a change under tools/release or the export rename map can break it, and every release runs the export."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSyncGuardTests+ExportGuard": {
+      "seconds": 94.6,
+      "why": "Runs the public-to-dev sync guard and Import-PublicCommit.ps1 over fixture git repositories under pwsh. Only a change under tools/release can break it."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSyncGuardTests+Import": {
+      "seconds": 40.8,
+      "why": "Runs the public-to-dev sync guard and Import-PublicCommit.ps1 over fixture git repositories under pwsh. Only a change under tools/release can break it."
+    },
+    "DotCharter.Tests.Infrastructure.PublicSyncGuardTests+SnapshotIdentityCase": {
+      "seconds": 29,
+      "why": "Runs the public-to-dev sync guard and Import-PublicCommit.ps1 over fixture git repositories under pwsh. Only a change under tools/release can break it."
+    },
+    "DotCharter.Tests.Services.Audio.Dsp.ToneLowEndResponseTests": {
+      "seconds": 109.6,
+      "why": "Renders the tone rig through the native engine stage by stage to pin the low-E loudness regression floor: a DSP integration check that only a tone-rig change can move."
+    },
+    "DotCharter.Tests.Services.Audio.LivePlay.CqtTimedJudgingEndToEndTests": {
+      "seconds": 54.9,
+      "why": "Drives the live analyzer and the CQT verifier over synthesized audio end to end to check judged-hit timing; an end-to-end check of the live-play stack."
+    },
+    "DotCharter.Tests.Services.Audio.LivePlay.LiveDetectionAccuracyTests": {
+      "seconds": 112.2,
+      "why": "Scores live note detection over synthesized songs (accuracy percentages per riff, bass, harmonics, idle input); a slow accuracy corpus for the live-play stack."
+    },
+    "DotCharter.Tests.Services.Audio.LivePlay.SyntheticPerformanceTests": {
+      "seconds": 64.9,
+      "why": "Plays wall-clock synthetic performances through the live detection stack in the chunks the 30 Hz pump delivers; an end-to-end check of the live-play stack."
+    }
+  }
+}

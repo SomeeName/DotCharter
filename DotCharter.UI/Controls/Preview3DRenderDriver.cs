@@ -5,7 +5,6 @@ using DotCharter.Rendering.Data;
 using DotCharter.Rendering.Diagnostics;
 using DotCharter.Rendering.Engines;
 using DotCharter.Rendering.Vulkan;
-using DotCharter.Services.Export.Rocksmith;
 using DotCharter.UI.Constants;
 using DotCharter.UI.Controls.Themes;
 using DotCharter.UI.ViewModels.Editor;
@@ -47,7 +46,6 @@ internal sealed class Preview3DRenderDriver
     private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
 
     private readonly SnapshotUpdateContext _updateContext = new();
-    private readonly RepeatChordLatch _repeatChords = new();
 
     private CancellationTokenSource? _cancellationTokenSource;
     private int _capoSafe;
@@ -1018,7 +1016,7 @@ internal sealed class Preview3DRenderDriver
             _updateContext.HandShapeStart = hsStart;
             _updateContext.HandShapeEnd = hsEnd;
             // The repeat box is the export's decision, as data.
-            _updateContext.RepeatChords = _repeatChords.Get(_updateContext.ActiveTemplates, notes, chords,
+            _updateContext.RepeatChords = localEditor.SharedRepeatChords.Get(_updateContext.ActiveTemplates, notes, chords,
                 handShapes, beats, localEditor.HistoryRevision, Environment.TickCount64);
             _updateContext.SelectedNotes = localEditor.SelectedNotes;
             _updateContext.SelectedChords = localEditor.SelectedChords;

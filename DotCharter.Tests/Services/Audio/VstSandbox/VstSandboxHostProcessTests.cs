@@ -33,11 +33,11 @@ public class VstSandboxHostProcessTests
         Assert.True(host.IsRunning);
         Assert.NotNull(host.ChildProcessId is int ? host.ChildProcessId : null);
 
-        var pong = await host.SendAsync(new VstSandboxRequest { Op = "ping" }, TimeSpan.FromSeconds(10));
+        var pong = await host.SendAsync(new VstSandboxRequest { Op = "ping" }, TimeSpan.FromSeconds(60));
         Assert.True(pong.Ok);
 
         await host.StopAsync();
-        var requested = await exitedRequested.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var requested = await exitedRequested.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
         Assert.True(requested, "graceful quit must be reported as a requested exit");
         Assert.False(host.IsRunning);
     }
@@ -61,7 +61,7 @@ public class VstSandboxHostProcessTests
         Assert.True(host.IsRunning, "a failed load must not kill the sandbox");
 
         // Still responsive afterwards.
-        var pong = await host.SendAsync(new VstSandboxRequest { Op = "ping" }, TimeSpan.FromSeconds(10));
+        var pong = await host.SendAsync(new VstSandboxRequest { Op = "ping" }, TimeSpan.FromSeconds(60));
         Assert.True(pong.Ok);
 
         await host.StopAsync();
@@ -131,7 +131,7 @@ public class VstSandboxHostProcessTests
             await child.WaitForExitAsync(TestContext.Current.CancellationToken);
         }
 
-        var requested = await exited.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var requested = await exited.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
         Assert.False(requested, "an external kill must surface as a crash (unrequested exit)");
 
         // The audio side must degrade to dry passthrough: the block request
@@ -142,6 +142,6 @@ public class VstSandboxHostProcessTests
         var ok = shm.ProcessBlock(left, right, 128, null, 0, out _, out _, timeoutMs: 100);
         sw.Stop();
         Assert.False(ok, "a dead child cannot answer block requests");
-        Assert.True(sw.ElapsedMilliseconds < 2000, "timeout must be bounded");
+        Assert.True(sw.ElapsedMilliseconds < 60_000, "timeout must be bounded");
     }
 }

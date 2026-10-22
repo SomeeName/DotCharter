@@ -43,6 +43,23 @@ public sealed class AutoBackupPruneTests : IDisposable
     }
 
     [Fact]
+    public void BackupsNamedForTheDcprojAndTheOlderRscp_ArePrunedAsOneHistory()
+    {
+        for (var minute = 0; minute < 3; minute++) Touch($"song_20261007_10{minute:00}00.rscp.zip");
+        for (var minute = 3; minute < 6; minute++) Touch($"song_20261007_10{minute:00}00.dcproj.zip");
+
+        var deleted = ProjectAutoBackup.PruneBackups(_dir, "song", keep: 4);
+
+        Assert.Equal(2, deleted);
+        Assert.Equal(
+            [
+                "song_20261007_100200.rscp.zip", "song_20261007_100300.dcproj.zip",
+                "song_20261007_100400.dcproj.zip", "song_20261007_100500.dcproj.zip"
+            ],
+            Names());
+    }
+
+    [Fact]
     public void AnotherProjectsBackups_AndForeignFiles_AreNeverTouched()
     {
         for (var minute = 0; minute < 4; minute++) Touch($"song_20261007_10{minute:00}00.rscp.zip");

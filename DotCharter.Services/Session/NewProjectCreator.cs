@@ -4,6 +4,7 @@ using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Tempo;
 using DotCharter.Services.Import.Audio;
 using DotCharter.Services.Infrastructure.Documents;
+using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Services.State;
 
 namespace DotCharter.Services.Session;
@@ -82,7 +83,7 @@ public sealed class NewProjectCreator(
         {
             logger.Info(AppLogCategory.Project,
                 $"Creating new project. Artist='{details.Artist}', title='{details.Title}', baseDir='{baseDir}', audio='{audioFilePath}'.");
-            // The working audio is written into this folder at once and project.rscp
+            // The working audio is written into this folder at once and project.dcproj
             // follows on the first save, so an existing project's folder is never reused.
             var projectDir = NewProjectFolder.Create(baseDir, FolderName(details));
 
@@ -113,7 +114,7 @@ public sealed class NewProjectCreator(
             TryWriteCoverArt(project, projectDir, details.CoverArtPng);
 
             editor.ApplyProject(project, resetHistory: true);
-            state.CurrentProjectPath = Path.Combine(projectDir, "project.rscp");
+            state.CurrentProjectPath = ProjectFiles.DefaultPath(projectDir);
             // DIRTY on purpose: nothing has written that path yet
             // (see IProjectSessionService.MarkProjectClean).
             session.MarkProjectDirty();
@@ -178,7 +179,7 @@ public sealed class NewProjectCreator(
             ApplyChartMetadata(project, details);
 
             editor.ApplyProject(project, resetHistory: true);
-            state.CurrentProjectPath = Path.Combine(projectDir, "project.rscp");
+            state.CurrentProjectPath = ProjectFiles.DefaultPath(projectDir);
             session.MarkProjectDirty();
 
             if (transport.Bpm <= 0) transport.Bpm = 120.0;

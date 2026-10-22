@@ -71,9 +71,9 @@ public class ChartData
     // A project-level tuning would be a lie in every path that
     // fills it: the psarc importer's `if (Chart.Tuning.Length == 0)` guard could
     // never fire against a six-name class default, so every Rocksmith import
-    // would report E standard whatever the song was tuned to, and the `.rscp` header
+    // would report E standard whatever the song was tuned to, and the `.dcproj` header
     // parser would stamp standard-tuning NAMES sized by the first arrangement's string
-    // count, so an Eb chart would come back as E. Nothing persists such a value (the `.rscp`
+    // count, so an Eb chart would come back as E. Nothing persists such a value (the `.dcproj`
     // writer never emits one), so it is not part of the format.
     // The lane count every reader wants is `Arrangement.Tuning.Length` — via
     // `DotCharter.UI/Input/StringDigitTargeting.StringCountOf` where a null-safe

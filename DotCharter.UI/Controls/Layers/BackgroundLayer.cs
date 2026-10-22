@@ -718,21 +718,16 @@ public class BackgroundLayer : ITimelineRenderLayer
         const float gapLen = 4f;
         // When subdivision spacing is denser than one full dash+gap cycle the
         // dash pattern visually fuses into a continuous line. Switch to a
-        // single solid AA quad — visually identical at the eye, but ~75x
-        // fewer quads vs the per-dash rectangles.
+        // single solid AA quad — visually identical at the eye.
         var useSolid = pixelSpacing < dashLen + gapLen;
         var lineW = polish
             ? ChartEditorConstants.RenderMetrics.SubdivisionLineWidth
             : ChartEditorConstants.RenderMetrics.StandardLineWidth;
 
         // Pre-grow the general buffer once so the per-call EnsureCapacity
-        // inside each AddVerticalLineAaRaw becomes a branch-predictable
-        // fast-path compare.
-        var iterations = jEnd - jStart + 1;
-        var quadsPerIter = useSolid
-            ? 1
-            : Math.Max(1, (int)Math.Ceiling(height / (dashLen + gapLen)));
-        batcher.EnsureQuadsCapacity(0, iterations * quadsPerIter);
+        // inside each line call becomes a branch-predictable fast-path
+        // compare. Solid or dashed, every sub-grid line is one quad.
+        batcher.EnsureQuadsCapacity(0, jEnd - jStart + 1);
 
         for (var j = jStart; j <= jEnd; j++)
         {
@@ -769,22 +764,17 @@ public class BackgroundLayer : ITimelineRenderLayer
         }
     }
 
-    private void DrawDashedVerticalLine(TimelineBatcher batcher, float x, float startY, float endY, float dashLen,
-        float gapLen, float thickness, Color color)
+    private static void DrawDashedVerticalLine(TimelineBatcher batcher, float x, float startY, float endY,
+        float dashLen, float gapLen, float thickness, Color color)
     {
         DrawDashedVerticalLineRaw(batcher, x, startY, endY, dashLen, gapLen, thickness,
             color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
     }
 
-    private void DrawDashedVerticalLineRaw(TimelineBatcher batcher, float x, float startY, float endY, float dashLen,
-        float gapLen, float thickness, float r, float g, float b, float a)
-    {
-        var y = startY;
-        while (y < endY)
-        {
-            var h = Math.Min(dashLen, endY - y);
-            batcher.AddVerticalLineAaRaw(x, y, thickness, h, r, g, b, a);
-            y += dashLen + gapLen;
-        }
-    }
+    // One quad per line: the general shader evaluates the dash pattern, so the
+    // vertex count does not grow with the pane height. The phase starts at
+    // startY and the last dash is clipped at endY.
+    private static void DrawDashedVerticalLineRaw(TimelineBatcher batcher, float x, float startY, float endY,
+        float dashLen, float gapLen, float thickness, float r, float g, float b, float a)
+        => batcher.AddDashedVerticalLineAaRaw(x, startY, thickness, endY - startY, dashLen, gapLen, r, g, b, a);
 }

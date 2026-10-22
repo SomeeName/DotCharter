@@ -1,4 +1,5 @@
 using DotCharter.Services.Infrastructure.Documents;
+using DotCharter.Services.Parsing.Rscp;
 
 namespace DotCharter.Services.Export.DlcBuilder;
 
@@ -36,7 +37,7 @@ public sealed class DlcBuilderProjectWriter(IProjectDocumentService documents, I
 
         var path = DlcBuilderProjectFile.PathIn(folder, snapshot);
         // The bundle writer names its folder after the project file it is given.
-        documents.SaveDlcBuilderXmlBundle(Path.ChangeExtension(path, ".rscp"), snapshot, sources.AudioLengthMs);
+        documents.SaveDlcBuilderXmlBundle(ProjectFiles.Beside(path), snapshot, sources.AudioLengthMs);
         if (!Directory.Exists(DlcBuilderBundle.DirectoryFor(path)))
             throw new IOException($"The '{DlcBuilderBundle.DirectoryName}' folder was not written in '{folder}'.");
 

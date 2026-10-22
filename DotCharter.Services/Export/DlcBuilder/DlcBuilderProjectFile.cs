@@ -2,7 +2,7 @@ namespace DotCharter.Services.Export.DlcBuilder;
 
 /// <summary>
 ///     The <c>.rs2dlc</c> a folder gets for a chart, shared by the two writers of it: the save
-///     companion (beside the <c>.rscp</c>, only when its setting is on) and the export dialog's
+///     companion (beside the <c>.dcproj</c>, only when its setting is on) and the export dialog's
 ///     "Export DLC Builder project" (a folder the user picked). One place decides the file name,
 ///     the vocals and charter fallbacks and how the audio and cover art are referenced.
 /// </summary>
@@ -24,7 +24,8 @@ internal static class DlcBuilderProjectFile
             CoverArtFileName: RelativeToProject(directory, coverArtPath),
             AudioLengthMs: audioLengthMs,
             FallbackCharter: config.DefaultCharterName,
-            IncludeVocals: VocalsExportPolicy.IncludeVocals(config)));
+            IncludeVocals: VocalsExportPolicy.IncludeVocals(config),
+            SixStringProjection: config.RsXmlSixStringProjection));
 
     /// <summary>A resolved absolute path expressed the way the project stores it:
     /// a bare file name when it is inside the project folder, otherwise absolute.</summary>

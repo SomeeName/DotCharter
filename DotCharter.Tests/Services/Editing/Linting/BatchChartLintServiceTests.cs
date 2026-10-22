@@ -1,5 +1,7 @@
 using DotCharter.Services.Editing.Fixing;
 using DotCharter.Services.Editing.Linting;
+using DotCharter.Services.Export;
+using DotCharter.Services.Export.Charter;
 using DotCharter.Services.Parsing;
 using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Tone.Infrastructure.Storage;
@@ -63,7 +65,7 @@ public sealed class BatchChartLintServiceTests : IDisposable
     [Fact]
     public void Run_WithAutoFixesAndSave_PersistsTheFixedProject()
     {
-        var path = WriteFixtureProject("chart.rscp");
+        var path = WriteFixtureProject("chart.dcproj");
 
         var result = CreateService().Run(new[] { path },
             new ChartLintOptions { ApplyAutoFixes = true, SaveFixedProjects = true },
@@ -226,16 +228,108 @@ public sealed class BatchChartLintServiceTests : IDisposable
 
     // ---------------------------------------------------------------- fixture
 
-    private static BatchChartLintService CreateService(IChartSerializer? serializer = null)
+    private static BatchChartLintService CreateService(IChartSerializer? serializer = null,
+        ISaveCompanionService? companions = null)
     {
         return new BatchChartLintService(
             serializer ?? new RscpChartSerializer(),
             new ArrangementValidationService(new FakeAppLogger()),
-            new ArrangementAutoFixService());
+            new ArrangementAutoFixService(),
+            companions ?? RealCompanions());
+    }
+
+    private static readonly ChartLintOptions SaveFixes = new() { ApplyAutoFixes = true, SaveFixedProjects = true };
+
+    private static SaveCompanionService RealCompanions() => new(new FakeConfigurationService(), new FakeAppLogger());
+
+    /// <summary>A project file the way Charter writes it: no DotCharter element anywhere, and no
+    /// ownership stamp, so DotCharter never considers it its own.</summary>
+    private string WriteCharterProject(string fileName)
+    {
+        var path = Path.Combine(_tempDir, fileName);
+        var doc = CharterRscpProjection.Build(BuildFixtureProject(), out _);
+        using var stream = File.Create(path);
+        RscpChartSerializer.WriteDocument(stream, doc);
+        return path;
     }
 
     /// <summary>
-    ///     Batch lint rewrites <c>.rscp</c> files IN PLACE across a whole folder
+    ///     A Charter <c>.rscp</c> in a folder batch lint walks: the fixed project is written as the
+    ///     <c>.dcproj</c> beside it, and the <c>.rscp</c> stays byte for byte what Charter wrote.
+    /// </summary>
+    [Fact]
+    public void ACharterRscp_IsNeverRewritten_TheFixedProjectIsWrittenAsADcproj()
+    {
+        var rscp = WriteCharterProject("chart.rscp");
+        var before = File.ReadAllBytes(rscp);
+        Assert.False(CharterRscp.IsWrittenByDotCharter(rscp));
+
+        var report = Assert.Single(CreateService(companions: RealCompanions()).Run(
+            [rscp], SaveFixes, cancellationToken: TestContext.Current.CancellationToken).Charts);
+
+        Assert.True(report.Saved, report.Error);
+        Assert.Equal(before, File.ReadAllBytes(rscp));
+        var dcproj = Path.Combine(_tempDir, "chart.dcproj");
+        Assert.True(File.Exists(dcproj));
+        Assert.True(CharterRscp.IsWrittenByDotCharter(dcproj));
+        Assert.Equal(2, new RscpChartSerializer().Load(dcproj).Arrangements[0].Levels[0].Notes.Count); // the fix is in it
+        Assert.False(File.Exists(rscp + ".bak"));
+        Assert.False(File.Exists(rscp + ".lint-saving"));
+    }
+
+    /// <summary>An older DotCharter <c>.rscp</c> follows the session's first save: kept as <c>.rscp.bak</c>,
+    /// with the Charter companion taking the name.</summary>
+    [Fact]
+    public void AnOlderDotCharterRscp_IsKeptAsABackup_AndTheCharterCompanionTakesItsName()
+    {
+        var rscp = WriteFixtureProject("chart.rscp");
+        var before = File.ReadAllBytes(rscp);
+
+        var report = Assert.Single(CreateService(companions: RealCompanions()).Run(
+            [rscp], SaveFixes, cancellationToken: TestContext.Current.CancellationToken).Charts);
+
+        Assert.True(report.Saved, report.Error);
+        Assert.Equal(before, File.ReadAllBytes(rscp + ".bak"));
+        Assert.True(File.Exists(Path.Combine(_tempDir, "chart.dcproj")));
+        Assert.True(File.Exists(rscp));
+        Assert.False(CharterRscp.IsWrittenByDotCharter(rscp));
+    }
+
+    /// <summary>A <c>.dcproj</c> of that name is somebody's project: nothing is overwritten, nothing is lost.</summary>
+    [Fact]
+    public void ADcprojAlreadyBesideTheRscp_IsNeverOverwritten()
+    {
+        var rscp = WriteCharterProject("chart.rscp");
+        var dcproj = Path.Combine(_tempDir, "chart.dcproj");
+        File.WriteAllText(dcproj, "someone else's project");
+        var before = File.ReadAllBytes(rscp);
+
+        var report = Assert.Single(CreateService(companions: RealCompanions()).Run(
+            [rscp], SaveFixes, cancellationToken: TestContext.Current.CancellationToken).Charts);
+
+        Assert.False(report.Saved);
+        Assert.Contains("already exists", report.Error);
+        Assert.Equal("someone else's project", File.ReadAllText(dcproj));
+        Assert.Equal(before, File.ReadAllBytes(rscp));
+        Assert.False(File.Exists(rscp + ".lint-saving"));
+    }
+
+    /// <summary>A report-only run writes no file at all.</summary>
+    [Fact]
+    public void AReportOnlyRun_OverACharterRscp_WritesNoDcproj()
+    {
+        var rscp = WriteCharterProject("clean.rscp");
+        var before = File.ReadAllBytes(rscp);
+        var service = CreateService(companions: RealCompanions());
+
+        service.Run([rscp], new ChartLintOptions { ApplyAutoFixes = false }, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(before, File.ReadAllBytes(rscp));
+        Assert.False(File.Exists(Path.Combine(_tempDir, "clean.dcproj")));
+    }
+
+    /// <summary>
+    ///     Batch lint rewrites <c>.dcproj</c> files IN PLACE across a whole folder
     ///     tree, headlessly, on projects the user never opened — the largest blast
     ///     radius of any writer in the repo. It used to hand the real project path
     ///     straight to the serializer, which opens <c>FileMode.Create</c>
@@ -246,7 +340,7 @@ public sealed class BatchChartLintServiceTests : IDisposable
     [Fact]
     public void AFailedSaveLeavesTheOriginalProjectIntact()
     {
-        var path = WriteFixtureProject("chart.rscp");
+        var path = WriteFixtureProject("chart.dcproj");
         var bytesBefore = File.ReadAllBytes(path);
 
         var report = Assert.Single(
@@ -282,6 +376,13 @@ public sealed class BatchChartLintServiceTests : IDisposable
     /// note at the same (position, string) (auto-fixable).</summary>
     private string WriteFixtureProject(string fileName, bool includeBadFret = true, bool includeDuplicate = true)
     {
+        var path = Path.Combine(_tempDir, fileName);
+        new RscpChartSerializer().Save(path, BuildFixtureProject(includeBadFret, includeDuplicate));
+        return path;
+    }
+
+    private static ChartProject BuildFixtureProject(bool includeBadFret = true, bool includeDuplicate = true)
+    {
         var project = new ChartProject { AudioFileName = "song.wav", Bpm = 120.0 };
         project.Chart.Artist = "Artist";
         project.Chart.SongName = "Song";
@@ -299,9 +400,6 @@ public sealed class BatchChartLintServiceTests : IDisposable
             level.Notes.Add(new GuitarNote { Position = new FractionalPosition(3), StringIndex = 0, Fret = 26 });
         arrangement.Levels.Add(level);
         project.Arrangements.Add(arrangement);
-
-        var path = Path.Combine(_tempDir, fileName);
-        new RscpChartSerializer().Save(path, project);
-        return path;
+        return project;
     }
 }

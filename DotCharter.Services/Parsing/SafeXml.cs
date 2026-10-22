@@ -56,7 +56,7 @@ public static class SafeXml
     ///     How every XML document this app owns is opened for reading:
     ///     <see cref="FileShare.ReadWrite" /> | <see cref="FileShare.Delete" />.
     ///     <para>
-    ///         The share mode is load-bearing, not incidental. A <c>.rscp</c> is
+    ///         The share mode is load-bearing, not incidental. A <c>.dcproj</c> is
     ///         written through <c>AtomicFile.ReplaceWithRetry</c> — stage, fsync,
     ///         RENAME over the target — and on Windows a rename is refused by any
     ///         open handle on the destination that does not share DELETE. A plain

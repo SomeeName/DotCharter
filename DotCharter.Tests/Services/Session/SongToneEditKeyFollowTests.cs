@@ -260,7 +260,8 @@ public sealed class SongToneEditKeyFollowTests : IDisposable
                 new NoOpCrashRecoveryService(), History, new NoOpSaveCompanionService(),
                 uiDispatcher: new TestUiDispatcher(),
                 localization: FakeLocalization.English(),
-                songToneEdits: Store);
+                songToneEdits: Store,
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public string ProjectPath { get; }

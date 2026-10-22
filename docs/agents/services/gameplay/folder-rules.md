@@ -51,6 +51,24 @@ Extracted verbatim from `DotCharter.Services/AGENTS.md`. **Read this before touc
   `.SelectDeletions_NothingReferenced_ButFilesPresent_DeletesNothing`.
   **A new consumer of `GetAll()` that deletes, prunes or evicts asks
   `IsStoreAuthoritative` first.**
+- **An own chart's song key is its PROJECT PATH, so a path change must move the
+  stores keyed by it** (`LivePlayViewModel.ProfileSongKey`;
+  `PlaySongItem.SongIdentity`). The `.rscp` to `.dcproj` migration does it
+  through `IProjectPathRekey` (`ProjectPathRekey`, called by
+  `ProjectSaver.SaveToPickedPathAsync` right after the write, and only for the
+  same-named `.dcproj`). Path-keyed stores and what happens to each:
+  practice stats, bests and leaderboards (`practice-profiles.json` of EVERY
+  profile; `PracticeSongRekey` moves and merges), setlist entries
+  (`setlists.json` of every profile; `PlaySetlistViewModel` re-reads on
+  `Rekeyed`), `AppConfig.SongTonePreferences` and `DropTunerSongs`: all moved.
+  Checkpoints and tone edits are copied by the Save As tail the migration shares
+  (`CarryCheckpointsAsync`, `SongToneEditKeyFollow`); AI chats are keyed by
+  `ChartProject.ProjectId` and carried by `AiChatSaveAsCarry`. Replay and take
+  files are named from the session record, which moves with its entry. The stem
+  and waveform caches of an own chart key on the audio CONTENT signature
+  (`StemCacheIdentity`), never on the project path. A NEW store keyed by a project path joins `ProjectPathRekey`
+  in the same change. Pinned by `ProjectPathRekeyTests` and
+  `ProjectFileExtensionSessionTests`.
 - **A stored `BestAccuracy` of 0 means UNMEASURED, and no readout may grade it
   (0.58).** `PracticeProfileService.Record` declines to raise the stored best for
   a run under `MinCoverageForBestAccuracy`, so a player whose runs are all

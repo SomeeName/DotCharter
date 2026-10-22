@@ -117,7 +117,7 @@ internal sealed class ProjectSilencePadder(
         for (var i = 0; i < project.Stems.Count; i++)
         {
             var stem = project.Stems[i];
-            // Data from the .rscp: a UNC, device or network-drive path is refused unprobed.
+            // Data from the .dcproj: a UNC, device or network-drive path is refused unprobed.
             if (!ProjectRelativePath.IsReadableMediaReference(stem.Path)) continue;
             var path = Path.IsPathRooted(stem.Path)
                 ? stem.Path

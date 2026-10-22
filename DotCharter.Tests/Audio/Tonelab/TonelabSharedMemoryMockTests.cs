@@ -41,7 +41,7 @@ public sealed class TonelabSharedMemoryMockTests
             view.Write(TonelabSharedMemoryMock.InWriteOffset, (uint)(b + 1));
         }
 
-        Assert.True(SpinWait.SpinUntil(() => view.ReadUInt32(TonelabSharedMemoryMock.OutWriteOffset) == blocks, TimeSpan.FromSeconds(10)));
+        Assert.True(SpinWait.SpinUntil(() => view.ReadUInt32(TonelabSharedMemoryMock.OutWriteOffset) == blocks, TimeSpan.FromSeconds(60)));
 
         var output = new float[block * 2];
         for (var b = 0; b < blocks; b++)

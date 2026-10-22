@@ -261,7 +261,14 @@ invariant itself)
   beat and PUSHES the target (what EOF and Log Charter both emit), and **on-beat
   is also the FALLBACK when a before-beat grace has no room** — the old "no room
   ⇒ give up" rule silently dropped two more reference slides whose targets abut
-  the previous note. A plain (non-slide) grace still degrades to the
+  the previous note. A grace that HAMMERS or PULLS into its target (GP's
+  `HopoOrigin` on the grace note, read by `GpNoteParser.IsHopoOrigin`; the
+  target carries `HopoDestination`) is a real short note too, without a slide,
+  and the target is marked as the legato's destination. An on-beat one cannot
+  push a target below a quarter note's sustain (`ShortenForGrace`), but a TIED
+  target whose merged ring is exactly a quarter still drops under the
+  sub-quarter sustain rule after the on-beat shift. A plain (no slide, no
+  hammer/pull) grace still degrades to the
   notation-only `GuitarNote.GraceFret` hint; `ChordNote` had no such field, so a
   plain CHORD grace was dropped until 0.33.2 added `ChordNote.GraceFret`: the
   gpif chord path now attaches one hint per graced STRING, and a grace beat may

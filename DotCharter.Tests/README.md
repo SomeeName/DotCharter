@@ -8,17 +8,20 @@ harness notes are in [docs/agents/testing/](../docs/agents/testing/).
 
 ## Running the tests
 
-The suite is split into **two runs, in two separate processes**:
+The suite is split into **separate runs, in separate processes**:
 
 | Run | What it is | Command |
 |---|---|---|
-| **Default gate** | everything except `*UiPerfSmokeTests` | `tools/agent/Invoke-Gate.ps1 -Gate`, or a plain `dotnet test` (below) |
+| **Default gate** | everything except `*UiPerfSmokeTests` and the release lane | `tools/agent/Invoke-Gate.ps1 -Gate`, or a plain `dotnet test` (below) |
+| **Release lane** | the slowest corpus / integration / determinism classes, listed with a reason each in `tools/ci/release-lane.json` | `tools/agent/Invoke-Gate.ps1 -ReleaseLane` (the merge train, the release preflight and CI always run it) |
 | **Headless UI suite** | every `*UiPerfSmokeTests` class except the golden screenshots | `tools/agent/Invoke-Gate.ps1 -Headless` |
 | Golden screenshots | `ScreenGoldenUiPerfSmokeTests` (needs approved baselines) | `tools/agent/Invoke-Gate.ps1 -Goldens` |
 | A few classes | while you iterate | `tools/agent/Invoke-Gate.ps1 -FilterClass '*MyFeature*'` |
 
-"Everything" means the gate run followed by the headless run. They are never one
-process.
+"Everything" means the gate, the release lane and the headless run. The headless
+suite is never in the same process as the others; `-Gate -ReleaseLane` runs the
+first two back to back. `Infrastructure/ReleaseLaneLintTests` proves every test
+class runs in exactly one of the lanes.
 
 ### Why two processes
 
@@ -33,8 +36,10 @@ fix it. Keep the two runs separate.
 The root `global.json` opts `dotnet test` into Microsoft.Testing.Platform. When
 `dotnet test` starts the test executable **without any filter**,
 [`TestEntryPoint.cs`](TestEntryPoint.cs) adds the gate's own exclusion,
-`--filter-not-class "*UiPerfSmokeTests"`. So a newcomer who types `dotnet test`
-gets the default gate and cannot mix the two runs by accident.
+`--filter-not-class "*UiPerfSmokeTests"` and one `--filter-not-class` per class of
+the release lane. So a newcomer who types `dotnet test` gets the default gate (not
+the slow release lane, and not the headless suite) and cannot mix the runs by
+accident. `dotnet test ... --filter-class "*MyLaneClass"` runs a release-lane class.
 
 **Any explicit filter turns that default off.** Every script passes its own
 filter, so each one runs exactly what it ran before: `Invoke-Gate.ps1`, CI
@@ -78,7 +83,8 @@ so treat these as rough sizes.
 
 | Run | Cases | Time |
 |---|---|---|
-| Default gate (plain `dotnet test`, `Invoke-Gate.ps1 -Gate`) | 20,914 | 516 s |
+| Default gate (plain `dotnet test`, `Invoke-Gate.ps1 -Gate`, 4 shards) | 21,927 | 122 s (2026-10-21) |
+| Release lane (`Invoke-Gate.ps1 -ReleaseLane`, 4 shards) | 119 | 185 s (2026-10-21) |
 | Headless UI suite (`Invoke-Gate.ps1 -Headless`, 4 processes) | 1,545 | 276 s |
 | Golden screenshots (`Invoke-Gate.ps1 -Goldens`) | 367 | not part of either run |
 

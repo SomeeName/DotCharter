@@ -76,11 +76,11 @@ public static class ContestedFeatures
 
     /// <summary>
     ///     Palette ids that READ game packages or the game install, by the
-    /// <see cref="PackageFeatures" /> id that gates each. None today: the
-    ///     one package import is a Tone Designer button, and the writer's entries stay.
+    /// <see cref="PackageFeatures" /> id that gates each: the package → <c>.dcsong</c> conversion.
+    ///     The Tone Designer's package import is a button, and the writer's entries stay.
     /// </summary>
     public static IReadOnlyDictionary<string, string> PackagePaletteCommandIds { get; } =
-        new Dictionary<string, string>(StringComparer.Ordinal);
+        new Dictionary<string, string>(StringComparer.Ordinal) { ["file.convertPackages"] = PackageFeatures.GamePackagesId };
 
     /// <summary>
     ///     The palette entries of a build with the switch <paramref name="enabled" /> and the

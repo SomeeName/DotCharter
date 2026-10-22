@@ -1,6 +1,7 @@
 // The pure extension -> subsystem table behind ProjectMenuViewModel.LoadFile
 // (File ▸ Open Recent and the window's file DROP both funnel through it).
 using DotCharter.Services.Import.Audio;
+using DotCharter.Services.Parsing.Rscp;
 
 namespace DotCharter.UI.ViewModels.Shell;
 
@@ -9,7 +10,7 @@ namespace DotCharter.UI.ViewModels.Shell;
 /// </summary>
 public enum DroppedFileRoute
 {
-    /// <summary>An <c>.rscp</c> project — the project loader REPLACES the session.</summary>
+    /// <summary>A <c>.dcproj</c> or <c>.rscp</c> project — the project loader REPLACES the session.</summary>
     Project,
 
     /// <summary>Song audio (<see cref="AudioFileTypes" />) — attached or auditioned.</summary>
@@ -64,7 +65,7 @@ public enum DroppedFileRoute
 /// </summary>
 public static class DroppedFileRouter
 {
-    /// <summary>The atomic-save temp suffix (<c>project.rscp.saving</c>) —
+    /// <summary>The atomic-save temp suffix (<c>project.dcproj.saving</c>) —
     /// <c>ProjectDocumentService</c> loads through it, so the router must too or a
     /// leftover temp becomes "unsupported".</summary>
     private const string AtomicTempSuffix = ".saving";
@@ -78,7 +79,7 @@ public static class DroppedFileRouter
 
     /// <summary>Every extension this table names, in route order. Test surface.</summary>
     public static IReadOnlyList<string> KnownExtensions { get; } =
-        new[] { ".rscp", ".dcsong", ".eof", ".xml", ".psarc" }
+        new[] { ProjectFiles.Extension, CharterRscp.Extension, ".dcsong", ".eof", ".xml", ".psarc" }
             .Concat(MidiExtensions)
             .Concat(GuitarProExtensions)
             .Concat(AudioFileTypes.Extensions)
@@ -104,7 +105,8 @@ public static class DroppedFileRouter
 
         return extension switch
         {
-            ".rscp" => DroppedFileRoute.Project,
+            // Both open as a project; the session prefers a .dcproj over its Charter companion.
+            ProjectFiles.Extension or CharterRscp.Extension => DroppedFileRoute.Project,
             // A song package unpacks into a new project folder (ProjectSessionService.LoadFile).
             ".dcsong" => DroppedFileRoute.Project,
             ".eof" => DroppedFileRoute.EofImport,

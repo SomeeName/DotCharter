@@ -4,7 +4,7 @@ namespace DotCharter.Core.Domain.Project;
 /// How the built-in chart synth PLAYS a song's notes, per song: one rule set
 ///     for guitar arrangements and one for bass. The defaults are the rules the synth
 ///     always followed, so a project that never touches this sounds exactly as before.
-///     Saved in the .rscp as <c>dcSynthPlayStyle</c>, only when it differs from the
+///     Saved in the .dcproj as <c>dcSynthPlayStyle</c>, only when it differs from the
 ///     defaults.
 /// </summary>
 public sealed class ChartSynthPlayStyle

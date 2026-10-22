@@ -13,7 +13,6 @@ namespace DotCharter.Tests.Services.Audio.Coordination;
 ///     measured level, a glide never displaces a queued tone switch, a measured chain
 ///     is never measured twice, and the player's saved edits are left alone.
 /// </summary>
-[Collection("GameplayToneHud")]
 public sealed class RsTonePlaybackCoordinatorLevellingTests
 {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(60);

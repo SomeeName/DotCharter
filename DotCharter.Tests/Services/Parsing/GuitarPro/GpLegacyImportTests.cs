@@ -151,7 +151,7 @@ public sealed class GpLegacyImportTests
             // A TimeoutException here IS the regression: the import thread is
             // stuck inside PreviousPowerOfTwo and never comes back.
             var arrangements =
-                await work.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+                await work.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
             var arr = Assert.Single(arrangements);
             Assert.NotEmpty(arr.Levels);
         }

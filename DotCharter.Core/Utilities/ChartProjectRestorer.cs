@@ -41,7 +41,7 @@ namespace DotCharter.Core.Utilities;
 ///         <see cref="ChartProjectCloner" /> is documented as the single
 ///         snapshot source of truth, and a second hand-written copier would
 ///         silently stop restoring any newly added model field — the same class
-///         of bug as a `.rscp` field with a reader but no writer. So the cloner
+///         of bug as a `.dcproj` field with a reader but no writer. So the cloner
 ///         delegates here: <c>Clone</c> is "restore into a brand-new empty
 ///         object", the tail path, and there is exactly ONE place that knows
 ///         which fields a project has.

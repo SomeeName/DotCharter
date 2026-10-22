@@ -57,13 +57,13 @@ public sealed class AudioHealthMonitorLoopTests
         { IsBackground = true, Name = "health-loop-under-test" };
 
         loop.Start();
-        Assert.True(polling.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "the loop never polled");
+        Assert.True(polling.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken), "the loop never polled");
 
         // Exactly what the timed-out-join path does.
         stop.Dispose();
 
-        Assert.True(finished.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "the loop never exited");
-        Assert.True(loop.Join(TimeSpan.FromSeconds(10)));
+        Assert.True(finished.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken), "the loop never exited");
+        Assert.True(loop.Join(TimeSpan.FromSeconds(60)));
         Assert.Null(escaped);
         Assert.True(polls > 0);
     }
@@ -94,11 +94,11 @@ public sealed class AudioHealthMonitorLoopTests
         { IsBackground = true, Name = "throwing-poll-loop" };
 
         loop.Start();
-        Assert.True(enough.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "the loop stopped at the first throw");
+        Assert.True(enough.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken), "the loop stopped at the first throw");
 
         stop.Set();
-        Assert.True(finished.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
-        Assert.True(loop.Join(TimeSpan.FromSeconds(10)));
+        Assert.True(finished.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
+        Assert.True(loop.Join(TimeSpan.FromSeconds(60)));
 
         Assert.True(polls >= 3);
         Assert.Equal(polls, errors);
@@ -121,9 +121,9 @@ public sealed class AudioHealthMonitorLoopTests
         { IsBackground = true, Name = "joined-loop" };
 
         loop.Start();
-        Assert.True(running.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.True(running.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
 
-        var joined = AudioHealthMonitor.TryStopLoopThread(stop, loop, TimeSpan.FromSeconds(10));
+        var joined = AudioHealthMonitor.TryStopLoopThread(stop, loop, TimeSpan.FromSeconds(60));
 
         Assert.True(joined);
         // Disposed, because the thread is provably gone.
@@ -148,12 +148,12 @@ public sealed class AudioHealthMonitorLoopTests
         var loop = new Thread(() =>
         {
             wedged.Set();
-            release.Wait(TimeSpan.FromSeconds(30));
+            release.Wait(TimeSpan.FromSeconds(60));
         })
         { IsBackground = true, Name = "wedged-loop" };
 
         loop.Start();
-        Assert.True(wedged.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.True(wedged.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
 
         var joined = AudioHealthMonitor.TryStopLoopThread(
             stop, loop, TimeSpan.FromMilliseconds(50));
@@ -166,7 +166,7 @@ public sealed class AudioHealthMonitorLoopTests
         Assert.True(stop.WaitOne(0), "the handle must survive the failed join, still signalled");
 
         release.Set();
-        Assert.True(loop.Join(TimeSpan.FromSeconds(10)));
+        Assert.True(loop.Join(TimeSpan.FromSeconds(60)));
         stop.Dispose();
     }
 }

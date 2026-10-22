@@ -58,7 +58,19 @@ Part of the rendering/perf reference. Router: [../rendering-perf-detail.md](../r
   selection change — only the curve/dynamic layers rebuild; (3)
   `ChartSpacingEnforcer.EnforceSoundSpacing` is a pooled-array backward
   sweep (semantics pinned in `ChartSpacingEnforcerTests`), not LINQ +
-  dictionaries. Measurement seam: `DOTCHARTER_AUTOPILOT_EDIT=1` inside the
+  dictionaries. A fourth, for whole-level derived data: it is computed ONCE
+  per level and edit and READ by every surface — `ChartEditorViewModel`
+  owns one `HandShapeSuggestionLatch` (`SharedHandShapeSuggestions`) and one
+  `RepeatChordLatch` (`SharedRepeatChords`, thread-safe, the 3D thread reads
+  it) — never a latch per reader: the timeline, each stacked row, the song
+  map and the hand-shape tool each re-ran the 4 ms / 6.4 MB suggester on a
+  5.7k-sound chart. The suggester itself merges the two sorted lists into
+  pooled arrays (`HandShapeSounds`) and remembers which grips one hand can
+  hold across runs (`HandShapeGripMemo`): ~1.1 ms / 140 KB warm, ~1.7 ms /
+  1 MB cold, against 3.2 ms / 4.8 MB. Pinned by
+  `HandShapeSuggestionLatchTests` (counts, bytes) and
+  `UI/SharedEditLatchReadersTests` (no surface names a latch type).
+  Measurement seam: `DOTCHARTER_AUTOPILOT_EDIT=1` inside the
   perf autopilot logs `[EditGC]` (per-edit alloc + GC counts) and
   `[CloneStats]` (one crash-recovery-style assemble+clone: measured 8.9 ms /
   3.2 MB on a real 4-arrangement chart — the sanctioned whole-project

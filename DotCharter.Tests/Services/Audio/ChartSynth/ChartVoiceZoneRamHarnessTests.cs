@@ -144,7 +144,7 @@ public sealed class ChartVoiceZoneRamHarnessTests : IDisposable
                 report.AppendLine(CultureInfo.InvariantCulture,
                     $"| {name} | {chart.Name} | {chart.Upload.Notes.Length} | {st.PackBytes / MiB:F1} | {(on - before) / MiB:F1} | {enableMs} |");
                 engine.SetChartSourceEnabled(0, false);
-                var deadline = Environment.TickCount64 + 5000;
+                var deadline = Environment.TickCount64 + 60_000;   // a deadlock detector, not a budget
                 while (JuceAudioEngine.ChartVoicePackBytes != 0 && Environment.TickCount64 < deadline) Thread.Sleep(10);
                 Assert.Equal(0, JuceAudioEngine.ChartVoicePackBytes);
                 engine.SetChartNotes(0, [], []);

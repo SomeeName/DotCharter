@@ -4,7 +4,7 @@ namespace DotCharter.Services.Ai.Chat;
 
 /// <summary>
 ///     The chart the chat history serves: its identity (<c>ChartProject.ProjectId</c>)
-///     and the folder its <c>.rscp</c> lives in, or null when it has none yet.
+///     and the folder its <c>.dcproj</c> lives in, or null when it has none yet.
 /// </summary>
 public sealed record AiChatChart(string ChartId, string? ProjectFolder);
 

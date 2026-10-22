@@ -15,8 +15,9 @@ namespace DotCharter.Tests.Presentation.Settings;
 ///     companions and timed backup (load, count, save, revert, reset, search),
 ///     the decoded-audio cache readout, and backup export / import — including
 ///     that a FAILED import still drops the caches it may have invalidated.
+///     The backup view model gets a recording localization, so no case here writes
+///     the process culture and the class needs no collection.
 /// </summary>
-[Collection("LocalizationSingleton")]
 public sealed class FilesSettingsViewModelTests : IDisposable
 {
     private readonly string _cacheRoot = Path.Combine(Path.GetTempPath(), "DotCharterTests", "files-tab-" + Guid.NewGuid().ToString("N"));

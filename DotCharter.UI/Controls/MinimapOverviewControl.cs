@@ -5,7 +5,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Tone.UI.Controls;
 using DotCharter.UI.Constants;
 using DotCharter.UI.Controls.Layers.Helpers;
@@ -97,13 +96,6 @@ public class MinimapOverviewControl : Control
     // Reused every frame by DrawUseMarks: cleared and refilled, never re-allocated.
     private readonly List<SongMapMark> _selectionMarks = [];
     private readonly List<SongMapMark> _highlightMarks = [];
-
-    // The suggested hand shapes: the lane's own latch type over the lane's own inputs
-    // (the level on screen, the View toggle, the history revision), so the detector reruns only on
-    // an edit and an unchanged frame reuses the same list. Drawn as a faint wash of the hand-shape
-    // bar colour with a stronger bar along the bottom edge; both alpha copies of a ChartTheme
-    // colour, so OnThemeChanged repaints them like EditTargetWashBrush.
-    private readonly HandShapeSuggestionLatch _suggestedHandShapes = new();
 
     // The emphasised link group's placements (hover or selection only): refilled per frame, and
     // only while a group is emphasised.
@@ -379,8 +371,8 @@ public class MinimapOverviewControl : Control
     /// <summary>Test seam: the suggested hand shapes' bands the last frame drew.</summary>
     internal IReadOnlyList<SongMapMark> SuggestionMarks => _suggestionMarks;
 
-    /// <summary>Test seam: how many times the map's suggestion latch ran the detector.</summary>
-    internal int SuggestionComputeCount => _suggestedHandShapes.ComputeCount;
+    /// <summary>Test seam: how many times the editor's shared suggestion latch ran the detector.</summary>
+    internal int SuggestionComputeCount => Editor?.SharedHandShapeSuggestions.ComputeCount ?? 0;
 
     private void OnSelectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -518,8 +510,8 @@ public class MinimapOverviewControl : Control
     /// </summary>
     private void DrawSuggestions(DrawingContext context, ChartEditorViewModel editor, double scale, double height)
     {
-        var bars = _suggestedHandShapes.Get(editor.ActiveArrangement, editor.ActiveLevel,
-            editor.ShowSuggestedHandShapes, editor.HistoryRevision, Environment.TickCount64);
+        var bars = editor.SharedHandShapeSuggestions.Get(editor.ActiveArrangement, editor.ActiveLevel,
+            editor.ShowSuggestedHandShapes, editor.HistoryRevision, Environment.TickCount64).Bars;
         SongMapMarks.CollectSuggestions(bars, editor.Beats, scale, SectionBandHeight, height, _suggestionMarks);
         for (var i = 0; i < _suggestionMarks.Count; i++)
         {

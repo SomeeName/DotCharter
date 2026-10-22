@@ -8,7 +8,7 @@ namespace DotCharter.Core.Domain.Project;
 ///         The shape is load-bearing beyond tidiness: the AI chat history names a
 ///         DIRECTORY after the id (<c>ai-chats/&lt;id&gt;/</c>), so an id that could
 ///         carry a separator or <c>..</c> would be a path traversal from one edited
-///         <c>.rscp</c> attribute.
+///         <c>.dcproj</c> attribute.
 ///     </para>
 /// </summary>
 public static class ProjectIdentity

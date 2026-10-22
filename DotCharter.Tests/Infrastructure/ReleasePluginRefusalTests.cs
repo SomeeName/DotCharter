@@ -172,6 +172,38 @@ public sealed class ReleasePluginRefusalTests : IDisposable
     }
 
     [Fact]
+    public void A_plugin_build_publishes_the_plugin_tools_and_every_payload_is_checked_for_them()
+    {
+        var script = Script();
+
+        Assert.Contains("$PluginToolExes = @(Get-PluginToolExeNames $RepoRoot)", script, StringComparison.Ordinal);
+        Assert.Contains("$PluginToolFiles = @(Get-PluginToolFileNames $RepoRoot)", script, StringComparison.Ordinal);
+
+        // The tools are published into the app folder by a plugin build only, then the executables are checked.
+        var publish = script[script.IndexOf("function Publish-UiPayload", StringComparison.Ordinal)..];
+        publish = publish[..publish.IndexOf("\nfunction ", 10, StringComparison.Ordinal)];
+        var tools = publish.IndexOf("if ($WithPlugins) { Publish-PluginTools -RepoRoot $RepoRoot -AppDir $AppDir", StringComparison.Ordinal);
+        Assert.True(tools > publish.IndexOf("& dotnet publish", StringComparison.Ordinal), "the tools go in after the app is published.");
+        Assert.True(publish.IndexOf("Assert-ReleasePayloadPlugins $AppDir $PluginToolExes -WithPlugins:$WithPlugins", StringComparison.Ordinal) > tools,
+            "the tool executables are checked after they are published.");
+
+        // The launchers are written for a plugin build only, before the folder is checked and zipped.
+        var launchers = script.IndexOf("if ($WithPlugins -and $PluginToolFiles.Count -gt 0) {\n        Write-Step 'Writing the plugin tools", StringComparison.Ordinal);
+        var zipStep = script.IndexOf("New-FolderWrappedZip -Directory $publishDir -ZipPath $uiZip", StringComparison.Ordinal);
+        Assert.True(launchers > 0 && launchers < zipStep, "the launchers must be in tools/ before the payload is zipped.");
+
+        // A public payload is refused when it holds a tool file, a plugin payload when it lacks one: folder, zip, -SmokeOnly.
+        Assert.True(script.IndexOf("Assert-ReleasePayloadPlugins $publishDir $PluginToolFiles -WithPlugins:$WithPlugins", StringComparison.Ordinal)
+                    is var folder && folder > launchers && folder < zipStep, "the payload folder is checked for the tool files before it is zipped.");
+        Assert.True(script.IndexOf("Assert-ReleasePayloadPlugins $uiZip $PluginToolFiles -WithPlugins:$WithPlugins", StringComparison.Ordinal) > zipStep,
+            "the zip is checked for the tool files after it is written.");
+        var smoke = script[script.IndexOf("if ($SmokeOnly) {", StringComparison.Ordinal)..];
+        Assert.True(smoke.IndexOf("Assert-ReleasePayloadPlugins $source $PluginToolFiles -WithPlugins:$WithPlugins", StringComparison.Ordinal) is var check
+                    && check > 0 && check < smoke.IndexOf("Invoke-PackSmoke", StringComparison.Ordinal),
+            "-SmokeOnly checks the tool files before it launches the payload.");
+    }
+
+    [Fact]
     public void The_printed_command_targets_the_resolved_repo_settled_before_the_build()
     {
         var script = Script();

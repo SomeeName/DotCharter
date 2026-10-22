@@ -8,8 +8,7 @@ namespace DotCharter.Tests.Infrastructure;
 /// </summary>
 public sealed partial class PublicSnapshotExportTests
 {
-    [Fact]
-    public void Push_WhenEverythingHolds_PushesBothRepos_AndAnUnchangedJuceSharpIsLeftAsItIs()
+    private static void Push_WhenEverythingHolds_PushesBothRepos_AndAnUnchangedJuceSharpIsLeftAsItIs()
     {
         var scratch = Directory.CreateTempSubdirectory("dc-public-push-").FullName;
         try
@@ -42,21 +41,23 @@ public sealed partial class PublicSnapshotExportTests
         }
     }
 
-    public static TheoryData<string, string> PushRefusals => new()
-    {
-        { "no-gate", "-Push needs -Gate in the same run" },
-        { "gate-fails", "  - build: Invoke-Gate.ps1 -Public -Gate exited 1" },
-        { "no-gitleaks", "gitleaks is not installed" },
-        { "gitleaks-findings", "gitleaks reported findings (exit 1)" },
-        { "pending-pin", "the native pin of the public JuceSharp commit is PENDING" },
-        { "identity", "identity: JuceSharp: commit " },
-        { "tag-exists", "preflight: DotCharter: tag v1.2.3 already exists for commit " },
-        { "main-moved", "  - JuceSharp: public main is " }
-    };
+    // What each refusal says. "no-gitleaks" and "main-moved" are the slowest refusals, so each
+    // has its own class in PublicSnapshotExportTests.Cases.cs; the rest share one.
+    private static readonly (string Failure, string Expected)[] PushRefusals =
+    [
+        ("no-gate", "-Push needs -Gate in the same run"),
+        ("gate-fails", "  - build: Invoke-Gate.ps1 -Public -Gate exited 1"),
+        ("no-gitleaks", "gitleaks is not installed"),
+        ("gitleaks-findings", "gitleaks reported findings (exit 1)"),
+        ("pending-pin", "the native pin of the public JuceSharp commit is PENDING"),
+        ("identity", "identity: JuceSharp: commit "),
+        ("tag-exists", "preflight: DotCharter: tag v1.2.3 already exists for commit "),
+        ("main-moved", "  - JuceSharp: public main is ")
+    ];
 
-    [Theory]
-    [MemberData(nameof(PushRefusals))]
-    public void Push_Refuses_AndLeavesBothPublicReposUntouched(string failure, string expected)
+    private static string RefusalMessage(string failure) => PushRefusals.Single(r => r.Failure == failure).Expected;
+
+    private static void Push_Refuses_AndLeavesBothPublicReposUntouched(string failure, string expected)
     {
         var scratch = Directory.CreateTempSubdirectory("dc-public-push-").FullName;
         try
@@ -109,7 +110,7 @@ public sealed partial class PublicSnapshotExportTests
             failure == "pending-pin" ? Manifest() : Manifest((devJuceCommit, DllHash, HostHash)));
         WriteTree(devDc, "tools/agent/Invoke-Gate.ps1",
             "param([switch]$Public, [switch]$Build, [switch]$Gate)\n" +
-            "Set-Content -LiteralPath $env:DC_FAKE_GATE_MARKER -Value ran\n" +
+            "Set-Content -LiteralPath $env:DC_FAKE_GATE_MARKER -Value $(if ($Gate) { 'ran -Gate' } else { 'ran -Build' })\n" +
             // "main-moved": someone pushes to public JuceSharp while the gate runs.
             "if ($env:DC_FAKE_GATE_MOVE) {\n" +
             "    $m = Join-Path $env:DC_FAKE_GATE_MOVE_SCRATCH 'mover'; git init -q -b main $m; Set-Content (Join-Path $m 'x.txt') x\n" +

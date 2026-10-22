@@ -1,28 +1,35 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
 namespace DotCharter.Tests.Infrastructure;
 
 /// <summary>
-///     Every test class that moves the AMBIENT CULTURE joins one serialized
-///     collection, because the culture is process-wide and xunit runs the rest of
-///     the assembly beside it.
+///     Every test class that writes the PROCESS-WIDE culture joins one serialized
+///     collection, because those defaults are shared by the whole assembly and xunit
+///     runs the rest of it beside them.
 ///     <para>
 ///         <c>LocalizationService.SetConfiguredCulture</c> writes
 ///         <c>CultureInfo.DefaultThreadCurrentCulture</c> and
 ///         <c>DefaultThreadCurrentUICulture</c> — process-wide defaults, not
 ///         thread state — and then the current thread's culture on top. A test
 ///         that flips to <c>fr-FR</c> is changing what every OTHER test in the
-///         run sees, and a test that restores on a pool thread cannot restore
-///         what a continuation carried somewhere else.
+///         run sees.
 ///     </para>
 ///     <para>
-///         The symptom is a gate that fails ~17 localization cases perhaps one
-///         run in three and passes the same cases in isolation, which reads as
-///         "flaky localization tests" and gets re-run rather than fixed.
-///         <c>CommunityLanguageTests</c> and <c>RtlSupportTests</c> already
-///         carried the collection; the classes mutating culture AROUND them did
-///         not, so the serialization only ever covered half the participants.
+///         <c>CultureInfo.CurrentCulture</c> and <c>CurrentUICulture</c> are a
+///         different thing: their setters store the value for the calling flow
+///         (an <c>AsyncLocal</c>), so a test that sets one and restores it in a
+///         <c>finally</c> cannot be seen by a neighbour.
+///         <see cref="CurrentCultureWrites_AreScopedToTheCallersFlow" /> pins that
+///         against the runtime, and it is why such a class needs no collection.
+///     </para>
+///     <para>
+///         The symptom of a missed process-wide writer is a gate that fails ~17
+///         localization cases perhaps one run in three and passes the same cases in
+///         isolation, which reads as "flaky localization tests" and gets re-run
+///         rather than fixed. The collection runs after the parallel phase, so
+///         neither its members nor the readers beside them overlap a writer.
 ///     </para>
 ///     <para>
 ///         This is a SOURCE lint because the fault lives in method bodies, which
@@ -37,13 +44,14 @@ public sealed class CultureCollectionLintTests
     private const string HeadlessCollectionName = "HeadlessUI";
 
     /// <summary>
-    ///     Writes to ambient culture. Deliberately NOT matching reads
+    ///     Writes to the PROCESS-WIDE culture. Deliberately NOT matching reads
     ///     (<c>CultureInfo.InvariantCulture</c>, <c>StringComparison</c>) — a
     ///     reader is a victim of this race, not a cause, and serializing every
-    ///     reader would serialize most of the gate.
+    ///     reader would serialize most of the gate — and NOT matching the
+    ///     flow-scoped <c>CurrentCulture =</c> / <c>CurrentUICulture =</c> setters.
     /// </summary>
     /// <remarks>
-    ///     The last three alternatives are TRANSITIVE writers — types whose
+    ///     The last alternatives are TRANSITIVE writers — types whose
     ///     product code calls <c>SetConfiguredCulture</c> for you, so the test
     ///     source contains none of the direct tokens above and the lint reported
     ///     zero offenders while four real writers ran unserialized.
@@ -59,7 +67,7 @@ public sealed class CultureCollectionLintTests
     ///     writes the culture becomes reachable from a test.</b>
     /// </remarks>
     private static readonly Regex CultureWrite = new(
-        @"DefaultThreadCurrentCulture\s*=|DefaultThreadCurrentUICulture\s*=|CurrentCulture\s*=|CurrentUICulture\s*=|" +
+        @"DefaultThreadCurrentCulture\s*=|DefaultThreadCurrentUICulture\s*=|" +
         @"\.SetConfiguredCulture\(|\.LoadCommunityLanguages\(|" +
         @"new\s+OnboardingWizardRig\(|new\s+OnboardingWizardViewModel\(|new\s+GeneralSettingsViewModel\(|" +
         @"new\s+BackupMigrateViewModel\(|" +
@@ -90,8 +98,93 @@ public sealed class CultureCollectionLintTests
             "are what must join the collection, and this lint is what makes them.")
     ];
 
+    /// <summary>
+    ///     Files whose culture-looking calls land on an INSTANCE that holds the setting
+    ///     itself (a fake, or a recording stub), so the process culture never moves. Each
+    ///     entry names the calls to ignore, the variable they go through and the initializer
+    ///     EVERY assignment of that variable must carry: the moment one assignment is
+    ///     something else the calls are judged as writes again, and any other write in the
+    ///     file is judged as one regardless.
+    /// </summary>
+    private static readonly (string File, Regex Ignored, string Variable, Regex Initializer, string Reason)[] InstanceScopedFiles =
+    [
+        (Path.Combine("DotCharter.Tests", "Infrastructure", "FakeLocalizationTests.cs"),
+            new Regex(@"\bfake\s*\.\s*(SetConfiguredCulture|LoadCommunityLanguages)\(", RegexOptions.Compiled),
+            "fake",
+            new Regex(@"FakeLocalization\.", RegexOptions.Compiled),
+            "FakeLocalization.SetConfiguredCulture records the value on the fake and leaves the process alone; " +
+            "the class asserts exactly that."),
+        (Path.Combine("DotCharter.Tests", "Presentation", "Settings", "FilesSettingsViewModelTests.cs"),
+            new Regex(@"new\s+BackupMigrateViewModel\(\s*config\s*,\s*loc\s*,", RegexOptions.Compiled),
+            "loc",
+            new Regex(@"new\s+RecordingLocalization\(\)", RegexOptions.Compiled),
+            "The backup view model writes the culture through the localization it is given, and the class " +
+            "gives it a RecordingLocalization that only records the call."),
+        (Path.Combine("DotCharter.Tests", "Presentation", "Settings", "GeneralSettingsViewModelTests.cs"),
+            new Regex(@"new\s+GeneralSettingsViewModel\(\s*config\s*,\s*loc\s*,", RegexOptions.Compiled),
+            "loc",
+            new Regex(@"new\s+RecordingLocalization\(\)", RegexOptions.Compiled),
+            "The general settings view model writes the culture through the localization it is given, and the " +
+            "class gives it a RecordingLocalization that only records the call.")
+    ];
+
+    /// <summary>
+    ///     True when the variable is assigned at least once and every assignment starts
+    ///     with the initializer.
+    /// </summary>
+    private static bool EveryAssignmentIs(string code, string variable, Regex initializer)
+    {
+        var assignments = Regex.Matches(code, $@"\b{Regex.Escape(variable)}\s*=(?!=|>)\s*");
+        return assignments.Count > 0 && assignments.All(a => StartsAt(initializer, code, a.Index + a.Length));
+    }
+
+    private static bool StartsAt(Regex pattern, string text, int start)
+    {
+        var match = pattern.Match(text, start);
+        return match.Success && match.Index == start;
+    }
+
+    /// <summary>
+    ///     The setters the lint leaves out are scoped to the calling flow. Set one on this
+    ///     flow, and a task started with the execution context suppressed (a thread that
+    ///     did not inherit it) still sees the process default. If the runtime ever made
+    ///     them process-wide, every class that relies on that would need the collection
+    ///     again, and this is the case that says so.
+    /// </summary>
     [Fact]
-    public void EveryTestThatMovesTheAmbientCulture_JoinsTheSerializedCollection()
+    public async Task CurrentCultureWrites_AreScopedToTheCallersFlow()
+    {
+        var before = CultureInfo.CurrentCulture;
+        var beforeUi = CultureInfo.CurrentUICulture;
+        var other = CultureInfo.GetCultureInfo(before.Name == "ja-JP" ? "de-DE" : "ja-JP");
+        try
+        {
+            CultureInfo.CurrentCulture = other;
+            CultureInfo.CurrentUICulture = other;
+
+            Task<(string Culture, string Ui)> probe;
+            using (ExecutionContext.SuppressFlow())
+            {
+                probe = Task.Run(
+                    () => (CultureInfo.CurrentCulture.Name, CultureInfo.CurrentUICulture.Name),
+                    TestContext.Current.CancellationToken);
+            }
+
+            var (seenCulture, seenUi) = await probe;
+
+            Assert.Equal(other.Name, CultureInfo.CurrentCulture.Name);
+            Assert.NotEqual(other.Name, seenCulture);
+            Assert.NotEqual(other.Name, seenUi);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = before;
+            CultureInfo.CurrentUICulture = beforeUi;
+        }
+    }
+
+    [Fact]
+    public void EveryTestThatWritesTheProcessCulture_JoinsTheSerializedCollection()
     {
         var root = TestPaths.RepoRoot();
         var testRoot = Path.Combine(root, "DotCharter.Tests");
@@ -118,6 +211,15 @@ public sealed class CultureCollectionLintTests
             mutators++;
             var relative = Path.GetRelativePath(root, file);
             if (ExemptFiles.Any(e => e.File == relative)) continue;
+
+            // An instance-scoped file is judged WITHOUT its ignored calls, and only
+            // while its witness is still in the source.
+            var scoped = InstanceScopedFiles.FirstOrDefault(e => e.File == relative);
+            if (scoped.File is not null && EveryAssignmentIs(code, scoped.Variable, scoped.Initializer) &&
+                !CultureWrite.IsMatch(scoped.Ignored.Replace(code, string.Empty)))
+            {
+                continue;
+            }
 
             // Comments STRIPPED, because a doc comment that merely QUOTES
             // `[Collection("HeadlessUI")]` — this repo has one, in
@@ -158,6 +260,16 @@ public sealed class CultureCollectionLintTests
                 $"Exempt file '{file}' no longer exists — delete the entry ({reason}).");
             Assert.False(string.IsNullOrWhiteSpace(reason), $"Exempt file '{file}' carries no reason.");
         }
+        foreach (var (file, _, variable, initializer, reason) in InstanceScopedFiles)
+        {
+            Assert.True(File.Exists(Path.Combine(root, file)),
+                $"Instance-scoped file '{file}' no longer exists — delete the entry ({reason}).");
+            Assert.True(
+                EveryAssignmentIs(SourceText.StripComments(File.ReadAllText(Path.Combine(root, file))), variable, initializer),
+                $"Instance-scoped file '{file}' assigns '{variable}' something other than /{initializer}/ — its " +
+                $"culture calls may reach the process now, so it must join the collection or restore that ({reason}).");
+        }
+
         Assert.True(offenders.Count == 0,
             "A test that moves the process-wide culture must join the \"" + CollectionName +
             "\" collection, or it races every other test in the run:" +

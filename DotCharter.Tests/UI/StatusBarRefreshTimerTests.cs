@@ -76,7 +76,7 @@ public sealed class StatusBarRefreshTimerTests
     {
         var ui = new PostCountingUi();
         using var timer = ((IUiDispatcher)ui).SchedulePeriodic(TimeSpan.FromMilliseconds(15), () => ui.Ticks++);
-        SpinWait.SpinUntil(() => ui.Ticks >= 2, TimeSpan.FromSeconds(10));
+        SpinWait.SpinUntil(() => ui.Ticks >= 2, TimeSpan.FromSeconds(60));
         Assert.True(ui.Ticks >= 2, "the default periodic schedule never ticked");
         Assert.True(ui.Posts >= 2, "the default schedule must reach the UI thread through Post");
     }

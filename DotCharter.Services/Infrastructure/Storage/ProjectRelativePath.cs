@@ -1,7 +1,7 @@
 namespace DotCharter.Services.Infrastructure.Storage;
 
 /// <summary>
-///     The ONE check for a file path that came out of a file: an <c>.rscp</c>'s
+///     The ONE check for a file path that came out of a file: a <c>.dcproj</c>'s
 ///     <c>musicFileName</c> / <c>dcCoverArt</c> / stem paths / <c>arrangementFiles</c>,
 ///     an <c>.eof</c>'s companion audio, an imported profile's avatar. Such a path is
 ///     DATA written by whoever shared the file, never a trusted location.

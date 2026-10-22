@@ -234,15 +234,23 @@ The one an agent asks about most.
   [services/editing-invariants/undo.md](services/editing-invariants/undo.md).
 - **Any exception inside that `Task.Run` is reported as "project save failed"** —
   so companion-artifact writers must carry their own try/catch, or a failed
-  side-artifact will claim the `.rscp` didn't save when it did.
+  side-artifact will claim the `.dcproj` didn't save when it did.
 
-**Project format**: `.rscp`, XML (not a zip), `chartFormatVersion` 3.
-Serializer `DotCharter.Services/Parsing/Rscp/RscpChartSerializer.cs`, resolved by
-extension through a **keyed** DI registration (see DI table below).
+**Project format**: `.dcproj`, XML (not a zip), `chartFormatVersion` 3 — the
+RsCharter layout plus DotCharter's `dc*` extensions, so the code keeps the
+`Rscp` name. Serializer `DotCharter.Services/Parsing/Rscp/RscpChartSerializer.cs`, resolved by
+extension through a **keyed** DI registration (see DI table below). Both
+extensions are spelled ONLY in `Parsing/Rscp/ProjectFiles.cs` (`ProjectFiles` for
+`.dcproj`, `CharterRscp` for Charter's `.rscp`). A `.rscp` (Charter, or an older
+DotCharter build) still opens; its first save writes the `.dcproj` beside it
+(`ProjectSaver.SaveFromRscpAsync`; an older DotCharter file is renamed to
+`.rscp.bak`). A `.rscp` beside its `.dcproj` is the Charter companion and never
+opens in the project's place (`ProjectFiles.PreferProject`). Guarantees:
+[../DCPROJ-FORMAT-GUARANTEES.md](../DCPROJ-FORMAT-GUARANTEES.md).
 A project's stable identity is `ChartProject.ProjectId` (`<dcProjectId>`, minted
 at creation, derived from the bytes of an older file on open); the AI chat
 history keeps its conversations BESIDE the project, in
-`<project folder>/ai-chats/<id>/` — not in the `.rscp`, not in any snapshot
+`<project folder>/ai-chats/<id>/` — not in the `.dcproj`, not in any snapshot
 ([services/ai-chat-history.md](services/ai-chat-history.md)).
 
 **Companion artifacts written on every save** (`SaveCompanionService`, plus the
@@ -250,10 +258,11 @@ pre-existing XML bundle). All are DERIVED — none may fail a save:
 
 | Artifact | When | Notes |
 |---|---|---|
+| `<name>.rscp` | inside the save worker, FIRST, right after the `.dcproj` swap | `Export/Charter/` — the Charter-compatible companion: the project XML cut down to `CharterProjectSchema` (an allow-list read from Charter V0.22.44's model), no `dc*` nodes. Charter's own project format, so it goes through `CompanionOwnership` and a Charter project at that name is never overwritten |
 | `DTRS XML/` bundle | inside the save worker | `ProjectDocumentService.SaveDlcBuilderXmlBundle` — staged into `DTRS XML.saving`, then `Directory.Move`, so it is never half-populated |
 | `<project>.eof` | inside the save worker | Cheap. Also transcodes a sibling `.ogg` — **EOF resolves its audio relative to the folder the `.eof` is in** and prompts without it |
 | `<DlcKey>_p.psarc` | **detached, after** the save | Slow (SNG + audio copy). Coalesced (holding Ctrl+S does not queue builds) and staged-then-swapped; `Session/DetachedCompanionBuilder` owns the queue |
-| `<Artist>_<Title>.rs2dlc` (the PROJECT ROOT, beside the `.rscp` — NOT inside `DTRS XML/`, which is renamed aside on the next save) | inside the save worker, AFTER the bundle | `Export/DlcBuilder/` — the DLC Builder PROJECT that names the bundle's XML through the `DTRS XML\` folder prefix (`Rs2DlcProjectBuilder.InBundle`). Refuses when the bundle is absent; a project file naming missing XML reads as an EMPTY project. **Its `Tones` list carries the project's tone BODIES** (`ChartProject.ToneDefinitions`, each definition's JSON emitted verbatim — it already is DLC Builder's own tone object), and each arrangement carries `BaseTone` + its four slots. Empty ONLY when the project owns no tone definitions; it was empty for every earlier release because the app had no tone bodies to put there, and a `BaseTone` with `Tones: []` is a project DLC Builder cannot build |
+| `<Artist>_<Title>.rs2dlc` (the PROJECT ROOT, beside the `.dcproj` — NOT inside `DTRS XML/`, which is renamed aside on the next save) | inside the save worker, AFTER the bundle | `Export/DlcBuilder/` — the DLC Builder PROJECT that names the bundle's XML through the `DTRS XML\` folder prefix (`Rs2DlcProjectBuilder.InBundle`). Refuses when the bundle is absent; a project file naming missing XML reads as an EMPTY project. **Its `Tones` list carries the project's tone BODIES** (`ChartProject.ToneDefinitions`, each definition's JSON emitted verbatim — it already is DLC Builder's own tone object), and each arrangement carries `BaseTone` + its four slots. Empty ONLY when the project owns no tone definitions; it was empty for every earlier release because the app had no tone bodies to put there, and a `BaseTone` with `Tones: []` is a project DLC Builder cannot build |
 
 **Exporters** (none are DI-registered except `ISaveCompanionService`; the rest are
 `new`'d or static):
@@ -282,7 +291,9 @@ Audio-encoding rules and the two ways to silently ship a silent CDLC:
 `Write/PsarcWriter` + `Write/PsarcTocEncryptor` (AES-CFB TOC). Big-endian header + TOC; the
 SNG/bnk bodies inside are little-endian. **Nothing in this repository reads a
 package (#889)**: the reader is an optional plugin (`Services/Plugins/`: it registers an
-`ILibraryPackageSource`, an `IPackageToneImporter` and an `IGameInstallReader`).
+`ILibraryPackageSource`, an `IPackageToneImporter`, an `IGameInstallReader` and an `IPackageSongConverter`;
+File ▸ Import ▸ Convert PSARC to DotCharter song drives the last through
+`Presentation/Screens/Dialogs/PackageConversionLauncher`, and the plugin's drag-and-drop exe runs the same converter).
 
 **Writer / reader split (#885, epic #882)**: the writer side is `Services/Export/**` and
 `Services/Infrastructure/Psarc/Write/**` and names NO reader type
@@ -296,7 +307,7 @@ is byte/SHA-256 pins (`SngWriterBytePinTests`, `RocksmithPackageBytePinTests`). 
 whose read-back half moved keeps what both halves share in a partial file named after the class
 with a `.Fixtures` suffix, which the plugin's test project links.
 
-**Importers**: `.rscp`, `.xml`, RS2014 XML, Guitar Pro (`.gp*`), `.eof`, `.dcsong` (and a package
+**Importers**: `.dcproj`, Charter's `.rscp`, `.xml`, RS2014 XML, Guitar Pro (`.gp*`), `.eof`, `.dcsong` (and a package
 through the optional plugin),
 YouTube audio (File ▸ Import ▸ Audio from YouTube, `YoutubeAudioLauncher`; contested), WAV/OGG/MP3/FLAC, LRC, UltraStar, `.bnk`/`.wem`,
 `.dds`, MIDI (`.mid`/`.midi` — `Services/Parsing/Midi/` behind
@@ -399,7 +410,7 @@ A new project-file format needs **both** a keyed `IChartSerializer` registration
 here **and** a case in the `ext switch` in `ProjectDocumentService.ResolveFormat`
 (grep `private static string ResolveFormat`) — the ONE helper both `LoadChart`
 and `SaveChart` go through, and it throws `NotSupportedException` on anything
-that is not `.rscp` or `.xml`.
+that is not `.dcproj`, `.rscp` or `.xml`.
 
 ---
 

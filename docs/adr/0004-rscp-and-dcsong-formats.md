@@ -11,9 +11,12 @@ a chart should be able to travel to and from them.
 
 ## Decision
 
-- **Project: `.rscp`.** One XML document, version 3, compatible with
-  RSCharter and Log Charter. DotCharter adds its own `dc*` elements after the
-  inherited ones. Every written file is version 3, names are frozen once
+- **Project: `.dcproj`.** One XML document, version 3, in the RSCharter /
+  Log Charter layout. DotCharter adds its own `dc*` elements after the
+  inherited ones, which Charter cannot read, so the file carries DotCharter's
+  own extension and every save writes a Charter-compatible `.rscp` beside it
+  (only what Charter's model knows). A `.rscp` from Charter or from an older
+  DotCharter build still opens. Every written file is version 3, names are frozen once
   released, and unknown data is preserved on load and written back.
 - **Package: `.dcsong`.** A zip with a manifest, the full chart, Opus audio
   plus a preview, cover art and optional stems. Every member carries a SHA-256
@@ -31,5 +34,5 @@ a chart should be able to travel to and from them.
 
 ## Links
 
-[docs/RSCP-FORMAT-GUARANTEES.md](../RSCP-FORMAT-GUARANTEES.md),
+[docs/DCPROJ-FORMAT-GUARANTEES.md](../DCPROJ-FORMAT-GUARANTEES.md),
 [docs/agents/services/dcsong-format.md](../agents/services/dcsong-format.md), [ACKNOWLEDGEMENTS.md](../../ACKNOWLEDGEMENTS.md).

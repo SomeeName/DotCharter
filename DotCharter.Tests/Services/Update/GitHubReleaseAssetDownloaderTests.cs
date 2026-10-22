@@ -76,7 +76,7 @@ public sealed class GitHubReleaseAssetDownloaderTests : IDisposable
         Assert.Equal("application/vnd.github+json", handler.HeaderOf(0, "Accept"));
         Assert.Equal("Bearer " + Token, handler.HeaderOf(0, "Authorization"));
         Assert.Equal("2022-11-28", handler.HeaderOf(0, "X-GitHub-Api-Version"));
-        Assert.StartsWith(runningVersion ? "DotCharter/1.1.1," : "DotCharter/0.61.0",
+        Assert.StartsWith(runningVersion ? "DotCharter/1.2.0," : "DotCharter/0.61.0",
             handler.HeaderOf(0, "User-Agent"), StringComparison.Ordinal);
 
         Assert.Equal(AssetApiUrl, handler.Requests[1].RequestUri!.ToString());

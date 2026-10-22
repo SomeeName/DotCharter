@@ -143,6 +143,8 @@ public sealed class LivePlayRunArchiveTests
 
         public bool IsStoreAuthoritative => true;
 
+        public int RekeySong(string fromSongKey, string toSongKey) => 0;
+
         public PracticeArrangementProfile GetProfile(string songKey, string arrangementName) => new();
 
         public PracticeArrangementProfile Record(string songKey, string arrangementName,

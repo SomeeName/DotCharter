@@ -2,7 +2,7 @@ namespace DotCharter.Tests.UI.Input.Tools;
 
 /// <summary>
 ///     A click on a dashed suggested bar accepts THAT bar (#491). The renderer and the hand-shape tool
-///     each hold a <c>HandShapeSuggestionLatch</c> over the same inputs — the level, the View toggle and
+///     each read the editor's ONE shared <c>HandShapeSuggestionLatch</c> over the same inputs — the level, the View toggle and
 ///     the history revision — so what a click hits is what was drawn; the tool hit-tests it with the
 ///     committed bars' own <c>ChartHitTester.HitTestHandShape</c>; Alt picks the arpeggio. A source lint
 ///     because the tool takes a <c>ToolContext</c>, which takes a <c>MainWindowViewModel</c> (the
@@ -17,15 +17,18 @@ public sealed class HandShapeSuggestionClickTests
         var tool = Read("DotCharter.UI/Input/Tools/HandShapeInteractionTool.cs");
         var renderer = Read("DotCharter.UI/Controls/ChartRenderer.cs");
 
-        Assert.Contains("private readonly HandShapeSuggestionLatch _", tool);
-        Assert.Contains("private readonly HandShapeSuggestionLatch _", renderer);
+        // One latch, the editor's: a latch per reader ran the detector once per reader per edit.
+        Assert.DoesNotContain("new HandShapeSuggestionLatch", tool);
+        Assert.DoesNotContain("new HandShapeSuggestionLatch", renderer);
+        Assert.Contains("ChartEditor.SharedHandShapeSuggestions.Get(", tool);
+        Assert.Contains("editor.SharedHandShapeSuggestions.Get(", renderer);
         foreach (var source in new[] { tool, renderer })
             Assert.Contains("HistoryRevision, Environment.TickCount64)", source);
         Assert.Contains("vm.ProjectState.ShowSuggestedHandShapes", tool);
         Assert.Contains("editor.ShowSuggestedHandShapes", renderer);
     }
 
-    /// <summary>The song map's bands (#639) read the suggestions the lane's way too — its own latch
+    /// <summary>The song map's bands (#639) read the suggestions the lane's way too — the shared latch
     /// over the level on screen, the View toggle and the history revision — so a band on the map is
     /// a dashed bar on the lane. The bands' geometry is <c>UI/Controls/SongMapSuggestionMarksTests</c>.</summary>
     [Fact]
@@ -33,7 +36,8 @@ public sealed class HandShapeSuggestionClickTests
     {
         var map = Read("DotCharter.UI/Controls/MinimapOverviewControl.cs");
 
-        Assert.Contains("private readonly HandShapeSuggestionLatch _", map);
+        Assert.DoesNotContain("new HandShapeSuggestionLatch", map);
+        Assert.Contains("editor.SharedHandShapeSuggestions.Get(", map);
         Assert.Contains("editor.ShowSuggestedHandShapes, editor.HistoryRevision, Environment.TickCount64)", map);
         Assert.Contains("SongMapMarks.CollectSuggestions(", map);
     }
@@ -59,7 +63,7 @@ public sealed class HandShapeSuggestionClickTests
             "private (HandShape Bar, SuggestedHandShape Suggestion)? HitSuggestion(ToolContext context)");
 
         Assert.Contains("ChartHitTester.HitTestHandShape(context.Position, bars,", hit);
-        Assert.Contains("_suggested.Suggestions[bars.IndexOf(hit)]", hit);
+        Assert.Contains("set.Suggestions[bars.IndexOf(hit)]", hit);
     }
 
     private static string MethodBody(string source, string signature)

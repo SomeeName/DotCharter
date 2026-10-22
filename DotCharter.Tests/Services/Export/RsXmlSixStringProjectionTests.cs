@@ -28,22 +28,64 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
     [Fact]
-    public void The_dtrs_xml_bundle_always_carries_the_six_string_projection_and_logs_what_it_dropped()
+    public void The_dtrs_xml_bundle_keeps_every_string_by_default()
     {
-        Directory.CreateDirectory(_dir);
-        // DLC Builder's steps off: the count below is the chart's one level, not a generated ladder.
-        var service = Service(new AppConfig
-        {
-            RsXmlSixStringProjection = false, ExportApplyDlcBuilderFixes = false, ExportGenerateDynamicDifficulty = false
-        });
+        var song = Bundle(7, new AppConfig { RsXmlSixStringProjection = false });
 
-        service.SaveDlcBuilderXmlBundle(Path.Combine(_dir, "project.rscp"), Chart(7));
+        Assert.Equal("7", (string?)song.Element("tuning")!.Attribute("strings"));
+        Assert.NotNull(song.Element("tuning")!.Attribute("string6"));
+        Assert.Contains(song.Descendants("note"), n => (int)n.Attribute("string")! == 6);
+        Assert.Contains(song.Element("chordTemplates")!.Elements("chordTemplate"),
+            t => t.Attribute("fret6") is not null);
+        Assert.DoesNotContain(_logger.Entries, e => e.Level == "WARN");
+    }
 
-        var file = Directory.GetFiles(Path.Combine(_dir, DlcBuilderBundle.DirectoryName), "*_Lead_*.xml").Single();
-        var song = XDocument.Load(file).Root!;
+    [Fact]
+    public void The_dtrs_xml_bundle_carries_the_six_string_projection_when_the_option_is_on_and_logs_what_it_dropped()
+    {
+        var song = Bundle(7, new AppConfig { RsXmlSixStringProjection = true });
+
         Assert.Null(song.Element("tuning")!.Attribute("strings"));
         Assert.All(song.Descendants("note"), n => Assert.InRange((int)n.Attribute("string")!, 0, 5));
         Assert.Contains(_logger.Entries, e => e.Level == "WARN" && e.Message.Contains("dropped 2 notes"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_dtrs_xml_bundle_of_a_six_string_guitar_or_bass_is_the_same_with_the_option_on_or_off(bool bass)
+    {
+        var off = BundleText(bass, false);
+        var on = BundleText(bass, true);
+
+        Assert.Equal(off, on);
+    }
+
+    private XElement Bundle(int strings, AppConfig config)
+    {
+        Directory.CreateDirectory(_dir);
+        // DLC Builder's steps off: the count is the chart's one level, not a generated ladder.
+        config.ExportApplyDlcBuilderFixes = false;
+        config.ExportGenerateDynamicDifficulty = false;
+        Service(config).SaveDlcBuilderXmlBundle(Path.Combine(_dir, "project.rscp"), Chart(strings));
+        var file = Directory.GetFiles(Path.Combine(_dir, DlcBuilderBundle.DirectoryName), "*_Lead_*.xml").Single();
+        return XDocument.Load(file).Root!;
+    }
+
+    private string BundleText(bool bass, bool projection)
+    {
+        var dir = Path.Combine(_dir, bass ? "bass" : "guitar", projection ? "on" : "off");
+        Directory.CreateDirectory(dir);
+        var config = new AppConfig
+        {
+            RsXmlSixStringProjection = projection, ExportApplyDlcBuilderFixes = false, ExportGenerateDynamicDifficulty = false
+        };
+        Service(config).SaveDlcBuilderXmlBundle(Path.Combine(dir, "project.rscp"), bass ? BassChart() : Chart(6));
+        var file = Directory.GetFiles(Path.Combine(dir, DlcBuilderBundle.DirectoryName), "*.xml")
+            .Single(f => !f.Contains("Vocals") && !f.Contains("Showlights"));
+        var copy = XDocument.Load(file);
+        copy.Root!.Element("lastConversionDateTime")?.Remove();
+        return copy.ToString();
     }
 
     [Fact]
@@ -208,6 +250,56 @@ public sealed class RsXmlSixStringProjectionTests : IDisposable
 
         Assert.Equal(new short[] { -2, 0, 0, 0, 0, 0 }, Rs2DlcProjectBuilder.TuningVector(six));
     }
+
+    [Fact]
+    public void The_rs2dlc_of_a_seven_string_guitar_lists_every_string_the_xml_does_when_the_projection_is_off()
+    {
+        var project = Chart(7);
+        project.Arrangements[0].TuningPitches[0] = new TuningOffset(-5);
+        project.Arrangements[0].TuningPitches[1] = new TuningOffset(-2);
+        project.Arrangements[0].TuningPitches[3] = new TuningOffset(-1);
+
+        var tuning = Rs2DlcTuning(project, sixStringProjection: false);
+
+        var xml = new RsXmlSongWriter().Write(project).Root!.Element("tuning")!;
+        Assert.Equal(7, tuning.Length);
+        Assert.Equal(Enumerable.Range(0, 7).Select(i => (short)(int)xml.Attribute($"string{i}")!), tuning);
+        Assert.Equal(new short[] { -2, 0, -1, 0, 0, 0, -5 }, tuning);
+    }
+
+    [Fact]
+    public void The_rs2dlc_of_a_seven_string_guitar_keeps_six_slots_when_the_projection_is_on()
+    {
+        var project = Chart(7);
+        project.Arrangements[0].TuningPitches[0] = new TuningOffset(-5);
+        project.Arrangements[0].TuningPitches[1] = new TuningOffset(-2);
+
+        Assert.Equal(new short[] { -2, 0, 0, 0, 0, 0 }, Rs2DlcTuning(project, sixStringProjection: true));
+    }
+
+    [Fact]
+    public void The_rs2dlc_of_a_six_string_guitar_and_a_bass_is_identical_either_way()
+    {
+        foreach (var project in new[] { Chart(6), BassChart() })
+        {
+            project.Arrangements[0].TuningPitches[0] = new TuningOffset(-2);
+
+            var on = Rs2DlcProjectBuilder.Build(project, Rs2DlcOptions(true));
+            var off = Rs2DlcProjectBuilder.Build(project, Rs2DlcOptions(false));
+
+            Assert.Equal(6, Rs2DlcTuning(project, true).Length);
+            Assert.Equal(Rs2DlcJson(on), Rs2DlcJson(off));
+        }
+    }
+
+    private static short[] Rs2DlcTuning(ChartProject project, bool sixStringProjection) =>
+        ((Rs2DlcInstrumentalDto)Rs2DlcProjectBuilder.Build(project, Rs2DlcOptions(sixStringProjection))
+            .Arrangements[0].Fields[0]).Tuning;
+
+    private static Rs2DlcProjectBuilder.Rs2DlcBuildOptions Rs2DlcOptions(bool sixStringProjection) =>
+        new("song.ogg", "cover.png", 20_000, "Charter", SixStringProjection: sixStringProjection);
+
+    private static string Rs2DlcJson(Rs2DlcProjectDto dto) => System.Text.Json.JsonSerializer.Serialize(dto);
 
     [Fact]
     public void A_projection_with_nothing_on_the_extra_strings_loses_nothing()

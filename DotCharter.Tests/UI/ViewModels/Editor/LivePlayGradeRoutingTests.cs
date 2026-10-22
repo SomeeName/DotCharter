@@ -165,5 +165,7 @@ public sealed class LivePlayGradeRoutingTests
         public void InvalidateCache() { }
 
         public bool IsStoreAuthoritative => true;
+
+        public int RekeySong(string fromSongKey, string toSongKey) => 0;
     }
 }

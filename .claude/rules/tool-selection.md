@@ -29,20 +29,29 @@ the path-scoped ones load when you touch matching files.
 - The big-file table in `AGENTS.md` still applies: never Read a resx, an IR
   table or a large `.axaml` whole.
 
-## Subagents (owner rule, 2026-09-22)
+## Subagents (owner rule, 2026-10-21)
 
-**The main session is the implementer.** Never launch a subagent to write
-code, move a screen or dialog, wire a feature or port tests — whatever the size
-and whatever the model. The one standing use is **ONE Opus subagent reviewing
-screenshots** of what the main session built (one view per review), and never
-two agents at once. Anything else — an experiment such as an A/B comparison —
-only when the owner asks for it in so many words. State the model in every
-Agent call.
+**Subagents implement; the main session orchestrates.** Every issue goes to
+an agent in its own worktree (the `dotcharter-worktree` skill) that writes the
+code and tests and opens the PR. The main session files issues, writes short
+agent prompts, checks the evidence, runs the merge train and merges. It writes
+product code itself only when the owner asks for that in so many words — not
+for "small" fixes, not while waiting for an agent slot (queue the issue
+instead). State the model in every Agent call.
 
-This replaces the earlier model-tier routing (Haiku / Sonnet / Opus / Fable
-implementers, at most two at a time): implementer agents in worktrees went
-stale against the branch, launched helpers of their own, and cost tokens the
-owner did not want spent.
+## Usage budget (owner rule, 2026-10-15)
+
+- **One fresh session per issue or per train** (`/clear`). Never run an
+  all-day session; memory and the issue carry the context.
+- **Sonnet is the default implementer, Opus only for genuinely hard work**
+  (novel algorithms, parity ports, audio/ABI/Vulkan), Haiku for mechanical
+  edits. Up to THREE implementer agents at once (owner, 2026-10-21): agents and merge trains share CPUs 8-15, so more than three makes timing-sensitive tests flaky and measurements noisy. Short prompts.
+- **No heartbeat crons or wakeups** unless the owner is away AND something is
+  actually running.
+- **Never resume a large finished agent.** Start a fresh one, or hand the
+  small rest to a new one.
+- **Agents run targeted tests while iterating;** the full gate and headless
+  run once, on the merge train.
 
 ## Methodology
 

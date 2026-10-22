@@ -234,7 +234,7 @@ public sealed class RigLibraryGrowthTests : IDisposable
         var first = await provider.GetAsync(null, CancellationToken.None);
         Assert.Equal(4, first.Count);
 
-        await WaitUntilAsync(() => !provider.IsGrowing, TimeSpan.FromSeconds(30));
+        await WaitUntilAsync(() => !provider.IsGrowing, TimeSpan.FromSeconds(60));
 
         var later = await provider.GetAsync(null, CancellationToken.None);
         Assert.Equal(20, later.Count);
@@ -268,7 +268,7 @@ public sealed class RigLibraryGrowthTests : IDisposable
             Assert.Equal(3, renderer.Priorities.Count);
         }
 
-        await WaitUntilAsync(() => !provider.IsGrowing, TimeSpan.FromSeconds(30));
+        await WaitUntilAsync(() => !provider.IsGrowing, TimeSpan.FromSeconds(60));
         Assert.Equal(12, renderer.Priorities.Count);
     }
 

@@ -16,9 +16,12 @@ namespace DotCharter.Tests.Services.Audio.Coordination;
 ///         through) or against the mixer, never against the toggle's own state.
 ///     </para>
 /// </summary>
-[Collection("GameplayToneHud")]
 public sealed class ChartTonePreviewControllerTests
 {
+    // A deadlock detector, never a budget: the coordinator applies on a worker, and this class
+    // shares the CPU-saturated parallel phase with the rest of the gate.
+    private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(60);
+
     private static IReadOnlyList<DspModuleType> Catalog() =>
         new[] { "amp", "cab", "gain", "overdrive", "distortion", "ds1" /* Pedal_Distortion converts to ds1 since 0.54 */, "eq", "reverb", "delay", "chorus", "flanger" }
             .Select(id => new DspModuleType(id, id,
@@ -69,7 +72,7 @@ public sealed class ChartTonePreviewControllerTests
         System.Collections.Concurrent.ConcurrentQueue<string> applied, int count, string because)
     {
         Assert.True(
-            SpinWait.SpinUntil(() => applied.Count >= count, TimeSpan.FromSeconds(2)),
+            SpinWait.SpinUntil(() => applied.Count >= count, Deadline),
             $"{because} (saw {applied.Count} of {count} applies: {string.Join(", ", applied)})");
     }
 
@@ -279,7 +282,7 @@ public sealed class ChartTonePreviewControllerTests
         Assert.Equal(new[] { "amp", "cab", "gain" }, Order(chain));
 
         state.CurrentTimeMs = 4500; // crossed the ToneChange
-        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken),
+        Assert.True(heavyApplied.Wait(Deadline, TestContext.Current.CancellationToken),
             "scrubbing past the tone change did not switch the rig");
         Assert.Equal(new[] { "ds1", "amp", "cab", "gain" }, Order(chain));
 

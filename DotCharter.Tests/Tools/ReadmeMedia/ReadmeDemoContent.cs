@@ -8,7 +8,7 @@ namespace DotCharter.Tests.Tools.ReadmeMedia;
 
 /// <summary>
 ///     Writes the README demo content (issue #912) to a folder: the flagship chart project
-///     ("DotCharter Demo": <c>.rscp</c>, rendered <c>song.wav</c>, drawn <c>cover.png</c>) and a
+///     ("DotCharter Demo": <c>.dcproj</c>, rendered <c>song.wav</c>, drawn <c>cover.png</c>) and a
 ///     <c>library/</c> folder of <c>.dcsong</c> packages for the Library and Song Select shots.
 ///     Everything - title, lyrics, tune, cover, audio - is generated here; see
 ///     <c>docs/agents/readme-media.md</c> for how the pictures are made from it.
@@ -17,7 +17,7 @@ internal static class ReadmeDemoContent
 {
     public const string ProjectFolder = "DotCharter Demo";
 
-    public const string ProjectFile = "DotCharter Demo.rscp";
+    public const string ProjectFile = "DotCharter Demo.dcproj";
 
     /// <summary>Writes everything under <paramref name="root" /> and returns the project file.
     /// The <c>.dcsong</c> packages need ffmpeg and are skipped (empty list) without it.</summary>
@@ -28,32 +28,37 @@ internal static class ReadmeDemoContent
         var projectPath = await WriteSongAsync(ReadmeDemoSong.Flagship, projectDir, ProjectFile);
         WriteChat(projectDir, ReadmeDemoSong.StableId(ReadmeDemoSong.Flagship.Title));
 
-        var packages = new List<string>();
         var libraryDir = Path.Combine(root, "library");
         Directory.CreateDirectory(libraryDir);
-        foreach (var variant in ReadmeDemoSong.Extras.Prepend(ReadmeDemoSong.Flagship))
-        {
-            var work = Path.Combine(root, "work", variant.Title);
-            Directory.CreateDirectory(work);
-            var path = await WriteSongAsync(variant, work, variant.Title + ".rscp");
-            var package = Path.Combine(libraryDir, variant.Title + ".dcsong");
-            try
-            {
-                var project = new RscpChartSerializer().Load(path);
-                await new DcSongWriter(null, () => null).WriteAsync(new DcSongWriteRequest
-                {
-                    Project = project, AudioPath = Path.Combine(work, "song.wav"), OutputPath = package,
-                    CoverPath = Path.Combine(work, "cover.png"), ProjectDirectory = work
-                });
-                packages.Add(package);
-            }
-            catch (DcSongWriteException)
-            {
-                // No ffmpeg here: the project alone is still written.
-            }
-        }
+        // Each song renders its audio and encodes its package in its own folder, so the five
+        // run side by side; the list keeps the variants' order.
+        var written = await Task.WhenAll(ReadmeDemoSong.Extras.Prepend(ReadmeDemoSong.Flagship)
+            .Select(variant => Task.Run(() => WritePackageAsync(variant, root, libraryDir))));
+        return (projectPath, [.. written.OfType<string>()]);
+    }
 
-        return (projectPath, packages);
+    /// <summary>One song's work folder and its <c>.dcsong</c> package; null when there is no
+    /// ffmpeg to encode it (the project alone is still written).</summary>
+    private static async Task<string?> WritePackageAsync(ReadmeDemoVariant variant, string root, string libraryDir)
+    {
+        var work = Path.Combine(root, "work", variant.Title);
+        Directory.CreateDirectory(work);
+        var path = await WriteSongAsync(variant, work, variant.Title + ".rscp");
+        var package = Path.Combine(libraryDir, variant.Title + ".dcsong");
+        try
+        {
+            var project = new RscpChartSerializer().Load(path);
+            await new DcSongWriter(null, () => null).WriteAsync(new DcSongWriteRequest
+            {
+                Project = project, AudioPath = Path.Combine(work, "song.wav"), OutputPath = package,
+                CoverPath = Path.Combine(work, "cover.png"), ProjectDirectory = work
+            });
+            return package;
+        }
+        catch (DcSongWriteException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

@@ -185,7 +185,13 @@ public sealed partial class MethodComplexityBudgetTests
 
     private static int Ceiling(int measured, int budget) => Math.Max(measured, budget);
 
-    private static IEnumerable<MethodComplexityMeter.Measurement> MeasureProduct()
+    /// <summary>Four facts read the same measurements; the product tree is parsed once
+    /// per process, not once per fact.</summary>
+    private static readonly Lazy<MethodComplexityMeter.Measurement[]> Product = new(() => [.. MeasureTree()]);
+
+    private static IEnumerable<MethodComplexityMeter.Measurement> MeasureProduct() => Product.Value;
+
+    private static IEnumerable<MethodComplexityMeter.Measurement> MeasureTree()
     {
         foreach (var (full, relative) in ProductSourceFiles(TestPaths.RepoRoot()))
         {

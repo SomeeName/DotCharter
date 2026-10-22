@@ -47,7 +47,7 @@ public sealed class ChildProcessEncodingTests
         File.WriteAllText(path, NonAscii, new UTF8Encoding(false));
         try
         {
-            var result = MediaProcess.Run("cmd", ["/c", "type", path], TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+            var result = MediaProcess.Run("cmd", ["/c", "type", path], TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
             Assert.Equal(0, result.ExitCode);
             Assert.Equal(NonAscii, result.StandardOutput.Trim());

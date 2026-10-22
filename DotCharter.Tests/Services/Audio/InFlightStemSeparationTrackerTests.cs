@@ -49,7 +49,7 @@ public class InFlightStemSeparationTrackerTests
     public async Task WaitForCompletion_WhenIdle_CompletesImmediately()
     {
         var t = new InFlightStemSeparationTracker();
-        var task = t.WaitForCompletionAsync(TimeSpan.FromSeconds(5));
+        var task = t.WaitForCompletionAsync(TimeSpan.FromSeconds(60));
         Assert.True(task.IsCompletedSuccessfully);
         await task;
     }
@@ -59,11 +59,11 @@ public class InFlightStemSeparationTrackerTests
     {
         var t = new InFlightStemSeparationTracker();
         var s = t.BeginRun();
-        var wait = t.WaitForCompletionAsync(TimeSpan.FromSeconds(5));
+        var wait = t.WaitForCompletionAsync(TimeSpan.FromSeconds(60));
         Assert.False(wait.IsCompleted);
 
         s.Dispose();
-        await wait.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await wait.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
         Assert.Equal(0, t.InFlight);
     }
 
@@ -91,9 +91,9 @@ public class InFlightStemSeparationTrackerTests
 
         // Second cycle resets the TCS so a new wait actually waits.
         var s = t.BeginRun();
-        var wait = t.WaitForCompletionAsync(TimeSpan.FromSeconds(2));
+        var wait = t.WaitForCompletionAsync(TimeSpan.FromSeconds(60));
         Assert.False(wait.IsCompleted);
         s.Dispose();
-        await wait.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await wait.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
     }
 }

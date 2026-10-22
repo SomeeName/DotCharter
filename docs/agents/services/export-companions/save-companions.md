@@ -2,16 +2,32 @@
 
 ## Save companions (`SaveCompanionService`)
 
-Every save writes derived artifacts beside the `.rscp`: the RS2014 XML bundle
-(pre-existing), a DLC Builder `.rs2dlc` inside it, an Editor on Fire `.eof`, a
-Rocksmith `.psarc`. (The CustomsForge upload plan and its browser fill script
+Every save writes derived artifacts beside the `.dcproj`: a Charter-compatible
+`.rscp`, the RS2014 XML bundle, a DLC Builder `.rs2dlc` beside it, an Editor on
+Fire `.eof`, a Rocksmith `.psarc`. (The CustomsForge upload plan and its browser fill script
 were removed in #866: the site's form changes too often to keep a filler in step.)
 
-**They are derived, and none of them may fail a save.** The `.rscp` is written
+**They are derived, and none of them may fail a save.** The `.dcproj` is written
 atomically *before* any of them runs, so a companion exception must be caught —
 otherwise `SaveProjectCoreAsync`'s outer catch reports "project save failed" for a
 project that saved perfectly.
 
+- **The Charter `.rscp`** (`SaveCompanionService.WriteCharterProject`) — the
+  first companion, written right after the `.dcproj` swap as `<name>.rscp`. It is
+  the same `RscpWriter` document cut down by `Export/Charter/CharterRscpProjection`
+  to `CharterProjectSchema`: a tree of every element and attribute Charter's
+  XStream model reads, transcribed from Charter V0.22.44 (`ChartProject.java`,
+  the model classes it includes and the converters in `io/rsc/xml/converters`,
+  each named in the schema's doc comment). Everything else — `dc*` nodes, the
+  extension attributes on known elements — is dropped from the companion only
+  and logged once per changed loss. **When Charter's model changes, re-read
+  those files and update the schema with the version.** It is Charter's own
+  project format, so it goes through `CompanionOwnership` (below): a Charter
+  project at `<name>.rscp` is never overwritten. A session opened from a `.rscp`
+  moves to the `.dcproj` on its first save, and an older DotCharter `.rscp`
+  there is renamed to `.rscp.bak` BEFORE this runs, so the companion takes its
+  name. Pinned by `CharterRscpCompanionTests` (allow-list, re-import,
+  ownership, log-once); whether Charter opens it is a manual check.
 - **The DTRS XML bundle** (`ProjectDocumentService.SaveDlcBuilderXmlBundle`) — written
   to a `DTRS XML.saving` staging folder, then swapped in by **renaming** the old
   bundle to `DTRS XML.old` and renaming staging into place (`SwapInBundle`). Never
@@ -19,13 +35,15 @@ project that saved perfectly.
   one locked file half-deletes the bundle and the cleanup then removes staging too —
   both copies gone. A rename is all-or-nothing, so the worst case is a leftover
   `.old` (cleaned up on the next save) beside an intact previous bundle.
-  **A 7-/8-string guitar goes into the bundle as its six-string projection (#911)**:
-  DLC Builder is the consumer and its SNG build indexes six-wide arrays. The writer is
-  `RsXmlSongWriter { SixStringProjection = true }`; each arrangement that dropped
-  something logs one warning (counts of notes and chords). The `.rs2dlc` agrees: its six
-  tuning slots are the six STOCK strings in package order (`Rs2DlcProjectBuilder.TuningVector`
-  through `Rs7StringLayout.ToDomain`), not the chart's first six. Six-string guitars and
-  basses are written as before.
+  **A 7-/8-string guitar goes into the bundle with every string by default** and as its
+  six-string projection (#911) when `AppConfig.RsXmlSixStringProjection` is on (a stock
+  DLC Builder's SNG build indexes six-wide arrays). The writer is
+  `RsXmlSongWriter { SixStringProjection = config.RsXmlSixStringProjection }`; each projected
+  arrangement that dropped something logs one warning (counts of notes and chords). The
+  `.rs2dlc` follows the same setting: off, a 7-/8-string guitar's tuning lists every string in
+  package order (the XML's `string0`..`stringN`); on, its six slots are the six STOCK strings
+  in package order (`Rs2DlcProjectBuilder.TuningVector` through `Rs7StringLayout.ToDomain`),
+  not the chart's first six. Six-string guitars and basses always have six slots.
 - **`.eof`** — a plain binary write (a few ms), so it runs inside the existing save
   worker on every save. **EOF resolves its audio relative to the folder the `.eof`
   lives in**, and `EofExporter` names it `<audiostem>.ogg`. So the companion also
@@ -40,7 +58,7 @@ project that saved perfectly.
   rather than truncated.
 
 - **`.rs2dlc`** (`Export/DlcBuilder/`) — the DLC Builder PROJECT file, written
-  to the **project root** beside the `.rscp` and the audio, naming the bundle's
+  to the **project root** beside the `.dcproj` and the audio, naming the bundle's
   arrangements through `DTRS XML/`. It is what makes the folder open directly in
   DLC Builder and what gets dropped onto CustomsForge Ignition4's own "Import
   rs2dlc" control (which autofills the metadata it carries, with no code of ours
@@ -84,10 +102,10 @@ the `.eof` alike, because Rocksmith plays a single Vocals arrangement (the
 `.rs2dlc` used to name every lyric-bearing track). The DTRS XML bundle still
 writes a file per track: it is the charter's source folder, not a package.
 
-### Two companions are somebody else's project file — never clobber them
+### Three companions are somebody else's project file — never clobber them
 
-**The `.rs2dlc` and the `.eof` are the NATIVE PROJECT FORMATS of DLC Builder and
-Editor on Fire.** The charter opens them there, edits them, and saves. Everything
+**The `.rscp`, the `.rs2dlc` and the `.eof` are the NATIVE PROJECT FORMATS of
+Charter, DLC Builder and Editor on Fire.** The charter opens them there, edits them, and saves. Everything
 they add lives in fields DotCharter does not author and cannot round-trip. The
 worst of it was TONES: `Rs2DlcProjectDto.Tones` and the per-arrangement
 `BaseTone`/`Tones` were always written **empty**, so rewriting the file was not
@@ -113,7 +131,7 @@ project, in
 (`Rs2DlcToneBodyTests`). **None of this weakens the rule below** — the stamp is
 what protects a hand edit, and it is unchanged.
 
-So both go through **`Export/CompanionOwnership.WriteIfUnmodified`**: it
+So all three go through **`Export/CompanionOwnership.WriteIfUnmodified`**: it
 overwrites only when the file on disk hashes to exactly what we last wrote there,
 and stamps the result. Anything else — edited, replaced, or never stamped — is
 left alone and the refusal is logged (`"Leaving the .rs2dlc alone: …"`).

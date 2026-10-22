@@ -20,6 +20,8 @@ public static class DialogsModule
 
         services.AddScoped<ChartEditDialogServices>();
         services.AddSingleton<DialogBasics>();
+        // File ▸ Import ▸ Convert PSARC to DotCharter song: reads the plugin's converter, so a build without one never shows the row.
+        services.AddSingleton<PackageConversionLauncher>();
         services.AddScoped<IUnsavedChangesScreen, UnsavedChangesViewModel>();
         services.AddScoped<ISetBpmScreen, SetBpmViewModel>();
         services.AddScoped<IAiToneGenerateScreen, AiToneGenerateViewModel>();

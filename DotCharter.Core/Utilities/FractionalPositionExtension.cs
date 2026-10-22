@@ -33,7 +33,7 @@ public static class FractionalPositionExtensions
     ///     <para>
     ///         The bar/beat half is NOT ambient:
     ///         <see cref="FractionalPosition.ToString" /> is the text
-    ///         of a `.rscp` <c>p</c> attribute as well as of this label, so it is
+    ///         of a `.dcproj` <c>p</c> attribute as well as of this label, so it is
     ///         invariant at the source. See that method for what the ambient
     ///         reading cost.
     ///     </para>

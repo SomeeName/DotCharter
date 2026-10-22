@@ -4,7 +4,7 @@ using DotCharter.Services.Parsing.Rscp;
 namespace DotCharter.Services.Package.DcSong;
 
 /// <summary>What opening a <c>.dcsong</c> as a project wrote.</summary>
-/// <param name="ProjectPath">The new <c>project.rscp</c>, absolute.</param>
+/// <param name="ProjectPath">The new <c>project.dcproj</c>, absolute.</param>
 /// <param name="ProjectDirectory">The NEW folder it sits in.</param>
 /// <param name="Title">The song title, for the status line.</param>
 /// <param name="AudioLossy">True for an Opus package: the project's WAV is a decode of
@@ -30,7 +30,7 @@ public sealed record DcSongUnpackResult(
 ///         is taken, so opening a package twice never lands on the first copy. Every
 ///         byte comes out of <see cref="DcSongPackage" />, which reads the untrusted
 ///         archive member by member, bounded and checksum-verified; the file names
-///         written here are FIXED (<c>project.rscp</c>, <c>song.*</c>, <c>cover.*</c>,
+///         written here are FIXED (<c>project.dcproj</c>, <c>song.*</c>, <c>cover.*</c>,
 ///         <c>banner.*</c>, <c>stems/&lt;name&gt;.wav</c> with a name the format limits to
 ///         <c>[a-z0-9_-]</c>), never taken from the archive.
 ///     </para>
@@ -44,7 +44,7 @@ public sealed record DcSongUnpackResult(
 /// </summary>
 public sealed class DcSongProjectUnpacker
 {
-    public const string ProjectFileName = "project.rscp";
+    public const string ProjectFileName = ProjectFiles.DefaultFileName;
 
     private readonly IAppLogger _logger;
     private readonly Func<IStemEncoder> _decoder;

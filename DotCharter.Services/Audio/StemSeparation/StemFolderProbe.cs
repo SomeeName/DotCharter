@@ -87,7 +87,7 @@ public static class StemFolderProbe
 
     /// <summary>
     ///     A stored stem path made absolute. The PROJECT directory is the base —
-    ///     the one every relative name in the <c>.rscp</c> uses — and the audio
+    ///     the one every relative name in the <c>.dcproj</c> uses — and the audio
     ///     directory is a read-only FALLBACK for files written against the audio
     ///     directory by older builds. Touches the disk (to pick between the two),
     ///     so it runs on the probe's worker and never on the UI thread. With
@@ -96,7 +96,7 @@ public static class StemFolderProbe
     /// </summary>
     public static string ResolveStemPath(string projectDir, string legacyDir, string path)
     {
-        // Data from the .rscp: a UNC, device or network-drive path is refused unprobed.
+        // Data from the .dcproj: a UNC, device or network-drive path is refused unprobed.
         if (!ProjectRelativePath.IsReadableMediaReference(path)) return string.Empty;
         if (Path.IsPathRooted(path)) return path;
 

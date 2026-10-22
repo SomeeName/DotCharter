@@ -113,7 +113,7 @@ public static class TuningUtilities
     ///         "E_STANDARD", and the tuning table uses Rocksmith's low-note spelling
     ///         (Drop C# is <c>E_FLAT_DROP_D_FLAT</c>, Drop B is
     ///         <c>D_FLAT_DROP_B</c>), which almost nothing else calls it — so a name
-    ///         arriving from another tool, a hand-edited <c>.rscp</c> or a UI preset
+    ///         arriving from another tool, a hand-edited <c>.dcproj</c> or a UI preset
     ///         misses the table easily and every string then reads as standard.
     ///     </para>
     ///     <para>

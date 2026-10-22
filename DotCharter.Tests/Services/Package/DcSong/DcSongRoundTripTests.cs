@@ -70,6 +70,7 @@ public sealed class DcSongRoundTripTests : IDisposable
         // Everything else the package carries.
         var manifest = package.Manifest;
         Assert.Equal((DcSongFormat.CurrentMajor, DcSongFormat.CurrentMinor), (manifest.FormatMajor, manifest.FormatMinor));
+        Assert.Equal("chart.dcproj", manifest.Find(DcSongFileRole.Chart)!.Path);
         Assert.Equal("The Song", manifest.Song.Title);
         Assert.Equal("The Artist", manifest.Song.Artist);
         Assert.Equal("The Album", manifest.Song.Album);

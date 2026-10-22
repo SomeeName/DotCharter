@@ -19,8 +19,9 @@
     as Rocksmith's frame-only repeat box is the EXPORT's decision
     (`DotCharter.Services/Export/Rocksmith/RepeatChords`: `RsChordDensity`, plus
     `ForceNoNotes`, minus link landings). Each builder gets the whole-level set
-    from its own `RepeatChordLatch` (list identity + count + the editor's
-    `HistoryRevision`; no timer, so playback recomputes nothing) into
+    from the editor's shared `RepeatChordLatch` (`ChartEditorViewModel.SharedRepeatChords`:
+    list identity + count + the editor's `HistoryRevision`; no timer, so playback recomputes
+    nothing; one run per level and edit, whichever of the 2D rows and the 3D thread asks first) into
     `SnapshotUpdateContext.RepeatChords`;
     `UpdateChords` looks each WINDOWED chord up and sets `ChordFlags.Repeat`.
     `ChordRenderer` (3D) and the UI's `NoteLayer` (2D) read only the flag: 3D
@@ -113,7 +114,8 @@
     SUGGESTED bars (#491) are a separate array, `FrameSnapshot.SuggestedHandShapes`
     (`IsSuggested`, `Label` = the grip's name), WINDOWED from
     `SnapshotUpdateContext.SuggestedHandShapes` — the list
-    `Services/Editing/HandShapes/HandShapeSuggestionLatch` computes once per edit.
+    `Services/Editing/HandShapes/HandShapeSuggestionLatch` computes once per level and edit
+    (the editor's shared instance: `SharedHandShapeSuggestions`).
     Pinned by `HandShapeBarRenderDataTests`.
   - **The bulk-edit preview (#485):** `ChordFlags.EditTarget` and
     `RenderHandShape.IsEditTarget` are copied from

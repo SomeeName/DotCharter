@@ -15,8 +15,8 @@ namespace DotCharter.Tests.Audio.Dsp.RsToneConversion.Fidelity;
 ///     through converted tones on the REAL native rig and holds the result to
 ///     <see cref="RsToneFidelityTargets" /> — relational targets from the gear's
 ///     documented character, because no Rocksmith reference render exists to
-///     compare against. Every target runs in the default gate (skipped without
-///     the DLL).
+///     compare against. Every target runs in the release lane
+///     (<c>tools/ci/release-lane.json</c>; skipped without the DLL).
 ///     <para>
 ///         <b>Eval output</b>, never in the repo: set
 ///         <c>DOTCHARTER_RS_FIDELITY_OUT</c> to a directory and

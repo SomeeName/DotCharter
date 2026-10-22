@@ -1,23 +1,27 @@
+using System.Collections.Concurrent;
 using DotCharter.Services.Export.Audio;
+using DotCharter.Services.Export.Charter;
 using DotCharter.Services.Export.DlcBuilder;
 using DotCharter.Services.Export.DynamicDifficulty;
 using DotCharter.Services.Export.Validation;
 using DotCharter.Services.Import.Youtube;
 using DotCharter.Services.Parsing.Eof;
+using DotCharter.Services.Parsing.Rscp;
 
 namespace DotCharter.Services.Export;
 
 /// <summary>
-///     Writes the derived artifacts that sit alongside a saved project: an Editor
-///     on Fire <c>.eof</c> and a Rocksmith <c>.psarc</c>.
+///     Writes the derived artifacts that sit alongside a saved project: a Charter
+///     <c>.rscp</c>, an Editor on Fire <c>.eof</c>, a DLC Builder <c>.rs2dlc</c> and a
+///     Rocksmith <c>.psarc</c>.
 /// </summary>
 /// <remarks>
-///     Both are DERIVED data. Neither may ever fail a project save — the <c>.rscp</c>
+///     All are DERIVED data. None may ever fail a project save — the <c>.dcproj</c>
 ///     is the source of truth and it is already on disk (atomically) by the time
 ///     these run. Callers catch; these methods log and degrade.
 ///     <para>
-///         Derived does NOT mean disposable. The <c>.eof</c> and the <c>.rs2dlc</c>
-///         are two other editors' own project formats, so both go through
+///         Derived does NOT mean disposable. The <c>.rscp</c>, the <c>.eof</c> and the
+///         <c>.rs2dlc</c> are three other editors' own project formats, so all three go through
 ///         <see cref="CompanionOwnership" />: a save overwrites only the file it
 ///         wrote itself. The <c>.psarc</c> and the XML bundle are unconditional.
 ///     </para>
@@ -29,6 +33,20 @@ namespace DotCharter.Services.Export;
 /// </remarks>
 public interface ISaveCompanionService
 {
+    /// <summary>
+    ///     Writes the Charter-compatible <c>&lt;project&gt;.rscp</c> beside the <c>.dcproj</c>:
+    ///     the project's XML cut down to what Charter's model knows
+    ///     (<see cref="CharterProjectSchema" />), so the folder opens in Charter too. Returns
+    ///     the path, or null when the project is play-only, when the project path is itself
+    ///     a <c>.rscp</c>, or when the <c>.rscp</c> on disk is one this app did not write
+    ///     (a Charter project, or one the charter edited in Charter).
+    /// </summary>
+    /// <remarks>
+    ///     The default writes nothing, for hosts that keep no companions; the app's
+    ///     <see cref="SaveCompanionService" /> implements it.
+    /// </remarks>
+    string? WriteCharterProject(string projectPath, ChartProject snapshot) => null;
+
     /// <summary>
     ///     Writes <c>&lt;project&gt;.eof</c> next to the project and, when enabled,
     ///     makes sure the <c>.ogg</c> it references actually exists there — EOF
@@ -79,6 +97,9 @@ public sealed class SaveCompanionService : ISaveCompanionService
     private readonly IAppLogger _logger;
     private readonly RocksmithPackageBuilder _builder;
 
+    /// <summary>The last drop summary logged per companion path, so an unchanged loss is logged once, not per save.</summary>
+    private readonly ConcurrentDictionary<string, string> _charterDropsLogged = new(StringComparer.OrdinalIgnoreCase);
+
     public SaveCompanionService(IConfigurationService config, IAppLogger logger)
     {
         _config = config;
@@ -96,6 +117,44 @@ public sealed class SaveCompanionService : ISaveCompanionService
         if (!PlayOnlyExportGuard.IsPlayOnly(snapshot)) return false;
         _logger.Info(AppLogCategory.Project, $"{companion} skipped: the project is play-only.");
         return true;
+    }
+
+    public string? WriteCharterProject(string projectPath, ChartProject snapshot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var companionPath = CharterRscp.CompanionPath(projectPath);
+        if (string.Equals(Path.GetFullPath(companionPath), Path.GetFullPath(projectPath), StringComparison.OrdinalIgnoreCase))
+            return null;
+        if (RefusedAsPlayOnly(snapshot, "Charter .rscp companion")) return null;
+
+        var doc = CharterRscpProjection.Build(snapshot, out var dropped);
+
+        // Charter's own project format: a charter who opened and saved it in Charter,
+        // or a Charter project this one was imported from, is never overwritten.
+        if (!CompanionOwnership.WriteIfUnmodified(companionPath, target =>
+                {
+                    using var buffer = new MemoryStream();
+                    RscpChartSerializer.WriteDocument(buffer, doc);
+                    AtomicFile.WriteAllBytes(target, buffer.ToArray());
+                },
+                out var skipReason))
+        {
+            _logger.Info(AppLogCategory.Project, $"Leaving the .rscp alone: {skipReason}. Path='{companionPath}'.");
+            return null;
+        }
+
+        var summary = dropped.LogLine();
+        if (!_charterDropsLogged.TryGetValue(companionPath, out var logged) || logged != summary)
+        {
+            _charterDropsLogged[companionPath] = summary;
+            _logger.Info(AppLogCategory.Project,
+                $"Charter .rscp companion written. Path='{companionPath}'. DotCharter-only data it cannot carry " +
+                $"(dropped from the companion, kept in the .dcproj): {summary}.");
+        }
+
+        return companionPath;
     }
 
     public string? WriteEof(string projectPath, ChartProject snapshot)

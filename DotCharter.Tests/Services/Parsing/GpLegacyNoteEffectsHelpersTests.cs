@@ -40,7 +40,7 @@ public sealed class GpLegacyNoteEffectsHelpersTests
         var work = Task.Run(() => GpLegacyNoteEffectsHelpers.PreviousPowerOfTwo(n));
 
         // A TimeoutException here IS the regression: the loop is still spinning.
-        var result = await work.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var result = await work.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
         Assert.Equal(1 << 30, result);
     }

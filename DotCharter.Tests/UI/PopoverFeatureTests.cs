@@ -33,10 +33,9 @@ namespace DotCharter.Tests.UI;
 ///         the VERB and its effect, never on "the control exists".
 ///     </para>
 /// </remarks>
-// Mutates the AMBIENT culture, which is process-wide, so it shares the
-// serialized collection with the other culture tests. See
-// Infrastructure/CultureCollectionLintTests.
-[Collection("LocalizationSingleton")]
+// Sets CultureInfo.CurrentCulture for the calling flow only and restores it in a
+// finally, so no collection is needed. Infrastructure/CultureCollectionLintTests
+// serializes the classes that write the process-wide defaults.
 public sealed class PopoverFeatureTests
 {
     // ── 1. Mix: the INPUT LEVEL meter ───────────────────────────────────────

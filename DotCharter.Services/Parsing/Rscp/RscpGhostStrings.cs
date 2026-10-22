@@ -3,7 +3,7 @@ using System.Globalization;
 namespace DotCharter.Services.Parsing.Rscp;
 
 /// <summary>
-/// The <c>ghost</c> attribute of an <c>.rscp</c> <c>chordTemplate</c>: the string
+/// The <c>ghost</c> attribute of a <c>.dcproj</c> <c>chordTemplate</c>: the string
 ///     indices of <see cref="ChordTemplate.GhostMask" />, ascending and comma-separated
 ///     (<c>ghost="1,4"</c>), the way the <c>frets</c> attribute names strings. Indices, not a
 ///     raw number, so the file reads like the rest of the template.

@@ -203,7 +203,7 @@ public sealed class GpImportApplier(
     /// <summary>
     ///     A NON-EMPTY score value wins (the import is one undo step); an empty
     ///     one never erases what the user authored — Guitar Pro writes blanks for
-    ///     unfilled properties. Only fields the .rscp round-trips are mapped.
+    ///     unfilled properties. Only fields the .dcproj round-trips are mapped.
     /// </summary>
     private void ApplyScoreMetadata(ChartProject project, GpImportMetadata meta)
     {

@@ -84,7 +84,11 @@ public sealed partial class LintClassSummaryLintTests
         {
             var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
             if (relative.Contains("/bin/", StringComparison.Ordinal) || relative.Contains("/obj/", StringComparison.Ordinal)) continue;
-            foreach (var (name, found) in Summaries(relative, File.ReadAllText(file)))
+            // A class named ...LintTests needs that word in its own file, so a file without
+            // it is not parsed.
+            var source = File.ReadAllText(file);
+            if (!source.Contains("LintTests", StringComparison.Ordinal)) continue;
+            foreach (var (name, found) in Summaries(relative, source))
             {
                 if (!all.TryGetValue(name, out var existing) || WordCount(found.Summary) > WordCount(existing.Summary))
                     all[name] = found;

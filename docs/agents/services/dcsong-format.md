@@ -21,6 +21,12 @@ preview clip, the cover and banner, and optionally the stems.
 | `DcSongProjectUnpacker.UnpackAsync(package, baseDirectory, ct)` | Opens a package as a project in a NEW folder (#709, § Opening as a project). Returns `DcSongUnpackResult` |
 | `DcSongLibrarySource` (`Package/DcSong/Library/`) | The Library's and Play Mode's door (#708, § Library and Play Mode): one `ILibraryPackageSource` of `LibraryService` (#886) — `ReadForIndex`, `LoadAsync`, `PrepareAudio`, `LoadCover`, `BeginScan` (`ProbeDecoder`), `BlockFor` and `Probe` |
 
+A game package becomes a `.dcsong` in one step through the plugin that reads packages
+(`Services/Plugins/IPackageSongConverter`, [contested-features.md](contested-features.md)
+§ Optional plugins): the plugin loads each song the way the Library does and hands the chart,
+the audio and the cover to the same `DcSongWriter`, so the file is the one the two-step path
+(open the package, File ▸ Export ▸ DotCharter song) writes, minus stems.
+
 `DcSongExporter` (`IDcSongExporter`, a singleton in `App.EditingServices`) is the
 app's door, driven by File ▸ Export ▸ DotCharter song (#707,
 `Presentation/Screens/Dialogs/DcSongExportViewModel`): `ProbeAsync` reports off the
@@ -41,7 +47,7 @@ A zip (no zip64, one volume). Member names are fixed by role:
 | Member | Role | Stored as | Required |
 |---|---|---|---|
 | `manifest.json` | (the manifest) | deflate | yes |
-| `chart.rscp` | `chart` | deflate | yes |
+| `chart.dcproj` (format 1.0: `chart.rscp`, still read) | `chart` | deflate | yes |
 | `audio/song.opus` or `audio/song.flac` | `audio` | **stored** | yes |
 | `audio/preview.opus` | `preview` | **stored** | written always; read as optional |
 | `images/cover.png` / `.jpg` | `cover` | stored or deflate | no |
@@ -75,7 +81,7 @@ A zip (no zip64, one volume). Member names are fixed by role:
     "previewStartMs": 45308.6, "previewLengthMs": 28000
   },
   "files": [
-    { "path": "chart.rscp", "role": "chart", "size": 12345, "sha256": "<64 lower-case hex>" },
+    { "path": "chart.dcproj", "role": "chart", "size": 12345, "sha256": "<64 lower-case hex>" },
     { "path": "stems/drums.opus", "role": "stem", "stem": "drums", "size": 1, "sha256": "..." },
     { "path": "images/cover.png", "role": "cover", "mediaType": "image/png", "size": 1, "sha256": "..." }
   ]
@@ -85,7 +91,12 @@ A zip (no zip64, one volume). Member names are fixed by role:
 - **`formatVersion` is `major.minor`**, two non-negative integers. It is read
   BEFORE anything else: a newer MAJOR is refused (`NewerVersion`) whatever the
   rest of the manifest looks like; a newer MINOR is read. This build writes
-  `1.0` (`DcSongFormat.CurrentMajor` / `CurrentMinor`).
+  `1.1` (`DcSongFormat.CurrentMajor` / `CurrentMinor`). 1.1 stores the chart as
+  `chart.dcproj` (`DcSongFormat.ChartPath`); a 1.0 package's `chart.rscp`
+  (`DcSongFormat.LegacyChartPath`) is accepted as the chart role too
+  (`DcSongManifestJsonTests.TheChart_IsReadUnderTheCurrentAndTheFormat10MemberName`).
+  A build that reads only 1.0 refuses a 1.1 package's chart path as an invalid
+  manifest, so the member rename is the one 1.1 change an older reader cannot read.
 - **Every member except the manifest is listed in `files`** with its
   uncompressed `size` and the SHA-256 of its uncompressed bytes. A zip member
   the manifest does not list is refused (`EntryUnlisted`); a listed member the
@@ -125,7 +136,7 @@ Opus + four stems 21.1 MB. Open + `VerifyAll` 20–40 ms.
 
 ## The chart
 
-`chart.rscp` is the project as `RscpChartSerializer` writes it — every
+The chart member is the project as `RscpChartSerializer` writes it — every
 arrangement, tone, section, phrase, lyric, anchor and fingering. **Its file
 references point into the package** (`DcSongChart.ForPackage`):
 `AudioFileName` is the audio member, `CoverArtPath` the cover member or `""`,
@@ -135,7 +146,7 @@ arrangements, in project order; vocal tracks always travel. A project names file
 absolute cover path would leak the author's folder layout.
 
 **A chart that asks to recover arrangements from sibling files is refused**
-(`ChartInvalid`): the `.rscp` reader would resolve those names — rooted ones
+(`ChartInvalid`): the project reader would resolve those names — rooted ones
 included — outside the package. The writer never produces one.
 
 ## Reading untrusted input
@@ -158,7 +169,7 @@ A package comes from anywhere, so the reader never asks `ZipArchive` anything:
   cannot change underneath a later read.
 - An image must sniff as the `mediaType` its manifest says.
 - Nothing is extracted to disk except the chart, into a temporary folder that is
-  deleted after the load (the `.rscp` reader takes a path). This reader does not
+  deleted after the load (the project reader takes a path). This reader does not
   expand archives, so `BoundedZipExtractor` is not involved.
 - A truncated download or a non-zip is `Unreadable`.
 
@@ -196,7 +207,7 @@ routes it the same way (`DroppedFileRouter`: `.dcsong` → `Project`). Both end 
      opening a package twice gives `… (2)` and never lands on the earlier copy (an
      existing EMPTY folder is free, NewProjectFolder's rule). Linted with the other
      create-project flows by `NewProjectFolderTests`.
-   - **Every file name is fixed here**, never taken from the archive: `project.rscp`,
+   - **Every file name is fixed here**, never taken from the archive: `project.dcproj`,
      `song.flac` / `song.wav`, `cover.*`, `banner.*`, `stems/<name>.wav` (a stem name
      is `[a-z0-9_-]`). Every byte comes through `DcSongPackage` (bounded,
      checksum-verified member reads); nothing is extracted wholesale.
@@ -225,7 +236,7 @@ routes it the same way (`DroppedFileRouter`: `.dcsong` → `Project`). Both end 
    - **A failure part-way removes what the call wrote**, and the folder when the call
      made it (a pre-existing empty folder is left standing). A tampered member is
      refused at its read (`ChecksumMismatch`) and leaves nothing behind.
-4. The written `project.rscp` opens through the ordinary load (spacing pass, audio,
+4. The written `project.dcproj` opens through the ordinary load (spacing pass, audio,
    MRU, `LastProjectPath`), and the status line says `Status_DcSong_Opened`, or
    `Status_DcSong_OpenedLossy` (Warning) for an Opus package: **chart-from-audio and
    stem separation work best from lossless**, so ask for a FLAC package to use them.

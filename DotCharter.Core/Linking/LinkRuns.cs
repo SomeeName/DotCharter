@@ -7,7 +7,7 @@ namespace DotCharter.Core.Linking;
 ///     The shared vocabulary of linked measures over a live project: where a placement sits on
 ///     the measure grid, whether it still spans whole measures, the content key of each copy
 ///     under its group's rule, and how a group is split when its copies stop agreeing. Used by
-///     the history's reconciler, the load check and the <c>.rscp</c> writer, so all three read a
+///     the history's reconciler, the load check and the <c>.dcproj</c> writer, so all three read a
 ///     placement the same way.
 /// </summary>
 public static class LinkRuns

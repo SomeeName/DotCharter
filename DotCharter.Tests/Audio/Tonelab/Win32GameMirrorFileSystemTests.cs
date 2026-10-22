@@ -133,7 +133,7 @@ public sealed class Win32GameMirrorFileSystemTests : IDisposable
 
         Assert.True(created.ProcessId is not null, created.Error);
         var output = Path.Combine(_root, "out.txt");
-        Assert.True(SpinWait.SpinUntil(() => File.Exists(output) && new FileInfo(output).Length > 0, TimeSpan.FromSeconds(30)), "cmd wrote nothing");
+        Assert.True(SpinWait.SpinUntil(() => File.Exists(output) && new FileInfo(output).Length > 0, TimeSpan.FromSeconds(60)), "cmd wrote nothing");
         Assert.True(SpinWait.SpinUntil(() =>
         {
             try
@@ -144,6 +144,6 @@ public sealed class Win32GameMirrorFileSystemTests : IDisposable
             {
                 return false;
             }
-        }, TimeSpan.FromSeconds(10)), "the environment did not reach the child");
+        }, TimeSpan.FromSeconds(60)), "the environment did not reach the child");
     }
 }

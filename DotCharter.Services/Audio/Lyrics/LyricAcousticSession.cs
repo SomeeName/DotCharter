@@ -21,6 +21,13 @@ public interface ILyricAcousticSession : IDisposable
     /// <summary>The head's own symbol alphabet — what <see cref="CtcEmissions.Width" /> counts.</summary>
     LyricVocabulary Vocabulary { get; }
 
+    /// <summary>
+    ///     The provider this session really runs on. A session that does not say
+    ///     reports the CPU, which is never retried: only a GPU run has a CPU to fall
+    ///     back to (<see cref="LyricProviderFallbackSession" />).
+    /// </summary>
+    OnnxExecutionProvider ActiveProvider => OnnxExecutionProvider.Cpu;
+
     /// <summary>Runs the whole song and returns log-softmax emissions.</summary>
     CtcEmissions Encode(float[] mono16k, CancellationToken cancellationToken = default);
 }
@@ -56,6 +63,8 @@ public static class LyricAcousticSessionFactory
     private sealed class OnnxSession(LyricAcousticModel model) : ILyricAcousticSession
     {
         public LyricVocabulary Vocabulary => model.Vocabulary;
+
+        public OnnxExecutionProvider ActiveProvider => model.ActiveProvider;
 
         public CtcEmissions Encode(float[] mono16k, CancellationToken cancellationToken = default) =>
             model.Encode(mono16k, cancellationToken);

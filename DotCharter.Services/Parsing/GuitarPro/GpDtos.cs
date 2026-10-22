@@ -18,7 +18,7 @@ public class GpImportMetadata
     // Score-level song metadata (gpif <Score>, GP3-5 song-attributes header).
     // Both GP importers fill these; the import dialog copies a NON-EMPTY value
     // onto the project's ChartData (SongName/Artist/AlbumName/Charter — all
-    // fields the .rscp round-trips). Empty = the file did not carry it.
+    // fields the .dcproj round-trips). Empty = the file did not carry it.
     public string Title { get; set; } = "";
     public string Artist { get; set; } = "";
     public string Album { get; set; } = "";

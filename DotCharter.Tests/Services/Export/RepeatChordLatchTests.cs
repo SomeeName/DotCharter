@@ -117,4 +117,54 @@ public sealed class RepeatChordLatchTests
         latch.Get(templates, notes, chords, swapped, beats, 7, 1_002);
         Assert.Equal(3, latch.ComputeCount);
     }
+
+    /// <summary>The 2D timeline and the 3D render thread read one level on one edit: ONE run, the very
+    /// same set — and a second level (a stacked row) is its own run.</summary>
+    [Fact]
+    public void TheTwoLoops_ShareOneRunPerEdit()
+    {
+        var (templates, notes, chords, shapes) = Level();
+        var beats = Beats();
+        var latch = new RepeatChordLatch();
+
+        for (long edit = 1; edit <= 3; edit++)
+        {
+            var timeline = latch.Get(templates, notes, chords, shapes, beats, edit, 0);
+            var preview3D = latch.Get(templates, notes, chords, shapes, beats, edit, 0);
+
+            Assert.Same(timeline, preview3D);
+            Assert.Equal((int)edit, latch.ComputeCount);
+        }
+
+        var (otherTemplates, otherNotes, otherChords, otherShapes) = Level();
+        latch.Get(otherTemplates, otherNotes, otherChords, otherShapes, beats, 3, 0);
+        Assert.Equal(4, latch.ComputeCount);
+    }
+
+    [Fact]
+    public void ReadersOnSeveralThreads_WaitForOneRun()
+    {
+        var (templates, notes, chords, shapes) = Level();
+        var beats = Beats();
+        var latch = new RepeatChordLatch();
+        var sets = new IReadOnlySet<Chord>[16];
+
+        Parallel.For(0, sets.Length, new ParallelOptions { MaxDegreeOfParallelism = sets.Length },
+            i => sets[i] = latch.Get(templates, notes, chords, shapes, beats, 1, 0));
+
+        Assert.Equal(1, latch.ComputeCount);
+        Assert.All(sets, set => Assert.Same(sets[0], set));
+    }
+
+    [Fact]
+    public void AWarmRead_AllocatesNothing()
+    {
+        var (templates, notes, chords, shapes) = Level();
+        var beats = Beats();
+        var latch = new RepeatChordLatch();
+        latch.Get(templates, notes, chords, shapes, beats, 1, 0);
+
+        AllocationProbe.AssertAllocationFree("a warm repeat-chord read",
+            () => latch.Get(templates, notes, chords, shapes, beats, 1, 0));
+    }
 }

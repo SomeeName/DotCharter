@@ -30,6 +30,7 @@ public sealed class ReleasePackChecksLintTests
         var tool = File.ReadAllText(Path.Combine(TestPaths.RepoRoot(), "tools", "release", "CheckPayloadBinaries.cs"));
 
         Assert.Contains("ReleasePayloadIntegrity.Scan(", tool, StringComparison.Ordinal);
+        Assert.Contains("NativeImportAudit.Scan(", tool, StringComparison.Ordinal);
         Assert.Contains("$BinaryCheckTool = Join-Path $PSScriptRoot 'CheckPayloadBinaries.cs'", Script(), StringComparison.Ordinal);
     }
 
@@ -124,8 +125,12 @@ public sealed class ReleasePackChecksLintTests
         var ensureEnd = IndexOf(script, "function Add-BundledTools");
         var body = script[ensure..ensureEnd];
         Assert.Contains("& $FfmpegBuildScript -OutDir $RedistDir", body, StringComparison.Ordinal);
-        Assert.Equal(2, Regex.Matches(body, @"Test-FfmpegInventory \$ffmpeg \$FfmpegInventory").Count);
-        Assert.Matches(new Regex(@"if \(\$missing\.Count -gt 0\) \{ throw"), body);
+        // Every candidate (the tree's copy, the release cache's, a fresh build) is graded by
+        // Get-FfmpegState, which runs the version AND inventory checks.
+        Assert.Equal(3, Regex.Matches(body, @"\$state = Get-FfmpegState \$ffmpeg").Count);
+        var state = script[IndexOf(script, "function Get-FfmpegState")..ensure];
+        Assert.Contains("$missing = @(Test-FfmpegInventory $Path $FfmpegInventory)", state, StringComparison.Ordinal);
+        Assert.Matches(new Regex(@"if \(\$state\.Missing\.Count -gt 0\) \{ throw"), body);
 
         Assert.True(IndexOf(script, "$redist = Ensure-RedistTools") < IndexOf(script, "Write-Ok 'preflight done'"),
             "the media tools (and the ffmpeg inventory check) must run in preflight.");

@@ -36,7 +36,7 @@ tuning, naming).
   sense: it is the `.rscp` forward-compatibility residue — top-level project
   nodes a NEWER build wrote, kept as opaque XML fragments so the next save puts
   them back instead of deleting them
-  ([`docs/RSCP-FORMAT-GUARANTEES.md`](../../RSCP-FORMAT-GUARANTEES.md)). The
+  ([`docs/DCPROJ-FORMAT-GUARANTEES.md`](../../DCPROJ-FORMAT-GUARANTEES.md)). The
   `.rscp` reader is its only producer, the `.rscp` writer its only consumer;
   nothing else may read or interpret it. It still has to ride
   `ChartProjectRestorer`, or the first undo-able edit after opening such a file

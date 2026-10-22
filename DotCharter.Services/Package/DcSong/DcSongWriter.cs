@@ -15,7 +15,7 @@ namespace DotCharter.Services.Package.DcSong;
 ///         chart exactly as the editor did), the preview is the Rocksmith export's
 ///         clip (<see cref="PreviewClip" />), Opus and FLAC come from the stem
 ///         cache's ffmpeg encoder (<see cref="FfmpegStemEncoder" />, at 192 kb/s
-///         here), and the chart is the project writer's <c>.rscp</c>
+///         here), and the chart is the project writer's <c>.dcproj</c>
 ///         (<see cref="RscpChartSerializer" />).
 ///     </para>
 ///     <para>

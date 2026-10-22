@@ -3,7 +3,7 @@ using System.Xml.Linq;
 namespace DotCharter.Services.Parsing.Rscp;
 
 /// <summary>
-///     One pre-order pass over an <c>.rscp</c> document that records the FIRST
+///     One pre-order pass over a <c>.dcproj</c> document that records the FIRST
 ///     element carrying each of a known set of names, so the header parser can
 ///     answer thirty <c>doc.Descendants(name).FirstOrDefault()</c> questions with
 ///     thirty dictionary lookups.

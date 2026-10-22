@@ -14,6 +14,7 @@ using DotCharter.Services.Infrastructure.Recovery;
 using DotCharter.Services.Editing.Tempo;
 using DotCharter.Services.Infrastructure.Documents;
 using DotCharter.Services.Package.DcSong;
+using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Services.Library.Cache;
 using DotCharter.Services.State;
 using DotCharter.Services.State.Checkpoints;
@@ -80,6 +81,7 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         ISaveCompanionService saveCompanions,
         IUiDispatcher uiDispatcher,
         ILocalizationService localization,
+        IProjectPathRekey pathRekey,
         WaveformDiskCache? waveformCache = null,
         SilentAudioTrack? silentAudio = null,
         IMessagePrompt? messageDialog = null,
@@ -115,7 +117,7 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
             chartEditor, uiDispatcher, logger, _localization);
         Saver = new ProjectSaver(configService, documentService, saveCompanions, crashRecovery, storageService,
             projectState, transport, chartEditor, _dirtyTracker, _detachedCompanions, uiDispatcher, logger,
-            _localization, messageDialog, statusBar, this, songToneEdits ?? SongToneEditStore.Default, checkpoints);
+            _localization, messageDialog, statusBar, this, songToneEdits ?? SongToneEditStore.Default, pathRekey, checkpoints);
         _dirtyTracker.IsDirtyChanged += () => ProjectDirtyChanged?.Invoke();
         _dcSongOpener = new DcSongProjectOpener(
             new DcSongProjectUnpacker(logger, () => configService.LoadAppConfig().FfmpegPath),
@@ -343,15 +345,15 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         var startDir = !string.IsNullOrEmpty(AppConfig.LastRscpDir) ? AppConfig.LastRscpDir : AppConfig.LastProjectPath;
         // File ▸ Open was the ONE picker in the app that passed no filters at all
         // — every other one names its types — so the single dialog the user opens
-        // most often was an unfiltered folder listing to hunt a `.rscp` in. The
+        // most often was an unfiltered folder listing to hunt a project file in. The
         // first entry spans BOTH kinds because this router accepts both (audio
         // attaches to the open project, or auditions without one), so the default
         // view shows everything the command can actually take.
         var filters = new List<FilePickerFilter>
         {
             new(L("Picker_ProjectOrAudioFiles"),
-                new[] { "*.rscp", "*" + DcSongFormat.Extension }.Concat(AudioFileTypes.PickerPatterns).ToArray()),
-            new(L("Picker_ProjectFiles"), new[] { "*.rscp" }),
+                ProjectFiles.OpenablePatterns.Append("*" + DcSongFormat.Extension).Concat(AudioFileTypes.PickerPatterns).ToArray()),
+            new(L("Picker_ProjectFiles"), ProjectFiles.OpenablePatterns.ToArray()),
             new(L("Picker_DcSongFiles"), new[] { "*" + DcSongFormat.Extension }),
             new(L("Picker_AudioFiles"), AudioFileTypes.PickerPatterns.ToArray()),
             FilePickerFilters.AllFiles
@@ -418,7 +420,22 @@ public sealed class ProjectSessionService : IProjectSessionService, IProjectSave
         }
     }
 
-    public Task LoadFile(string filePath) => LoadFileAsync(filePath, replaceConfirmed: false);
+    public async Task LoadFile(string filePath) =>
+        await LoadFileAsync(await PreferProjectFileAsync(filePath), replaceConfirmed: false);
+
+    /// <summary>
+    ///     A <c>.rscp</c> with its <c>.dcproj</c> beside it is that project's Charter companion:
+    ///     the <c>.dcproj</c> is the project, whichever of the two was picked, dropped or
+    ///     remembered (File ▸ Open, a drop, Open Recent and the startup reload all come here).
+    /// </summary>
+    private async Task<string> PreferProjectFileAsync(string filePath)
+    {
+        var preferred = await Task.Run(() => ProjectFiles.PreferProject(filePath));
+        if (string.Equals(preferred, filePath, StringComparison.Ordinal)) return filePath;
+
+        _logger.Info(AppLogCategory.Project, $"'{filePath}' is the Charter companion of '{preferred}'; opening the .dcproj.");
+        return preferred;
+    }
 
     /// <param name="filePath">A project, audio or <c>.dcsong</c> file.</param>
     /// <param name="replaceConfirmed">True when the caller already asked before

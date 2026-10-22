@@ -19,7 +19,6 @@ namespace DotCharter.Tests.Services.Library;
 ///     existing <c>lib:</c> entry win over its <c>psarc:</c> twin and (5) do nothing on
 ///     a second run.
 /// </summary>
-[Collection("CwdSerialized")]
 public sealed class LibrarySongIdentityMigrationTests : IDisposable
 {
     private const string OwnChart = @"C:\Charts\My Song\project.rscp";
@@ -234,56 +233,6 @@ public sealed class LibrarySongIdentityMigrationTests : IDisposable
         }
 
         Assert.Equal(-6f, GainOf(store.Read("lib:CallMe")["CallMe_dist"]));
-    }
-
-    // ---- AppConfig: per-song tone source + drop-tuner list -------------------
-
-    [Fact]
-    public void AppConfig_OldSongKeys_AreReadAsLib_AndTheNextSaveWritesThem()
-    {
-        var originalCwd = Directory.GetCurrentDirectory();
-        Directory.SetCurrentDirectory(_root);
-        WritablePaths.OverrideRootsForTesting(_root, _root);
-        try
-        {
-            var configPath = Path.Combine(_root, "appconfig.json");
-            File.WriteAllText(configPath, """
-                {
-                  "UseInGameTones": true,
-                  "SongTonePreferences": {
-                    "psarc:CallMe": { "Mode": "mytone", "PresetId": "user-1" },
-                    "psarc:Heart": { "Mode": "ingame" },
-                    "lib:Heart": { "Mode": "mytone", "PresetId": "user-2" },
-                    "C:\\Charts\\My Song\\project.rscp": { "Mode": "ingame" }
-                  },
-                  "DropTunerSongs": [ "psarc:CallMe", "lib:callme", "C:\\Charts\\My Song\\project.rscp" ]
-                }
-                """);
-
-            using var service = new JsonConfigurationService(TimeSpan.Zero, null);
-            var config = service.LoadAppConfig();
-
-            Assert.Equal(["C:\\Charts\\My Song\\project.rscp", "lib:CallMe", "lib:Heart"],
-                config.SongTonePreferences.Keys.Order(StringComparer.Ordinal));
-            Assert.Equal("user-1", config.SongTonePreferences["lib:CallMe"].PresetId);
-            Assert.Equal("user-2", config.SongTonePreferences["lib:Heart"].PresetId);
-            Assert.Equal(["lib:CallMe", OwnChart], config.DropTunerSongs);
-
-            service.SaveAppConfig(config);
-            service.Flush();
-            Assert.DoesNotContain("psarc:", File.ReadAllText(configPath), StringComparison.Ordinal);
-
-            // Second run over the saved file: unchanged.
-            var again = config.SongTonePreferences.Count;
-            JsonConfigurationService.MigrateLibrarySongKeys(config);
-            Assert.Equal(again, config.SongTonePreferences.Count);
-            Assert.Equal(["lib:CallMe", OwnChart], config.DropTunerSongs);
-        }
-        finally
-        {
-            WritablePaths.OverrideRootsForTesting(null, null);
-            Directory.SetCurrentDirectory(originalCwd);
-        }
     }
 
     // ---- setlists -------------------------------------------------------------

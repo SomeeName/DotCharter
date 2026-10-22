@@ -16,7 +16,7 @@ namespace DotCharter.Tests.Ai.Generate;
 /// </summary>
 public sealed class AiToneGenerationRunTests : IDisposable
 {
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
 
     private readonly string _audio = Path.Combine(Path.GetTempPath(), $"dc-ai-tone-{Guid.NewGuid():N}.wav");
     private readonly ProjectState _state = new();

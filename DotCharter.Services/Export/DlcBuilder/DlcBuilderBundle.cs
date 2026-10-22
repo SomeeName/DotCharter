@@ -2,7 +2,7 @@ namespace DotCharter.Services.Export.DlcBuilder;
 
 /// <summary>
 ///     The names inside the DLC Builder bundle a save writes beside the
-///     <c>.rscp</c>: the folder, the RS-XML file per arrangement / vocal track, and
+///     <c>.dcproj</c>: the folder, the RS-XML file per arrangement / vocal track, and
 ///     the showlights file.
 /// </summary>
 /// <remarks>

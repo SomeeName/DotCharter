@@ -231,13 +231,13 @@ Consequences to keep straight:
   English menus on a de-AT machine one path's best read 99.9% on Get Ready and
   99,9% in Song select. A percentage goes through
   `Presentation/Shared/PercentText`, whose spacing is the region's too ("99,9 %"
-  in de-AT). `Localization/FormattingCultureTests` lints every `.Culture` passed
+  in de-AT). `Localization/ResourceCultureFormatLintTests` lints every `.Culture` passed
   as an argument or captured into a variable, over the display projects; a read
   that is neither (the tone narrator's LANGUAGE callback) is not formatting.
 - The split is only safe because the file/wire layers stopped reading the
   ambient culture in the same change (section above). **Do not revert one half
   without the other** — the two lints named there are what make the leak
-  visible, and `Localization/FormattingCultureTests` is what pins this half.
+  visible, and `Localization/FormattingCultureTests` (with the lint above) is what pins this half.
 - A test that wants deterministic FORMATTING must now set it itself. The
   headless suite does: `Perf/HeadlessAppFixture.IsolateConfigRoots` pins
   `DefaultThreadCurrentCulture` to `DOTCHARTER_HEADLESS_CULTURE` alongside the

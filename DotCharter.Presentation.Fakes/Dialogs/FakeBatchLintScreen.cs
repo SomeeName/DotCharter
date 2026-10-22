@@ -35,9 +35,9 @@ public sealed class FakeBatchLintScreen : FakeDialog<bool>, IBatchLintScreen
 
     public static FakeBatchLintScreen Default() => new(@"D:\Charts\Muse",
     [
-        new Row("hysteria.rscp", @"D:\Charts\Muse", "3 issues, 2 fixed", false, true),
-        new Row("plug_in_baby.rscp", @"D:\Charts\Muse", "0 issues", false, false),
-        new Row("knights_of_cydonia.rscp", @"D:\Charts\Muse", "The file is not a DotCharter project.", true, false)
+        new Row("hysteria.dcproj", @"D:\Charts\Muse", "3 issues, 2 fixed", false, true),
+        new Row("plug_in_baby.dcproj", @"D:\Charts\Muse", "0 issues", false, false),
+        new Row("knights_of_cydonia.dcproj", @"D:\Charts\Muse", "The file is not a DotCharter project.", true, false)
     ], "3 files · 3 issues · 2 fixes · 1 saved · 1 failed", applyFixes: true);
 
     /// <summary>Nothing picked and nothing run: the first open.</summary>
@@ -46,22 +46,22 @@ public sealed class FakeBatchLintScreen : FakeDialog<bool>, IBatchLintScreen
     public static FakeBatchLintScreen LongText() => new(
         @"D:\Charts\Die Ärzte – Liveaufnahmen mit alternativer Stimmung\Zweite Fassung",
         [
-            new Row("schrei_nach_liebe_live_alternative_stimmung.rscp",
+            new Row("schrei_nach_liebe_live_alternative_stimmung.dcproj",
                 @"D:\Charts\Die Ärzte – Liveaufnahmen mit alternativer Stimmung\Zweite Fassung",
                 "12 Probleme, 9 automatisch behoben — ungültige Griffhandpositionen wurden neu gesetzt", false, false),
-            new Row("リズムギター_ドロップD.rscp", @"D:\Charts\日本語のフォルダ", "プロジェクトを読み込めませんでした。", true, false)
+            new Row("リズムギター_ドロップD.dcproj", @"D:\Charts\日本語のフォルダ", "プロジェクトを読み込めませんでした。", true, false)
         ], "2 Dateien · 12 Probleme · 9 Korrekturen · 0 gespeichert · 1 fehlgeschlagen");
 
     /// <summary>A library-sized folder: the list scrolls.</summary>
     public static FakeBatchLintScreen Full() => new(@"D:\Rocksmith\Customs",
     [
         .. Enumerable.Range(1, 50).Select(ILintResultRow (i) =>
-            new Row($"custom_song_{i:000}.rscp", @"D:\Rocksmith\Customs", $"{i % 7} {(i % 7 == 1 ? "issue" : "issues")}", i % 13 == 0, false))
+            new Row($"custom_song_{i:000}.dcproj", @"D:\Rocksmith\Customs", $"{i % 7} {(i % 7 == 1 ? "issue" : "issues")}", i % 13 == 0, false))
     ], "50 files · 150 issues · 0 fixes · 0 saved · 3 failed");
 
     /// <summary>A run in flight: the bar, the current file and a live Cancel.</summary>
     public static FakeBatchLintScreen Busy() => new(@"D:\Rocksmith\Customs", [], "Linting 400 projects…",
-        applyFixes: true, isBusy: true, progress: 0.37, currentFile: "custom_song_148.rscp");
+        applyFixes: true, isBusy: true, progress: 0.37, currentFile: "custom_song_148.dcproj");
 
     public string FolderPath { get; }
 

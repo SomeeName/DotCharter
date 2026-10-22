@@ -6,6 +6,7 @@ using DotCharter.Presentation.Dialogs;
 using DotCharter.Services.Diagnostics;
 using DotCharter.Services.Editing.Linting;
 using DotCharter.Services.Infrastructure.Configuration;
+using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Tone.Infrastructure.Configuration;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.Tone.Logging;
@@ -233,7 +234,10 @@ public sealed class BatchLintViewModel : DialogViewModel<bool>, IBatchLintScreen
         string[] files;
         try
         {
-            files = _files.FindFiles(FolderPath, "*.rscp");
+            // A project's Charter companion is never linted in its place: rewriting it
+            // would put DotCharter's XML into the file Charter opens.
+            files = [.. ProjectFiles.WithoutShadowedCompanions(
+                ProjectFiles.OpenablePatterns.SelectMany(pattern => _files.FindFiles(FolderPath, pattern)))];
         }
         catch (Exception ex)
         {

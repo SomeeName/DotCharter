@@ -82,6 +82,10 @@ The pictures show a chart, lyrics, cover and audio made for this README (see
   in the layout the `rs7string` game mod reads.
 - Editor on Fire `.eof`, Guitar Pro (`.gp`, `.gpx`, `.gp5` in; `.gp` out),
   Rocksmith XML, RSCharter `.rscp` and MIDI.
+- Projects are saved as `.dcproj` files. Every save also writes a
+  Charter-compatible `.rscp` beside it, so the same folder opens in Charter.
+  A `.rscp` from Charter or from an older DotCharter opens as before; saving it
+  creates the `.dcproj` and keeps the old file.
 
 **Tone rig**
 - A pedalboard of amps, cabinets and effects on a native DSP engine, with
@@ -112,7 +116,8 @@ licence texts are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 - **[Charter / Log Charter](https://github.com/Lordszynencja/Charter)**
   (Lordszynencja). The highway textures are Charter's own files, parts of the
   editor logic are ported from it, and its checks are the model for our `L##`
-  codes. DotCharter opens and saves its `.rscp` projects.
+  codes. DotCharter opens its `.rscp` projects and saves a Charter-compatible
+  `.rscp` beside every `.dcproj` project.
 - **[Rocksmith2014.NET and DLC Builder](https://github.com/iminashi/Rocksmith2014.NET)**
   (iminashi). Parts of our writers are C# ports of its F# code, the tone-gear
   catalogue is its file, and its `I##` checks are our model. DotCharter writes
@@ -165,6 +170,10 @@ charting a song and playing one, screen by screen.
   all qualify). The highway and the editor timeline are drawn with Vulkan.
 - An audio interface or guitar input for Play Mode and the rig; an **ASIO**
   driver gives the lowest latency.
+- **Disk space:** about 550 MB for the installed program (the download is a
+  375 MB zip), plus roughly 300 to 360 MB for each stem-separation model you
+  download (an optional download, not part of the zip) and room for the stems
+  DotCharter caches for your songs.
 - Optional: a DirectX 12 GPU makes stem separation much faster (it falls back
   to the CPU otherwise).
 

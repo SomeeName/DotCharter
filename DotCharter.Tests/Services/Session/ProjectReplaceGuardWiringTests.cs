@@ -830,7 +830,8 @@ public sealed class ProjectReplaceGuardWiringTests
                 new AudiolessNameDocumentService(), State, transport, editor, new TempoService(logger),
                 new FakeCrashRecoveryService(), history, new NoOpSaveCompanionService(),
                 uiDispatcher: new TestUiDispatcher(),
-                localization: FakeLocalization.English());
+                localization: FakeLocalization.English(),
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public string ProjectPath { get; }

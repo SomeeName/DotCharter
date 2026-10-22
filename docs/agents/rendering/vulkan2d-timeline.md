@@ -30,6 +30,14 @@ composition-mode consequences for popups are in
     framebuffers, vertex streams, atlas) cycle on attach/detach (pop-out).
   - `Timeline2DVulkanCore` — single-attachment BGRA8 pass + solid (6-float
     vertex) / general (9-float) pipelines, shared per device.
+    The general fragment shader branches on the vertex `type` (1 disc, 2 ring,
+    3 glyph, 4 vertical AA line, 5 horizontal AA line, >= 8 DASHED vertical
+    AA line). A dashed grid line is ONE quad: `TimelineBatcher.AddDashedVerticalLineAa`
+    packs dash and gap (1/16 px units) into the type, the vertex shader decodes
+    them, and the fragment shader discards the gaps with the phase anchored at
+    the quad's top. Never draw a dashed line as one quad per dash again;
+    `Timeline2DDashedGridVertexTests` fails when the grid's vertex count grows
+    with the pane height.
   - `Timeline2DComposedRenderer` — per-viewport `VulkanComposedImagePool` +
     framebuffers + grow-on-demand mapped vertex streams; implements
     `IComposedFrameSource` (the pump-facing half of

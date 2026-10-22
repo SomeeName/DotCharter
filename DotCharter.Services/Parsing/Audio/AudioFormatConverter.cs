@@ -240,11 +240,11 @@ internal sealed class AudioFormatConverter
     ///         first, and this caller was simply never swept.
     ///     </para>
     /// </summary>
-    internal static bool RunProcess(string executable, IReadOnlyList<string> arguments)
+    internal static bool RunProcess(string executable, IReadOnlyList<string> arguments, TimeSpan? ceiling = null)
     {
         try
         {
-            return MediaProcess.Run(executable, arguments, ConversionTimeout).Succeeded;
+            return MediaProcess.Run(executable, arguments, ceiling ?? ConversionTimeout).Succeeded;
         }
         catch
         {

@@ -305,7 +305,8 @@ public sealed class LibrarySongBytesReleaseTests : IDisposable
             new NoCompanions(), statusBar: new RecordingStatusBarService(),
             uiDispatcher: new TestUiDispatcher(),
             localization: FakeLocalization.English(),
-            deviceRateAudio: deviceRateAudio);
+            deviceRateAudio: deviceRateAudio,
+            pathRekey: new FakeProjectPathRekey());
     }
 
     private sealed class NoDocuments : IProjectDocumentService

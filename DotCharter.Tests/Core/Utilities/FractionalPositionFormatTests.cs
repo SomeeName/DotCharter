@@ -17,13 +17,12 @@ namespace DotCharter.Tests.Core.Utilities;
 ///     </para>
 /// </summary>
 /// <remarks>
-///     In the <c>LocalizationSingleton</c> collection because
-///     <see cref="FollowsTheAmbientCulture_documentedNotDecided" /> moves
-///     <see cref="CultureInfo.CurrentCulture" />, which is process-wide —
-///     required by <c>Infrastructure/CultureCollectionLintTests</c>, which
-///     caught this class the first time the gate ran over it.
+///     <see cref="FollowsTheAmbientCulture_documentedNotDecided" /> sets
+///     <see cref="CultureInfo.CurrentCulture" />, which belongs to the calling
+///     flow and is restored in a <c>finally</c>, so the class needs no
+///     collection (<c>Infrastructure/CultureCollectionLintTests</c> serializes
+///     only the process-wide defaults).
 /// </remarks>
-[Collection("LocalizationSingleton")]
 public class FractionalPositionFormatTests
 {
     /// <summary>A steady 120 BPM 4/4 grid: one beat = 500 ms.</summary>

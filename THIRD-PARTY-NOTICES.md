@@ -306,6 +306,7 @@ tools use are listed separately: they are never part of a release.
 | `Serilog`, `Serilog.Sinks.Async`, `Serilog.Sinks.Console`, `Serilog.Sinks.File` | Apache-2.0 | <https://github.com/serilog> |
 | `Microsoft.ML.OnnxRuntime.DirectML` (`onnxruntime.dll`) | MIT | <https://github.com/microsoft/onnxruntime> |
 | `Microsoft.AI.DirectML` (`DirectML.dll`) | Microsoft DirectML redistributable licence (proprietary, **not** MIT): redistributed unmodified beside the app, as that licence permits; combining DotCharter with it is covered by the GPLv3 §7 additional permission in §1 | <https://www.nuget.org/packages/Microsoft.AI.DirectML> |
+| Microsoft Visual C++ Redistributable, app-local (`msvcp140.dll`, `msvcp140_1.dll`, `vcruntime140.dll`, `vcruntime140_1.dll`, x64, copied beside `onnxruntime.dll` from the Visual Studio `VC\Redist\MSVC` folder at the version pinned in `tools/release/vcredist.json`) | Microsoft Visual Studio licence terms for distributable code, as listed in the redistributable's `redist.txt` (proprietary, **not** MIT): redistributed unmodified and only so ONNX Runtime (a NuGet binary built against the dynamic C++ runtime) loads on a Windows without the system-wide redistributable | <https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files> |
 
 The ONNX Runtime packages are referenced by JuceSharp's
 `JuceSharp.StemSeparation.Onnx`, which runs stem separation and lyric

@@ -36,7 +36,7 @@ public sealed class ProjectAutoBackupTests : IDisposable
             FakeLocalization.English());
 
         _state.ActiveProject = new ChartProject();
-        _state.CurrentProjectPath = Path.Combine(_root, "My Song.rscp");
+        _state.CurrentProjectPath = Path.Combine(_root, "My Song.dcproj");
     }
 
     public void Dispose()
@@ -51,16 +51,16 @@ public sealed class ProjectAutoBackupTests : IDisposable
     {
         await _backup.CreateBackupAsync();
 
-        var zip = Assert.Single(Directory.GetFiles(Path.Combine(_root, "backups"), "*.rscp.zip"));
+        var zip = Assert.Single(Directory.GetFiles(Path.Combine(_root, "backups"), "*.dcproj.zip"));
         using (var archive = ZipFile.OpenRead(zip))
         {
             var entry = Assert.Single(archive.Entries);
-            Assert.Matches(new Regex(@"^My Song_\d{8}_\d{6}\.rscp$"), entry.FullName);
+            Assert.Matches(new Regex(@"^My Song_\d{8}_\d{6}\.dcproj$"), entry.FullName);
         }
 
         var saved = Assert.Single(_documents.Saved);
         Assert.NotSame(_state.ActiveProject, saved.Project);
-        Assert.False(File.Exists(saved.Path), "The temporary .rscp the zip was built from was left behind.");
+        Assert.False(File.Exists(saved.Path), "The temporary .dcproj the zip was built from was left behind.");
         Assert.True(_logger.HasEntryContaining("INFO", "Auto backup saved"));
     }
 
@@ -76,7 +76,7 @@ public sealed class ProjectAutoBackupTests : IDisposable
 
         await _backup.CreateBackupAsync();
 
-        Assert.Single(Directory.GetFiles(Path.Combine(_root, "backups"), "*.rscp.zip"));
+        Assert.Single(Directory.GetFiles(Path.Combine(_root, "backups"), "*.dcproj.zip"));
     }
 
     [Fact]
@@ -97,8 +97,8 @@ public sealed class ProjectAutoBackupTests : IDisposable
 
         var second = ProjectAutoBackup.UniqueArchivePath(_root, "song", "20261003_120000");
 
-        Assert.EndsWith("song_20261003_120000.rscp.zip", first, StringComparison.Ordinal);
-        Assert.EndsWith("song_20261003_120000_1.rscp.zip", second, StringComparison.Ordinal);
+        Assert.EndsWith("song_20261003_120000.dcproj.zip", first, StringComparison.Ordinal);
+        Assert.EndsWith("song_20261003_120000_1.dcproj.zip", second, StringComparison.Ordinal);
     }
 
     [Fact]

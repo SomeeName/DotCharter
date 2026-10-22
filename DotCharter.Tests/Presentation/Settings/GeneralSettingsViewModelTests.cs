@@ -10,7 +10,6 @@ namespace DotCharter.Tests.Presentation.Settings;
 ///     reset, the first-run wizard and search. The language write goes through a
 ///     recording localization, so nothing here moves the process's culture.
 /// </summary>
-[Collection("LocalizationSingleton")]
 public sealed class GeneralSettingsViewModelTests
 {
     private sealed record Rig(GeneralSettingsViewModel Vm, FakeConfigurationService Config,

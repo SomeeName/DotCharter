@@ -186,7 +186,7 @@ public static class AtomicFile
     ///         config), the destination still holds the previous version, and
     ///         the caller has already been told the write failed. Leaving it
     ///         parked next to the real file is how a user ends up with
-    ///         <c>MySong.rscp.saving</c> beside <c>MySong.rscp</c> after one
+    ///         <c>MySong.dcproj.saving</c> beside <c>MySong.dcproj</c> after one
     ///         antivirus hiccup — a file that looks like a newer save and is
     ///         not, and that nothing ever cleans up. The delete is best-effort
     ///         and never masks the original failure.
@@ -228,7 +228,7 @@ public static class AtomicFile
                 // Out of budget, or an exception class the retry does not
                 // understand. The swap is not happening, so the stage is
                 // garbage — sweep it before the failure propagates. See the
-                // doc above: an orphaned "<project>.rscp.saving" reads as a
+                // doc above: an orphaned "<project>.dcproj.saving" reads as a
                 // newer save that nothing will ever open.
                 BestEffortDelete.File(temp);
                 throw;

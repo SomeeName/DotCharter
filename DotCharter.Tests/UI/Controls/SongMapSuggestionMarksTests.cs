@@ -32,14 +32,15 @@ public sealed class SongMapSuggestionMarksTests
     private readonly ChordKeyboardMutationTests.Harness _h = new();
     private readonly HandShapeSuggestionLatch _latch = new();
     private readonly List<SongMapMark> _marks = [];
+    private HandShapeSuggestionSet _set = HandShapeSuggestionSet.Empty;
     private long _version;
 
     private ChartLevel Level => _h.Arrangement.Levels[0];
 
     private void Frame(bool enabled = true)
     {
-        var bars = _latch.Get(_h.Arrangement, Level, enabled, _version, 0);
-        SongMapMarks.CollectSuggestions(bars, _beats, Scale, Top, Height, _marks);
+        _set = _latch.Get(_h.Arrangement, Level, enabled, _version, 0);
+        SongMapMarks.CollectSuggestions(_set.Bars, _beats, Scale, Top, Height, _marks);
     }
 
     [Fact]
@@ -50,7 +51,7 @@ public sealed class SongMapSuggestionMarksTests
         Frame();
 
         var band = Assert.Single(_marks).Bounds;
-        var suggestion = Assert.Single(_latch.Suggestions);
+        var suggestion = Assert.Single(_set.Suggestions);
         Assert.Equal(suggestion.Position.GetPositionMs(_beats) * Scale, band.Left, 6);
         Assert.Equal(suggestion.EndPosition.GetPositionMs(_beats) * Scale, band.Right, 6);
         Assert.Equal(Top, band.Top, 6);
@@ -73,7 +74,7 @@ public sealed class SongMapSuggestionMarksTests
 
         // Accept the first: its band goes, the other stays where it was.
         var acceptor = new HandShapeSuggestionAcceptor(_h.History, new FakeAppLogger());
-        Assert.Equal(1, acceptor.Accept(_h.Arrangement, Level, [_latch.Suggestions[0]], arpeggio: false));
+        Assert.Equal(1, acceptor.Accept(_h.Arrangement, Level, [_set.Suggestions[0]], arpeggio: false));
         _version++;
         Frame();
         Assert.Equal(am, Assert.Single(_marks).Bounds);

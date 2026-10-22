@@ -32,7 +32,7 @@ public sealed partial class SongSelectViewModel : ObservableObject
     private readonly SongBrowserViewModel? _songBrowser;
 
     /// <summary>Scan-time cache of the genre each OWN chart authors in its
-    /// <c>.rscp</c> header — an own chart's genre has no other real source. Warmed on
+    /// <c>.dcproj</c> header — an own chart's genre has no other real source. Warmed on
     /// a pool thread once per library scan by <see cref="RebuildFromBrowserAsync" />;
     /// read (lookup only, no I/O) while the song rows are built.</summary>
     private readonly IChartGenreIndex _chartGenres;
@@ -380,7 +380,7 @@ public sealed partial class SongSelectViewModel : ObservableObject
         RebuildFromBrowser(ownPaths);
     }
 
-    /// <summary>The one place a <c>.rscp</c> header is read for a genre. Once
+    /// <summary>The one place a <c>.dcproj</c> header is read for a genre. Once
     /// per scan, off the UI thread, and a no-op when nothing changed since the
     /// last scan (<c>ChartGenreIndex</c> stats before it reads).</summary>
     private async Task WarmOwnChartGenresAsync(IReadOnlyList<string> ownPaths)

@@ -5,7 +5,6 @@ using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Parsing.Roundtrip;
 
-[Collection("CwdSerialized")]
 public sealed class RsXmlSongRoundtripTests : IDisposable
 {
     private readonly string _tempDir;

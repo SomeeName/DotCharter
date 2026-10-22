@@ -36,15 +36,13 @@ public partial class App
         services.AddSingleton<IArrangementRule, OpenNoteBendRule>();
         services.AddSingleton<IArrangementRule, ChordOutsideHandShapeRule>();
         services.AddSingleton<IArrangementAutoFixService, ArrangementAutoFixService>();
-        // Batch library lint (0.22): headless validate (+ optional auto-fix and
-        // save) over a folder of .rscp projects. The serializer is resolved by
-        // key because IChartSerializer is only registered keyed — the batch runs
-        // over PROJECT files, so it takes the rscp one.
+        // Batch library lint over a folder of projects; IChartSerializer is only registered keyed.
         services.AddSingleton<DotCharter.Services.Editing.Linting.IBatchChartLintService>(sp =>
             new DotCharter.Services.Editing.Linting.BatchChartLintService(
                 sp.GetRequiredKeyedService<IChartSerializer>("rscp"),
                 sp.GetRequiredService<IArrangementValidationService>(),
-                sp.GetRequiredService<IArrangementAutoFixService>()));
+                sp.GetRequiredService<IArrangementAutoFixService>(),
+                sp.GetRequiredService<DotCharter.Services.Export.ISaveCompanionService>()));
         // v0.29 audio-verified lint: offline CQT over the ORIGINAL MIX (never
         // Opus stems — bright-line rule) vs. the chart's sounding pitches.
         services.AddSingleton<DotCharter.Services.Editing.Linting.IAudioChartLintService>(sp =>

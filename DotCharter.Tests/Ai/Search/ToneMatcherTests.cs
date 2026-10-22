@@ -108,8 +108,7 @@ public sealed class ToneMatcherTests
     ]);
 
     /// <summary>A full 1000-render match on its own: a nested class is its own xunit
-    /// collection, so the four full matches run in parallel instead of back to
-    /// back (they were a ~175 s serial chain, the longest pole of the gate).</summary>
+    /// collection, so the two full matches run in parallel instead of back to back.</summary>
     public sealed class HiddenRigRecovery
     {
         [Fact]
@@ -165,24 +164,22 @@ public sealed class ToneMatcherTests
         }
     }
 
-    /// <summary>A full 1000-render match on its own: a nested class is its own xunit
-    /// collection, so the four full matches run in parallel instead of back to
-    /// back (they were a ~175 s serial chain, the longest pole of the gate).</summary>
-    public sealed class SelfDistanceFloor
+    /// <summary>The floor is measured from the target before any render is spent, so it
+    /// does not depend on the search: a budget of the anchor render plus a few seeds,
+    /// with no refinement, reports the same floor a full match does.</summary>
+    [Fact]
+    public async Task TheSelfDistanceFloor_IsMeasuredFromTheTargetItself()
     {
-        [Fact]
-        public async Task TheSelfDistanceFloor_IsMeasuredFromTheTargetItself()
-        {
-            var rig = await BuildAsync();
-            var target = await rig.Renderer.RenderAsync(rig.Di, HiddenRig(), CancellationToken.None);
+        var rig = await BuildAsync(new ToneMatcherOptions(
+            MaxRenders: 8, RefineCandidates: 0, SelfDistanceWindow: TimeSpan.FromSeconds(0.5)));
+        var target = await rig.Renderer.RenderAsync(rig.Di, HiddenRig(), CancellationToken.None);
 
-            var result = await rig.Matcher.MatchAsync(
-                new ToneMatchRequest(target, rig.Di, null) { TargetIsRender = true }, null, CancellationToken.None);
+        var result = await rig.Matcher.MatchAsync(
+            new ToneMatchRequest(target, rig.Di, null) { TargetIsRender = true }, null, CancellationToken.None);
 
-            // Non-zero (two windows of real content are never identical) and small
-            // (they are the same tone).
-            Assert.InRange(result.TargetSelfDistanceFloor, 1e-6, 1.0);
-        }
+        // Non-zero (two windows of real content are never identical) and small
+        // (they are the same tone).
+        Assert.InRange(result.TargetSelfDistanceFloor, 1e-6, 1.0);
     }
 
     /// <summary>
@@ -218,8 +215,7 @@ public sealed class ToneMatcherTests
     }
 
     /// <summary>A full 1000-render match on its own: a nested class is its own xunit
-    /// collection, so the four full matches run in parallel instead of back to
-    /// back (they were a ~175 s serial chain, the longest pole of the gate).</summary>
+    /// collection, so the two full matches run in parallel instead of back to back.</summary>
     public sealed class ExactPrior
     {
         [Fact]
@@ -388,24 +384,21 @@ public sealed class ToneMatcherTests
         Assert.Contains(result.Notes, n => n.Contains("estimator unavailable", StringComparison.Ordinal));
     }
 
-    /// <summary>A full 1000-render match on its own: a nested class is its own xunit
-    /// collection, so the four full matches run in parallel instead of back to
-    /// back (they were a ~175 s serial chain, the longest pole of the gate).</summary>
-    public sealed class CandidateCap
+    /// <summary>The cap truncates a longer, sorted list: 60 renders buy the anchor, four
+    /// seeds and one refinement, so five candidates exist and three come back.</summary>
+    [Fact]
+    public async Task CandidatesComeBackSortedAndCapped()
     {
-        [Fact]
-        public async Task CandidatesComeBackSortedAndCapped()
-        {
-            var rig = await BuildAsync();
-            var target = await rig.Renderer.RenderAsync(rig.Di, HiddenRig(), CancellationToken.None);
+        var rig = await BuildAsync(new ToneMatcherOptions(
+            MaxRenders: 60, RefineCandidates: 1, SelfDistanceWindow: TimeSpan.FromSeconds(0.5)));
+        var target = await rig.Renderer.RenderAsync(rig.Di, HiddenRig(), CancellationToken.None);
 
-            var result = await rig.Matcher.MatchAsync(
-                new ToneMatchRequest(target, rig.Di, null, Candidates: 3) { TargetIsRender = true }, null, CancellationToken.None);
+        var result = await rig.Matcher.MatchAsync(
+            new ToneMatchRequest(target, rig.Di, null, Candidates: 3) { TargetIsRender = true }, null, CancellationToken.None);
 
-            Assert.True(result.Candidates.Count <= 3);
-            for (var i = 1; i < result.Candidates.Count; i++)
-                Assert.True(result.Candidates[i - 1].Distance <= result.Candidates[i].Distance);
-        }
+        Assert.Equal(3, result.Candidates.Count);
+        for (var i = 1; i < result.Candidates.Count; i++)
+            Assert.True(result.Candidates[i - 1].Distance <= result.Candidates[i].Distance);
     }
 
     /// <summary><see cref="Progress{T}" /> posts to the synchronization context, so

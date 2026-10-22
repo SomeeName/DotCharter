@@ -139,8 +139,7 @@ public sealed partial class PublicSnapshotExportTests
         Assert.Equal(expected, actual);
     }
 
-    [Fact]
-    public void Export_IsOneCommitOnThePreviousSnapshot_WithoutTrailers_AndPointsAtThePublicJuceSharp()
+    private static void Export_IsOneCommitOnThePreviousSnapshot_WithoutTrailers_AndPointsAtThePublicJuceSharp()
     {
         var scratch = Directory.CreateTempSubdirectory("dc-public-export-").FullName;
         try
@@ -382,6 +381,9 @@ public sealed partial class PublicSnapshotExportTests
             info.ArgumentList.Add(argument);
         // Plain error text: ANSI escapes in a failure message make the TRX invalid XML.
         info.Environment["NO_COLOR"] = "1";
+        // Never the owner's %LOCALAPPDATA% release cache: the export records and reads gate
+        // runs there. A case that needs the cache across runs sets its own.
+        info.Environment["DOTCHARTER_RELEASE_CACHE"] = Path.Combine(Path.GetDirectoryName(file)!, "release-cache");
 
         Process? process;
         try

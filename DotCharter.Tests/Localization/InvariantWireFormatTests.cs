@@ -30,11 +30,11 @@ namespace DotCharter.Tests.Localization;
 ///     </para>
 /// </summary>
 /// <remarks>
-///     In the <c>LocalizationSingleton</c> collection because every case here
-///     moves <see cref="CultureInfo.CurrentCulture" />, which is process-wide —
-///     required by <c>Infrastructure/CultureCollectionLintTests</c>.
+///     Every case here sets <see cref="CultureInfo.CurrentCulture" />, which
+///     belongs to the calling flow and is restored in a <c>finally</c>, so the
+///     class needs no collection (<c>Infrastructure/CultureCollectionLintTests</c>
+///     serializes only the process-wide defaults).
 /// </remarks>
-[Collection("LocalizationSingleton")]
 public sealed class InvariantWireFormatTests
 {
     /// <summary>

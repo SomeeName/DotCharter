@@ -26,7 +26,7 @@ public sealed class FontAtlasRasterizeTests
         var work = Task.Run(() => FontAtlas.Rasterize(Ascii, "Arial", 32f));
 
         var finished = await Task.WhenAny(work,
-            Task.Delay(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+            Task.Delay(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
 
         Assert.True(ReferenceEquals(finished, work),
             "FontAtlas.Rasterize did not complete off the UI thread — the dispatcher dependency is back.");

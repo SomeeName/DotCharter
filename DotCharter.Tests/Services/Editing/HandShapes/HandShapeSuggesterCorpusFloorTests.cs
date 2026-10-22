@@ -27,6 +27,9 @@ public sealed class HandShapeSuggesterCorpusFloorTests(ITestOutputHelper output)
 
     private static readonly Lazy<(int Tp, int Fp, int Fn, int Windows)> Measured = new(Measure);
 
+    internal static string FixturePath { get; } = Path.Combine(AppContext.BaseDirectory, "Services", "Editing",
+        "HandShapes", "Fixtures", "hand-shape-suggestion-floor.json");
+
     [Fact]
     public void Precision_HoldsItsFloor()
     {
@@ -55,9 +58,7 @@ public sealed class HandShapeSuggesterCorpusFloorTests(ITestOutputHelper output)
 
     private static (int Tp, int Fp, int Fn, int Windows) Measure()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Services", "Editing", "HandShapes", "Fixtures",
-            "hand-shape-suggestion-floor.json");
-        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        using var doc = JsonDocument.Parse(File.ReadAllText(FixturePath));
         int tp = 0, fp = 0, fn = 0, windows = 0;
         foreach (var window in doc.RootElement.GetProperty("windows").EnumerateArray())
         {
@@ -77,7 +78,7 @@ public sealed class HandShapeSuggesterCorpusFloorTests(ITestOutputHelper output)
         return (tp, fp, fn, windows);
     }
 
-    private static (Arrangement Arrangement, ChartLevel Level, List<HandShape> Reference) Load(JsonElement window)
+    internal static (Arrangement Arrangement, ChartLevel Level, List<HandShape> Reference) Load(JsonElement window)
     {
         var arrangement = new Arrangement
         {

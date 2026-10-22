@@ -27,7 +27,7 @@ public interface IPluginModule
 /// registers against changes shape; a plugin built against another value is refused, never half-loaded.</summary>
 public static class PluginApiVersion
 {
-    public const int Current = 2;
+    public const int Current = 3;
 }
 
 /// <summary>

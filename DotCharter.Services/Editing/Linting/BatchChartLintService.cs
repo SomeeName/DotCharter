@@ -1,5 +1,7 @@
 ﻿using DotCharter.Services.Editing.Fixing;
+using DotCharter.Services.Export;
 using DotCharter.Services.Parsing;
+using DotCharter.Services.Parsing.Rscp;
 
 namespace DotCharter.Services.Editing.Linting;
 
@@ -8,22 +10,33 @@ namespace DotCharter.Services.Editing.Linting;
 /// <c>ArrangementAutoFixService</c>: lints a set of project files and
 /// produces a per-chart report (issues found, fixes applied when the flag is
 /// set, load/save failures). No UI, no shared state — one file's failure is
-/// recorded and the batch moves on. All file I/O goes through the injected
-/// <see cref="IChartSerializer"/>.
+/// recorded and the batch moves on. The project is read and written through the
+/// injected <see cref="IChartSerializer"/>.
+/// <para>
+///     <b>A <c>.rscp</c> is never rewritten with DotCharter's XML</b> (Charter could not open
+///     the result): its fixed project is written as the same-named <c>.dcproj</c> beside it, and the
+///     Charter companion is written through the save path's own
+///     <see cref="ISaveCompanionService.WriteCharterProject" />, which leaves a Charter project
+///     byte-for-byte as it is. An older DotCharter <c>.rscp</c> is kept as <c>.rscp.bak</c> first,
+///     like the session's first save does. A <c>.dcproj</c> already there is never overwritten.
+/// </para>
 /// </summary>
 public sealed class BatchChartLintService : IBatchChartLintService
 {
     private readonly IArrangementAutoFixService _autoFixService;
     private readonly IChartSerializer _serializer;
     private readonly IArrangementValidationService _validationService;
+    private readonly ISaveCompanionService _companions;
 
     public BatchChartLintService(IChartSerializer serializer,
         IArrangementValidationService validationService,
-        IArrangementAutoFixService autoFixService)
+        IArrangementAutoFixService autoFixService,
+        ISaveCompanionService companions)
     {
         _serializer = serializer;
         _validationService = validationService;
         _autoFixService = autoFixService;
+        _companions = companions;
     }
 
     public ChartLintBatchResult Run(IEnumerable<string> projectFilePaths,
@@ -108,7 +121,7 @@ public sealed class BatchChartLintService : IBatchChartLintService
         {
             try
             {
-                // STAGE AND SWAP. No .rscp writer in the repo may
+                // STAGE AND SWAP. No .dcproj writer in the repo may
                 // hand the real project path straight to the serializer —
                 // and the serializer opens FileMode.Create (truncate) and then
                 // fsyncs, on the documented assumption that IT is the staging
@@ -120,10 +133,14 @@ public sealed class BatchChartLintService : IBatchChartLintService
                 // walks a whole folder tree with SearchOption.AllDirectories and
                 // rewrites headlessly, so the files at risk are projects the user
                 // never opened and would not think to check.
+                var target = CharterRscp.IsCharterProject(path) ? ProjectFiles.Beside(path) : path;
+                if (target != path && File.Exists(target))
+                    throw new IOException($"'{Path.GetFileName(target)}' already exists, and the .rscp is left as it is");
                 var staging = path + ".lint-saving";
                 _serializer.Save(staging, project);
-                AtomicFile.ReplaceWithRetry(staging, path);
+                AtomicFile.ReplaceWithRetry(staging, target);
                 saved = true;
+                if (target != path) WriteCharterSideOfMigration(path, target, project);
             }
             catch (Exception ex)
             {
@@ -133,6 +150,24 @@ public sealed class BatchChartLintService : IBatchChartLintService
         }
 
         return new ChartLintReport(path, error: null, arrangementReports, saved);
+    }
+
+    /// <summary>
+    ///     After a <c>.rscp</c>'s fixed project landed as <paramref name="dcproj" />: an older DotCharter
+    ///     file is renamed to its backup name, then the Charter companion is written. Both are derived
+    ///     from a project that is already safely on disk, so neither can fail the file.
+    /// </summary>
+    private void WriteCharterSideOfMigration(string rscpPath, string dcproj, ChartProject project)
+    {
+        try
+        {
+            if (CharterRscp.IsWrittenByDotCharter(rscpPath)) CharterRscp.MoveToLegacyBackup(rscpPath);
+            _companions.WriteCharterProject(dcproj, project);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The .dcproj is the result; a Charter file that could not be refreshed stays as it was.
+        }
     }
 
     /// <summary>

@@ -30,7 +30,7 @@ public sealed class DcSongProjectUnpackerTests : IDisposable
         var result = await Unpacker(new FakeDecoder(available: false)).UnpackAsync(package, BaseDir, TestContext.Current.CancellationToken);
 
         Assert.Equal(Path.Combine(BaseDir, "The Artist - The Song"), result.ProjectDirectory);
-        Assert.Equal(Path.Combine(result.ProjectDirectory, "project.rscp"), result.ProjectPath);
+        Assert.Equal(Path.Combine(result.ProjectDirectory, "project.dcproj"), result.ProjectPath);
         Assert.False(result.AudioLossy);
         Assert.Equal("The Song", result.Title);
         // The FLAC is copied as it is — the engine decodes FLAC, no ffmpeg involved.
@@ -58,7 +58,7 @@ public sealed class DcSongProjectUnpackerTests : IDisposable
         Assert.Equal(FakeDecoder.Decoded(PackagedSong), File.ReadAllBytes(Path.Combine(result.ProjectDirectory, "song.wav")));
         Assert.Equal(FakeDecoder.Decoded(PackagedDrums), File.ReadAllBytes(Path.Combine(result.ProjectDirectory, "stems", "drums.wav")));
         // Nothing but the project's own files: the Opus bytes went through a scratch folder.
-        Assert.Equal(new[] { "project.rscp", "song.wav", Path.Combine("stems", "drums.wav") },
+        Assert.Equal(new[] { "project.dcproj", "song.wav", Path.Combine("stems", "drums.wav") },
             Directory.EnumerateFiles(result.ProjectDirectory, "*", SearchOption.AllDirectories)
                 .Select(f => Path.GetRelativePath(result.ProjectDirectory, f)).Order(StringComparer.Ordinal));
 
@@ -107,13 +107,13 @@ public sealed class DcSongProjectUnpackerTests : IDisposable
     public async Task AnOccupiedFolderOfThatName_IsLeftAlone()
     {
         var occupied = Directory.CreateDirectory(Path.Combine(BaseDir, "The Artist - The Song")).FullName;
-        File.WriteAllText(Path.Combine(occupied, "project.rscp"), "somebody else's project");
+        File.WriteAllText(Path.Combine(occupied, "project.dcproj"), "somebody else's project");
 
         var result = await Unpacker(new FakeDecoder(available: false))
             .UnpackAsync(BuildProjectPackage(_dir, lossless: true), BaseDir, TestContext.Current.CancellationToken);
 
         Assert.Equal(Path.Combine(BaseDir, "The Artist - The Song (2)"), result.ProjectDirectory);
-        Assert.Equal("somebody else's project", File.ReadAllText(Path.Combine(occupied, "project.rscp")));
+        Assert.Equal("somebody else's project", File.ReadAllText(Path.Combine(occupied, "project.dcproj")));
         Assert.Single(Directory.EnumerateFileSystemEntries(occupied));
     }
 

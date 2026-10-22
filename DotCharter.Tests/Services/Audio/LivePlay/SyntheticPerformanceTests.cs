@@ -20,7 +20,8 @@ namespace DotCharter.Tests.Services.Audio.LivePlay;
 ///     Faithful where it matters: the audio is WALL-CLOCK (a player plays at real pitch and
 ///     real tempo no matter what the transport does), it is delivered in the ~1600-sample
 ///     chunks the 30 Hz pump actually delivers, and the transport advances at speed×.
-///     Deterministic, no hardware, no dataset — it runs in the default gate.
+///     Deterministic, no hardware, no dataset — and slow enough to live in the release
+///     lane (<c>tools/ci/release-lane.json</c>), not the per-change gate.
 ///     </para>
 /// </summary>
 public sealed class SyntheticPerformanceTests

@@ -3,6 +3,7 @@ using DotCharter.Services.Gameplay.Profiles;
 using DotCharter.Services.Gameplay.Setlists;
 using DotCharter.Services.Gameplay.Stats;
 using DotCharter.Services.Audio.LivePlay;
+using DotCharter.Services.Session;
 using DotCharter.UI.ViewModels.PlayMode;
 
 namespace DotCharter.Tests.UI.ViewModels.PlayMode;
@@ -190,6 +191,39 @@ public sealed class PlaySetlistFlowTests : IDisposable
         Assert.Equal(path, saved.SongKey);
         Assert.Equal(60, saved.SpeedPercent);
         Assert.Equal("picked", saved.Title);
+    }
+
+    [Fact]
+    public async Task ASongThatMovedToANewProjectPath_IsFollowedByTheLoadedSetlist_OnTheNextVisitToSongSelect()
+    {
+        Directory.CreateDirectory(_dir);
+        var profiles = new PlayerProfileService(FakeLocalization.English(), null, Path.Combine(_dir, "profiles.json"), "Tester");
+        var store = new PlaySetlistStore(profiles);
+        var oldPath = Path.Combine(_dir, "song", "project.rscp");
+        var newPath = Path.Combine(_dir, "song", "project.dcproj");
+        store.Load(profiles.ActiveProfile.Id);
+        Assert.True(store.Save(profiles.ActiveProfile.Id,
+            [new PlaySetlist { Name = "Mine", Entries = [new PlaySetlistEntry { SongKey = oldPath, Arrangement = "Lead" }] }]));
+        var setlists = new PlaySetlistViewModel(FakeLocalization.English(), store, profiles);
+        var (vm, _) = Create(profiles, setlists);
+        await setlists.LoadAsync();
+        Assert.Equal(oldPath, setlists.Lists[0].Setlist.Entries[0].SongKey);
+
+        // The project migrates while the editor is up: the store is retargeted behind the loaded lists.
+        var practice = new PracticeProfileService(profiles, null, Path.Combine(_dir, "legacy.json"));
+        new ProjectPathRekey(practice, store, profiles, new FakeConfigurationService(), new FakeAppLogger()).Rekey(oldPath, newPath);
+        vm.CurrentScreen = PlayModeScreen.Start;
+        vm.CurrentScreen = PlayModeScreen.SongSelect;
+        await setlists.WhenRefreshed;
+
+        Assert.Equal(newPath, Assert.Single(setlists.Lists).Setlist.Entries[0].SongKey);
+        Assert.Equal("Mine", setlists.SelectedList?.Name);
+        // A save after that keeps the moved path instead of writing the old one back.
+        setlists.SelectedListName = "Renamed";
+        await setlists.WhenSaved;
+        var saved = Assert.Single(store.Load(profiles.ActiveProfile.Id).Setlists);
+        Assert.Equal("Renamed", saved.Name);
+        Assert.Equal(newPath, saved.Entries[0].SongKey);
     }
 
     [Fact]

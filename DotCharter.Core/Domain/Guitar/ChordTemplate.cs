@@ -97,7 +97,7 @@ public class ChordTemplate
     /// The template was AUTHORED by hand: every automatic fingering or rebuild
     ///     flow leaves it as it is (<see cref="IsPinned" />). Provenance, not the grip — not
     ///     in <see cref="Equals(object?)" />, like <see cref="FollowedFingering" />, and no
-    ///     interchange format writes it (only <c>.rscp</c>, absent when false).
+    ///     interchange format writes it (only <c>.dcproj</c>, absent when false).
     /// </summary>
     public bool Pinned { get; set; }
 

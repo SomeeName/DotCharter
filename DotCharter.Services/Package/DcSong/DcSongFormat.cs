@@ -21,10 +21,14 @@ public static class DcSongFormat
     public const int CurrentMajor = 1;
 
     /// <summary>The minor version this build writes.</summary>
-    public const int CurrentMinor = 0;
+    public const int CurrentMinor = 1;
 
     public const string ManifestPath = "manifest.json";
-    public const string ChartPath = "chart.rscp";
+    /// <summary>The chart member this build writes: the project file, under the project extension.</summary>
+    public const string ChartPath = "chart.dcproj";
+
+    /// <summary>The chart member format 1.0 packages carry; read, never written.</summary>
+    public const string LegacyChartPath = "chart.rscp";
     public const string AudioStem = "audio/song";
     public const string PreviewPath = "audio/preview.opus";
     public const string CoverStem = "images/cover";
@@ -44,7 +48,7 @@ public static class DcSongFormat
     /// <summary>Largest manifest accepted, in bytes.</summary>
     public const long MaxManifestBytes = 1L * 1024 * 1024;
 
-    /// <summary>Largest inflated <c>chart.rscp</c> accepted. A real project is a
+    /// <summary>Largest inflated chart member accepted. A real project is a
     /// few MB; this is the bomb ceiling.</summary>
     public const long MaxChartBytes = 64L * 1024 * 1024;
 

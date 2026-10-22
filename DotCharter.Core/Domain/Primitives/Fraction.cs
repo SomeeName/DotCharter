@@ -43,7 +43,7 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
     ///         <see cref="DivideByZeroException" /> out of a fraction with no zero
     ///         anywhere in it, and a product that wrapped to a merely-wrong value
     ///         produced a silently wrong position instead. Both are reachable from
-    ///         a single <c>.rscp</c> attribute, which arrives from disk AND over
+    ///         a single <c>.dcproj</c> attribute, which arrives from disk AND over
     ///         the unauthenticated LAN session transfer.
     ///     </para>
     ///     <para>
@@ -78,7 +78,7 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
     ///         directly would let <c>"1/-2147483648"</c> and <c>"-2147483648/-1"</c>
     ///         (both of which reduce out of int range) throw straight out of a
     ///         <c>bool</c>-returning method. Those strings are reachable from a
-    ///         hostile <c>.rscp</c> <c>p=</c> attribute — off disk AND over the
+    ///         hostile <c>.dcproj</c> <c>p=</c> attribute — off disk AND over the
     ///         unauthenticated LAN session transfer — and aborted the whole load.
     ///     </para>
     /// </summary>
@@ -140,7 +140,7 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
 
         // TryCreate, not the constructor: `1/-2147483648` and `-2147483648/-1`
         // parse as ints but do not FIT once reduced, and throwing out of a
-        // Try* method aborted an otherwise-loadable .rscp.
+        // Try* method aborted an otherwise-loadable .dcproj.
         //
         // INVARIANT, never the ambient culture: this text goes to and comes from
         // a file. See ToString below for what a hyphen costs under sv-SE.
@@ -260,7 +260,7 @@ public readonly struct Fraction : IComparable<Fraction>, IEquatable<Fraction>
     /// <summary>
     ///     <para>
     ///         INVARIANT. This is not a display string — it is the text of a
-    ///         <c>p</c> / <c>ep</c> attribute in a `.rscp` and of every
+    ///         <c>p</c> / <c>ep</c> attribute in a `.dcproj` and of every
     ///         <see cref="FractionalPosition" /> written beside it, so it must
     ///         read the same on every machine.
     ///     </para>

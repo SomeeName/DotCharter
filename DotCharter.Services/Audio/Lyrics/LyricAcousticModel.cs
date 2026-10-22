@@ -92,11 +92,12 @@ public sealed class LyricAcousticModel : IDisposable
     private readonly Action<string>? _log;
 
     private LyricAcousticModel(
-        InferenceSession session, SessionOptions sessionOptions, string inputName,
-        string? attentionMaskName, string outputName,
+        InferenceSession session, SessionOptions sessionOptions, OnnxExecutionProvider activeProvider,
+        string inputName, string? attentionMaskName, string outputName,
         LyricVocabulary vocabulary, Action<string>? log)
     {
         _session = session;
+        ActiveProvider = activeProvider;
         _sessionOptions = sessionOptions;
         _inputName = inputName;
         _attentionMaskName = attentionMaskName;
@@ -106,6 +107,9 @@ public sealed class LyricAcousticModel : IDisposable
     }
 
     public LyricVocabulary Vocabulary { get; }
+
+    /// <summary>The provider the session attached to, which is not always the one asked for.</summary>
+    public OnnxExecutionProvider ActiveProvider { get; }
 
     /// <summary>
     ///     Opens the ONNX graph and reads the vocabulary beside it.
@@ -152,7 +156,7 @@ public sealed class LyricAcousticModel : IDisposable
                         $"(blank={vocabulary.BlankId}).");
 
             return new LyricAcousticModel(
-                session, bundle.Options, inputName, maskName, outputName, vocabulary, log);
+                session, bundle.Options, bundle.Active, inputName, maskName, outputName, vocabulary, log);
         }, bundle.Options, session);
     }
 

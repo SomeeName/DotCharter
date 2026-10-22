@@ -19,7 +19,7 @@ namespace DotCharter.Services.Parsing.Rscp;
 ///         The placements are positions (beats), like every other position in the file. The
 ///         notes stay in each arrangement's levels — the copies are real — so an older build
 ///         reads the chart in full and keeps this node verbatim as residue
-///         (<c>docs/RSCP-FORMAT-GUARANTEES.md</c>); if it edits one copy, the hash catches it
+///         (<c>docs/DCPROJ-FORMAT-GUARANTEES.md</c>); if it edits one copy, the hash catches it
 ///         on the next load here. <c>v</c> is the node's own format version: a reader skips a
 ///         node whose version it does not know (and so keeps no links from it) rather than
 ///         misreading it.

@@ -1,6 +1,8 @@
 ﻿using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DotCharter.Services.Editing.HandShapes;
+using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Tone.UI.ViewModels.Shell;
 using DotCharter.UI.Constants;
 using DotCharter.UI.Editing.Linking;
@@ -242,9 +244,18 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
 
     /// <summary>Moves on every undo-history change (do, undo, redo, a merged
     /// gesture tick, clear) — the content version the renderers' per-chart
-    /// latches key on (<c>RepeatChordLatch</c>). Read from the 3D render thread
+    /// latches key on (<see cref="SharedRepeatChords" />). Read from the 3D render thread
     /// too, hence the interlocked read.</summary>
     public long HistoryRevision => Interlocked.Read(ref _historyRevision);
+
+    /// <summary>The dashed hand-shape suggestions, computed ONCE per level and edit and read by
+    /// every surface that shows or hits them: the timeline and its stacked rows, the song map and
+    /// the hand-shape tool. A latch per reader ran the whole-level detector once each per edit.</summary>
+    public HandShapeSuggestionLatch SharedHandShapeSuggestions { get; } = new();
+
+    /// <summary>The repeat-chord decision, computed ONCE per level and edit and read by the 2D
+    /// timeline rows and the 3D render thread alike (a thread-safe latch).</summary>
+    public RepeatChordLatch SharedRepeatChords { get; } = new();
 
     /// <summary>The link group every timeline emphasises or flashes.</summary>
     public LinkHighlight LinkHighlight { get; } = new();

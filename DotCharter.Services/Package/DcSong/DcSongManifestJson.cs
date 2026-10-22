@@ -226,7 +226,9 @@ public static class DcSongManifestJson
             throw Invalid($"'{path}' has no valid sha256.");
 
         var (stemName, mediaType, expectedPath) = RoleDetails(item, role, path, audio, stems);
-        if (expectedPath != null && path != expectedPath)
+        // A 1.0 package stores its chart under the older member name; both are the chart.
+        var legacyChart = role == DcSongFileRole.Chart && path == DcSongFormat.LegacyChartPath;
+        if (expectedPath != null && path != expectedPath && !legacyChart)
             throw Invalid($"a {RoleName(role)} must be stored as '{expectedPath}', not '{path}'.");
 
         return new DcSongFileEntry(path, role, size, sha, stemName, mediaType);

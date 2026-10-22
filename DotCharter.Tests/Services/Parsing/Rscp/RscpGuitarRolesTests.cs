@@ -8,7 +8,7 @@ namespace DotCharter.Tests.Services.Parsing.Rscp;
 ///     <c>ChartProject.GuitarRolesSplit</c> (#260) survives a save: written as the
 ///     additive <c>&lt;stems guitarRoles="true"&gt;</c>, ABSENT when off — absent and
 ///     false mean the same thing, so a project that never used it stays
-///     byte-identical (docs/RSCP-FORMAT-GUARANTEES.md).
+///     byte-identical (docs/DCPROJ-FORMAT-GUARANTEES.md).
 /// </summary>
 public sealed class RscpGuitarRolesTests : IDisposable
 {

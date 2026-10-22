@@ -84,8 +84,8 @@ earlier copy.
   the rule compares the position IN EFFECT, and propagation re-pins it where a
   target would inherit a different one.
 - `.rscp`: root node `dcLinkGroups` (`Parsing/Rscp/RscpLinkGroups`), checked on
-  load by `Core/Linking/LinkGroupVerifier`; see `docs/RSCP-FORMAT-GUARANTEES.md`
-  § Linked measures. `.dcsong` carries it inside its `chart.rscp`.
+  load by `Core/Linking/LinkGroupVerifier`; see `docs/DCPROJ-FORMAT-GUARANTEES.md`
+  § Linked measures. `.dcsong` carries it inside its chart member (`chart.dcproj`).
 
 ## Group edits, Only here, Link identical measures
 

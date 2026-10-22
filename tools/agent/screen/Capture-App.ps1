@@ -14,7 +14,7 @@ param(
     [string]$Bounds = '-2460,60,1920,1080',
     [string]$DataRoot = ''
 )
-if (-not $Project) { throw 'Pass -Project <path to a .rscp> or set DOTCHARTER_CAPTURE_PROJECT.' }
+if (-not $Project) { throw 'Pass -Project <path to a .dcproj or .rscp project> or set DOTCHARTER_CAPTURE_PROJECT.' }
 Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class DpiAw { [DllImport("shcore.dll")] public static extern int SetProcessDpiAwareness(int v); }'
 [void][DpiAw]::SetProcessDpiAwareness(2)

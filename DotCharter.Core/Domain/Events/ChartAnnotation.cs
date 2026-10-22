@@ -12,7 +12,7 @@ public enum ChartAnnotationKind
 
 /// <summary>
 ///     A charter's inline annotation on the timeline: a free-text note,
-///     reminder or mark bound to a time position. Persisted in the .rscp
+///     reminder or mark bound to a time position. Persisted in the .dcproj
 ///     project (see RscpWriter / RscpHeaderParser). Property-change
 ///     notification keeps the Notes panel live while items are resolved.
 /// </summary>

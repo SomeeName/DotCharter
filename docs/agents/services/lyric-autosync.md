@@ -70,6 +70,31 @@ file is the service half (models, decode, stem selection, windowing, install).
     adapter), unlike stem separation, which picks the fastest. Checked 2026-10-05 on
     `lyric-align-en-v1`: DirectML logits match the CPU's argmax on 99.9 % of frames
     (relative L2 3.9e-2), with graph fusion on or off.
+  - **A run that fails on the GPU is retried on the CPU, per model, for the rest
+    of the process** (`Audio/Lyrics/LyricProviderFallback.cs`). The ladder only
+    falls back when a session fails to CREATE; a graph can create on DirectML and
+    still fail its first `Run`. `LyricAutoSyncService.OpenSession` wraps every head
+    (the optional second one too) in `LyricProviderFallbackSession`: a failed
+    `Encode` on a non-CPU provider logs ONE warning, disposes the GPU session,
+    re-opens the same model on the CPU and encodes the WHOLE song again (never a
+    per-window retry: a half-GPU, half-CPU matrix mixes two numerics), and
+    `LyricProviderMemory.Process` keeps that model on the CPU, so a later sync
+    opens it there directly. A failure on the CPU, and cancellation, are not
+    retried. Each model is remembered on its own: an ensemble whose English head
+    fails keeps the multilingual head on the GPU. A session reports the provider it
+    really attached through `ILyricAcousticSession.ActiveProvider` (default: CPU,
+    which is never retried). Pinned by `LyricProviderFallbackTests`.
+    **The reason the multilingual head needs it:** `lyric-align` is a `torch.export`
+    graph, which writes `allowzero=1` on every one of its 145 `Reshape` nodes, and
+    ONNX Runtime 1.24.4's DirectML provider fails the first `Run` on that
+    (`Reshape 'node_view_1'`) for every window length, adapter, optimisation level
+    and graph-fusion setting; the fp32 and fp16 exports of the same model fail
+    identically, so it is not the int8 quantisation. The shapes contain no zero
+    dimension, so dropping the attribute is a no-op on the CPU and makes the graph
+    run on DirectML (about 130 ms per 24 s window against 3.1 s on the CPU). The
+    shipped file still carries the attribute, so until it is re-exported without
+    it the multilingual head runs on the CPU after one failed attempt per process.
+    The English head is a different export and runs on DirectML.
   - **`LyricAcousticModel.Encode` reports the frames it really WROTE, never
     `samples / 320`** (`Audio/Lyrics/LyricWindowStitch`). A song is encoded in
     overlapping windows, and wav2vec2's conv front end emits **n − 1** rows for

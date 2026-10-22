@@ -7,8 +7,8 @@ using DotCharter.UI.ViewModels.Shell;
 namespace DotCharter.Tests.UI.ViewModels.Shell;
 
 /// <summary>The Tones review's Audition (#614) over the REAL chart tone preview and tone coordinator (fake DSP
-/// chain): the same collection as <c>ChartTonePreviewControllerTests</c>, which drive the same coordinator.</summary>
-[Collection("GameplayToneHud")]
+/// chain). The coordinator is built without a HUD adapter, so it writes no process-wide state and the class
+/// needs no collection (<c>GameplayToneHudCollectionLintTests</c> names the classes that do).</summary>
 public sealed class ChartToneAuditionTests
 {
     private readonly AiChatToneFixture _f = new();

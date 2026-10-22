@@ -9,7 +9,7 @@ namespace DotCharter.Services.Parsing;
 /// </summary>
 /// <remarks>
 ///     <para>
-///     <b>The .rscp is XML, and XML 1.0 has no way to spell a control
+///     <b>The .dcproj is XML, and XML 1.0 has no way to spell a control
 ///     character.</b> <c>RscpChartSerializer.Save</c> writes through an
 ///     <c>XmlWriter</c> whose <c>CheckCharacters</c> is the default <c>true</c>,
 ///     so a single NUL — which ID3 text frames are NUL-terminated and routinely

@@ -74,6 +74,17 @@ public sealed class DcSongManifestJsonTests
         Assert.True(ex.Reason is DcSongReadFailure.ManifestInvalid or DcSongReadFailure.UnsafePath, why);
     }
 
+    [Theory]
+    [InlineData("chart.dcproj")]
+    [InlineData("chart.rscp")]
+    public void TheChart_IsReadUnderTheCurrentAndTheFormat10MemberName(string chartPath)
+    {
+        var json = Encoding.UTF8.GetString(DcSongManifestJson.Write(Sample()))
+            .Replace("\"path\": \"chart.rscp\"", $"\"path\": \"{chartPath}\"", StringComparison.Ordinal);
+        var parsed = DcSongManifestJson.Parse(Encoding.UTF8.GetBytes(json));
+        Assert.Equal(chartPath, parsed.Find(DcSongFileRole.Chart)!.Path);
+    }
+
     [Fact]
     public void ACodecThatDisagreesWithLossless_IsRefused()
     {

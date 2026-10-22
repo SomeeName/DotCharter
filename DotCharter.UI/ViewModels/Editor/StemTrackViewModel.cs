@@ -103,7 +103,7 @@ public partial class StemTrackViewModel : ObservableObject
     ///     through <see cref="SetMutedSilently" /> ALSO wrote
     ///     <c>ChartProject.OriginalMixMuted = true</c>, which is permanent. Soloing a
     ///     stem once and releasing it therefore left the original mix off for good,
-    ///     saved into the <c>.rscp</c>. Same rule, and the same reason, as
+    ///     saved into the <c>.dcproj</c>. Same rule, and the same reason, as
     ///     <see cref="SetMutedForRun" />.
     /// </remarks>
     internal void SetMutedForSolo(bool value)
@@ -180,7 +180,7 @@ public partial class StemTrackViewModel : ObservableObject
     /// <summary>
     ///     Mutes/unmutes for the duration of a gameplay run WITHOUT writing through to
     ///     the domain <c>Stem.Muted</c> flag. That field is serialized into the
-    ///     <c>.rscp</c> (the additive <c>stem/@muted</c> attribute,
+    ///     <c>.dcproj</c> (the additive <c>stem/@muted</c> attribute,
     ///     <c>RscpWriter.BuildStemsNode</c>), so a run-scoped mute that reached it
     ///     would survive a crash or hard exit mid-run and leave the stem permanently
     ///     muted in the saved project. Audio and the UI mirror still apply; the

@@ -11,7 +11,7 @@ namespace DotCharter.Services.Session;
 ///         <item><see cref="Capture" /> on the UI thread, beside the snapshot: the renames the live
 ///         project's <see cref="ToneKeyRenameJournal" /> holds, net (an undone rename is gone), and
 ///         only those whose new key the snapshot really has.</item>
-///         <item><see cref="Apply" /> on the worker, AFTER the <c>.rscp</c> is in place.</item>
+///         <item><see cref="Apply" /> on the worker, AFTER the <c>.dcproj</c> is in place.</item>
 ///         <item><see cref="Settle" /> once both agree: the captured steps are the new baseline.
 ///         A store that could not be written keeps them, so the next save moves the entries.</item>
 ///     </list>

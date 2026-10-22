@@ -11,8 +11,6 @@ using Avalonia.Rendering;
 using DotCharter.Rendering.Data;
 using DotCharter.Rendering.Diagnostics;
 using DotCharter.Rendering.Timeline2D;
-using DotCharter.Services.Editing.HandShapes;
-using DotCharter.Services.Export.Rocksmith;
 using DotCharter.Tone.UI.Controls;
 using DotCharter.UI.Constants;
 using DotCharter.UI.Controls.Layers;
@@ -88,8 +86,6 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
     private readonly HashSet<(long timeMs, int stringIdx)> _linkedTargetsBuffer = [];
     private readonly FrameSnapshot _snapshot = new();
     private readonly SnapshotUpdateContext _snapshotCtx = new();
-    private readonly RepeatChordLatch _repeatChords = new();
-    private readonly HandShapeSuggestionLatch _suggestedHandShapes = new();
     private readonly RibbonEventContentLatch _ribbonEvents = new();
 
     // ---- Env-gated per-phase frame stats (DOTCHARTER_2D_STATS_LOG=1) ----
@@ -1170,14 +1166,15 @@ public partial class ChartRenderer : Decorator, ICustomHitTest, IChartViewport
         _snapshotCtx.ActiveAnchors = sourceLevel?.Anchors ?? editor.Anchors;
         _snapshotCtx.ActiveHandShapes = sourceLevel?.HandShapes ?? editor.HandShapes;
         // The frame-only repeat box is the EXPORT's decision, handed over as data.
-        _snapshotCtx.RepeatChords = _repeatChords.Get(_snapshotCtx.ActiveTemplates, _snapshotCtx.ActiveNotes,
+        _snapshotCtx.RepeatChords = editor.SharedRepeatChords.Get(_snapshotCtx.ActiveTemplates, _snapshotCtx.ActiveNotes,
             _snapshotCtx.ActiveChords, _snapshotCtx.ActiveHandShapes, _snapshotCtx.ActiveBeats,
             editor.HistoryRevision, Environment.TickCount64);
         // The bars the inspector has an E05/D09 finding against — its own list, as data.
         _snapshotCtx.HandShapeFindings = editor.HandShapeFindings;
         // The dashed suggested bars, recomputed only on an edit.
-        _snapshotCtx.SuggestedHandShapes = _suggestedHandShapes.Get(sourceArr, sourceLevel ?? editor.ActiveLevel,
-            editor.ShowSuggestedHandShapes, editor.HistoryRevision, Environment.TickCount64);
+        _snapshotCtx.SuggestedHandShapes = editor.SharedHandShapeSuggestions.Get(sourceArr,
+            sourceLevel ?? editor.ActiveLevel, editor.ShowSuggestedHandShapes,
+            editor.HistoryRevision, Environment.TickCount64).Bars;
         // What a pending bulk chord edit would change, as the chord panel resolved it.
         _snapshotCtx.EditTargetChords = editor.UseHighlight.Chords;
         _snapshotCtx.EditTargetHandShapes = editor.UseHighlight.HandShapes;

@@ -639,7 +639,7 @@ public static class ChartSpacingEnforcer
     ///     <see cref="RemoveMutedNotesFromPartiallyMutedChords" /> would then clone
     ///     that stranger, strip the muted strings from it and permanently repoint
     ///     the chord at a reduction of a shape it never played, straight into the
-    ///     .rscp; <see cref="DeriveIgnoreFlags" /> would flag a chord from another
+    ///     .dcproj; <see cref="DeriveIgnoreFlags" /> would flag a chord from another
     ///     chord's frets. It is the same list-index-as-id confusion the inspector
     ///     avoids.
     ///     </para>

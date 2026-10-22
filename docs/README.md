@@ -19,7 +19,7 @@ Start here if you are a person. The repository holds two kinds of documents.
 | [adr/](adr/README.md) | Why the big decisions were made: audio engine, rendering, UI layers, formats, licence |
 | [dev/cookbook/](dev/cookbook/README.md) | Step-by-step recipes: add a view, a setting, a language, a menu command, a native call |
 | [dev/DEBUGGING.md](dev/DEBUGGING.md) | Logs, crash reports, attaching a debugger, what a bug report needs |
-| [RSCP-FORMAT-GUARANTEES.md](RSCP-FORMAT-GUARANTEES.md) | What the `.rscp` project format promises |
+| [DCPROJ-FORMAT-GUARANTEES.md](DCPROJ-FORMAT-GUARANTEES.md) | What the `.dcproj` project format (and its Charter `.rscp` companion) promises |
 | [../SECURITY.md](../SECURITY.md), [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | Reporting vulnerabilities; how we work together |
 | [../PRIVACY.md](../PRIVACY.md), [../LEGAL.md](../LEGAL.md) | What the app sends over the network; rights holders and your responsibilities |
 | [../ACKNOWLEDGEMENTS.md](../ACKNOWLEDGEMENTS.md), [../THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) | Whose work this builds on, and every licence |

@@ -111,14 +111,15 @@ public sealed class ExternalProcessInsertsTests
         var engine = new FakeEngine { DeviceRate = 48000 };
         var inlineRequests = 0;
         var replaying = false;
-        using var requested = new ManualResetEventSlim();
+        var requests = 0;
+        var deferred = new Queue<Action>();
         var inserts = new ExternalProcessInserts(null, () => engine, r =>
         {
             if (replaying) inlineRequests++;
+            requests++;
             engine.DeviceRate = r;
-            requested.Set();
             return true;
-        });
+        }, deferred.Enqueue);
         Assert.Equal(ExternalProcessInsertOpenResult.Opened, inserts.Open(0, Name, null, 48000));
 
         // The rebuilt engine came up at 44.1 kHz: the replay is refused for the rate and
@@ -129,9 +130,13 @@ public sealed class ExternalProcessInsertsTests
         inserts.ReplayTo(rebuilt);
         replaying = false;
         Assert.Equal(0, inlineRequests);
-        Assert.True(requested.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken), "the deferred rate request never ran");
-        Assert.True(SpinWait.SpinUntil(() => rebuilt.State[0] == ExternalProcessInsertState.Active, TimeSpan.FromSeconds(5)),
-            "the seat was not re-opened at the ring's rate");
+        Assert.Equal(0, requests);
+        Assert.Single(deferred);
+
+        // The deferred work runs off the lock: it requests the ring's rate and re-opens the seat.
+        deferred.Dequeue()();
+        Assert.Equal(1, requests);
+        Assert.Equal(ExternalProcessInsertState.Active, rebuilt.State[0]);
 
         // The other process went away: the replay forgets the seat instead of retrying forever.
         var third = new FakeEngine { DeviceRate = 48000, BlockExists = false };

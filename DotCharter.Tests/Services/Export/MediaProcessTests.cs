@@ -158,7 +158,7 @@ public sealed class MediaProcessTests : IDisposable
         // "always pass TestContext.Current.CancellationToken" rule is suppressed
         // here on purpose: passing one would test the other overload.
 #pragma warning disable xUnit1051
-        var result = MediaProcess.Run(script, [], TimeSpan.FromSeconds(30));
+        var result = MediaProcess.Run(script, [], TimeSpan.FromSeconds(60));
 #pragma warning restore xUnit1051
 
         Assert.True(result.Succeeded);
@@ -177,7 +177,7 @@ public sealed class MediaProcessTests : IDisposable
             exit /b 3
             """);
 
-        var result = MediaProcess.Run(script, [], TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        var result = MediaProcess.Run(script, [], TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Equal(3, result.ExitCode);

@@ -1,14 +1,15 @@
 namespace DotCharter.Services.Session;
 
 /// <summary>
-///     What a project is CALLED on screen. Every project saves as <c>project.rscp</c> inside
+///     What a project is CALLED on screen. Every project saves as <c>project.dcproj</c> inside
 ///     its own "Artist - Title" folder, so the file name alone named every chart "project".
 /// </summary>
 public static class ProjectDisplayName
 {
     /// <summary>
     ///     "Artist - Title" from the chart when it has a song name; otherwise the file name,
-    ///     or its folder's name when the file is the standard <c>project.rscp</c>; empty
+    ///     or its folder's name when the file is the standard <c>project.dcproj</c> (or an
+    ///     older <c>project.rscp</c>); empty
     ///     without either.
     /// </summary>
     public static string For(string? projectPath, ChartData? chart = null)

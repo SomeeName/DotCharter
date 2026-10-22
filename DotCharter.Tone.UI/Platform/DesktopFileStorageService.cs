@@ -43,6 +43,39 @@ public class DesktopFileStorageService : IFileStorageService
         }
     }
 
+    public async Task<IReadOnlyList<string>> OpenFilesPickerAsync(string title, IReadOnlyList<FilePickerFilter>? filters = null,
+        string? startingDirectory = null)
+    {
+        var window = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (window == null) return [];
+
+        var options = new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = true
+        };
+
+        if (filters is { Count: > 0 })
+        {
+            options.FileTypeFilter = filters
+                .Select(f => new FilePickerFileType(f.Name) { Patterns = f.Patterns.ToList() })
+                .ToList();
+        }
+
+        options.SuggestedStartLocation = await TryResolveFolderAsync(window, startingDirectory);
+
+        // See OpenFilePickerAsync: a vanished entry degrades to "nothing selected".
+        try
+        {
+            var result = await window.StorageProvider.OpenFilePickerAsync(options);
+            return result.Select(f => f.Path.LocalPath).ToList();
+        }
+        catch (ArgumentException)
+        {
+            return [];
+        }
+    }
+
     public async Task<string?> OpenFolderPickerAsync(string title, string? startingDirectory = null)
     {
         var window = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;

@@ -155,11 +155,15 @@ public sealed class CommentHygieneTests
     }
 
     internal static int CountCommentLines(string source, Regex pattern) =>
-        CSharpSyntaxTree.ParseText(source).GetRoot().DescendantTrivia(descendIntoTrivia: false)
-            .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia)
-                        || t.IsKind(SyntaxKind.MultiLineCommentTrivia)
-                        || t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
-                        || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia))
-            .SelectMany(t => t.ToFullString().Split('\n'))
-            .Count(l => pattern.IsMatch(l));
+        // A comment line the pattern matches is a line of the file the pattern matches, so a
+        // file with no match anywhere has none and is not parsed.
+        !pattern.IsMatch(source)
+            ? 0
+            : CSharpSyntaxTree.ParseText(source).GetRoot().DescendantTrivia(descendIntoTrivia: false)
+                .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia)
+                            || t.IsKind(SyntaxKind.MultiLineCommentTrivia)
+                            || t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+                            || t.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia))
+                .SelectMany(t => t.ToFullString().Split('\n'))
+                .Count(l => pattern.IsMatch(l));
 }

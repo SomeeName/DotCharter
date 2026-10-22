@@ -6,7 +6,7 @@ namespace DotCharter.Tests.Services.Parsing.Rscp;
 
 /// <summary>
 ///     <b>The `.rscp` format promise, mechanically.</b> Every clause of
-///     <c>docs/RSCP-FORMAT-GUARANTEES.md</c> that can be checked at all is
+///     <c>docs/DCPROJ-FORMAT-GUARANTEES.md</c> that can be checked at all is
 ///     checked here, so the doc cannot rot into a claim the code stopped
 ///     honouring — this repo treats a false safety claim in a guide as the
 ///     dangerous kind, because a reader stops looking.
@@ -294,7 +294,7 @@ public sealed class RscpForwardCompatibilityTests : IDisposable
         Assert.False(root.HasAttributes,
             "The root grew an attribute. Unknown ROOT ATTRIBUTES are not preserved (only root elements are), so "
             + "adding one silently creates a class of data an older build will drop — update "
-            + "docs/RSCP-FORMAT-GUARANTEES.md and ChartProject.UnknownRscpNodes together, or don't add it.");
+            + "docs/DCPROJ-FORMAT-GUARANTEES.md and ChartProject.UnknownRscpNodes together, or don't add it.");
     }
 
     /// <summary>
@@ -306,7 +306,7 @@ public sealed class RscpForwardCompatibilityTests : IDisposable
     [Fact]
     public void TheGuaranteesDoc_FreezesExactlyTheRootElementsTheContractKnows()
     {
-        var docPath = Path.Combine(TestPaths.RepoRoot(), "docs", "RSCP-FORMAT-GUARANTEES.md");
+        var docPath = Path.Combine(TestPaths.RepoRoot(), "docs", "DCPROJ-FORMAT-GUARANTEES.md");
         Assert.True(File.Exists(docPath), $"{docPath} is missing — the promise IS the deliverable.");
 
         var text = File.ReadAllText(docPath);
@@ -315,7 +315,7 @@ public sealed class RscpForwardCompatibilityTests : IDisposable
         var from = text.IndexOf(begin, StringComparison.Ordinal);
         var to = text.IndexOf(end, StringComparison.Ordinal);
         Assert.True(from >= 0 && to > from,
-            "The frozen-root-elements block markers are gone from docs/RSCP-FORMAT-GUARANTEES.md. They are what "
+            "The frozen-root-elements block markers are gone from docs/DCPROJ-FORMAT-GUARANTEES.md. They are what "
             + "makes the freeze checkable; do not delete them to silence this test.");
 
         var listed = System.Text.RegularExpressions.Regex
@@ -327,7 +327,7 @@ public sealed class RscpForwardCompatibilityTests : IDisposable
         var missingFromCode = listed.Except(RscpFormatContract.KnownRootElements).OrderBy(n => n, StringComparer.Ordinal);
 
         Assert.True(!missingFromDoc.Any() && !missingFromCode.Any(),
-            "docs/RSCP-FORMAT-GUARANTEES.md and RscpFormatContract.KnownRootElements disagree about the frozen "
+            "docs/DCPROJ-FORMAT-GUARANTEES.md and RscpFormatContract.KnownRootElements disagree about the frozen "
             + "root vocabulary.\n  not promised in the doc: " + string.Join(", ", missingFromDoc)
             + "\n  promised but not known to the code: " + string.Join(", ", missingFromCode));
     }

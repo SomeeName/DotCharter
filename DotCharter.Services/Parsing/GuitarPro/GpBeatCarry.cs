@@ -16,9 +16,20 @@ internal static class GpBeatCarry
     /// <summary>
     ///     One string's share of a grace beat. <c>Slide</c> marks a "sl." grace
     ///     that slides INTO the target (parsed onto the grace note's
-    ///     SlideTo/LinkNext) rather than a plain ornament.
+    ///     SlideTo/LinkNext) rather than a plain ornament. <c>Hopo</c> marks a grace
+    ///     that hammers or pulls INTO the target (GP's <c>HopoOrigin</c> on the grace
+    ///     note): the grace is the sound the legato starts from, so it is a real note.
     /// </summary>
-    internal readonly record struct GraceEntry(int StringIndex, int Fret, bool Slide);
+    internal readonly record struct GraceEntry(int StringIndex, int Fret, bool Slide, bool Hopo = false)
+    {
+        /// <summary>Whether this grace becomes a note of its own against a target on
+        /// <paramref name="targetFret"/>: a slide needs a fretted start that differs
+        /// from the landing, a hammer or pull may start from the open string, and
+        /// neither can start on the fret it lands on. A grace with no gesture stays
+        /// the notation-only <see cref="GuitarNote.GraceFret"/> hint.</summary>
+        public bool BecomesNote(int targetFret) =>
+            Fret != targetFret && (Slide ? Fret > 0 : Hopo);
+    }
 
     /// <summary>
     ///     A whole GP grace beat waiting for the next struck beat in the same
@@ -42,13 +53,15 @@ internal static class GpBeatCarry
     /// <summary>
     ///     Consumes the pending grace ornament against a SINGLE-NOTE target. A
     ///     "sl." grace on the target's string materializes into a real short note
-    ///     that slides into it (what EOF and Log Charter both emit); a plain grace
-    ///     stays the notation-only <see cref="GuitarNote.GraceFret"/> hint. Grace
+    ///     that slides into it (what EOF and Log Charter both emit); a grace that
+    ///     hammers or pulls into the target materializes the same way, without the
+    ///     slide, and leaves the target marked as the legato's destination. A plain
+    ///     grace stays the notation-only <see cref="GuitarNote.GraceFret"/> hint. Grace
     ///     entries on other strings have no playable target here and are dropped —
     ///     a GP grace beat attaches to the very next beat only.
     /// </summary>
     internal static void ApplyPendingGrace(GuitarNote note, ref PendingGrace? pendingGrace,
-        IList<GuitarNote> notesOut, IList<Chord> chordsOut)
+        IList<GuitarNote> notesOut, IList<Chord> chordsOut, ISet<IGuitarSound>? graceTargets = null)
     {
         var grace = pendingGrace;
         pendingGrace = null;
@@ -66,7 +79,7 @@ internal static class GpBeatCarry
 
         if (found is not { } entry) return;
 
-        if (!entry.Slide || entry.Fret <= 0 || entry.Fret == note.Fret)
+        if (!entry.BecomesNote(note.Fret))
         {
             note.GraceFret = entry.Fret; // a plain ornament stays notation-only
             return;
@@ -87,12 +100,14 @@ internal static class GpBeatCarry
             Sustain = place.GraceLength,
             StringIndex = note.StringIndex,
             Fret = entry.Fret,
-            SlideTo = note.Fret,
-            LinkNext = true,
+            SlideTo = entry.Slide ? note.Fret : null,
+            LinkNext = entry.Slide,
             NotationDuration = GpPostProcessor.GraceLeadIn
         });
+        if (!entry.Slide) MarkLegatoTarget(note, entry.Fret);
         note.Position += place.TargetShift;
         note.Sustain = GpPostProcessor.ShortenSustain(note.Sustain, place.TargetShift);
+        if (!entry.Slide && place.TargetShift.CompareTo(FractionalPosition.Zero) > 0) graceTargets?.Add(note);
     }
 
     /// <summary>
@@ -101,14 +116,15 @@ internal static class GpBeatCarry
     ///     "sl." chord grace materializes a real origin CHORD that slides into the
     ///     target — exactly what EOF and Log Charter emit (the reference file's
     ///     (1,3)(2,5)(3,5) → (1,5)(2,7)(3,7) shift, which must not be lost
-    ///     completely). Only the graced strings take part. A plain (non-slide)
+    ///     completely). Only the graced strings take part, and a hammering or
+    ///     pulling grace joins the origin chord without a slide. A plain
     ///     chord grace degrades to the notation-only
     ///     <see cref="ChordNote.GraceFret"/> hint on the string it belongs to,
     ///     exactly as the single-note path does — it must not be dropped outright
     ///     (<see cref="ChordNote"/> has a field for it).
     /// </summary>
     internal static void ApplyPendingGrace(Chord chord, ref PendingGrace? pendingGrace,
-        IList<GuitarNote> notesOut, IList<Chord> chordsOut)
+        IList<GuitarNote> notesOut, IList<Chord> chordsOut, ISet<IGuitarSound>? graceTargets = null)
     {
         var grace = pendingGrace;
         pendingGrace = null;
@@ -122,10 +138,10 @@ internal static class GpBeatCarry
             {
                 if (cn.StringIndex == entry.StringIndex)
                 {
-                    // Same rule as the single-note path: only a "sl." grace that
-                    // travels to a DIFFERENT fretted position can become a real
-                    // sliding note; anything else stays a notation ornament.
-                    if (entry.Slide && entry.Fret > 0 && cn.Fret != entry.Fret) pairs.Add((entry, cn));
+                    // Same rule as the single-note path: only a slide or a hammer /
+                    // pull that travels to a DIFFERENT fret can become a real note;
+                    // anything else stays a notation ornament.
+                    if (entry.BecomesNote(cn.Fret)) pairs.Add((entry, cn));
                     else hints.Add((entry, cn));
                     break;
                 }
@@ -168,15 +184,30 @@ internal static class GpBeatCarry
                 StringIndex = target.StringIndex,
                 Fret = entry.Fret,
                 Sustain = place.GraceLength,
-                SlideTo = target.Fret,
-                LinkNext = true
+                SlideTo = entry.Slide ? target.Fret : null,
+                LinkNext = entry.Slide
             });
+            if (!entry.Slide) MarkLegatoTarget(target, entry.Fret);
         }
 
         chordsOut.Add(graceChord);
         chord.Position += place.TargetShift;
+        var legato = pairs.Any(pair => !pair.Entry.Slide) && place.TargetShift.CompareTo(FractionalPosition.Zero) > 0;
         foreach (var cn in chord.ChordNotes)
+        {
             cn.Sustain = GpPostProcessor.ShortenSustain(cn.Sustain, place.TargetShift);
+            if (legato) graceTargets?.Add(cn);
+        }
+    }
+
+    /// <summary>Marks the sound a hammering or pulling grace lands on as the
+    /// legato's destination. GP writes the destination flag on the target as well,
+    /// so a target that already carries a technique (a hammer, or a tap that must
+    /// stay a tap) is left alone; the direction of a bare one follows the grace.</summary>
+    private static void MarkLegatoTarget(IGuitarSound target, int graceFret)
+    {
+        if (target.Hopo != HopoType.None) return;
+        target.Hopo = graceFret > target.Fret ? HopoType.PullOff : HopoType.HammerOn;
     }
 
     /// <summary>The end of the last sound already emitted on a string — the point a

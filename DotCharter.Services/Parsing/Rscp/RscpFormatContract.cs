@@ -3,7 +3,7 @@
 namespace DotCharter.Services.Parsing.Rscp;
 
 /// <summary>
-///     The `.rscp` forward-compatibility contract, in code:
+///     The `.dcproj` forward-compatibility contract, in code:
 ///     <list type="number">
 ///         <item>
 ///             which element names the ROOT of a project document may carry
@@ -24,7 +24,7 @@ namespace DotCharter.Services.Parsing.Rscp;
 ///         </item>
 ///     </list>
 ///     <para>
-///         The prose half is <c>docs/RSCP-FORMAT-GUARANTEES.md</c>; every clause
+///         The prose half is <c>docs/DCPROJ-FORMAT-GUARANTEES.md</c>; every clause
 ///         of it that can be checked mechanically is checked by
 ///         <c>RscpForwardCompatibilityTests</c>. If you add a root element to
 ///         <see cref="RscpWriter" /> or teach a parser to read one, add it here

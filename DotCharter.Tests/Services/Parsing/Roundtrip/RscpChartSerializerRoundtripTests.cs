@@ -4,7 +4,6 @@ using DotCharter.Tone.Infrastructure.Storage;
 
 namespace DotCharter.Tests.Services.Parsing.Roundtrip;
 
-[Collection("CwdSerialized")]
 public sealed class RscpChartSerializerRoundtripTests : IDisposable
 {
     private readonly string _tempDir;
@@ -161,7 +160,7 @@ public sealed class RscpChartSerializerRoundtripTests : IDisposable
     }
 
     /// <summary>The forward-compatibility half of the v3 stability contract
-    /// (docs/RSCP-FORMAT-GUARANTEES.md): a NEWER build's additive fields — the
+    /// (docs/DCPROJ-FORMAT-GUARANTEES.md): a NEWER build's additive fields — the
     /// nd/gf precedent — must be IGNORED by a build that predates them, never
     /// an error, with everything this build understands preserved.</summary>
     [Fact]

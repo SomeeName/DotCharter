@@ -29,6 +29,47 @@
   </Target>
 
   <!--
+    A XAML-compiled project keeps its reference assembly's timestamp when the
+    public surface did not change. Roslyn writes obj/refint and CopyRefAssembly
+    skips the copy to obj/ref when the MVID matches, so a comment-only edit
+    leaves obj/ref untouched and every dependent's Csc stays up to date. Avalonia's
+    CompileAvaloniaXaml rewrites obj/refint with Cecil, which drops the PE section
+    the MVID is read from, and Avalonia's own target deletes obj/ref before the
+    copy: the copy always runs and obj/ref takes refint's fresh timestamp, so
+    DotCharter.UI.Gallery and DotCharter.Tests recompile after every
+    DotCharter.UI edit. The two targets below record obj/ref's hash and timestamp
+    before that delete and put the timestamp back when the copied file has the
+    same bytes. A changed surface changes the bytes, keeps the new timestamp and
+    still rebuilds the dependents. -p:DotCharterKeepRefAssemblyStamp=false turns
+    the pair off to measure the old behaviour. Infrastructure/RefAssemblyStabilityLintTests
+    pins the pair.
+  -->
+  <Target Name="DotCharterRecordRefAssembly" BeforeTargets="AvaloniaDeleteRefAssemblyBeforeOutputCopy"
+          Condition="'@(AvaloniaResource)@(AvaloniaXaml)' != '' and '$(TargetRefPath)' != '' and '$(ProduceReferenceAssembly)' == 'true' and '$(DotCharterKeepRefAssemblyStamp)' != 'false' and Exists('$(TargetRefPath)')">
+    <ItemGroup>
+      <_DotCharterRefBefore Remove="@(_DotCharterRefBefore)" />
+    </ItemGroup>
+    <GetFileHash Files="$(TargetRefPath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_DotCharterRefBefore" />
+    </GetFileHash>
+    <PropertyGroup>
+      <_DotCharterRefHashBefore>%(_DotCharterRefBefore.FileHash)</_DotCharterRefHashBefore>
+      <_DotCharterRefTimeBefore>$([System.IO.File]::GetLastWriteTime('$(TargetRefPath)').ToString('o'))</_DotCharterRefTimeBefore>
+    </PropertyGroup>
+  </Target>
+  <Target Name="DotCharterRestoreRefAssemblyTime" AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(_DotCharterRefHashBefore)' != '' and '$(DotCharterKeepRefAssemblyStamp)' != 'false' and Exists('$(TargetRefPath)')">
+    <ItemGroup>
+      <_DotCharterRefAfter Remove="@(_DotCharterRefAfter)" />
+    </ItemGroup>
+    <GetFileHash Files="$(TargetRefPath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_DotCharterRefAfter" />
+    </GetFileHash>
+    <Touch Files="$(TargetRefPath)" Time="$(_DotCharterRefTimeBefore)" ForceTouch="true"
+           Condition="'%(_DotCharterRefAfter.FileHash)' == '$(_DotCharterRefHashBefore)'" />
+  </Target>
+
+  <!--
     The publish toolchain packages (the linker and the NativeAOT compiler) are
     PackageReferences the SDK adds itself, at the version of the runtime it
     bundles. DotCharter.UI (_RequiresILLinkPack) and DotCharter.Launcher

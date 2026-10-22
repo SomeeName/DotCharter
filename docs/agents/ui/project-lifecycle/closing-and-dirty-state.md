@@ -93,7 +93,7 @@
   **The crash-recovery dialog is the third case and the opposite sign**:
   `RecoveryViewModel.RecoverAsync` loads the SNAPSHOT (whose `LoadFile` ends
   clean, correctly) and then re-points `CurrentProjectPath` at the original
-  `.rscp`, which does not contain the recovered work — so it must
+  project file, which does not contain the recovered work — so it must
   `MarkProjectDirty()` right after the repoint, exactly as
   `CheckpointsViewModel.RestoreAsync` does. Without it: recover a crash, close
   the app, `MainWindow.OnClosing` sees a clean session and `TerminateNow()`s with
@@ -116,7 +116,7 @@
 - **…and Save As out of the audio's FOLDER rebases the audio reference
   (2026-09-04).** `musicFileName` is a bare name resolved against the project's
   own folder by `ProjectAudioLocator`, and Save As is the one operation that
-  changes that folder — so the new `.rscp` named an audio file that had stayed
+  changes that folder — so the new project file named an audio file that had stayed
   behind, and the copy opened with no waveform, no playback, no stems and no
   message. `ProjectSaver.RebaseAudioReferenceForSaveAs` runs BEFORE the
   write (the reference is read by `AssembleProject` inside
@@ -245,7 +245,7 @@
   other importable format stayed unrouted: a dropped `.gp5`/`.mid`/`.psarc`
   reached `ProjectDocumentService.ResolveFormat`, threw and came back as "Error
   loading project" — the `AudioFileTypes` bug one level up. Current table:
-  `.rscp`→project · audio→`AudioFileTypes` · `.eof`→`OpenEofImport` (the
+  `.dcproj` / `.rscp`→project (a `.rscp` beside its `.dcproj` opens the `.dcproj`) · audio→`AudioFileTypes` · `.eof`→`OpenEofImport` (the
   shell's door onto `EofImportLauncher.OpenAsync`) · `.mid/.midi`→`OpenMidiImport`
   (the launcher refuses, and says so, with no project open) ·
   RS `.xml`→`OpenRsXmlImport`, MERGING into the open project and

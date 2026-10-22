@@ -115,7 +115,7 @@ public sealed class StartupProjectProbeDeferralTests
             new(new FakeAudioPlaybackService(), _config, _logger, new FakeFileStorageService(),
                 new NoDocuments(), _state, _transport, Editor, new TempoService(_logger),
                 new NoCrashRecovery(), _history, new NoSaveCompanions(),
-                uiDispatcher: Dispatcher, localization: FakeLocalization.English())
+                uiDispatcher: Dispatcher, localization: FakeLocalization.English(), pathRekey: new FakeProjectPathRekey())
             {
                 StartupProjectExists = probe
             };

@@ -9,7 +9,7 @@ namespace DotCharter.Services.Parsing.Rscp;
 public readonly record struct ProjectCoverFacts(string Title, string Artist, string CoverArtPath);
 
 /// <summary>
-///     Reads the title, artist and cover art path out of an <c>.rscp</c>
+///     Reads the title, artist and cover art path out of a <c>.dcproj</c>
 ///     project HEADER with a streaming reader, stopping at the first bulk node
 ///     (the same walk <see cref="RscpGenreReader" /> makes), so Home never
 ///     materialises a chart to find a cover. Throws whatever the file system

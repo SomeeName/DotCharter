@@ -3,7 +3,7 @@ using System.Xml;
 namespace DotCharter.Services.Parsing.Rscp;
 
 /// <summary>
-///     Reads the authored genre (<c>dcGenre</c>) out of an <c>.rscp</c> project
+///     Reads the authored genre (<c>dcGenre</c>) out of a <c>.dcproj</c> project
 ///     HEADER without materialising the chart.
 ///     <para>
 ///         This exists because the practice planner's genre preference has

@@ -33,6 +33,7 @@ public sealed class GpArrangementParser
     ///     <see cref="GpPostProcessor.Run" /> beside <see cref="_authoredFingers" />.
     /// </summary>
     private readonly GpAuthoredChordNames _authoredChordNames = new();
+    private readonly HashSet<IGuitarSound> _graceTargets = [];
 
     /// <summary>The chord diagrams of the track being parsed (re-read per track).</summary>
     private GpChordDiagrams _diagrams = GpChordDiagrams.Empty;
@@ -106,6 +107,7 @@ public sealed class GpArrangementParser
             NoteParser.ResetLeftHandTappedNotes();
             _authoredFingers.Clear();
             _authoredChordNames.Clear();
+            _graceTargets.Clear();
             _diagrams = GpChordDiagrams.Read(trackNode, arr.StringCount, arr.Capo);
 
             var level = new ChartLevel { DifficultyIndex = 0 };
@@ -128,7 +130,8 @@ public sealed class GpArrangementParser
             // are deliberately NOT here.
             SlideInsMaterialized[arr] = GpPostProcessor.Run(level, arr, settings,
                 tapOriginated: NoteParser.LeftHandTappedNotes,
-                authoredFingers: _authoredFingers, authoredChordNames: _authoredChordNames);
+                authoredFingers: _authoredFingers, authoredChordNames: _authoredChordNames,
+                graceTargets: _graceTargets);
             // Sidecar voices get the NOTATION-relevant passes only: tied beats
             // merge (summing their authored NotationDuration) and slide targets
             // resolve. AdjustSustains is deliberately skipped — it is the
@@ -661,9 +664,12 @@ public sealed class GpArrangementParser
             // A grace with a slide (shift or legato) parses onto
             // the grace's SlideTo (-1) / LinkNext — capture it so
             // the ornament becomes a real slide-into note, not
-            // just a fret.
+            // just a fret. A grace that hammers or pulls into the target
+            // carries GP's HopoOrigin on the grace note itself (the target holds
+            // the destination half), so it is read from the node: the target's
+            // flag alone would leave the grace a bare fret hint.
             grace.Entries.Add(new GpBeatCarry.GraceEntry(g.StringIndex, g.Fret,
-                g.SlideTo.HasValue || g.LinkNext));
+                g.SlideTo.HasValue || g.LinkNext, GpNoteParser.IsHopoOrigin(graceNode)));
         }
 
         if (grace.Entries.Count > 0) slot.PendingGrace = grace;
@@ -758,7 +764,7 @@ public sealed class GpArrangementParser
         // GpPostProcessor.AdjustSustains discards short
         // sustains — the sheet view renders it verbatim.
         note.NotationDuration = entry.Rhythm;
-        GpBeatCarry.ApplyPendingGrace(note, ref slot.PendingGrace, target.Notes, target.Chords);
+        GpBeatCarry.ApplyPendingGrace(note, ref slot.PendingGrace, target.Notes, target.Chords, _graceTargets);
         if (technique is { } tech) GpMarkerImport.ApplyTechnique(note, tech);
         if (trill.HasValue && target.ExpandTrills)
         {
@@ -796,7 +802,7 @@ public sealed class GpArrangementParser
                 GpMarkerImport.ApplyTechnique(cn, tech);
         }
 
-        GpBeatCarry.ApplyPendingGrace(chord, ref slot.PendingGrace, target.Notes, target.Chords);
+        GpBeatCarry.ApplyPendingGrace(chord, ref slot.PendingGrace, target.Notes, target.Chords, _graceTargets);
         // The tab's chord diagram names and fingers the strum —
         // playable voice only, like the per-note fingers above. After
         // the grace: an on-beat grace moves the chord, and the side

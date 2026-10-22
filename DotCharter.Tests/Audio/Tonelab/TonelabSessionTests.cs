@@ -305,7 +305,7 @@ public sealed class TonelabSessionTests
     public void Discovery_ReadsOnlyTonelabPipes()
     {
         using var game = new TonelabGameMock();
-        SpinWait.SpinUntil(() => TonelabSession.DiscoverRunningGames().Contains(game.ProcessId), TimeSpan.FromSeconds(5));
+        SpinWait.SpinUntil(() => TonelabSession.DiscoverRunningGames().Contains(game.ProcessId), TimeSpan.FromSeconds(60));
         Assert.Contains(game.ProcessId, TonelabSession.DiscoverRunningGames());
     }
 

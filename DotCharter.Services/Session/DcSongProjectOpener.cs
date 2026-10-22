@@ -9,7 +9,7 @@ namespace DotCharter.Services.Session;
 /// File ▸ Open (and a drop) of a <c>.dcsong</c>: asks before replacing the open
 ///     project, asks where the new project folder goes, unpacks the package into a NEW
 ///     folder there (<see cref="DcSongProjectUnpacker" />) and opens the written
-///     <c>project.rscp</c> through the session's ordinary load. The status line says when
+///     <c>project.dcproj</c> through the session's ordinary load. The status line says when
 ///     the package's audio is lossy (Opus): chart-from-audio and stem separation work best
 ///     from a lossless (FLAC) package. Built by <see cref="ProjectSessionService" />, which
 ///     routes the extension here.

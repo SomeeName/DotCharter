@@ -48,7 +48,7 @@ Its project file is the `.rscp` format.
 - **How we work with it.** DotCharter opens and saves Charter's `.rscp` project
   files and keeps what it does not understand intact, so a chart can move
   between the two (the promise is spelled out in
-  [docs/RSCP-FORMAT-GUARANTEES.md](docs/RSCP-FORMAT-GUARANTEES.md)).
+  [docs/DCPROJ-FORMAT-GUARANTEES.md](docs/DCPROJ-FORMAT-GUARANTEES.md)).
 
 ## Rocksmith2014.NET and DLC Builder, by iminashi
 

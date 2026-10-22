@@ -110,7 +110,7 @@ public sealed class EofProjectCreatorTests : IDisposable
         Assert.Single(h.Session.LoadedAudioFiles);
         Assert.StartsWith("Created project", h.State.MainDisplayMessage);
         Assert.NotNull(h.State.ActiveArrangement);
-        Assert.EndsWith("project.rscp", h.State.CurrentProjectPath);
+        Assert.EndsWith("project.dcproj", h.State.CurrentProjectPath);
     }
 
     /// <summary>The import replaces the open project, so a kept unsaved project stops it before anything is written.</summary>

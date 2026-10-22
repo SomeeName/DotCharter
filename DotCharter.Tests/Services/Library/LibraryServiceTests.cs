@@ -126,10 +126,10 @@ public sealed class LibraryServiceTests : IDisposable
         var scan = Task.Run(() => new LibraryService(_logger, [packages]) { ScanParallelismForTests = 1 }
             .ScanAsync(Library, null, new Progress<IReadOnlyList<LibrarySongEntry>>(found.AddRange), cts.Token),
             TestContext.Current.CancellationToken);
-        Assert.True(packages.Entered.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.True(packages.Entered.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
 
         cts.Cancel();
-        var finished = await Task.WhenAny(scan, Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        var finished = await Task.WhenAny(scan, Task.Delay(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
 
         Assert.Same(scan, finished);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scan);
@@ -208,7 +208,7 @@ public sealed class LibraryServiceTests : IDisposable
             if (Blocks.Contains(path))
             {
                 Entered.Set();
-                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(30));
+                cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(120));
                 cancellationToken.ThrowIfCancellationRequested();
             }
 

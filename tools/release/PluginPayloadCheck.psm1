@@ -39,6 +39,77 @@ function Get-PluginAssemblyNames([string]$RepoRoot) {
     return @(Get-PluginProjects $RepoRoot | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_) + '.dll' })
 }
 
+# The console tools a plugin ships with its -WithPlugins release: a project below plugins/<name>/
+# (its tests and obj/bin folders excluded) that sets <DotCharterReleaseTool>true</DotCharterReleaseTool>.
+# Each is published into the app folder, where it shares the app's runtime, and gets a launcher
+# script in the install's tools/ folder. The public build ships none of them.
+function Get-PluginReleaseTools([string]$RepoRoot) {
+    $dir = Join-Path $RepoRoot 'plugins'
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { return @() }
+    return @(Get-ChildItem -LiteralPath $dir -Recurse -File -Filter '*.csproj' |
+        Where-Object { $_.FullName -notmatch '[\\/](obj|bin)[\\/]' } |
+        Where-Object { (Get-Content -LiteralPath $_.FullName -Raw) -match '<DotCharterReleaseTool>\s*true\s*</DotCharterReleaseTool>' } |
+        Sort-Object FullName | ForEach-Object {
+            $assembly = [System.IO.Path]::GetFileNameWithoutExtension($_.Name)
+            $text = Get-Content -LiteralPath $_.FullName -Raw
+            if ($text -match '<AssemblyName>\s*([^<\s]+)\s*</AssemblyName>') { $assembly = $Matches[1] }
+            [pscustomobject]@{ Project = $_.FullName; Name = $assembly; Exe = "$assembly.exe"; Launcher = "$assembly.cmd" }
+        })
+}
+
+# The tool executables a payload's app folder must hold (-WithPlugins) or must not (public).
+function Get-PluginToolExeNames([string]$RepoRoot) {
+    return @(Get-PluginReleaseTools $RepoRoot | ForEach-Object { $_.Exe })
+}
+
+# Every file a tool puts in a payload that names it: the executable and its launcher.
+function Get-PluginToolFileNames([string]$RepoRoot) {
+    return @(Get-PluginReleaseTools $RepoRoot | ForEach-Object { $_.Exe; $_.Launcher })
+}
+
+# The launcher script for a tool published into app\ (tools\<name>.cmd). Files dropped on it
+# arrive as arguments; the tool waits for a key at the end only when Explorer started this script
+# (cmd /c), so a run from a shell does not stop. Exit code is the tool's.
+function Get-PluginToolLauncherText([string]$Name) {
+    $lines = @(
+        '@echo off',
+        'set "DC_PAUSE="',
+        'setlocal EnableDelayedExpansion',
+        'echo !cmdcmdline!| findstr /i /c:"/c " >nul',
+        'if not errorlevel 1 (endlocal & set "DC_PAUSE=--pause") else endlocal',
+        ('"%~dp0..\app\{0}.exe" %DC_PAUSE% %*' -f $Name),
+        'exit /b %errorlevel%')
+    return ($lines -join "`r`n") + "`r`n"
+}
+
+# Publishes each tool self-contained into a scratch folder and copies into $AppDir the files it
+# does not already hold: the tool's own executable and metadata. Every assembly the tool shares
+# with the app stays the app's own build (a second copy would overwrite the ReadyToRun image).
+function Publish-PluginTools([string]$RepoRoot, [string]$AppDir, [string]$Scratch, [string]$Version) {
+    foreach ($tool in @(Get-PluginReleaseTools $RepoRoot)) {
+        $out = Join-Path $Scratch ('tool-' + $tool.Name)
+        if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
+        & dotnet publish $tool.Project -c Release -r win-x64 --self-contained true -o $out "-p:Version=$Version" -p:DotCharterPlugins=true | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "dotnet publish ($($tool.Name)) failed." }
+        if (-not (Test-Path -LiteralPath (Join-Path $out $tool.Exe))) { throw "The $($tool.Name) publish wrote no $($tool.Exe)." }
+        foreach ($file in Get-ChildItem -LiteralPath $out -File) {
+            $target = Join-Path $AppDir $file.Name
+            if (-not (Test-Path -LiteralPath $target)) { Copy-Item -LiteralPath $file.FullName -Destination $target }
+        }
+        if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
+    }
+}
+
+# Writes tools\<name>.cmd beside the bundled media tools for every plugin tool.
+function Add-PluginToolLaunchers([string]$RepoRoot, [string]$InstallDir) {
+    $toolsDir = Join-Path $InstallDir 'tools'
+    New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+    foreach ($tool in @(Get-PluginReleaseTools $RepoRoot)) {
+        $path = Join-Path $toolsDir $tool.Launcher
+        [System.IO.File]::WriteAllText($path, (Get-PluginToolLauncherText $tool.Name), (New-Object System.Text.UTF8Encoding($false)))
+    }
+}
+
 # Every copy of the named assemblies in a payload: a folder (any file of those names under
 # it, at any depth) or a zip (any entry of those names). A path that is neither throws.
 function Find-PluginsInPayload([string]$Path, [string[]]$Names) {
@@ -111,5 +182,6 @@ function Resolve-ReleaseFeed([string]$Repo, [switch]$WithPlugins, [string]$TagCh
     return [pscustomobject]@{ Repo = $Repo; TargetCheckout = $target; IsOtherCheckout = ($target.TrimEnd('\', '/') -ine $root.TrimEnd('\', '/')) }
 }
 
-Export-ModuleMember -Function Get-PluginProjects, Get-PluginAssemblyNames, Find-PluginsInPayload, Assert-NoPluginInPayload,
+Export-ModuleMember -Function Get-PluginProjects, Get-PluginAssemblyNames, Get-PluginReleaseTools, Get-PluginToolExeNames,
+    Get-PluginToolFileNames, Get-PluginToolLauncherText, Publish-PluginTools, Add-PluginToolLaunchers, Find-PluginsInPayload, Assert-NoPluginInPayload,
     Assert-PluginsInPayload, Assert-ReleasePayloadPlugins, Get-UiPluginPublishArgs, Resolve-ReleaseFeed

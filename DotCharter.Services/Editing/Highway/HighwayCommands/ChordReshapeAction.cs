@@ -10,7 +10,7 @@ namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 ///         A <see cref="ChordTemplate" /> is SHARED — one instance backs every
 ///         chord AND hand shape with that shape — so the new shape must be
 ///         resolve-or-created and the chord repointed, never the template
-///         mutated (the v0.33.2 corruption). And in an <c>.rscp</c> a
+///         mutated (the v0.33.2 corruption). And in a <c>.dcproj</c> a
 ///         <c>&lt;chordNote&gt;</c> carries no <c>fret</c> attribute at all: the
 ///         reader takes the fret from the template, so a shape change that does
 ///         not repoint <c>TemplateId</c> is DISCARDED on the next save

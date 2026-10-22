@@ -45,7 +45,7 @@ public class RscpWriter
         // build could not read. Appending keeps every Descendants() lookup above
         // resolving to the real node first; the contract type explains both that
         // and why a name the writer already used is dropped rather than
-        // duplicated. See docs/RSCP-FORMAT-GUARANTEES.md.
+        // duplicated. See docs/DCPROJ-FORMAT-GUARANTEES.md.
         RscpFormatContract.EmitUnknownRootNodes(root, project.UnknownRscpNodes);
 
         doc.Add(root);

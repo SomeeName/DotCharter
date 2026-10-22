@@ -895,7 +895,7 @@
     <data name="Settings_AsioOutChannelRight" xml:space="preserve"><value>ASIO出力チャンネル（右）</value></data>
     <data name="Settings_AsioOutChannelLeft" xml:space="preserve"><value>ASIO出力チャンネル（左）</value></data>
     <data name="Settings_AutoBackups" xml:space="preserve"><value>自動バックアップ</value></data>
-    <data name="Settings_BackupDescription" xml:space="preserve"><value>バックアップはRSCPの隣のbackupsフォルダーにZIPファイルとして保存されます。</value></data>
+    <data name="Settings_BackupDescription" xml:space="preserve"><value>バックアップはプロジェクトファイルの隣のbackupsフォルダーにZIPファイルとして保存されます。</value></data>
     <data name="Settings_BackupMigrate_Title" xml:space="preserve"><value>バックアップと移行</value></data>
     <data name="Settings_BackupMigrate_Subtitle" xml:space="preserve"><value>設定、キーバインド、プロフィールとプレイデータ、言語パック、復旧スナップショットを1つのzipアーカイブにエクスポートします。ログイン情報とキャッシュはこの端末に残ります。</value></data>
     <data name="Settings_BackupMigrate_Export" xml:space="preserve"><value>バックアップをエクスポート…</value></data>
@@ -1003,7 +1003,7 @@
     <data name="Status_CreateProjectFailed" xml:space="preserve"><value>プロジェクトの作成エラー: {0}</value></data>
     <data name="Status_CreatedProject" xml:space="preserve"><value>プロジェクトを作成しました: {0}（{1}）</value></data>
     <data name="Status_DecodingAudio" xml:space="preserve"><value>オーディオをデコード中: {0}…</value></data>
-    <data name="Status_DragDrop" xml:space="preserve"><value>オーディオ、XML、RSCP をドラッグ＆ドロップ</value></data>
+    <data name="Status_DragDrop" xml:space="preserve"><value>オーディオ、XML、プロジェクト (.dcproj, .rscp) をドラッグ＆ドロップ</value></data>
     <data name="Status_FhpRegenerated" xml:space="preserve"><value>FHP を再生成しました: アンカー{0}個（うち{1}個を置換）。</value></data>
     <data name="Status_FhpGenerated" xml:space="preserve"><value>FHP アンカーを{0}個生成しました。</value></data>
     <data name="Status_FhpGeneratedForRange" xml:space="preserve"><value>選択範囲に FHP アンカーを{0}個生成しました。</value></data>
@@ -1181,6 +1181,8 @@
     <data name="Status_CompanionPsarcBuilt" xml:space="preserve"><value>Rocksmith パッケージを生成しました: {0}</value></data>
     <data name="Status_CompanionPsarcFailed" xml:space="preserve"><value>Rocksmith パッケージを生成できませんでした: {0}</value></data>
     <data name="Status_ProjectSavedTo" xml:space="preserve"><value>プロジェクトを {0} に保存しました</value></data>
+    <data name="Status_ProjectSavedAsDcprojLegacyKept" xml:space="preserve"><value>プロジェクトを {0} として保存しました。DotCharterのプロジェクトは.dcprojファイルになりました。以前のファイルは {1} として残し、Charter互換の.rscpも隣に保存します。</value></data>
+    <data name="Status_ProjectSavedAsDcprojRscpKept" xml:space="preserve"><value>プロジェクトを {0} として保存しました。開いた元の.rscp（{1}）は変更されていません。</value></data>
     <data name="Status_SaveError" xml:space="preserve"><value>保存エラー: {0}</value></data>
     <data name="Export_PlayOnly" xml:space="preserve"><value>この譜面はプレイ専用です。プレイ・練習・閲覧はできますが、エクスポートはできません。</value></data>
     <data name="Status_SelectNoteChordRange" xml:space="preserve"><value>先にノートまたはコードの範囲を選択してください。</value></data>
@@ -1472,7 +1474,7 @@
     <data name="Settings_SaveCompanionRs2Dlc_RowLabel" xml:space="preserve"><value>DLC Builder プロジェクト</value></data>
     <data name="Settings_Tip_SaveCompanionRs2Dlc" xml:space="preserve"><value>DTRS XML フォルダーに .rs2dlc を書き出し、バンドルを DLC Builder で直接開けるようにします。CustomsForge の「Import rs2dlc」欄にドロップすればメタデータを自動入力できます。</value></data>
     <data name="Settings_RsXmlSixString_RowLabel" xml:space="preserve"><value>6弦ツール向け RS XML</value></data>
-    <data name="Settings_Tip_RsXmlSixString" xml:space="preserve"><value>7弦・8弦ギターを6弦の .xml として保存します。追加弦のノートは省かれ、EOF や DLC Builder で読み込めます。オフのときはすべての弦を残します。DTRS XML フォルダーと DLC Builder プロジェクトは常に6弦版を使います。</value></data>
+    <data name="Settings_Tip_RsXmlSixString" xml:space="preserve"><value>7弦・8弦ギターを6弦の .xml として保存します。追加弦のノートは省かれ、EOF や DLC Builder で読み込めます。オフのときはすべての弦を残します。DLC Builder 用の DTRS XML フォルダーにも適用されます。DLC Builder プロジェクトのチューニングは常に標準の6弦を並べます。</value></data>
     <data name="Settings_RsXmlMoverPhrases_RowLabel" xml:space="preserve"><value>拍の間のフレーズを moveR で RS XML に書く</value></data>
     <data name="Settings_Tip_RsXmlMoverPhrases" xml:space="preserve"><value>拍と拍の間のノートで始まるフレーズやセクションを、その前の拍に moveR として書きます。この形式を必要とするツール向けです。オフのときは実際の時刻を書きます。DLC Builder は改善処理の有無にかかわらずこちらも受け付けます。保存する .xml と DTRS XML フォルダーに適用され、Rocksmith パッケージは常に実際の時刻を使います。</value></data>
     <data name="Settings_ExportGenerateDd_RowLabel" xml:space="preserve"><value>1 レベルのアレンジメントにダイナミック難易度を生成</value></data>
@@ -3376,6 +3378,23 @@
     <data name="Action_Generate" xml:space="preserve"><value>生成</value></data>
     <data name="Action_Run" xml:space="preserve"><value>実行</value></data>
     <data name="Menu_ImportMidi" xml:space="preserve"><value>MIDIファイルをインポート…</value></data>
+    <data name="Menu_ConvertPackages" xml:space="preserve"><value>PSARCをDotCharter曲に変換…</value></data>
+    <data name="Picker_ConvertPackages" xml:space="preserve"><value>変換するPSARCファイルを選択</value></data>
+    <data name="Picker_GamePackages" xml:space="preserve"><value>Rocksmithパッケージ</value></data>
+    <data name="Picker_ConvertOutputFolder" xml:space="preserve"><value>DotCharter曲の保存先フォルダーを選択</value></data>
+    <data name="Convert_Prompt_Title" xml:space="preserve"><value>DotCharter曲に変換</value></data>
+    <data name="Convert_Prompt_Message" xml:space="preserve"><value>{0}個のパッケージを選択しました。OKで各.dcsongをパッケージと同じ場所に保存します。キャンセルすると保存先フォルダーを選べます。</value></data>
+    <data name="Status_ConvertingPackages" xml:space="preserve"><value>パッケージをDotCharter曲に変換中…</value></data>
+    <data name="Status_ConvertingPackage" xml:space="preserve"><value>{0}を変換中…（{1}件完了）</value></data>
+    <data name="Status_ConvertCancelled" xml:space="preserve"><value>変換をキャンセルしました。</value></data>
+    <data name="Status_ConvertUnavailable" xml:space="preserve"><value>このビルドではパッケージを変換できません。</value></data>
+    <data name="Convert_Summary_Title" xml:space="preserve"><value>変換が完了しました</value></data>
+    <data name="Convert_Summary_TitleProblems" xml:space="preserve"><value>変換は問題付きで完了しました</value></data>
+    <data name="Convert_Summary_Counts" xml:space="preserve"><value>変換{0}件、スキップ{1}件、失敗{2}件。</value></data>
+    <data name="Convert_Summary_Where" xml:space="preserve"><value>保存先：{0}</value></data>
+    <data name="Convert_Summary_FailedLine" xml:space="preserve"><value>• {0}: {1}</value></data>
+    <data name="Convert_Summary_More" xml:space="preserve"><value>…ほか{0}件。</value></data>
+    <data name="Convert_Summary_NoPackages" xml:space="preserve"><value>選択範囲にパッケージが見つかりませんでした。</value></data>
     <data name="Menu_GenerateLevels" xml:space="preserve"><value>難易度レベルを生成…</value></data>
     <data name="Menu_GenerateLevels_Tip" xml:space="preserve"><value>最も難しいレベルを段階的に薄くした複数のレベルへ展開し、単一レベルではなく可変難易度付きで譜面をエクスポートできるようにします。</value></data>
     <data name="Menu_PropagatePhrase" xml:space="preserve"><value>プレイヘッド位置のフレーズを反映</value></data>
@@ -3484,14 +3503,14 @@
     <data name="Dialog_QualityReport_AudioRunning" xml:space="preserve"><value>譜面の音高を音声と照合しています…</value></data>
     <data name="Dialog_QualityReport_AudioDone" xml:space="preserve"><value>{1} 音中 {0} 音を音声で確認しました。</value></data>
     <data name="Dialog_QualityReport_AudioFailed" xml:space="preserve"><value>音声との照合を実行できませんでした: {0}</value></data>
-    <data name="Dialog_BatchLint_Subtitle" xml:space="preserve"><value>サブフォルダーを含め、フォルダー内のすべての.rscpプロジェクトを検証します。</value></data>
+    <data name="Dialog_BatchLint_Subtitle" xml:space="preserve"><value>サブフォルダーを含め、フォルダー内のすべてのプロジェクト (.dcproj, .rscp) を検証します。</value></data>
     <data name="Dialog_BatchLint_FolderWatermark" xml:space="preserve"><value>フォルダー未選択</value></data>
     <data name="Dialog_BatchLint_ApplyFixes" xml:space="preserve"><value>各プロジェクトに自動修正パイプラインを適用する</value></data>
     <data name="Dialog_BatchLint_SaveFixed" xml:space="preserve"><value>修正したプロジェクトをディスクに保存する</value></data>
     <data name="Dialog_BatchLint_SaveFixed_Tip" xml:space="preserve"><value>自動修正パイプラインが変更したプロジェクトファイルを上書きします。元に戻せないため、先にフォルダーをバックアップしてください。</value></data>
     <data name="Dialog_BatchLint_SaveFixed_NeedsAutoFix" xml:space="preserve"><value>上のオートフィックスを有効にしてください。有効でなければ保存するものがありません。</value></data>
     <data name="BatchLint_NoFolder" xml:space="preserve"><value>検査するフォルダーを選択してください。</value></data>
-    <data name="BatchLint_NoProjects" xml:space="preserve"><value>そのフォルダーに.rscpプロジェクトファイルは見つかりませんでした。</value></data>
+    <data name="BatchLint_NoProjects" xml:space="preserve"><value>そのフォルダーにプロジェクトファイル (.dcproj, .rscp) は見つかりませんでした。</value></data>
     <data name="BatchLint_Running" xml:space="preserve"><value>{0}個のプロジェクトを検査しています…</value></data>
     <data name="BatchLint_RunningOne" xml:space="preserve"><value>{0}個のプロジェクトを検査しています…</value></data>
     <data name="BatchLint_Summary" xml:space="preserve"><value>{0}個のプロジェクト: 問題{1}件、修正{2}件、保存{3}件、失敗{4}件。</value></data>
@@ -3513,7 +3532,7 @@
     <data name="Dialog_ChartDiff_Subtitle" xml:space="preserve"><value>編集中のアレンジメントを、別のプロジェクトファイル内のアレンジメントと比較します。</value></data>
     <data name="Dialog_ChartDiff_FileWatermark" xml:space="preserve"><value>ファイル未選択</value></data>
     <data name="Dialog_ChartDiff_Arrangement" xml:space="preserve"><value>比較対象</value></data>
-    <data name="ChartDiff_PickFile" xml:space="preserve"><value>比較対象のプロジェクトファイル (.rscp) を選択</value></data>
+    <data name="ChartDiff_PickFile" xml:space="preserve"><value>比較対象のプロジェクトファイル (.dcproj, .rscp) を選択</value></data>
     <data name="ChartDiff_NoArrangements" xml:space="preserve"><value>そのプロジェクトにはアレンジメントがありません。</value></data>
     <data name="ChartDiff_LoadFailed" xml:space="preserve"><value>比較に失敗しました: {0}</value></data>
     <data name="ChartDiff_Identical" xml:space="preserve"><value>2つの譜面の音の内容は同一です。</value></data>

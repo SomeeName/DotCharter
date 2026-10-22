@@ -92,6 +92,9 @@
         <MenuItem Header="{localization:Loc Menu_ImportEof}" Command="{Binding Imports.ImportEofCommand}" />
         <MenuItem Header="{localization:Loc Menu_ImportRsXml}" Command="{Binding Imports.ImportRsXmlCommand}" />
         <MenuItem Header="{localization:Loc Menu_ImportMidi}" Command="{Binding Imports.ImportMidiCommand}" />
+        <!-- Reads a game package, so FileMenu removes it (ContestedMenu.Prune) when no plugin does. -->
+        <MenuItem Header="{localization:Loc Menu_ConvertPackages}" menus:ContestedMenu.Feature="game-packages"
+                  Command="{Binding Imports.ConvertPackagesCommand}" />
         <!-- #820: the downloader is a contested feature, so this row is REMOVED (not
              greyed) when the public-build switch is off (ContestedMenu.Prune). -->
         <MenuItem Header="{localization:Loc Menu_AttachYoutubeAudio}" menus:ContestedMenu.Feature="youtube-import"

@@ -26,7 +26,7 @@ public sealed record DcSongImage(string MediaType, byte[] Bytes);
 ///         declared size first and against the bytes the inflater really produces
 ///         second, and the media members are STORED, so their bytes are a plain
 ///         window of the file that cannot inflate at all. Nothing is extracted to
-///         disk except the chart, into a temporary folder, because the <c>.rscp</c>
+///         disk except the chart, into a temporary folder, because the <c>.dcproj</c>
 ///         reader takes a path.
 ///     </para>
 ///     <para>
@@ -114,7 +114,7 @@ public sealed class DcSongPackage : IDisposable
         var bytes = ReadVerified(Manifest.Find(DcSongFileRole.Chart)!, DcSongFormat.MaxChartBytes);
 
         // A pre-v3 project names sibling files to recover its arrangements from, and
-        // the .rscp reader would resolve those against the folder the chart sits in —
+        // the project reader would resolve those against the folder the chart sits in —
         // or, for a rooted name, anywhere on the disk. A package's chart is always
         // current (the writer saves it), so one that asks for recovery is refused
         // before the reader can follow it out of the package.
@@ -126,7 +126,7 @@ public sealed class DcSongPackage : IDisposable
         }
         catch (XmlException ex)
         {
-            throw new DcSongReadException(DcSongReadFailure.ChartInvalid, $"chart.rscp is not valid XML: {ex.Message}", ex);
+            throw new DcSongReadException(DcSongReadFailure.ChartInvalid, $"The chart is not valid XML: {ex.Message}", ex);
         }
 
         var folder = Directory.CreateTempSubdirectory("dotcharter_dcsong_chart_").FullName;
@@ -139,7 +139,7 @@ public sealed class DcSongPackage : IDisposable
         }
         catch (Exception ex) when (ex is XmlException or InvalidDataException or FormatException)
         {
-            throw new DcSongReadException(DcSongReadFailure.ChartInvalid, $"chart.rscp could not be read: {ex.Message}", ex);
+            throw new DcSongReadException(DcSongReadFailure.ChartInvalid, $"The chart could not be read: {ex.Message}", ex);
         }
         finally
         {

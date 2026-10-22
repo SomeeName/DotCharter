@@ -65,7 +65,7 @@ public interface IProjectSessionService : IDisposable
     ///     Marks the session dirty until the next save — for a project that is NOT
     ///     on disk in this state, whatever the undo history says. Two replace paths
     ///     need it: a new project (never written) and a checkpoint restore (the
-    ///     restored graph deliberately differs from the <c>.rscp</c>). It is also
+    ///     restored graph deliberately differs from the <c>.dcproj</c>). It is also
     ///     how <see cref="AttachAudioAsync" /> records a change the history cannot
     ///     represent.
     /// </summary>
@@ -103,7 +103,7 @@ public interface IProjectSessionService : IDisposable
 
     /// <summary>Saves to the session's project path; a session without one
     /// (fresh/default project, PSARC import) routes through the Save As picker
-    /// instead of silently writing a relative "project.rscp". Returns false
+    /// instead of silently writing a relative "project.dcproj". Returns false
     /// when the user canceled the picker or the save failed.</summary>
     Task<bool> SaveProjectAsync();
 

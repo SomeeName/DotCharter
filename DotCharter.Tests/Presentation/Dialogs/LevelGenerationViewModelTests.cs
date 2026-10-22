@@ -24,7 +24,7 @@ public sealed class LevelGenerationViewModelTests
         var vm = CreateViewModel(maintenance, out _);
 
         var apply = Apply(vm);
-        Assert.True(maintenance.Started.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken),
+        Assert.True(maintenance.Started.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken),
             "generation never started");
 
         // Mid-run: the dialog has not answered, and it says it is working.
@@ -77,7 +77,7 @@ public sealed class LevelGenerationViewModelTests
         var vm = CreateViewModel(maintenance, out _);
 
         var apply = Apply(vm);
-        Assert.True(maintenance.Started.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken),
+        Assert.True(maintenance.Started.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken),
             "generation never started");
 
         vm.CancelCommand.Execute(null);
@@ -188,7 +188,7 @@ public sealed class LevelGenerationViewModelTests
         {
             RequestedLevels = levelCount;
             Started.Set();
-            await Task.Run(() => Release.Wait(TimeSpan.FromSeconds(10)));
+            await Task.Run(() => Release.Wait(TimeSpan.FromSeconds(60)));
             if (Throw) throw new InvalidOperationException("level generation exploded");
             if (ReportsProgress) progress?.Report(new LevelGenerationProgress(levelCount, levelCount));
             return true;

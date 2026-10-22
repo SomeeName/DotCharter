@@ -100,7 +100,7 @@ issue and PR templates are the rest of the community files.
 | `DotCharter.RigLab` | The rig as a standalone app. References Core/Localization/Tone/Tone.UI and NEVER UI or Services (`RigLabDependencyTests`); published by `tools/release/Publish-RigLab.ps1` |
 | `DotCharter.Launcher` | The release's top-level `DotCharter.exe` (#413): a NativeAOT stub that starts `app\DotCharter.exe` with the same command line and exit code. References nothing first-party. The app resolves install-scoped paths (portable config, `tools/`, `voices/`, `models/`) through `InstallLocation.InstallRoot`, never `AppContext.BaseDirectory` — see [split-install.md](docs/agents/services/infrastructure-update/split-install.md) |
 | `DotCharter.UI.Gallery` | Standalone host (assembly `DotCharter.Gallery`) for screens on FAKE view models — no audio, no JUCE, no DI. `DotCharter.Gallery.exe --capture <dir>` writes a PNG per page and variant. See `DotCharter.UI.Gallery/AGENTS.md` |
-| `DotCharter.Tests` | xUnit on Microsoft.Testing.Platform. The default gate is ~19,500 cases (19,489 on 2026-10-11; the gate wrapper prints the live count); `UiPerfSmokeTests` run as a SEPARATE invocation (see Validation) |
+| `DotCharter.Tests` | xUnit on Microsoft.Testing.Platform. The default gate is ~21,900 cases (21,927 on 2026-10-21; the gate wrapper prints the live count); the release lane (`tools/ci/release-lane.json`) adds ~120; `UiPerfSmokeTests` run as a SEPARATE invocation (see Validation) |
 | `JuceSharp/` | **Git submodule** ([SomeeName/JuceSharp](https://github.com/SomeeName/JuceSharp), private). C# wrapper + native C++ engine. See `JuceSharp/src/JuceSharp/README.md` |
 
 Dependency direction (bottom → top): `Core` → { `Analysis`, `Rendering`,
@@ -143,18 +143,67 @@ exclusion itself (`DotCharter.Tests/TestEntryPoint.cs`); any explicit filter
 turns that off. For the same reason the headless suite is SPLIT across
 concurrent processes, whole classes per shard: `tools/agent/Invoke-Gate.ps1
 -Headless` runs 4 shards (`-Shards N`), CI runs 2, all through
-`tools/ci/HeadlessShards.psm1`. Budget ~3 minutes for it on an idle box (157 s
-measured 2026-10-04; one process was ~10 min) and ~3–4 minutes for the gate.
+`tools/ci/HeadlessShards.psm1`. **The gate is sharded too** (`-Gate`, 4 shards,
+CI 2, `tools/ci/GateShards.psm1`): shards 1..N-1 run explicit class lists from
+`tools/ci/gate-shard-weights.json`, the last runs the gate's own filter minus
+every listed class, so the shards are the gate's case set exactly — a new class
+runs in that remainder. `Invoke-Gate.ps1 -SelfTest` proves it against the
+runner's listing; `-Shards 1` is the one-process run above. `-Gate -Headless`
+runs both suites AT ONCE when `-MinFreeGB` (12) is free, else one after the
+other. After the gate the 20 slowest classes are printed and every class's
+duration lands in `gate-durations.json` beside `gate.trx`.
+**CPUs (#171).** `Invoke-Gate.ps1` and `Merge-Train.ps1` pin themselves at
+below-normal priority on CPUs 8-15 (the owner games on 0-7); there is no game
+detection. `-AllCores`, passed by hand, uses every core. The first output line
+prints the mask and the reason ("default" / "-AllCores"); shards default to 4 on
+half, 8 on all. The decision is `tools/agent/DevBuild.psm1`'s `Get-DevCpuPlan`.
+Measured 2026-10-21 on CPUs 8-15 with other gates running: `-Build -Gate
+-Headless` 404–572 s concurrent against 915 s one after the other; the gate
+alone 363 s in 4 shards against 465 s in one process. Eight cores are the ceiling, not the sharding: under load the
+summed case time triples, and one long serial chain bounds any split: a
+class's cases run one after another. That is why the slow end-to-end classes sit
+in the release lane and why its heaviest scenarios are nested classes (each its
+own collection, so they run side by side): measured the same day, the `-Gate`
+wall time was 291 s with the ToneMatcherTests full matches in it (22,038 cases)
+and 122 s without (21,927 cases).
 Exception signatures and the known-bad list are in
 [docs/agents/testing/perf-harnesses.md](docs/agents/testing/perf-harnesses.md)
 and `DotCharter.Tests/AGENTS.md`.
+
+**The default gate is NOT every non-headless class: the RELEASE LANE holds the
+slowest.** `tools/ci/release-lane.json` is the ONE declared list of heavy
+corpus / integration / determinism classes (the snapshot-export and sync-guard
+tooling tests, the analysis determinism check, the full tone-match and
+live-detection harnesses, the native-engine tone fidelity checks), each with the
+reason it is not a per-change check. `Invoke-Gate.ps1 -Gate` and a plain
+`dotnet test` leave them out; `Invoke-Gate.ps1 -ReleaseLane` runs exactly them,
+sharded the same way (`-Gate -ReleaseLane` = both, the old full set). **It is
+never dropped:** `Merge-Train.ps1` runs it after a green gate on every train that
+is not docs-only (and records it), `New-Release.ps1` runs it in preflight with no
+skip switch (it reuses only a green record of the same tree, `-ForceReleaseLane`
+re-runs), and CI's test job passes `-ReleaseLane`.
+`Infrastructure/ReleaseLaneLintTests` replays every lane's real shard plans over
+every test class and fails one that runs in no lane or in two. Move a class
+there by what it tests, not to hide a slow unit test; touching a lane class's
+subsystem means running it yourself with `-FilterClass`.
 
 **The headless-UI half BLOCKS a release and runs in CI as its own job** —
 `tools/release/New-Release.ps1` runs it in preflight, and
 `.github/workflows/build.yml`'s `headless-ui` job runs
 `tools/ci/Invoke-HeadlessUiCi.ps1`. `Infrastructure/CiWorkflowLintTests` keeps the
-two `dotnet test`s in different jobs. It is not in the commit gate; run it
+gate (`Invoke-Gate.ps1 -Gate`) and the headless suite in different jobs. It is not in the commit gate; run it
 yourself after a view change.
+
+**While iterating, `Invoke-Gate.ps1 -Affected`** (`-Base <ref>`, default
+`origin/main`; `-SelectOnly` prints and stops) builds and runs only the test
+classes that cover the diff, each printed with its reason: the changed test
+files' classes, classes that name a changed file or its type, the test folder
+mirroring the changed folder, ALWAYS the structural lints, and the headless
+classes naming a changed view. A change to `tools/`, a project, props, targets or
+global config runs the full gate instead and says so. **It is a loop aid, never
+the gate:** it records no green tree and the merge train still runs the full
+gate once. The rules are the header of `tools/agent/AffectedTests.psm1`, pinned
+by `Infrastructure/AffectedTestsModuleTests`.
 
 **CI runs on its own only on the PUBLIC repos; the private dev repos run it by
 hand.** `build.yml` triggers on `workflow_dispatch`, push to `main` and
@@ -320,6 +369,16 @@ generic `cmake -G "Visual Studio 17 2022"` line does not work there.
   pumps on the hot path.** The wrapper stays marshalling + lifetime only.
 - **The DLL is a build artifact, not tracked.** An ABI bump means rebuilding it
   before any managed code runs, or engine open fails with a version mismatch.
+- **The native pair imports only Windows system DLLs (#176).** `juce_sharp.dll`
+  and `juce_vst_host.exe` link the MSVC runtime statically (JuceSharp's
+  `JUCESHARP_STATIC_CRT`); v1.0.0 linked it dynamically and failed to load on a
+  Windows without the VC++ redistributable. `Services/Update/NativeImportAudit`
+  enforces it two ways: `Services/Update/NativeImportAuditTests` in the default
+  gate (over `JuceSharp/src/JuceSharp/runtimes/win-x64/native`), and
+  `tools/release/CheckPayloadBinaries.cs` over every staged payload and extracted
+  zip. There is no exception: ONNX Runtime (a NuGet binary on the dynamic
+  runtime) is satisfied by the four app-local VC++ DLLs the release copies beside it from
+  the pinned redistributable (`tools/release/vcredist.json`, `VcRedist.psm1`).
 - **Contributors get it prebuilt (#832).** When `juce_sharp.dll` is MISSING, the
   build (`tools/setup/NativeRuntime.targets`, hooked by `Directory.Solution.targets`
   and `Directory.Build.targets`) runs `tools/setup/Get-NativeRuntime.ps1`: it
@@ -436,7 +495,7 @@ assignee is `SomeeName`.
 
 ## Bounded agent work
 
-At most **two subagents**, only for independent tasks with explicit file and
+At most **three subagents**, only for independent tasks with explicit file and
 outcome ownership. Read MAP.md and the relevant subtree guide once; return paths,
 symbols, evidence and next action instead of raw logs. The orchestrator owns the
 integration and release gates. The loop is [docs/agents/workflow.md](docs/agents/workflow.md).

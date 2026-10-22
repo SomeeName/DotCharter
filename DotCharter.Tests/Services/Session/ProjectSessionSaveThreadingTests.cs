@@ -208,7 +208,8 @@ public sealed class ProjectSessionSaveThreadingTests : IDisposable
                 Documents, state, transport, editor, new TempoService(logger),
                 new NoOpCrashRecoveryService(), history, new NoOpSaveCompanionService(),
                 uiDispatcher: new TestUiDispatcher(),
-                localization: FakeLocalization.English());
+                localization: FakeLocalization.English(),
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public RecordingDocumentService Documents { get; } = new();

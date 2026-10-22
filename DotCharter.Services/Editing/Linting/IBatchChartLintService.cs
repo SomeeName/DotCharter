@@ -27,7 +27,7 @@ public interface IBatchChartLintService
     ///     entry in the result. See <see cref="BatchChartLintService" />.
     ///     <para>
     ///         A whole library is MINUTES of recursive I/O that can also REWRITE
-    ///         <c>.rscp</c> files the user never opened, so the run is
+    ///         <c>.dcproj</c> files the user never opened, so the run is
     ///         interruptible and reports its position: <paramref name="progress" />
     ///         fires per file and <paramref name="cancellationToken" /> stops the
     ///         batch on a whole-file boundary. The partial result is returned with

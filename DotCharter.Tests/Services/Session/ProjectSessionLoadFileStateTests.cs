@@ -126,7 +126,8 @@ public sealed class ProjectSessionLoadFileStateTests : IDisposable
                 new NoOpCrashRecoveryService { SnapshotRootDirectory = recoveryRoot }, history,
                 new NoOpSaveCompanionService(), statusBar: StatusBar,
                 uiDispatcher: new TestUiDispatcher(),
-                localization: FakeLocalization.English());
+                localization: FakeLocalization.English(),
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public ProjectState State { get; } = new();

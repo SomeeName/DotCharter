@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace DotCharter.Services.Ai.Match.Search;
 
 /// <summary>
@@ -30,6 +32,10 @@ public static class MultiScaleSpectralDistance
 {
     internal static readonly int[] Scales = [512, 1024, 2048];
 
+    /// <summary>One Hann window per size: it is read-only and every render of a match
+    /// uses the same three.</summary>
+    private static readonly ConcurrentDictionary<int, double[]> Windows = new();
+
     /// <summary>Distance in <c>[0, ∞)</c>, 0 for two signals with the same long-term
     /// spectrum at every scale. Resamples nothing: both inputs must share a sample
     /// rate (they do — everything downstream of the renderer is at the engine's).</summary>
@@ -37,12 +43,29 @@ public static class MultiScaleSpectralDistance
     {
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(b);
+        return Distance(a, Spectra(b));
+    }
+
+    /// <summary>The averaged spectrum of <paramref name="audio" /> at every scale, null
+    /// where it is shorter than the window. A match compares thousands of renders with
+    /// ONE target, so the target's spectra are taken once and handed to every distance.</summary>
+    internal static double[]?[] Spectra(MonoAudio audio)
+    {
+        var spectra = new double[]?[Scales.Length];
+        for (var i = 0; i < Scales.Length; i++) spectra[i] = AverageSpectrum(audio.Samples, Scales[i]);
+        return spectra;
+    }
+
+    /// <summary>The distance to a target whose <see cref="Spectra" /> are already known;
+    /// the same sum, in the same order, as the two-signal overload.</summary>
+    internal static double Distance(MonoAudio a, double[]?[] targetSpectra)
+    {
         var total = 0.0;
         var used = 0;
-        foreach (var n in Scales)
+        for (var scale = 0; scale < Scales.Length; scale++)
         {
-            var sa = AverageSpectrum(a.Samples, n);
-            var sb = AverageSpectrum(b.Samples, n);
+            var sa = AverageSpectrum(a.Samples, Scales[scale]);
+            var sb = targetSpectra[scale];
             if (sa is null || sb is null) continue;
             var acc = 0.0;
             for (var i = 0; i < sa.Length; i++)
@@ -67,7 +90,7 @@ public static class MultiScaleSpectralDistance
         var hop = n / 4;
         var bins = n / 2 + 1;
         var acc = new double[bins];
-        var window = Hann(n);
+        var window = Windows.GetOrAdd(n, Hann);
         var re = new double[n];
         var im = new double[n];
         var frames = 0;

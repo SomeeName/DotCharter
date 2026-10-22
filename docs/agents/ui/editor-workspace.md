@@ -185,9 +185,10 @@ Related: the rails around it (menu bar / toolbar / status rail / popovers) are
   - **Open hand-shape suggestions (#639) are a faint band each** — the hand-shape
     bar colour at low alpha from under the section band to the bottom edge, with a
     stronger bar along the bottom, drawn UNDER the selection and preview marks.
-    `MinimapOverviewControl.DrawSuggestions` holds its own `HandShapeSuggestionLatch`
-    over the lane's inputs (active level, View ▸ Show suggested hand shapes, history
-    revision), so the detector reruns only on an edit; no new repaint path — an edit
+    `MinimapOverviewControl.DrawSuggestions` reads the editor's ONE shared
+    `HandShapeSuggestionLatch` (`ChartEditorViewModel.SharedHandShapeSuggestions`) over the
+    lane's inputs (active level, View ▸ Show suggested hand shapes, history revision), so the
+    detector reruns only on an edit, once for the map, the timeline and the tool alike; no new repaint path — an edit
     and the View toggle already reach the map through `RequestRendererRedraw`.
     `UI/Controls/SongMapSuggestionMarksTests`, `Perf/MinimapUseMarksUiPerfSmokeTests`.
   - **…and since 0.61 the strip is DRAWN on that same effective length, which

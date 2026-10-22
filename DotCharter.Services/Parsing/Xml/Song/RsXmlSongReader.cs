@@ -742,7 +742,7 @@ internal sealed class RsXmlSongReader
             VibratoStrength = Fmt.AttrInt(el, E.VibratoAttr),
             Tremolo = Fmt.AttrInt(el, E.TremoloAttr) != 0,
             LinkNext = Fmt.AttrInt(el, E.LinkNext) != 0,
-            // RsXmlSongWriter.WriteChordNote writes it; the .rscp and EOF readers keep it.
+            // RsXmlSongWriter.WriteChordNote writes it; the .dcproj and EOF readers keep it.
             Ignore = Fmt.AttrInt(el, E.Ignore) != 0,
         };
 

@@ -18,7 +18,7 @@ namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 ///         <see cref="Arrangement" /> is required for one reason and it is not
 ///         optional: a <c>ChordTemplate</c> is SHARED, so any verb that changes
 ///         a chord note's FRET or STRING must resolve-or-create a template with
-///         the new shape and repoint <c>TemplateId</c>. In the <c>.rscp</c> a
+///         the new shape and repoint <c>TemplateId</c>. In the <c>.dcproj</c> a
 ///         <c>&lt;chordNote&gt;</c> carries no <c>fret</c> attribute at all — the
 ///         reader takes it from the template — so a fret change that does not
 ///         repoint is DISCARDED on the next save (format audit 02 §6.5).

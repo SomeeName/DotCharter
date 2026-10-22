@@ -23,6 +23,8 @@ public class DroppedFileRoutingTests
     [Theory]
     // Projects
     [InlineData("song.rscp", DroppedFileRoute.Project)]
+    [InlineData("project.dcproj", DroppedFileRoute.Project)]
+    [InlineData("SONG.DCPROJ", DroppedFileRoute.Project)]
     [InlineData("SONG.RSCP", DroppedFileRoute.Project)]
     [InlineData("song.dcsong", DroppedFileRoute.Project)]
     [InlineData("SONG.DCSONG", DroppedFileRoute.Project)]
@@ -99,6 +101,7 @@ public class DroppedFileRoutingTests
     public void Route_LooksThroughTheAtomicSaveTempSuffix()
     {
         Assert.Equal(DroppedFileRoute.Project, DroppedFileRouter.Route("project.rscp.saving", readsGamePackages: true));
+        Assert.Equal(DroppedFileRoute.Project, DroppedFileRouter.Route("project.dcproj.saving", readsGamePackages: true));
         Assert.Equal(".rscp", DroppedFileRouter.ExtensionOf("project.rscp.SAVING"));
     }
 

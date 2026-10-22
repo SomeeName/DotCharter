@@ -16,7 +16,7 @@ namespace DotCharter.Services.Export.DlcBuilder;
 ///     will live in, which is what upstream's <c>DLCProject.toRelativePaths</c> does
 ///     on save and <c>toAbsolutePaths</c> undoes on load.
 ///     <para>
-///         The project file sits in the PROJECT ROOT, beside the <c>.rscp</c> and
+///         The project file sits in the PROJECT ROOT, beside the <c>.dcproj</c> and
 ///         the audio — so the audio and album art are bare file names and the
 ///         arrangements are reached through <c>DTRS XML/</c>. It deliberately does
 ///         NOT live inside that folder: <c>SaveDlcBuilderXmlBundle</c> swaps the
@@ -27,8 +27,8 @@ namespace DotCharter.Services.Export.DlcBuilder;
 /// </remarks>
 public static class Rs2DlcProjectBuilder
 {
-    /// <summary>Rocksmith stores every tuning in six slots whatever the
-    /// instrument, and DLC Builder's DTO is a six-element array.</summary>
+    /// <summary>Rocksmith stores every stock tuning in six slots whatever the
+    /// instrument, and a stock DLC Builder's DTO is a six-element array.</summary>
     private const int TuningSlots = 6;
 
     /// <summary>
@@ -52,12 +52,18 @@ public static class Rs2DlcProjectBuilder
     ///     Independent of the one-arrangement-per-track shape below, which is
     ///     deliberate.
     /// </param>
+    /// <param name="SixStringProjection">
+    ///     <c>AppConfig.RsXmlSixStringProjection</c>, the setting the bundle's XML follows. Off, a
+    ///     7-/8-string guitar's tuning lists every string, as the XML's <c>string0</c>..<c>stringN</c> do,
+    ///     so the project and the XML name the same strings; on, it keeps the six stock slots.
+    /// </param>
     public readonly record struct Rs2DlcBuildOptions(
         string AudioFileName,
         string CoverArtFileName,
         double? AudioLengthMs,
         string FallbackCharter,
-        bool IncludeVocals = true);
+        bool IncludeVocals = true,
+        bool SixStringProjection = true);
 
     /// <summary>
     ///     Projects a saved chart into the <c>.rs2dlc</c> DTO.
@@ -125,7 +131,7 @@ public static class Rs2DlcProjectBuilder
             // than leaving a path that resolves to the project folder.
             AudioPreviewFile = new Rs2DlcAudioFile { Path = PreviewPathFor(options.AudioFileName) },
             IgnoredIssues = [],
-            Arrangements = BuildArrangements(project, dlcKey, options.IncludeVocals),
+            Arrangements = BuildArrangements(project, dlcKey, options.IncludeVocals, options.SixStringProjection),
             Tones = BuildTones(project)
         };
     }
@@ -209,7 +215,7 @@ public static class Rs2DlcProjectBuilder
     }
 
     private static Rs2DlcArrangementDto[] BuildArrangements(ChartProject project, string dlcKey,
-        bool includeVocals)
+        bool includeVocals, bool sixStringProjection)
     {
         var entries = new List<Rs2DlcArrangementDto>();
 
@@ -243,7 +249,7 @@ public static class Rs2DlcProjectBuilder
                         // "no preference", which is what DLC Builder shows too.
                         ScrollSpeed = arrangement.ScrollSpeed ?? 1.3,
                         BassPicked = arrangement.PickedBass,
-                        Tuning = TuningVector(arrangement),
+                        Tuning = TuningVector(arrangement, !sixStringProjection),
                         TuningPitch = PitchFromCents(arrangement.CentOffset),
                         BaseTone = tones.BaseTone,
                         Tones = tones.Slots,
@@ -297,20 +303,29 @@ public static class Rs2DlcProjectBuilder
     /// <summary>
     ///     Six semitone offsets, low → high. DotCharter stores one
     ///     <see cref="TuningOffset" /> per string and a chart may have 4-9 of them;
-    ///     the RS slot count is fixed at six, so a shorter vector is zero-padded and
-    ///     a longer one is truncated to what the format can spell.
+    ///     the stock RS slot count is six, so a shorter vector is zero-padded and
+    ///     a longer one is truncated to what a stock tool can spell.
     /// </summary>
-    public static short[] TuningVector(Arrangement arrangement)
+    public static short[] TuningVector(Arrangement arrangement) => TuningVector(arrangement, false);
+
+    /// <summary>
+    ///     The tuning slots of <paramref name="arrangement" />. With <paramref name="allStrings" /> an
+    ///     extended (7-/8-string) guitar gets one slot per string in the rs7string package order, the
+    ///     values and order of the XML's <c>string0</c>..<c>stringN</c>; every other arrangement, and
+    ///     an extended guitar without it, gets the six stock slots.
+    /// </summary>
+    public static short[] TuningVector(Arrangement arrangement, bool allStrings)
     {
         ArgumentNullException.ThrowIfNull(arrangement);
 
         var offsets = TuningOffsetResolution.Resolve(arrangement);
-        var tuning = new short[TuningSlots];
+        var extended = Rs7StringLayout.IsExtendedGuitar(arrangement);
+        var slots = extended && allStrings ? arrangement.StringCount : TuningSlots;
+        var tuning = new short[slots];
         // A 7-/8-string guitar's six slots are the six STOCK strings of the six-string
         // projection the bundle's XML carries: package order, not the chart's
         // lowest-first order, whose first six would be the wrong strings.
-        var extended = Rs7StringLayout.IsExtendedGuitar(arrangement);
-        for (var i = 0; i < TuningSlots; i++)
+        for (var i = 0; i < slots; i++)
         {
             var chartString = extended ? Rs7StringLayout.ToDomain(i, arrangement.StringCount) : i;
             if (chartString < offsets.Count)

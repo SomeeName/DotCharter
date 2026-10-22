@@ -135,6 +135,37 @@ public sealed class PackageReaderOffUiPerfSmokeTests
         }, CancellationToken.None);
     }
 
+    private static IEnumerable<MenuItem> Rows(ItemsControl root) =>
+        root.Items.OfType<MenuItem>().SelectMany(item => new[] { item }.Concat(Rows(item)));
+
+    private static List<MenuItem> PackageRows(ItemsControl root) =>
+        Rows(root).Where(m => ContestedMenu.GetFeature(m) == PackageFeatures.GamePackagesId).ToList();
+
+    [Fact]
+    public async Task TheFileMenu_HasTheConvertRow_OnlyWhenTheBuildReadsPackages()
+    {
+        await WithReaderOff(services =>
+        {
+            var vm = services.GetRequiredService<MainWindowViewModel>();
+
+            // The row is there before anything prunes it: a menu that never had it would pass the next lines vacuously.
+            var bare = new FileMenu();
+            Assert.Single(PackageRows(bare));
+
+            // A build with the reader keeps it, one without removes it.
+            var withReader = new FileMenu();
+            Assert.Equal(0, ContestedMenu.Prune(withReader, ContestedFeatures.Enabled, PackageFeatures.All));
+            Assert.Single(PackageRows(withReader));
+            var without = new FileMenu();
+            Assert.Equal(1, ContestedMenu.Prune(without, ContestedFeatures.Enabled, PackageFeatures.None));
+            Assert.Empty(PackageRows(without));
+
+            // And the booted reader-off app does it itself when the shell's view model arrives.
+            var booted = new FileMenu { DataContext = vm };
+            Assert.Empty(PackageRows(booted));
+        });
+    }
+
     [Fact]
     public async Task APackageMarkedMenuRow_IsRemoved_OnlyWithoutTheReader()
     {

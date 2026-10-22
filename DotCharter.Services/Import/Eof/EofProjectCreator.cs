@@ -3,6 +3,7 @@ using DotCharter.Services.Audio.Coordination;
 using DotCharter.Services.Editing;
 using DotCharter.Services.Infrastructure.Documents;
 using DotCharter.Services.Parsing.Eof;
+using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Services.Session;
 using DotCharter.Services.State;
 
@@ -139,7 +140,7 @@ public sealed class EofProjectCreator(
         var projectDir = NewProjectFolder.Create(baseDir, folderName);
         var audioFileName = $"song{Path.GetExtension(selection.AudioPath)}";
         var destAudioPath = Path.Combine(projectDir, audioFileName);
-        var projectPath = Path.Combine(projectDir, "project.rscp");
+        var projectPath = ProjectFiles.DefaultPath(projectDir);
         var appConfig = config.LoadAppConfig();
 
         // Silence padding is NOT applied: the beat map and every note are

@@ -230,6 +230,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
     private readonly LyricAcousticSessionOpener _openSession;
     private readonly Func<string, IList<string>, float[]> _loadAudio;
     private readonly ILocalizationService _localization;
+    private readonly LyricProviderMemory _providerMemory;
 
     /// <param name="localization">Resolves the status and progress text the user reads.</param>
     /// <param name="logger">App logger.</param>
@@ -255,6 +256,11 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
     ///     selection — it is how the standalone CLI's <c>--model-dir</c> can still
     ///     find both heads and ensemble them.
     /// </param>
+    /// <param name="providerMemory">
+    ///     Which models already failed on a GPU provider and open on the CPU; null
+    ///     uses <see cref="LyricProviderMemory.Process" />, so the choice outlives
+    ///     one sync. A test hook for the same reason as the other seams.
+    /// </param>
     public LyricAutoSyncService(
         ILocalizationService localization,
         IAppLogger? logger = null,
@@ -262,9 +268,11 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         Func<string, string?>? vocalStemLocator = null,
         LyricAcousticSessionOpener? sessionOpener = null,
         Func<string, IList<string>, float[]>? audioLoader = null,
-        IReadOnlyList<string>? modelRoots = null)
+        IReadOnlyList<string>? modelRoots = null,
+        LyricProviderMemory? providerMemory = null)
     {
         _localization = localization;
+        _providerMemory = providerMemory ?? LyricProviderMemory.Process;
         _logger = logger;
         _vocalStem = vocalStemLocator ?? VocalStemLocator.TryLocate;
         _openSession = sessionOpener ?? LyricAcousticSessionFactory.Default;
@@ -433,8 +441,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             var chosen = selection.Primary;
 
             progress?.Report(_localization["Progress_ListeningVocal"]);
-            using var model = _openSession(
-                chosen, options.Provider, m => _logger?.Info(AppLogCategory.Audio, m));
+            using var model = OpenSession(chosen, options.Provider);
 
             var emissions = model.Encode(audio, ct);
             ct.ThrowIfCancellationRequested();
@@ -448,8 +455,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
                 progress?.Report(_localization["Progress_ListeningAgain"]);
                 emissions = BlendOptionalSecondary(emissions, primary =>
                     {
-                        using var other = _openSession(
-                            secondary, options.Provider, m => _logger?.Info(AppLogCategory.Audio, m));
+                        using var other = OpenSession(secondary, options.Provider);
 
                         return CtcEmissionBlender.Blend(
                             primary, other.Encode(audio, ct),
@@ -508,6 +514,17 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             return LyricSyncResult.Failed(ex.Message, warnings);
         }
     }
+
+    /// <summary>
+    ///     Opens one head so that a failed GPU run is answered on the CPU
+    ///     (<see cref="LyricProviderFallbackSession" />). Every head goes through
+    ///     here, the optional second one included: each is remembered on its own.
+    /// </summary>
+    private ILyricAcousticSession OpenSession(LyricModel model, OnnxExecutionProvider provider) =>
+        new LyricProviderFallbackSession(
+            model, provider, _openSession, _providerMemory,
+            m => _logger?.Info(AppLogCategory.Audio, m),
+            m => _logger?.Warning(AppLogCategory.Audio, m));
 
     /// <summary>
     ///     Zips the sheet's structure back onto the aligner's times. The two are

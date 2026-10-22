@@ -136,6 +136,8 @@ public sealed class FrontDoorLastSessionReadTests : IDisposable
 
         public void InvalidateCache() { }
         public bool IsStoreAuthoritative => true;
+
+        public int RekeySong(string fromSongKey, string toSongKey) => 0;
         public bool AttachTakeFile(string songKey, string arrangementName, string takeFileName) => false;
         public bool AttachReplayFile(string songKey, string arrangementName, string replayFileName) => false;
     }

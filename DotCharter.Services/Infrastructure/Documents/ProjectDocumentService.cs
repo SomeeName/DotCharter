@@ -4,6 +4,7 @@ using DotCharter.Services.Export;
 using DotCharter.Services.Export.DlcBuilder;
 using DotCharter.Services.Export.DynamicDifficulty;
 using DotCharter.Services.Parsing;
+using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Services.Parsing.Xml;
 using DotCharter.Services.Parsing.Xml.Showlights;
 using DotCharter.Services.Parsing.Xml.Song;
@@ -26,7 +27,7 @@ public class ProjectDocumentService : IProjectDocumentService
 
     /// <summary>
     ///     The atomic-write temp suffix used by save paths (write to
-    ///     <c>project.rscp.saving</c>, then swap in). The serializer is chosen by
+    ///     <c>project.dcproj.saving</c>, then swap in). The serializer is chosen by
     ///     the REAL extension underneath it — the temp suffix must never change
     ///     which format gets written, and a leftover temp stays loadable.
     /// </summary>
@@ -41,7 +42,8 @@ public class ProjectDocumentService : IProjectDocumentService
         var ext = Path.GetExtension(name).ToLowerInvariant();
         return ext switch
         {
-            ".rscp" => "rscp",
+            // A .dcproj and a Charter .rscp share one XML format, so one serializer reads both.
+            ProjectFiles.Extension or CharterRscp.Extension => "rscp",
             ".xml" => "xml",
             _ => throw new NotSupportedException($"File format {ext} is not supported.")
         };
@@ -139,11 +141,11 @@ public class ProjectDocumentService : IProjectDocumentService
         if (Directory.Exists(stagingDirectory)) Directory.Delete(stagingDirectory, true);
         Directory.CreateDirectory(stagingDirectory);
 
-        // DLC Builder is the bundle's consumer and indexes six-wide arrays, so a 7-/8-string
-        // guitar goes in as its six-string projection. Six-string guitars and basses
-        // are written exactly as before.
+        // The bundle follows the same "RS XML for 6-string tools" option as the saved .xml: off
+        // writes every string the chart has (for rs7string tooling), on writes the six-string
+        // projection a stock DLC Builder indexes. Six-string guitars and basses are identical either way.
         var config = TryLoadAppConfig() ?? new AppConfig();
-        var arrangementWriter = new RsXmlSongWriter { SixStringProjection = true, MoverPhrases = config.RsXmlMoverPhrases };
+        var arrangementWriter = new RsXmlSongWriter { SixStringProjection = config.RsXmlSixStringProjection, MoverPhrases = config.RsXmlMoverPhrases };
         var vocalsWriter = new RsXmlVocalsWriter();
         var showlightsWriter = new RsXmlShowlightsWriter();
 

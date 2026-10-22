@@ -204,7 +204,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
 
     /// <summary>
     ///     How long routine news stays on the rail. Without it the rail's one line keeps the LAST thing
-    ///     said forever — "Loaded Chart: project.rscp" for a whole session. Info and
+    ///     said forever — "Loaded Chart: project.dcproj" for a whole session. Info and
     ///     success step aside after this; a warning or an error stays until something replaces it,
     ///     because it still needs the user. The full history is one click away in the log chip.
     /// </summary>
@@ -766,7 +766,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     {
         var proj = _projectState.ActiveProject;
         HasProject = proj != null;
-        // The song, not the file: every project saves as project.rscp, and a song Play
+        // The song, not the file: every project saves as project.dcproj, and a song Play
         // Mode loaded has no file yet but knows its artist and title.
         var name = proj == null
             ? string.Empty

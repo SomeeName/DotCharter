@@ -195,7 +195,7 @@
     Success fade after `StatusBarViewModel.MainMessageFadeMs` (8 s) on the rail's
     once-a-second timer; Warning and Error stay until something replaces them,
     because they still need the user. The line used to keep the last thing said
-    forever ("Loaded Chart: project.rscp" for a whole session). The history is
+    forever ("Loaded Chart: project.dcproj" for a whole session). The history is
     in the log chip. `StatusSeverityTests.RoutineNews_LeavesTheRail_ButAProblemStays`.
   - **A message may carry ONE verb** (#638): `SetMessage(text, severity,
     new StatusMessageAction(label, run))` puts `StatusMessageActionButton` right

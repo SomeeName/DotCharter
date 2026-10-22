@@ -257,15 +257,25 @@ jobs:
       # test down with them. They run in the `headless-ui` JOB below — a
       # separate runner, a separate process. See DotCharter.Tests/AGENTS.md
       # § Running.
+      # The gate itself runs as Invoke-Gate.ps1 does locally: split by whole
+      # classes across concurrent testhosts (tools/ci/GateShards.psm1), the
+      # remainder shard running `--filter-not-class "*UiPerfSmokeTests"` minus
+      # the listed classes, the TRX files merged into TestResults/gate/gate.trx.
+      # -Shards 2, not the 4 a dev box uses: the hosted runner has 2 vCPUs.
+      # -ReleaseLane adds the slow corpus / integration classes the default gate
+      # leaves out (tools/ci/release-lane.json), so a run started by hand tests
+      # the whole non-headless suite; their TRX files land in the same folder.
       - name: Test
-        run: dotnet test --project DotCharter.Tests/DotCharter.Tests.csproj -c Release -r win-x64 --no-build --filter-not-class "*UiPerfSmokeTests" --report-xunit-trx --report-xunit-trx-filename test-results.trx --results-directory TestResults
+        run: pwsh -NoProfile -File tools/agent/Invoke-Gate.ps1 -Gate -NoBuild -ReleaseLane -Configuration Release -Runtime win-x64 -Shards 2 -ResultsDir TestResults
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-results
-          path: '**/TestResults/*.trx'
+          path: |
+            TestResults/gate/gate.trx
+            TestResults/gate/gate-durations.json
           if-no-files-found: ignore
           retention-days: 7
 

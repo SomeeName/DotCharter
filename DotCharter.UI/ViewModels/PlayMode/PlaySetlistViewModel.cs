@@ -50,6 +50,7 @@ public sealed partial class PlaySetlistViewModel : ObservableObject,
     private Guid _loadedProfile;
     private Task? _loading;
     private Task _saving = Task.CompletedTask;
+    private Task _refreshing = Task.CompletedTask;
     private int _speedBeforeRun = 100;
 
     /// <summary>Set while a setlist verb moves Play Mode itself, so the Song Select
@@ -172,6 +173,9 @@ public sealed partial class PlaySetlistViewModel : ObservableObject,
     /// <summary>Completes when every save queued so far has landed (tests).</summary>
     public Task WhenSaved => _saving;
 
+    /// <summary>Completes when the latest re-read of the store has been applied (tests).</summary>
+    public Task WhenRefreshed => _refreshing;
+
     private async Task LoadCoreAsync()
     {
         if (_store == null || _profiles == null) return;
@@ -194,7 +198,36 @@ public sealed partial class PlaySetlistViewModel : ObservableObject,
     private void EnsureLoaded()
     {
         if (_loading == null) _ = LoadAsync();
+        else if (!IsRunning) _refreshing = RefreshAsync();
     }
+
+    /// <summary>
+    ///     Picks up what changed in the store while Play Mode was away: a project that moved to a new
+    ///     path (the <c>.rscp</c> to <c>.dcproj</c> migration) has its setlist songs retargeted on disk,
+    ///     and the lists in memory would save the old path back over it on the next edit. Reads after
+    ///     the queued saves and replaces the lists only when they differ, keeping the picked one.
+    /// </summary>
+    private async Task RefreshAsync()
+    {
+        if (_store == null || _profiles == null || _loading is not { IsCompleted: true }) return;
+        await _saving;
+        var profile = _profiles.ActiveProfile.Id;
+        if (profile != _loadedProfile) return; // a profile switch reads the new profile's lists itself
+        var store = _store;
+        var read = await Task.Run(() => store.Load(profile));
+        if (read.Outcome != PlaySetlistReadOutcome.Loaded || IsRunning || !_saving.IsCompleted) return;
+        if (Describe(read.Setlists) == Describe(Lists.Select(l => l.Setlist))) return;
+
+        var picked = SelectedList?.Setlist.Id;
+        Lists.Clear();
+        foreach (var list in read.Setlists) Lists.Add(new PlaySetlistOption(list));
+        SelectedList = Lists.FirstOrDefault(l => l.Setlist.Id == picked) ?? Lists.FirstOrDefault();
+        RaiseListState();
+    }
+
+    private static string Describe(IEnumerable<PlaySetlist> lists) =>
+        string.Join('\n', lists.Select(l => $"{l.Id}|{l.Name}|" + string.Join(";",
+            l.Entries.Select(e => $"{e.SongKey}/{e.Arrangement}/{e.SpeedPercent}"))));
 
     // ── editing ────────────────────────────────────────────────────────────
 

@@ -112,7 +112,8 @@ public sealed class ProjectSessionAttachAudioTests : IDisposable
                 Documents, State, Transport, Editor, new TempoService(logger),
                 new NoOpCrashRecoveryService(), History, new NoOpSaveCompanionService(),
                 uiDispatcher: new TestUiDispatcher(),
-                localization: FakeLocalization.English());
+                localization: FakeLocalization.English(),
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public ProjectState State { get; } = new();

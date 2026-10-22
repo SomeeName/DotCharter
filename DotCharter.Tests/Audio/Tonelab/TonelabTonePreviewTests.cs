@@ -72,13 +72,13 @@ public sealed class TonelabTonePreviewTests : IDisposable
         using var reply = new SemaphoreSlim(0);
         game.Responder = line =>
         {
-            if (line.StartsWith("tone knob ", StringComparison.Ordinal)) reply.Wait(TimeSpan.FromSeconds(10));
+            if (line.StartsWith("tone knob ", StringComparison.Ordinal)) reply.Wait(TimeSpan.FromSeconds(60));
             return "ok";
         };
         preview.Apply(WithKnob(Tone(), knob, max));
         _scheduler.Elapse();
         var inFlight = preview.LastTask;
-        Assert.True(SpinWait.SpinUntil(() => game.Commands().Any(c => c.StartsWith("tone knob ", StringComparison.Ordinal)), TimeSpan.FromSeconds(10)));
+        Assert.True(SpinWait.SpinUntil(() => game.Commands().Any(c => c.StartsWith("tone knob ", StringComparison.Ordinal)), TimeSpan.FromSeconds(60)));
 
         // three more drags while the game has not answered: none of them may queue a command
         var latest = (min + max) / 2;

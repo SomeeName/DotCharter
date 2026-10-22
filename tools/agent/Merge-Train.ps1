@@ -12,8 +12,10 @@
       2. each PR's head merged into it, in the given order, with `--no-ff` -
          the same three-way merges GitHub's "Create a merge commit" performs;
       3. the full default gate, plus the headless suite when the train touches
-         a view (.axaml, Views/) or when -Headless is given - or, when the train
-         changes only documentation, the docs fast path (below);
+         a view (.axaml, Views/) or when -Headless is given, plus the RELEASE
+         LANE (tools/ci/release-lane.json: the slow corpus / integration classes
+         the default gate leaves out) - or, when the train changes only
+         documentation, the docs fast path (below);
       4. with -Merge and everything green: each PR merged on GitHub in the SAME
          order, after checking its head did not move since it was tested.
 
@@ -31,17 +33,26 @@
     only `*.md` files and files under `docs/` (a .resx is NOT docs), the gate
     is the build plus the lints that read those files
     (Get-MergeTrainDocsOnlyClasses in tools/agent/MergeTrain.psm1, among them
-    DocReferenceLintTests), not the full suite. -Headless asks for the full
-    path.
+    DocReferenceLintTests), not the full suite or the release lane. -Headless
+    asks for the full path.
+
+    THE RELEASE LANE runs after a green gate (and headless suite) on every train
+    that is not docs-only, as its own Invoke-Gate.ps1 -ReleaseLane call, so the
+    classes moved out of the default gate are never dropped from a merge. The
+    green tree is recorded with it (ReleaseCache.psm1 -ReleaseLane), which
+    New-Release.ps1 reuses.
 
     OWN PROCESSES ONLY. Before the reset and after the gates, the train stops
     stray test hosts whose executable or command line lies inside the train
     worktree (Select-MergeTrainOwnProcesses), and no others: other agents'
     gates run at the same time.
 
-    CPUS. On a box with 16 or more logical processors the train moves itself
-    to CPUs 8-15 at below-normal priority before it starts anything; git, the
-    build and every test host inherit both (the owner games on CPUs 0-7).
+    CPUS (#171). On a box with 16 or more logical processors the train pins
+    itself at below-normal priority before it starts anything: CPUs 8-15 by
+    default (the owner games on CPUs 0-7), ALL cores only with -AllCores, passed
+    by hand. Git, the build and every test host inherit it, and the child gates
+    get the same switch.
+    tools/agent/DevBuild.psm1 holds the decision.
 
     The headless suite's known harness faults (the needles in
     tools/ci/HeadlessShards.psm1: the setup race of #192, Avalonia's 5 s
@@ -68,8 +79,10 @@
     Run the headless suite even when no PR touches a view (and never take the
     docs fast path).
 .PARAMETER Shards
-    Headless shards (default 4, as Invoke-Gate.ps1 -Headless and the release
-    preflight).
+    Shards per suite (default: 4 on CPUs 8-15, 8 on all cores): the default gate's (tools/ci/GateShards.psm1)
+    and the headless suite's, as Invoke-Gate.ps1 and the release preflight. When
+    the train needs both suites they run in ONE Invoke-Gate.ps1 -Gate -Headless
+    call, concurrently when enough memory is free.
 .PARAMETER RaceReruns
     How many times a headless class whose every failure is a harness fault is
     re-run alone before the train stops (default 2; 0 = stop on the first).
@@ -85,8 +98,11 @@ param(
     [Parameter(Mandatory)][string[]]$Prs,
     [switch]$Merge,
     [switch]$Headless,
-    [ValidateRange(1, 16)]
-    [int]$Shards = 4,
+    # 0 (default) follows the CPU plan: 4 on CPUs 8-15, 8 on all cores.
+    [ValidateRange(0, 16)]
+    [int]$Shards = 0,
+    # CPU plan (#171): default CPUs 8-15; -AllCores by hand uses every core (children too).
+    [switch]$AllCores,
     [ValidateRange(0, 5)]
     [int]$RaceReruns = 2,
     [switch]$Fresh
@@ -95,6 +111,7 @@ param(
 $ErrorActionPreference = 'Stop'
 [int[]]$Prs = @($Prs | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ } | ForEach-Object { [int]$_ })
 Import-Module (Join-Path $PSScriptRoot 'MergeTrain.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'DevBuild.psm1') -Force
 # The MAIN checkout, even when this runs from a worktree: worktrees are created
 # under it (the dotcharter-worktree script resolves the same way).
 $common = "$(git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir)".Trim() -replace '/', '\'
@@ -104,22 +121,15 @@ $wt = Join-Path $main '.claude\worktrees\train'
 $branch = 'train/current'
 $lock = Join-Path $common 'dotcharter-merge-train.lock'
 
-# CPUs 8-15, below-normal priority, inherited by every process started below.
-# Only ever narrowed and lowered: a caller already pinned (or at idle) stays so.
-if ([int]$env:NUMBER_OF_PROCESSORS -ge 16) {
-    $self = [Diagnostics.Process]::GetCurrentProcess()
-    $mask = [int64]$self.ProcessorAffinity -band 0xFF00
-    if ($mask -ne 0) { $self.ProcessorAffinity = [IntPtr]$mask }
-    if (@('Idle', 'BelowNormal') -notcontains [string]$self.PriorityClass) { $self.PriorityClass = 'BelowNormal' }
-}
+# CPU plan (#171, DevBuild.psm1): CPUs 8-15 by default, all cores only with -AllCores;
+# below-normal priority, inherited by every process started below. The child
+# gates get the same choice as a switch.
+$cpuPlan = Set-DevCpuPlan -AllCores:$AllCores
+if ($Shards -eq 0) { $Shards = $cpuPlan.Shards }
+$cpuSwitch = @(if ($cpuPlan.Name -eq 'all') { '-AllCores' })
 
-# The SDK's implicit SourceLink stamps HEAD's commit id into every project's
-# AssemblyInformationalVersion (and its SourceLink file, a compiler input). A
-# train's HEAD is a NEW merge commit every run, so with it on, every project
-# recompiles and the kept bin/obj save nothing (measured on #668: 187 s both
-# cold and "incremental"). Off for the train's builds only; product code reads
-# the version with or without the `+sha` suffix (RscpFormatContract, AppVersionTests).
-$env:SuppressImplicitGitSourceLink = 'true'
+# Dev builds keep bin/obj incremental (SourceLink off: tools/agent/DevBuild.psm1).
+Enable-IncrementalDevBuild
 
 function Invoke-Git([string[]]$GitArgs, [string]$Dir = $main) {
     $ErrorActionPreference = 'Continue'
@@ -254,44 +264,84 @@ try {
     $gated = Get-Date
     Push-Location $wt
     try {
+        $headlessOk = $true
+        $raceRerun = ''
+        $ranHeadless = $false
         if ($docsOnly) {
             $docsClasses = (Get-MergeTrainDocsOnlyClasses) -join ','
             Write-Host "  docs only ($($changed.Count) file(s)): build + $docsClasses"
-            & powershell -NoProfile -File $gate -FilterClass $docsClasses | Out-Host
+            & powershell -NoProfile -File $gate @cpuSwitch -FilterClass $docsClasses | Out-Host
+            $gateOk = $LASTEXITCODE -eq 0
         }
-        else {
-            & powershell -NoProfile -File $gate -Gate | Out-Host
-        }
-        $gateOk = $LASTEXITCODE -eq 0
-        $headlessOk = $true
-        $raceRerun = ''
-        $ranHeadless = $gateOk -and ($Headless -or $touchesViews)
-        if ($ranHeadless) {
-            & powershell -NoProfile -File $gate -Headless -Shards $Shards -NoBuild -RaceReruns $RaceReruns |
+        elseif ($Headless -or $touchesViews) {
+            # ONE call, so the gate's shards and the headless shards run at the
+            # same time when memory allows. Invoke-Gate ends with
+            # `gate + headless: gate exit G, headless exit H` - or, when it ran
+            # them one after the other and the gate was red, never started the
+            # headless suite.
+            & powershell -NoProfile -File $gate @cpuSwitch -Gate -Headless -Shards $Shards -RaceReruns $RaceReruns |
                 Tee-Object -Variable headlessOut | Out-Host
-            $headlessOk = $LASTEXITCODE -eq 0
+            $code = $LASTEXITCODE
+            $both = [string](@($headlessOut) | Where-Object { "$_" -match '^gate \+ headless: gate exit (-?\d+), headless exit (-?\d+)' } | Select-Object -First 1)
+            if ($both -and $both -match 'gate exit (-?\d+), headless exit (-?\d+)') {
+                $gateOk = [int]$Matches[1] -eq 0
+                $headlessOk = [int]$Matches[2] -eq 0
+                $ranHeadless = $true
+            }
+            else {
+                $ranHeadless = [bool](@($headlessOut) | Where-Object { "$_" -match '^headless: ' } | Select-Object -First 1)
+                $gateOk = $ranHeadless -or $code -eq 0
+                $headlessOk = $code -eq 0
+            }
             # Invoke-Gate prints `headless race re-run: PASSED ...` when the run is
             # green only because harness-fault classes passed alone afterwards.
             $raceRerun = [string](@($headlessOut) | Where-Object { "$_" -match 'headless race re-run: PASSED' } | Select-Object -First 1)
+        }
+        else {
+            & powershell -NoProfile -File $gate @cpuSwitch -Gate -Shards $Shards | Out-Host
+            $gateOk = $LASTEXITCODE -eq 0
+        }
+        # The release lane (tools/ci/release-lane.json), after a green gate: the slow
+        # classes the default gate leaves out. Its own call, so its verdict is its own.
+        $releaseOk = $true
+        $ranRelease = $false
+        if (-not $docsOnly -and $gateOk -and $headlessOk) {
+            & powershell -NoProfile -File $gate @cpuSwitch -ReleaseLane -NoBuild -Shards $Shards | Out-Host
+            $releaseOk = $LASTEXITCODE -eq 0
+            $ranRelease = $true
         }
     }
     finally { Pop-Location }
     $gateSeconds = [int]((Get-Date) - $gated).TotalSeconds
     Stop-TrainTestHosts
 
-    $verdict = if (-not $gateOk) { 'gate RED' } elseif (-not $headlessOk) { 'headless RED' } else { 'GREEN' }
+    $verdict = if (-not $gateOk) { 'gate RED' } elseif (-not $headlessOk) { 'headless RED' } elseif (-not $releaseOk) { 'release lane RED' } else { 'GREEN' }
     $gateKind = if ($docsOnly) { 'docs fast path' } else { 'full gate' }
     $headlessNote = if ($ranHeadless -and $raceRerun) { "run; GREEN AFTER A RACE RE-RUN -$($raceRerun.Trim() -replace '^headless race re-run: PASSED', '')" } `
-        elseif ($ranHeadless) { 'run' } elseif (-not $gateOk) { 'skipped: the gate is red' } elseif ($docsOnly) { 'not needed: docs only' } `
+        elseif ($ranHeadless -and -not $gateOk) { 'run alongside the red gate' } elseif ($ranHeadless) { 'run' } elseif (-not $gateOk) { 'skipped: the gate is red' } elseif ($docsOnly) { 'not needed: docs only' } `
         else { 'not needed: no view changes' }
     # Invoke-Gate keeps a failed headless run's TRX and messages (#55) and prints where.
     $evidenceLine = [string](@($headlessOut) | Where-Object { "$_" -match 'headless failure evidence kept:' } | Select-Object -First 1)
     if ($evidenceLine) { Write-Host "== $($evidenceLine.Trim())" }
     $worktreeNote = if ($rebuild) { "fresh: $rebuild" } else { 'incremental' }
-    Write-Host "== Train $($Prs -join ', '): $verdict ($gateKind; headless $headlessNote) - worktree $worktreeNote ${prepareSeconds}s, gates ${gateSeconds}s"
+    $releaseNote = if ($ranRelease -and $releaseOk) { 'run' } elseif ($ranRelease) { 'RED' } elseif ($docsOnly) { 'not needed: docs only' } else { 'skipped: an earlier gate is red' }
+    Write-Host "== Train $($Prs -join ', '): $verdict ($gateKind; headless $headlessNote; release lane $releaseNote) - worktree $worktreeNote ${prepareSeconds}s, gates ${gateSeconds}s"
     if ($verdict -ne 'GREEN') {
         Write-Host "Nothing merged. Re-run a red class alone before calling it a flake; the train worktree is $wt"
         exit 1
+    }
+
+    # The green tree on record (tools/release/ReleaseCache.psm1), so the public export's
+    # -Gate and New-Release's headless preflight skip the identical test run on it.
+    if (-not $docsOnly) {
+        Import-Module (Join-Path $PSScriptRoot '..\release\ReleaseCache.psm1') -Force
+        $trainTree = Get-CleanTreeId -Repo $wt
+        if ($trainTree) {
+            $recordArgs = @{ Tree = $trainTree; Commit = (Invoke-Git @('rev-parse', 'HEAD') $wt).Out; Gate = $true; Headless = $ranHeadless; ReleaseLane = $ranRelease; Source = "Merge-Train.ps1 ($($Prs -join ', '))" }
+            $recordPath = Save-GateRecord @recordArgs
+            Write-Host "== Recorded: green full gate$(if ($ranHeadless) { ' + headless' })$(if ($ranRelease) { ' + release lane' }) on tree $trainTree ($recordPath)"
+        }
+        else { Write-Host '== Not recorded: the train worktree is not clean HEAD.' }
     }
 
     # ---- 4. merge in the tested order ----------------------------------------
@@ -300,7 +350,7 @@ try {
         exit 0
     }
 
-    $tested = if ($docsOnly) { 'the build and the docs lints (a docs-only train)' } else { "the full gate$(if ($ranHeadless) { ' and the headless suite' })" }
+    $tested = if ($docsOnly) { 'the build and the docs lints (a docs-only train)' } else { "the full gate and the release lane$(if ($ranHeadless) { ' and the headless suite' })" }
     foreach ($p in $info) {
         $now = (gh pr view $p.Number --repo $repo --json headRefOid | ConvertFrom-Json).headRefOid
         if ($now -ne $p.Head) {

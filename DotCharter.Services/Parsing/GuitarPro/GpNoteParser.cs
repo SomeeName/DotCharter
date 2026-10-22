@@ -123,6 +123,16 @@ public sealed class GpNoteParser
         noteNode.Element("Tie")?.Attribute("destination")?.Value == "true";
 
     /// <summary>
+    ///     Whether the node is the ORIGIN half of a hammer-on or pull-off (GP's
+    ///     <c>HopoOrigin</c> property; the destination note carries
+    ///     <c>HopoDestination</c>, which <see cref="ApplyHopo" /> reads). Needed on its
+    ///     own for a grace note: the grace is the sound the legato starts from.
+    /// </summary>
+    public static bool IsHopoOrigin(XElement noteNode) =>
+        noteNode.Element("Properties")?.Elements("Property")
+            .Any(p => p.Attribute("name")?.Value == "HopoOrigin") == true;
+
+    /// <summary>
     ///     The node's GP string index (already DotCharter's low-pitch-first
     ///     convention, see <see cref="ApplyNoteAttributes" />), or <c>-1</c> when
     ///     the node names none. Same "classify before parsing" purpose as

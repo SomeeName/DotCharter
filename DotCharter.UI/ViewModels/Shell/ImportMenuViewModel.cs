@@ -16,6 +16,7 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
     private readonly MidiImportLauncher? _midiImport;
     private readonly GpImportLauncher? _gpImport;
     private readonly YoutubeAudioLauncher? _youtubeAudio;
+    private readonly PackageConversionLauncher? _packageConversion;
     private readonly AlignToRecordingOffer _alignOffer;
     private readonly GpLinkSuggestionOffer? _linkOffer;
 
@@ -28,7 +29,8 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
         MidiImportLauncher? midiImport = null,
         GpImportLauncher? gpImport = null,
         YoutubeAudioLauncher? youtubeAudio = null,
-        GpLinkSuggestionOffer? linkOffer = null)
+        GpLinkSuggestionOffer? linkOffer = null,
+        PackageConversionLauncher? packageConversion = null)
     {
         _logger = logger;
         _alignOffer = alignOffer;
@@ -39,6 +41,7 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
         _gpImport = gpImport;
         _youtubeAudio = youtubeAudio;
         _linkOffer = linkOffer;
+        _packageConversion = packageConversion;
     }
 
     /// <summary>File ▸ New project, from the menu, the launch card, the palette and its keybind.</summary>
@@ -99,6 +102,10 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
 
         DialogLaunch.Run(_logger, () => run(launcher), what);
     }
+
+    /// <summary>File ▸ Import ▸ Convert PSARC to DotCharter song: the picker, then every package becomes a .dcsong. Present only when a plugin reads packages.</summary>
+    [RelayCommand]
+    private void ConvertPackages() => LaunchImport(_packageConversion, l => l.PickAsync(), "package conversion");
 
     /// <summary>File ▸ Audio from YouTube: the link dialog, then the attach. Absent from a build with the contested features off.</summary>
     [RelayCommand]

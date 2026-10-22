@@ -48,12 +48,14 @@ binaries), prints counts instead of console noise, and writes the full log to a
 file it names:
 
 ```powershell
-# build + the default gate
+# build + the default gate (4 concurrent shards; prints the 20 slowest classes)
 powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -Gate
 # a few classes while you iterate (wildcards only at either end)
 powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -FilterClass '*MyFeature*'
 # the headless-UI suite, after ANY view or XAML change
 powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -Headless
+# both at once (one after the other when memory is short)
+powershell -NoProfile -File tools/agent/Invoke-Gate.ps1 -Gate -Headless
 ```
 
 **The test suite runs as TWO separate invocations, and that is deliberate.**

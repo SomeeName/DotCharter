@@ -238,7 +238,7 @@ public sealed class RsTonePlaybackCoordinatorTests
         {
             ToneDefinitionSource = _ =>
             {
-                gate.Wait(TimeSpan.FromSeconds(10)); // hold the conversion open
+                gate.Wait(TimeSpan.FromSeconds(60)); // hold the conversion open
                 return new[] { new PsarcToneDefinition("clean", "clean", CleanJson) };
             }
         };
@@ -362,7 +362,7 @@ public sealed class RsTonePlaybackCoordinatorTests
         Assert.Equal(new[] { "amp", "cab", "gain" }, Order(chain));
         state.CurrentTimeMs = 4500;                 // crossed → worker applies "heavy"
 
-        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken),
+        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken),
             "the heavy tone was not applied");
         // Heavy adds a distortion in front of the shared amp/cab/gain tail.
         Assert.Equal(new[] { "ds1", "amp", "cab", "gain" }, Order(chain));
@@ -435,7 +435,7 @@ public sealed class RsTonePlaybackCoordinatorTests
         Assert.Equal(new[] { "amp", "cab", "gain" }, Order(chain));
 
         state.CurrentTimeMs = 4500; // cross the change
-        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken),
+        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken),
             "the padded/upper-case 'HEAVY' tone was not applied");
         Assert.Equal(new[] { "ds1", "amp", "cab", "gain" }, Order(chain));
 
@@ -550,7 +550,7 @@ public sealed class RsTonePlaybackCoordinatorTests
             if (info.ToneName == "heavy") heavyApplied.Set();
         };
         state.CurrentTimeMs = 4500;
-        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken),
+        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken),
             "an own chart's tone change did not switch the rig");
         Assert.Equal(["ds1", "amp", "cab", "gain"], Order(chain));
 
@@ -688,7 +688,7 @@ public sealed class RsTonePlaybackCoordinatorTests
         System.Collections.Concurrent.ConcurrentQueue<string> applied, int count, string because)
     {
         Assert.True(
-            SpinWait.SpinUntil(() => applied.Count >= count, TimeSpan.FromSeconds(2)),
+            SpinWait.SpinUntil(() => applied.Count >= count, TimeSpan.FromSeconds(60)),
             $"{because} (saw {applied.Count} of {count} applies: {string.Join(", ", applied)})");
     }
 
@@ -889,7 +889,7 @@ public sealed class RsTonePlaybackCoordinatorTests
         coord.PrepareForSong("song.psarc", new Arrangement { ToneBase = "other" });
 
         state.CurrentTimeMs = 4500; // the preview's own tone change
-        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken),
+        Assert.True(heavyApplied.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken),
             "the package prepare stole the preview's converted tones");
         Assert.Equal(new[] { "ds1", "amp", "cab", "gain" }, Order(chain));
 
@@ -1066,7 +1066,11 @@ public sealed class RsTonePlaybackCoordinatorTests
 }
 
 /// <summary>Serializes every test that reads/writes the process-wide
-/// <c>GameplayToneHud</c> statics (the coordinator sets them on apply; the
-/// snapshot tests read them) so parallel test classes never interfere.</summary>
+/// <c>GameplayToneHud</c> statics (a coordinator built with the app's HUD adapter
+/// sets them on apply; the snapshot tests read them) so parallel test classes never
+/// interfere. Membership follows the statics, not the coordinator: a coordinator
+/// built without the adapter touches none, and
+/// <c>GameplayToneHudCollectionLintTests</c> keeps every class that does name them
+/// in here.</summary>
 [CollectionDefinition("GameplayToneHud", DisableParallelization = true)]
 public sealed class GameplayToneHudCollection;

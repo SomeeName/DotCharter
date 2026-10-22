@@ -18,6 +18,16 @@ namespace DotCharter.Tests.Services.Audio.ChartSynth;
 public sealed class ChartSynthNullDeviceTests : IDisposable
 {
     private const int Rate = 48_000;
+
+    /// <summary>The null device wakes once per block, so a starved box slows the song by
+    /// the number of wake-ups it needs: 2048 frames (43 ms) need a fifth of the wake-ups
+    /// that 480 do for the same stretch of song.</summary>
+    private const int BlockFrames = 2048;
+
+    /// <summary>Notes the chart must start before the routing is judged. The first sounds
+    /// at 0.5 s of song time, so the test asks for about a second of progress, not for a
+    /// fixed stretch of the wall clock.</summary>
+    private const int NotesToStart = 2;
     private readonly string _wav = Path.Combine(Path.GetTempPath(), $"chart-synth-{Guid.NewGuid():N}.wav");
 
     public ChartSynthNullDeviceTests()
@@ -51,7 +61,7 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         OutputTypeName = "Null",
         InputTypeName = "Null",
         SampleRate = Rate,
-        BufferFrames = 480,
+        BufferFrames = BlockFrames,
         OutputChannels = 2,
         InputChannels = 1,
     };
@@ -70,11 +80,14 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         return ChartNoteEventBuilder.Build(new Arrangement(), notes, [], ChartNoteEventBuilderTests.Beats(), null, 120);
     }
 
-    /// <summary>Plays until four notes started, the rig peaked and the ring delivered a
-    /// second; returns the seat's post-rig peak and what the capture ring carried. The
-    /// 60 s cap is a deadlock detector, not a budget (#228): a fixed 3 s window read
-    /// "only 0 notes started" when a saturated gate starved the null device.</summary>
-    private static (float RigPeak, float RingPeak, long RingSamples, long Started) PlayAndListen(JuceAudioPlaybackService svc)
+    /// <summary>Plays until <see cref="NotesToStart" /> notes started, the rig peaked and the
+    /// ring delivered a quarter second; returns the seat's post-rig peak, what the capture
+    /// ring carried and the engine's last status. The device paces the song in wall time,
+    /// so what is awaited is the engine's own progress (notes started), never a window:
+    /// the 60 s cap is a deadlock detector that cannot fire on a passing run. When the
+    /// song runs out before the notes were counted (a starved read-ahead makes the clock
+    /// jump, and a jump skips the notes it passes), the song restarts from 0.</summary>
+    private static (float RigPeak, float RingPeak, long RingSamples, ChartSynthStatus Status) PlayAndListen(JuceAudioPlaybackService svc)
     {
         var ring = new float[8192];
         while (svc.ReadInputCapture(ring) > 0) { }
@@ -83,6 +96,7 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         float rigPeak = 0, ringPeak = 0;
         long ringSamples = 0;
         ChartSynthStatus status = default;
+        var seenPlaying = false;
         var deadline = Environment.TickCount64 + 60_000;
         while (Environment.TickCount64 < deadline)
         {
@@ -94,11 +108,20 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
                 for (var i = 0; i < n; i++) ringPeak = MathF.Max(ringPeak, MathF.Abs(ring[i]));
             }
             svc.TryGetChartSynthStatus(out status);
-            if (status.NotesStarted >= 4 && rigPeak > 0.02f && ringSamples > Rate) break;
+            if (status.NotesStarted >= NotesToStart && rigPeak > 0.02f && ringSamples > Rate / 4) break;
+            seenPlaying |= status.IsClockPlaying;
+            if (seenPlaying && !status.IsClockPlaying)
+            {
+                svc.Pause();
+                svc.SeekTo(0);
+                svc.Play();
+                seenPlaying = false;
+            }
+
             Thread.Sleep(20);
         }
         svc.Pause();
-        return (rigPeak, ringPeak, ringSamples, status.NotesStarted);
+        return (rigPeak, ringPeak, ringSamples, status);
     }
 
     /// <summary>#574: the editor's play-the-chart toggles re-read whether an engine is
@@ -138,9 +161,10 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         Assert.True(synth.UploadChartNotes(chart), "the engine refused a valid chart");
 
         var first = PlayAndListen(svc);
-        Assert.True(first.Started >= 4, $"only {first.Started} notes started");
+        Assert.True(first.Status.NotesStarted >= NotesToStart,
+            $"only {first.Status.NotesStarted} notes started in 60 s: {first.Status}, ring {first.RingSamples} samples");
         Assert.True(first.RigPeak > 0.02f, $"the chart never reached seat 0's rig (post-rig peak {first.RigPeak})");
-        Assert.True(first.RingSamples > Rate, $"the capture ring delivered {first.RingSamples} samples — vacuous");
+        Assert.True(first.RingSamples > Rate / 4, $"the capture ring delivered {first.RingSamples} samples — vacuous");
         Assert.Equal(0f, first.RingPeak);
 
         // The rebuild a device change runs. A fresh engine starts with the chart
@@ -156,8 +180,8 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
 
         svc.SeekTo(0);
         var second = PlayAndListen(svc);
-        Assert.True(second.Started >= 4 && second.RigPeak > 0.02f,
-            $"after the rebuild: {second.Started} notes, rig peak {second.RigPeak}");
+        Assert.True(second.Status.NotesStarted >= NotesToStart && second.RigPeak > 0.02f,
+            $"after the rebuild: {second.Status}, rig peak {second.RigPeak}");
         Assert.Equal(0f, second.RingPeak);
 
         synth.SetChartSynthEnabled(false);

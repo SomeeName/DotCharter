@@ -1,4 +1,4 @@
-# `.rscp` v3 — the format promise
+# `.dcproj` — the project format promise
 
 What the project file format guarantees between machines and app versions: which names are frozen, what a reader does with
 data it does not recognise, what happens when an older build opens a newer
@@ -12,11 +12,50 @@ reader stops looking.
 
 ## The format
 
-- One XML document (NOT a zip), extension `.rscp`, serializer
+- One XML document (NOT a zip), extension **`.dcproj`**, serializer
   `DotCharter.Services/Parsing/Rscp/RscpChartSerializer` (`Save`/`Load`),
   resolved by extension through the keyed DI registration (see
   `docs/agents/MAP.md`). The contract type is
-  `Parsing/Rscp/RscpFormatContract` — the code half of this document.
+  `Parsing/Rscp/RscpFormatContract` — the code half of this document. The
+  layout is RsCharter's `chartFormatVersion` 3 plus DotCharter's additive
+  extensions, so the code keeps the format family's `Rscp` name; only the
+  extension says "DotCharter project".
+- **The extensions are spelled in ONE place**: `Parsing/Rscp/ProjectFiles`
+  (`.dcproj`, `project.dcproj`, the picker patterns, the folder-scan rule) and
+  `CharterRscp` (`.rscp`, the companion name, the legacy backup name, the
+  `dcWriterVersion` probe). Every picker, the drop router, the batch lint scan,
+  New Project, the `.dcsong` unpacker and the save path go through them
+  (`ProjectFilesTests`).
+- **A `.rscp` still opens**: Charter's projects and the projects older
+  DotCharter builds saved under that extension read through the same
+  serializer. DotCharter's XML is never written back into a `.rscp`: the first
+  save of a session opened from one writes the same-named `.dcproj` beside it
+  (`ProjectSaver.SaveFromRscpAsync`). An older DotCharter file (its root carries
+  `<dcWriterVersion>`) is then renamed to `<name>.rscp.bak` (then
+  `.rscp.2.bak`, …; never overwritten, never deleted) and the status line says
+  so once; a plain Charter project is left byte-for-byte as it is. A `.dcproj`
+  already sitting there is never overwritten: the user picks a name instead.
+  Pinned by `ProjectFileExtensionSessionTests`.
+- **The migration keeps the project's Play Mode records.** An own chart's
+  stats key is its project path, so the same save moves everything keyed by
+  the old path to the new one (`ProjectPathRekey`): practice stats and best
+  scores of every player profile (the leaderboards read those), setlist
+  songs, and the per-song tone and drop-tuner settings. Each store is
+  rewritten atomically, merges with entries already under the new path and
+  never drops one; a second run moves nothing. Only a migration to the
+  same-named `.dcproj` does this: a `.dcproj` the user named differently is a
+  Save As, which starts fresh like every Save As. Batch lint follows the same
+  rule as the save: the fixed project of a `.rscp` is written as the
+  `.dcproj` beside it (an older DotCharter file is kept as `.rscp.bak`, a
+  Charter project stays byte-for-byte as it is), and an existing `.dcproj` is
+  never overwritten.
+- **A `.dcproj` beats the `.rscp` of the same name.** In a folder holding both,
+  the `.rscp` is the project's Charter companion (below), so opening, dropping
+  or remembering the `.rscp` opens the `.dcproj` (`ProjectFiles.PreferProject`
+  in `ProjectSessionService.LoadFileAsync`); the recent list
+  (`RecentProjectsList.Prune`) and the batch lint scan
+  (`ProjectFiles.WithoutShadowedCompanions`) never list the companion in the
+  project's place.
 - **Every written file is version 3.** `RscpWriter.BuildChartHeader` pins
   `<chartFormatVersion>3</chartFormatVersion>` unconditionally — never the
   loaded file's number — because RsCharter re-runs v1/v2→v3 migration on any
@@ -65,7 +104,7 @@ fails and makes it a decision.
 ### The identity of a sound — PROSE ONLY
 
 Nothing mechanical pins these, but they are what every other field hangs off,
-and changing one would invalidate every `.rscp` in existence:
+and changing one would invalidate every project file in existence (`.dcproj`, and every `.rscp` before it):
 
 - A note is `<soundNote>` with `p` (start), `ep` (end), `string`, `fret`;
   a chord is `<soundChord>` with `p` and `templateId`, holding `<chordNote>`
@@ -116,8 +155,8 @@ Three rules make that safe, and all three are pinned:
    protection and crash recovery all go through. Without it the first
    undo-able edit after opening the file would delete what the reader kept.
 
-`ChartProject.UnknownRscpNodes` is **not an extension point**: the `.rscp`
-reader is its only producer and the `.rscp` writer its only consumer. Nothing
+`ChartProject.UnknownRscpNodes` is **not an extension point**: the project
+reader is its only producer and the project writer its only consumer. Nothing
 in the app may interpret its contents.
 
 ### Unknown attributes and unknown DEEP nodes are DROPPED
@@ -129,7 +168,7 @@ name and ignore the rest, so it is never an error
 (`RscpChartSerializerRoundtripTests.Load_ToleratesUnknownElementsAndAttributes_FromANewerBuild`).
 
 **This is a promise to drop, not an unfixed bug.** Re-attaching a per-note hint
-requires an identity a `.rscp` note does not have: the only handle is position +
+requires an identity a project-file note does not have: the only handle is position +
 string, and a user who moves, splits or deletes notes between the two saves
 would get a newer build's hint hung on the wrong note. **Corrupting is worse
 than losing**, so the reader loses it, and the load-time warning says so out
@@ -283,22 +322,45 @@ every placement's notes stay in its arrangement's levels, so the node only names
   save pipeline in `docs/agents/MAP.md`) — a crash mid-save never corrupts the
   previous file.
 
+## The Charter companion — `<name>.rscp`
+
+Every save also writes a Charter-compatible `<name>.rscp` beside the
+`<name>.dcproj` (`SaveCompanionService.WriteCharterProject`, after the
+`.dcproj` is on disk; it never fails a save):
+
+- **It is the same document cut down to Charter's model**
+  (`Export/Charter/CharterRscpProjection` over `CharterProjectSchema`, an
+  allow-list tree read from Charter V0.22.44's `ChartProject` and the classes
+  and converters it includes). No `dc*` node, no attribute Charter does not
+  read, `chartFormatVersion` 3. What it cannot carry (links, tone definitions,
+  annotations, notation voices, the extension attributes) is dropped from the
+  companion only, and logged once per changed loss.
+- **It is Charter's own project format, so it is never clobbered**: it goes
+  through `CompanionOwnership.WriteIfUnmodified` like the `.eof` and the
+  `.rs2dlc`. A Charter project at that name, or a companion the charter saved
+  in Charter, is left alone.
+- **It is derived and never read back as the project** while its `.dcproj`
+  exists (see the precedence rule above).
+- Pinned by `CharterRscpCompanionTests`: the allow-list (no element or
+  attribute outside it), a DotCharter re-import of the companion with the chart
+  content intact, the ownership refusal and the log-once rule. Whether Charter
+  itself opens it is a manual check.
+
 ## What is deliberately NOT promised
 
 - **Byte-identity across builds.** `<dcWriterVersion>` changes with the app, so
   a re-save always differs by at least that line. Within one build, a chart that
   uses no new feature is still byte-identical to the previous build's output.
 - **Element ORDER**, beyond "residue last". Readers look nodes up by name.
-- **RsCharter (Java) readability of every file.** DotCharter's `dc*` nodes are
-  unknown elements to XStream. Every other `dc*` node is absent when unused, so
-  a plain chart stayed loadable there; `<dcWriterVersion>` is always present, so
-  a DotCharter-saved project is a DotCharter project. RsCharter's
-  own output still loads here — that direction is the one that matters.
+- **RsCharter (Java) readability of the `.dcproj`.** DotCharter's `dc*` nodes
+  and extension attributes mean nothing to Charter's XStream model, and
+  `<dcWriterVersion>` is always present. Charter opens the `<name>.rscp`
+  companion instead. RsCharter's own output still loads here.
 - **Preservation of unknown deep attributes/elements**, and of unknown
   attributes on the root. See above; these are drops by design.
 
 ## What is NOT the format
 
-- The companion artifacts (`DTRS XML/` bundle, `<project>.eof`,
+- The companion artifacts (`<name>.rscp`, `DTRS XML/` bundle, `<project>.eof`,
   `<DlcKey>_p.psarc`) are DERIVED on save and never read back as the source of
-  truth. Deleting them loses nothing; the `.rscp` alone is the project.
+  truth. Deleting them loses nothing; the `.dcproj` alone is the project.

@@ -246,9 +246,16 @@ public sealed class StaticLocalizationRatchetTests
         Assert.True(scanned > 1000, $"only {scanned} product source files found; the scan is broken");
     }
 
-    private static IEnumerable<(string Path, int Uses)> CountUses()
+    /// <summary>Four facts read the same per-file counts; the tree is scanned once per
+    /// process, not once per fact.</summary>
+    private static readonly Lazy<(string Path, int Uses)[]> Uses = new(ScanUses);
+
+    private static IEnumerable<(string Path, int Uses)> CountUses() => Uses.Value;
+
+    private static (string Path, int Uses)[] ScanUses()
     {
         var root = TestPaths.RepoRoot();
+        var counted = new List<(string Path, int Uses)>();
         foreach (var file in ProductSourceFiles(root))
         {
             var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
@@ -257,12 +264,23 @@ public sealed class StaticLocalizationRatchetTests
                 continue;
             }
 
-            var uses = UsesIn(File.ReadAllText(file));
+            // A use needs the type's name in the file itself: the static instance by its
+            // name, an alias or a `using static` by the directive naming it. A file without
+            // the word counts 0, so it is not parsed.
+            var source = File.ReadAllText(file);
+            if (!source.Contains("LocalizationService", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var uses = UsesIn(source);
             if (uses > 0)
             {
-                yield return (relative, uses);
+                counted.Add((relative, uses));
             }
         }
+
+        return [.. counted];
     }
 
     private static int UsesIn(string source)

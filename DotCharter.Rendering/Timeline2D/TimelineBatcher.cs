@@ -219,6 +219,50 @@ public class TimelineBatcher
             r, g, b, a, 4f, 0f, totalW, totalW, totalW);
     }
 
+    /// <summary>
+    ///     A dashed vertical AA line as ONE quad: the general fragment shader
+    ///     discards the gaps, so the vertex count is independent of the line's
+    ///     length. Same across-line ramp as <see cref="AddVerticalLineAaRaw" />; the
+    ///     dash phase starts at <paramref name="y" /> and the last dash is clipped at
+    ///     <c>y + h</c>, exactly like a loop of one quad per dash. Dash and gap are
+    ///     carried in the vertex type in 1/16 px units (at most
+    ///     <see cref="DashedLineMaxPx" /> each).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void AddDashedVerticalLineAaRaw(float x, float y, float w, float h, float dash, float gap,
+        float r, float g, float b, float a)
+    {
+        // A zero dash draws nothing, as the per-dash loop drew nothing.
+        if (h <= 0f || dash <= 0f) return;
+        var pad = 1.0f;
+        var totalW = w + pad * 2;
+        AddGeneralQuadRaw(x - pad, y, x - pad, y + h, x + w + pad, y + h, x + w + pad, y,
+            r, g, b, a, DashedLineType(dash, gap), 0f, totalW, totalW, totalW);
+    }
+
+    /// <summary>First vertex-type code of the dashed vertical AA line (timeline2d_general.vert decodes it).</summary>
+    public const float DashedLineTypeBase = 8f;
+
+    /// <summary>Dash and gap resolution in the packed type: 1/16 px.</summary>
+    public const float DashedLineUnitsPerPx = 16f;
+
+    /// <summary>Multiplier of the dash field in the packed type; the gap field sits below it.</summary>
+    public const float DashedLineDashStride = 1024f;
+
+    /// <summary>The longest dash or gap the packed type can carry.</summary>
+    public const float DashedLineMaxPx = (DashedLineDashStride - 1f) / DashedLineUnitsPerPx;
+
+    /// <summary>
+    ///     The packed vertex type of a dashed line. Every field is a small integer, so
+    ///     the float carries it exactly and the shader decodes it without rounding.
+    /// </summary>
+    public static float DashedLineType(float dash, float gap)
+    {
+        var dashUnits = Math.Clamp(MathF.Round(dash * DashedLineUnitsPerPx), 0f, DashedLineDashStride - 1f);
+        var gapUnits = Math.Clamp(MathF.Round(gap * DashedLineUnitsPerPx), 0f, DashedLineDashStride - 1f);
+        return DashedLineTypeBase + dashUnits * DashedLineDashStride + gapUnits;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AddHorizontalLineAa(float x, float y, float w, float h, Color c)
     {

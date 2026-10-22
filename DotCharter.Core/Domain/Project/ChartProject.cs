@@ -88,13 +88,13 @@ public class ChartProject
     ///     understand, each as one normalized XML fragment, in the order they
     ///     appeared in the file. Carried through untouched so the next save puts
     ///     them back instead of deleting them — the forward-compatibility half of
-    ///     <c>docs/RSCP-FORMAT-GUARANTEES.md</c>.
+    ///     <c>docs/DCPROJ-FORMAT-GUARANTEES.md</c>.
     ///     <para>
     ///         Empty for every project this build's writer produced, for every
     ///         import, and for a brand-new chart: it only ever holds bytes that
     ///         came off disk. It is deliberately NOT a general extension point —
     ///         nothing in the app may read, write or interpret its contents. The
-    ///         `.rscp` reader is the only producer and the `.rscp` writer the
+    ///         `.dcproj` reader is the only producer and the `.dcproj` writer the
     ///         only consumer.
     ///     </para>
     ///     <para>

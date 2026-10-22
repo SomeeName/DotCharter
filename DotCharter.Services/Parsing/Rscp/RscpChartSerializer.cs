@@ -51,7 +51,7 @@ public class RscpChartSerializer : IChartSerializer
                 "Data this build cannot re-attach will be dropped if the project is saved.");
         }
 
-        // The forward-compatibility half (docs/RSCP-FORMAT-GUARANTEES.md): keep
+        // The forward-compatibility half (docs/DCPROJ-FORMAT-GUARANTEES.md): keep
         // the top-level nodes this build does not understand so the next save
         // puts them back instead of deleting a newer build's whole feature. The
         // capture is the definition of "unknown" — it is the complement of
@@ -146,24 +146,9 @@ public class RscpChartSerializer : IChartSerializer
         var doc = new XDocument();
         _writer.WriteDocument(doc, project);
 
-        // RsCharter (XStream) writes <?xml version='1.0' encoding='UTF-8'?>
-        // with single quotes and uppercase UTF-8. XmlWriter only emits the
-        // double-quoted, lowercase form, so write the prologue manually and
-        // append the document body without its own declaration.
-        var settings = new XmlWriterSettings
-        {
-            OmitXmlDeclaration = true,
-            Indent = true,
-            IndentChars = "  ",
-            Encoding = new UTF8Encoding(false)
-        };
-
         using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read))
         {
-            var prologue = Encoding.UTF8.GetBytes("<?xml version='1.0' encoding='UTF-8'?>\n");
-            stream.Write(prologue, 0, prologue.Length);
-            using (var writer = XmlWriter.Create(stream, settings))
-                doc.Save(writer);
+            WriteDocument(stream, doc);
 
             // Durability, not just atomicity: this file is the staging half of a
             // temp-write → File.Move swap (ProjectSessionService writes
@@ -175,5 +160,28 @@ public class RscpChartSerializer : IChartSerializer
             // bytes to the platter before the caller's rename can retire.
             stream.Flush(flushToDisk: true);
         }
+    }
+
+    /// <summary>
+    ///     Writes <paramref name="doc" /> the way RsCharter (XStream) does:
+    ///     <c>&lt;?xml version='1.0' encoding='UTF-8'?&gt;</c> with single quotes and
+    ///     uppercase UTF-8, then the body indented by two spaces. XmlWriter only emits the
+    ///     double-quoted, lowercase form, so the prologue is written by hand and the body
+    ///     follows without its own declaration. Shared by the project file and its Charter companion.
+    /// </summary>
+    public static void WriteDocument(Stream stream, XDocument doc)
+    {
+        var settings = new XmlWriterSettings
+        {
+            OmitXmlDeclaration = true,
+            Indent = true,
+            IndentChars = "  ",
+            Encoding = new UTF8Encoding(false)
+        };
+
+        var prologue = Encoding.UTF8.GetBytes("<?xml version='1.0' encoding='UTF-8'?>\n");
+        stream.Write(prologue, 0, prologue.Length);
+        using var writer = XmlWriter.Create(stream, settings);
+        doc.Save(writer);
     }
 }

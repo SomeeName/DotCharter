@@ -26,7 +26,7 @@ namespace DotCharter.Services.Editing.Improvement;
 ///         <see cref="ChordTemplateResolver.IndexById" /> (first template with that id wins).
 ///     </para>
 ///     <para>
-///         <b>Ids stay POSITIONS.</b> Ids are not positions in the editor, but the <c>.rscp</c> is
+///         <b>Ids stay POSITIONS.</b> Ids are not positions in the editor, but the <c>.dcproj</c> is
 ///         positional: the parser numbers templates by their index. <see cref="Apply" /> keeps the
 ///         live chart that way: survivors are renumbered to their final positions and every user is
 ///         remapped, and it does nothing at all on an arrangement whose ids were not positional to

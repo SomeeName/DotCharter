@@ -142,7 +142,9 @@ public sealed class CiWorkflowLintTests
     {
         var jobs = Jobs(Workflow());
 
-        var gateJobs = jobs.Where(j => j.Value.Contains("--filter-not-class \"*UiPerfSmokeTests\"", StringComparison.Ordinal)).Select(j => j.Key).ToList();
+        // The gate runs sharded through Invoke-Gate.ps1 (tools/ci/GateShards.psm1),
+        // whose every shard keeps the `*UiPerfSmokeTests` exclusion.
+        var gateJobs = jobs.Where(j => Regex.IsMatch(j.Value, @"run:[^\n]*tools/agent/Invoke-Gate\.ps1 -Gate -NoBuild[^\n]*-Shards \d+")).Select(j => j.Key).ToList();
         // A `run:` line, not a comment — the gate job's comment names the script too.
         var headlessJobs = jobs.Where(j => Regex.IsMatch(j.Value, @"run:[^\n]*Invoke-HeadlessUiCi\.ps1")).Select(j => j.Key).ToList();
 
@@ -156,6 +158,7 @@ public sealed class CiWorkflowLintTests
         // The gate half must not ALSO run inside the headless job's process, and
         // no job may run the suite unfiltered.
         Assert.DoesNotContain("--filter-not-class", headless);
+        Assert.DoesNotContain("Invoke-Gate.ps1", headless);
         foreach (var job in jobs.Values)
             Assert.DoesNotMatch(@"dotnet test [^\n]*DotCharter\.Tests\.csproj(?![^\n]*--filter)(?![^\n]*--list-tests)", job);
 
@@ -226,7 +229,7 @@ public sealed class CiWorkflowLintTests
         Assert.Contains("Get-HeadlessRaceRerunDecision @(Read-HeadlessTrxFailures $Trx) $Absent", gate);
         Assert.Contains("Invoke-HeadlessRaceReruns $Label $trx $absent", gate);
         // …and the train gets it by running the headless suite through Invoke-Gate.
-        Assert.Matches(@"& powershell -NoProfile -File \$gate -Headless [^\n]*-RaceReruns \$RaceReruns", train);
+        Assert.Matches(@"& powershell -NoProfile -File \$gate [^\n]*-Headless [^\n]*-RaceReruns \$RaceReruns", train);
 
         // The script runs the suite with the FILTER, as its own process, and
         // records the two numbers CI exists to measure.

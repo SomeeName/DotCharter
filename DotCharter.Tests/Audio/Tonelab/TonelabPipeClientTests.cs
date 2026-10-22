@@ -11,7 +11,13 @@ public sealed class TonelabPipeClientTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static readonly TonelabTimeouts Quick = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    /// <summary>
+    ///     A bound that is not the subject of a test: a starved thread pool can stall a connect or a reply
+    ///     for seconds, so only a timeout a test asserts on is ever short.
+    /// </summary>
+    private static readonly TimeSpan Unbounded = TimeSpan.FromSeconds(60);
+
+    private static readonly TonelabTimeouts Patient = new(Unbounded, Unbounded, Unbounded);
 
     /// <summary>
     ///     A hidden game serves its pipe from a 10 frames/s main loop, so an answer can take well over a
@@ -40,7 +46,7 @@ public sealed class TonelabPipeClientTests
     public async Task EveryCommand_SendsItsLine_AndReadsItsReply()
     {
         using var game = new TonelabGameMock();
-        using var client = new TonelabPipeClient(game.PipeName, Quick);
+        using var client = new TonelabPipeClient(game.PipeName, Patient);
         var file = Path.Combine(Path.GetTempPath(), $"tonelab-client-{game.ProcessId}.json");
         await File.WriteAllTextAsync(file, """{ "GearList": { "Amp": { "Key": "Amp_A" } }, "Key": "my_tone" }""", Ct);
         try
@@ -81,7 +87,7 @@ public sealed class TonelabPipeClientTests
     public async Task AnErrReply_IsATypedResult_NotAnException()
     {
         using var game = new TonelabGameMock { Responder = _ => "err unknown-gear Amp_Nope" };
-        using var client = new TonelabPipeClient(game.PipeName, Quick);
+        using var client = new TonelabPipeClient(game.PipeName, Patient);
 
         var result = await client.ApplyFileAsync(@"C:\x.json", Ct);
 
@@ -101,7 +107,7 @@ public sealed class TonelabPipeClientTests
             first = false;
             return "garbage!";
         };
-        using var client = new TonelabPipeClient(game.PipeName, Quick);
+        using var client = new TonelabPipeClient(game.PipeName, Patient);
 
         Assert.Equal(TonelabOutcome.Malformed, (await client.RestoreAsync(Ct)).Outcome);
         Assert.Equal(TonelabOutcome.Ok, (await client.RestoreAsync(Ct)).Outcome);
@@ -112,16 +118,18 @@ public sealed class TonelabPipeClientTests
     {
         var answer = false;
         using var game = new TonelabGameMock();
-        game.Responder = _ => answer ? "ok" : null;
-        using var client = new TonelabPipeClient(game.PipeName,
-            new TonelabTimeouts(TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(5)));
+        game.Responder = _ => answer ? "ok applied my_tone" : null;
+        // Only the Command (reply) timeout is short: it is what the first command runs into. The next
+        // command is an apply-file, which runs on the long ApplyFile bound, so a slow reconnect or reply
+        // on a loaded machine cannot turn the second half into a timeout of its own.
+        using var client = new TonelabPipeClient(game.PipeName, new TonelabTimeouts(Unbounded, TimeSpan.FromMilliseconds(150), Unbounded));
 
         var timedOut = await client.MixMuteAsync(true, Ct);
         Assert.Equal(TonelabOutcome.Timeout, timedOut.Outcome);
         Assert.False(client.IsConnected);   // a late reply must never be read as the next command's
 
         answer = true;
-        Assert.True((await client.MixMuteAsync(true, Ct)).IsOk);
+        Assert.True((await client.ApplyFileAsync(@"C:\x.json", Ct)).IsOk);
         Assert.Equal(2, game.Connections);
     }
 
@@ -140,7 +148,7 @@ public sealed class TonelabPipeClientTests
     {
         var pid = 1_999_999_002;
         using var client = new TonelabPipeClient(TonelabProtocol.PipeNameFor(pid),
-            new TonelabTimeouts(TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2)));
+            new TonelabTimeouts(Unbounded, Unbounded, Unbounded));
 
         using (var game = new TonelabGameMock(pid))
             Assert.True((await client.MixMuteAsync(true, Ct)).IsOk);
@@ -156,7 +164,7 @@ public sealed class TonelabPipeClientTests
     public async Task Cancellation_Throws_AndDropsTheConnection()
     {
         using var game = new TonelabGameMock { Responder = _ => null };
-        using var client = new TonelabPipeClient(game.PipeName, Quick);
+        using var client = new TonelabPipeClient(game.PipeName, Patient);
         using var cts = new CancellationTokenSource();
 
         var pending = client.RestoreAsync(cts.Token);

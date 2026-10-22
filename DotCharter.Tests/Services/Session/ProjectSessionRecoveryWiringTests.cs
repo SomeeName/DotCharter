@@ -169,7 +169,8 @@ public sealed class ProjectSessionRecoveryWiringTests
                 new StubDocumentService(), State, transport, editor, new TempoService(logger),
                 Recovery, history, new NoOpSaveCompanionService(),
                 uiDispatcher: new TestUiDispatcher(),
-                localization: FakeLocalization.English());
+                localization: FakeLocalization.English(),
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public ProjectState State { get; } = new();

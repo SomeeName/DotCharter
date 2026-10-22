@@ -42,7 +42,7 @@ public static class StemWaveformMix
     ///     <para>
     ///         Muted-and-soloed is unreachable from the mixer's own strips (each
     ///         setter clears the other), but it is perfectly storable: a
-    ///         <c>.rscp</c> carries <c>stem/@muted</c> and <c>stem/@solo</c>
+    ///         <c>.dcproj</c> carries <c>stem/@muted</c> and <c>stem/@solo</c>
     ///         independently and <c>BuildStrips</c> seeds the strip from both
     ///         without reconciling them.
     ///     </para>

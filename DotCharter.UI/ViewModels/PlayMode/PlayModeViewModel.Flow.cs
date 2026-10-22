@@ -295,7 +295,7 @@ public sealed partial class PlayModeViewModel
     ///     <para>
     ///         Mutes are RUN-SCOPED (<see cref="StemTrackViewModel.SetMutedForRun" />):
     ///         they must not write the domain <c>Stem.Muted</c> flag, which is
-    ///         serialized into the .rscp. Writing it would mean a crash mid-run left the
+    ///         serialized into the .dcproj. Writing it would mean a crash mid-run left the
     ///         stem permanently muted in the saved project.
     ///     </para>
     /// </remarks>

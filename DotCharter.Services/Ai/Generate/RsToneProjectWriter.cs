@@ -18,7 +18,7 @@ public sealed record RsToneWriteResult(IReadOnlyList<string> Keys, int ToneChang
 ///         <b>There is no second writer here, and there must not be.</b> The tone
 ///         body is serialized by <see cref="RsToneJsonWriter" /> — the one thing in
 ///         this app that turns an <see cref="RsTone" /> into the manifest JSON the
-///         package export embeds verbatim. Everything downstream (the `.rscp`, the
+///         package export embeds verbatim. Everything downstream (the `.dcproj`, the
 ///         `.psarc` manifest, the RS-XML tone slots, and the `.rs2dlc`'s
 ///         <c>BaseTone</c>) reads what is written here.
 ///     </para>

@@ -16,8 +16,7 @@ public sealed class PublicSyncGuardTests
     private static string Root => TestPaths.RepoRoot();
     private static string Release(string file) => Path.Combine(Root, "tools", "release", file);
 
-    [Fact]
-    public void Export_RefusesWhileAPublicCommitHasNoDevTrailer_AndPassesOnceEachHasOne()
+    private static void Export_RefusesWhileAPublicCommitHasNoDevTrailer_AndPassesOnceEachHasOne()
     {
         var scratch = Directory.CreateTempSubdirectory("dc-public-sync-").FullName;
         try
@@ -94,8 +93,7 @@ public sealed class PublicSyncGuardTests
         }
     }
 
-    [Fact]
-    public void Import_AppliesAPublicCommit_ThroughTheReverseRenameMap_WithTrailers()
+    private static void Import_AppliesAPublicCommit_ThroughTheReverseRenameMap_WithTrailers()
     {
         var scratch = Directory.CreateTempSubdirectory("dc-public-import-").FullName;
         try
@@ -143,8 +141,7 @@ public sealed class PublicSyncGuardTests
         }
     }
 
-    [Fact]
-    public void Watch_And_Import_RecogniseASnapshotByTheOneSnapshotIdentity()
+    private static void Watch_And_Import_RecogniseASnapshotByTheOneSnapshotIdentity()
     {
         var scratch = Directory.CreateTempSubdirectory("dc-public-identity-").FullName;
         try
@@ -195,6 +192,33 @@ public sealed class PublicSyncGuardTests
         var call = System.Text.RegularExpressions.Regex.Match(preflight,
             @"& pwsh -NoProfile -File \(Join-Path \$PSScriptRoot 'Find-UnimportedPublicCommits\.ps1'\)[^\n]*-FailOnMissing[^\n]*\n\s*if \(\$LASTEXITCODE -ne 0\) \{ throw ");
         Assert.True(call.Success, "New-Release.ps1's preflight must run Find-UnimportedPublicCommits.ps1 -FailOnMissing and throw on a non-zero exit.");
+    }
+
+    // Each pwsh-driven scenario is its own nested class, so the three run side by side (a nested
+    // class is its own xunit collection) instead of back to back; each builds its own fixture
+    // repositories under its own scratch folder.
+    /// <summary>The guard refuses an export until each public commit has its dev trailer.</summary>
+    public sealed class ExportGuard
+    {
+        [Fact]
+        public void Export_RefusesWhileAPublicCommitHasNoDevTrailer()
+            => Export_RefusesWhileAPublicCommitHasNoDevTrailer_AndPassesOnceEachHasOne();
+    }
+
+    /// <summary>The import applies a public commit through the reverse rename map, with trailers.</summary>
+    public sealed class Import
+    {
+        [Fact]
+        public void Import_AppliesAPublicCommit_ThroughTheReverseRenameMap()
+            => Import_AppliesAPublicCommit_ThroughTheReverseRenameMap_WithTrailers();
+    }
+
+    /// <summary>A snapshot is recognised by the one snapshot identity, never by its shape.</summary>
+    public sealed class SnapshotIdentityCase
+    {
+        [Fact]
+        public void Watch_And_Import_RecogniseASnapshotByTheOneSnapshotIdentity()
+            => PublicSyncGuardTests.Watch_And_Import_RecogniseASnapshotByTheOneSnapshotIdentity();
     }
 
     internal static (string Name, string Email) SnapshotIdentity()

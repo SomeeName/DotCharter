@@ -12,7 +12,7 @@ namespace DotCharter.Tests.Services.Audio.LivePlay;
 /// </summary>
 public class LivePlayDetectionPumpTests
 {
-    private static bool WaitFor(Func<bool> condition, int timeoutMs = 5000)
+    private static bool WaitFor(Func<bool> condition, int timeoutMs = 60_000)
         => SpinWait.SpinUntil(condition, timeoutMs);
 
     [Fact]
@@ -73,7 +73,7 @@ public class LivePlayDetectionPumpTests
         }, cadenceMs: 1);
 
         pump.Start();
-        Assert.True(entered.Wait(5000, TestContext.Current.CancellationToken), "tick never started");
+        Assert.True(entered.Wait(60_000, TestContext.Current.CancellationToken), "tick never started");
         pump.Stop();
 
         // Stop returned ⇒ the in-flight tick ran to completion first.

@@ -126,11 +126,14 @@ public sealed partial class RocksmithKeyLeakLintTests
     private static bool AnyWindow(byte[] bytes, Fingerprints fingerprints)
     {
         if (bytes.Length < 32) return false;
+        // A span scan of the few candidate hashes, not a hash-set lookup per byte: this runs
+        // once for every byte of every tracked file.
+        var rolling = fingerprints.RollingValues.AsSpan();
         ulong h = 0;
         for (var i = 0; i < 32; i++) h = unchecked((h * RollBase) + bytes[i]);
         for (var i = 0; ; i++)
         {
-            if (fingerprints.Rolling.Contains(h) && IsKey(bytes.AsSpan(i, 32), fingerprints)) return true;
+            if (rolling.Contains(h) && IsKey(bytes.AsSpan(i, 32), fingerprints)) return true;
             if (i + 32 >= bytes.Length) return false;
             h = unchecked((h * RollBase) + bytes[i + 32] - (bytes[i] * RollBase32));
         }
@@ -151,7 +154,10 @@ public sealed partial class RocksmithKeyLeakLintTests
     private static readonly ulong RollBase32 = Enumerable.Range(0, 32).Aggregate(1UL, (acc, _) => unchecked(acc * RollBase));
 
     /// <summary>What the scan knows of a key: two hashes, never the key.</summary>
-    private sealed record Fingerprints(HashSet<ulong> Rolling, HashSet<string> Sha256);
+    private sealed record Fingerprints(HashSet<ulong> Rolling, HashSet<string> Sha256)
+    {
+        public ulong[] RollingValues { get; } = [.. Rolling];
+    }
 
     /// <summary>64+ hex digits, optionally one space, colon or dash between byte pairs.</summary>
     [GeneratedRegex(@"(?:[0-9A-Fa-f]{2}[ :\-]?){32,}")]

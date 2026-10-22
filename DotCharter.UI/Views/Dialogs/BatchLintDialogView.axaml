@@ -63,7 +63,7 @@
                         <CheckBox VerticalAlignment="Center" Grid.Column="1" IsChecked="{Binding ApplyAutoFixes}"
                                   AutomationProperties.Name="{localization:Loc Dialog_BatchLint_ApplyFixes}" />
                     </Grid>
-                    <!-- The row that REWRITES .rscp files the user never opened,
+                    <!-- The row that REWRITES .dcproj files the user never opened,
                          and it greys out until the auto-fix toggle above is on.
                          A tooltip cannot carry that reason — a disabled control
                          takes no pointer input, so it never fires — so the
@@ -124,7 +124,7 @@
 
                     <!-- Real per-file progress + the file being worked on. This
                          was an indeterminate bar with no cancel for the whole of
-                         a minutes-long sweep that also rewrites .rscp files. -->
+                         a minutes-long sweep that also rewrites .dcproj files. -->
                     <StackPanel Theme="{DynamicResource DlgBusyPanel}" Grid.Row="1" Classes="DlgBusy" IsVisible="{Binding IsBusy}">
                         <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" />
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">

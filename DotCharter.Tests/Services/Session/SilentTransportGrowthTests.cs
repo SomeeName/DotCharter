@@ -220,7 +220,8 @@ public sealed class SilentTransportGrowthTests : IDisposable
                 new NoOpSaveCompanionService(),
                 silentAudio: new SilentAudioTrack(logger, Path.Combine(_root, "silence")),
                 uiDispatcher: new TestUiDispatcher(),
-                localization: FakeLocalization.English());
+                localization: FakeLocalization.English(),
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public LengthFromNameAudioService Audio { get; } = new();

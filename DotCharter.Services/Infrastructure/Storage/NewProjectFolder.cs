@@ -10,7 +10,7 @@ namespace DotCharter.Services.Infrastructure.Storage;
 ///     folder already exists. The audio copy and the <c>SaveChart</c> that
 ///     followed then overwrote whatever was in there — so re-importing a song
 ///     you had already imported, under the same base folder, silently destroyed
-///     the earlier import's <c>project.rscp</c> and its working audio. The name
+///     the earlier import's <c>project.dcproj</c> and its working audio. The name
 ///     is derived, not typed, so hitting the collision takes no mistake at all:
 ///     the same song produces the same name every time.
 ///     <para>

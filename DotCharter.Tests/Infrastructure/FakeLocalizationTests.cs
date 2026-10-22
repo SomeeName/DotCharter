@@ -5,12 +5,11 @@ namespace DotCharter.Tests.Infrastructure;
 
 /// <summary>
 ///     The localization fake answers like the real service under en-US, or with the key
-///     itself, and never moves the process culture. It is in the
-///     <c>LocalizationSingleton</c> collection only because one case calls
-///     <c>SetConfiguredCulture</c> to prove that the call leaves the ambient culture
-///     alone, which <c>CultureCollectionLintTests</c> rightly cannot tell from a write.
+///     itself, and never moves the process culture. One case calls
+///     <c>SetConfiguredCulture</c> on the FAKE to prove that the call leaves the ambient
+///     culture alone; <c>CultureCollectionLintTests</c> lists the file as an
+///     instance-scoped caller, so the class needs no collection.
 /// </summary>
-[Collection("LocalizationSingleton")]
 public sealed class FakeLocalizationTests
 {
     [Fact]

@@ -41,7 +41,7 @@
   opening a `.dcsong` as a project) DERIVE the folder name from artist + title, so the same song yields the same
   name every time — and `CreateDirectory` is a no-op on an existing folder, so
   the working-audio copy and the `SaveChart` that follow landed straight on the
-  earlier import's `project.rscp` and `song.*`. Re-importing a song you had
+  earlier import's `project.dcproj` and `song.*`. Re-importing a song you had
   already imported destroyed it, with no prompt and no backup. The helper counts
   up (`… (2)`, `… (3)`) and treats an existing but EMPTY folder as free (users
   pre-create the destination in the picker, and there is no data behind it).

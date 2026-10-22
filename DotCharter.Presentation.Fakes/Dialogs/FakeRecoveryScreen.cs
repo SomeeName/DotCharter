@@ -34,7 +34,7 @@ public sealed class FakeRecoveryScreen : FakeDialog<bool>, IRecoveryScreen
     /// <summary>One saved project and one that was never saved.</summary>
     public static FakeRecoveryScreen Default() => new("2 snapshots were found",
     [
-        new Row("Hysteria", false, "Project", @"C:\Songs\Muse\Hysteria.rscp", "22.09.2026 14:31"),
+        new Row("Hysteria", false, "Project", @"C:\Songs\Muse\Hysteria.dcproj", "22.09.2026 14:31"),
         new Row("Unsaved project — Plug In Baby", true, "Never saved", "There is no project file yet",
             "22.09.2026 14:02")
     ]);
@@ -54,13 +54,13 @@ public sealed class FakeRecoveryScreen : FakeDialog<bool>, IRecoveryScreen
     [
         .. Enumerable.Range(1, 9).Select(IRecoverySession (i) => new Row($"Song {i}", i % 3 == 0,
             i % 3 == 0 ? "Never saved" : "Project",
-            i % 3 == 0 ? "There is no project file yet" : $@"D:\Charts\Band {i}\Song {i}.rscp",
+            i % 3 == 0 ? "There is no project file yet" : $@"D:\Charts\Band {i}\Song {i}.dcproj",
             $"2{i}.09.2026 1{i}:0{i}"))
     ]);
 
     /// <summary>A restore in flight: every action waits.</summary>
     public static FakeRecoveryScreen Busy() => new("1 snapshot was found",
-        [new Row("Hysteria", false, "Project", @"C:\Songs\Muse\Hysteria.rscp", "22.09.2026 14:31")],
+        [new Row("Hysteria", false, "Project", @"C:\Songs\Muse\Hysteria.dcproj", "22.09.2026 14:31")],
         busy: true);
 
     public string Subtitle { get; }

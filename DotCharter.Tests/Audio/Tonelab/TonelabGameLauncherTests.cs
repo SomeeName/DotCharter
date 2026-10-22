@@ -17,6 +17,10 @@ public sealed class TonelabGameLauncherTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private readonly MemoryTonelabFileSystem _files = new();
+    // Upper bound for waits that only matter when the test is already failing: a loaded gate can starve the pool
+    // for seconds, and EndStartedGameOnExit gives up (without the quit) when its cap elapses first.
+    private static readonly TimeSpan NeverFires = TimeSpan.FromSeconds(60);
+
     private readonly FakeAppLogger _logger = new();
 
     private string IniPath => Path.Combine(GameDir, RsAsioIniGuard.IniName);
@@ -37,7 +41,7 @@ public sealed class TonelabGameLauncherTests
 
     private void AssertIniIsTheUsers()
     {
-        Assert.True(SpinWait.SpinUntil(() => !_files.Exists(BackupPath), TimeSpan.FromSeconds(5)), "the backup was never put back");
+        Assert.True(SpinWait.SpinUntil(() => !_files.Exists(BackupPath), NeverFires), "the backup was never put back");
         Assert.Equal(UserIni, _files.ReadAllBytes(IniPath));
     }
 
@@ -134,7 +138,7 @@ public sealed class TonelabGameLauncherTests
         game.Exit();   // the user closed it, or it crashed
 
         AssertIniIsTheUsers();
-        Assert.True(SpinWait.SpinUntil(() => launcher.Current is null, TimeSpan.FromSeconds(5)));
+        Assert.True(SpinWait.SpinUntil(() => launcher.Current is null, NeverFires));
     }
 
     [Theory]
@@ -308,14 +312,14 @@ public sealed class TonelabGameLauncherTests
         {
             built++;
             return null;
-        }, TimeSpan.FromSeconds(1), _logger);
+        }, NeverFires, _logger);
         Assert.Equal(0, built);
 
         var game = new FakeRocksmith();
         var launcher = Launcher(game);
         await launcher.LaunchAsync(Ct);
         var session = new FakeTonelabSession();
-        TonelabGameLauncher.EndStartedGameOnExit([launcher], () => session, TimeSpan.FromSeconds(1), _logger);
+        TonelabGameLauncher.EndStartedGameOnExit([launcher], () => session, NeverFires, _logger);
         Assert.Equal(1, session.Quits);
     }
 }

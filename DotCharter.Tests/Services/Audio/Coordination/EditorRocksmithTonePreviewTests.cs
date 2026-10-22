@@ -13,12 +13,12 @@ namespace DotCharter.Tests.Services.Audio.Coordination;
 ///     and controller. Asserts what the game RECEIVES (apply-file, tone restore) and whether the
 ///     insert is open, never the switch's own state.
 /// </summary>
-[Collection("GameplayToneHud")]
 public sealed class EditorRocksmithTonePreviewTests : IDisposable
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(5);
+    // A deadlock detector, never a budget: this class shares the CPU-saturated parallel phase.
+    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(60);
     private readonly string _dir = Directory.CreateTempSubdirectory("dotcharter-tonelab-editor-").FullName;
     private readonly ManualTonelabScheduler _scheduler = new();
     private readonly List<IDisposable> _owned = [];

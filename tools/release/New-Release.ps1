@@ -154,6 +154,19 @@
     (it cannot share a testhost with the default gate). Skipping it means the
     pack is unverified, and the script says so.
 
+.PARAMETER ForceHeadlessUi
+    Run the headless UI suite's main pass even when a green run of it is on record
+    for this exact tree (ReleaseCache.psm1 Find-GateRecord: the merge train, an
+    earlier release run, or the dev tree a scratch export was cut from). Without it
+    the recorded run is reused and named; the test build and the localized layout
+    sweeps run either way.
+
+.PARAMETER ForceReleaseLane
+    Run the release lane even when a green run of it is on record for this exact tree
+    (the merge train records one). The lane itself cannot be skipped: it is the slow
+    corpus / integration classes the default gate leaves out
+    (tools/ci/release-lane.json), and a release is not cut without them.
+
 .PARAMETER HeadlessShards
     How many concurrent testhosts each headless-UI pass is split across
     (tools/ci/HeadlessShards.psm1 — whole classes, balanced by measured class
@@ -214,6 +227,10 @@ param(
     [bool]$ContestedFeatures = $true,
     [switch]$AllowMissingTools,
     [switch]$SkipHeadlessUi,
+    # Re-run the headless suite even when a green run is on record for this exact tree.
+    [switch]$ForceHeadlessUi,
+    # Run the release lane even when a green run of it is on record for this exact tree.
+    [switch]$ForceReleaseLane,
     [switch]$SkipRigLab,
     [string]$Tone3000ClientId,
     [ValidateRange(1, 16)]
@@ -249,6 +266,10 @@ if (-not $ContestedFeatures) { $ContestedPublishArgs += '-p:DotCharterContestedF
 # on fixture payloads (ReleasePluginRefusalTests).
 Import-Module (Join-Path $PSScriptRoot 'PluginPayloadCheck.psm1') -Force
 $PluginAssemblies = @(Get-PluginAssemblyNames $RepoRoot)
+# The console tools a plugin ships (<DotCharterReleaseTool>): the executables go into the app folder,
+# the launchers into tools/. A public payload carries neither; a -WithPlugins one carries both.
+$PluginToolExes = @(Get-PluginToolExeNames $RepoRoot)
+$PluginToolFiles = @(Get-PluginToolFileNames $RepoRoot)
 # Public assets never carry a plugin: the git-ignored plugins/ folder is ignored even when
 # something is checked out there, and Assert-ReleasePayloadPlugins refuses a payload that
 # still holds a plugin's assembly (a folder before zipping, the zip after). -WithPlugins
@@ -267,9 +288,6 @@ $ManifestTool = Join-Path $PSScriptRoot 'BuildPayloadManifest.cs'
 $PruneTool = Join-Path $PSScriptRoot 'PrunePayload.cs'
 $BinaryCheckTool = Join-Path $PSScriptRoot 'CheckPayloadBinaries.cs'
 $SignTool = Join-Path $PSScriptRoot 'SignReleaseManifest.cs'
-if (-not $SigningKeyPath) {
-    $SigningKeyPath = Join-Path (Split-Path $RepoRoot -Parent) 'DotCharter-local/release-signing/dotcharter-release-ed25519.key'
-}
 
 # --- Bundled media tools (ffmpeg / yt-dlp) -----------------------------------
 # The UI payload ships these in its tools/ subfolder so stem Opus encoding and
@@ -293,6 +311,15 @@ if (-not $SigningKeyPath) {
 #            No ffprobe: AudioMetadataExtractor reads tags through ffmpeg alone.
 Import-Module (Join-Path $PSScriptRoot 'FfmpegInventory.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PinnedDownload.psm1') -Force
+# The redist cache and the gate records live OUTSIDE the tree (ReleaseCache.psm1), so a
+# fresh scratch export reuses the minimal ffmpeg and a green headless run of its tree.
+Import-Module (Join-Path $PSScriptRoot 'ReleaseCache.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'VcRedist.psm1') -Force
+# The key's default lives in the owner's DotCharter-local, beside the DEV checkout: for a
+# scratch export (export-origin.json) the checkout it came from, for a worktree its main one.
+if (-not $SigningKeyPath) {
+    $SigningKeyPath = Join-Path (Get-ReleaseLocalDir -RepoRoot $RepoRoot) 'release-signing/dotcharter-release-ed25519.key'
+}
 # Start-HiddenDesktopProcess: the launch smoke runs the app on a never-shown
 # desktop so it cannot take the foreground (#419).
 Import-Module (Join-Path $PSScriptRoot 'HiddenDesktop.psm1') -Force
@@ -304,6 +331,11 @@ $FfmpegBuildScript = Join-Path $PSScriptRoot 'Build-MinimalFfmpeg.ps1'
 # Copyright ..."; a cached exe with any other version or tag is rebuilt.
 $FfmpegVersionPattern = '^ffmpeg version ' + [regex]::Escape("$($FfmpegInventory.ffmpegVersion)-$($FfmpegInventory.extraVersion)") + '\s'
 $RedistDir      = Join-Path $RepoRoot 'tools/redist/win-x64'
+# The x64 VC++ runtime DLLs onnxruntime.dll imports, shipped app-local beside it
+# (tools/release/vcredist.json pins the version and each file's SHA-256).
+$VcRedistPin    = Read-VcRedistPin -Path (Join-Path $PSScriptRoot 'vcredist.json')
+# What one minimal-ffmpeg build leaves in -OutDir; the cache entry holds the same set.
+$FfmpegRedistFiles = @('ffmpeg.exe', 'ffmpeg-LICENSE.txt', 'ffmpeg-BUILDINFO.txt')
 
 # --- tonelab (prebuilt, pinned by hash) ----------------------------------------
 # The in-game tone preview's game side: tonelab.dll, the 32-bit helper that
@@ -338,6 +370,8 @@ function Publish-UiPayload([string]$AppDir, [switch]$NoLayoutCheck) {
         -c Release -r win-x64 --self-contained true -o $AppDir "-p:Version=$Version" @ContestedPublishArgs @UiPluginPublishArgs @LockedRestoreArgs
     if ($LASTEXITCODE -ne 0) { throw 'dotnet publish (UI) failed.' }
     Assert-ReleasePayloadPlugins $AppDir $PluginAssemblies -WithPlugins:$WithPlugins
+    if ($WithPlugins) { Publish-PluginTools -RepoRoot $RepoRoot -AppDir $AppDir -Scratch $OutputDir -Version $Version }
+    if ($PluginToolExes.Count -gt 0) { Assert-ReleasePayloadPlugins $AppDir $PluginToolExes -WithPlugins:$WithPlugins }
     Write-Ok $PluginModeText
 
     if ($NoLayoutCheck) { return }
@@ -415,7 +449,7 @@ $($ReleaseIdentity.SourceUrl)
 
   app\     the application and its libraries (do not move or rename)
   voices\  the built-in guitar and bass sample packs
-  tools\   ffmpeg and yt-dlp, with their licences
+  tools\   ffmpeg and yt-dlp, with their licences$(if ($WithPlugins -and $PluginToolFiles.Count -gt 0) { "`n            and the launchers of the plugin tools (drop files on one)" })
 
 Not affiliated with or endorsed by Ubisoft. Rocksmith is a trademark of Ubisoft Entertainment.
 
@@ -607,6 +641,19 @@ function Get-FfmpegBuildVersion([string]$VersionLine) {
     return $null
 }
 
+# { Line; Missing; Ok } for the ffmpeg.exe at $Path: its `-version` line, the
+# inventory components it lacks, and whether it is the pinned, complete build.
+function Get-FfmpegState([string]$Path) {
+    $line = Get-ToolVersionLine $Path @('-hide_banner', '-version')
+    $missing = @()
+    if ($line -and $line -match $FfmpegVersionPattern) { $missing = @(Test-FfmpegInventory $Path $FfmpegInventory) }
+    return [pscustomobject]@{
+        Line    = $line
+        Missing = $missing
+        Ok      = [bool]($line -and $line -match $FfmpegVersionPattern -and $missing.Count -eq 0)
+    }
+}
+
 # Ensure the redistributables exist in tools/redist/win-x64/ AT THEIR PINNED
 # VERSIONS, downloading any that are missing or stale. Returns a result object;
 # records (does not throw) per-tool failures so the caller decides whether they
@@ -629,7 +676,13 @@ function Ensure-RedistTools {
     try {
         # The hash first: a cached or downloaded exe that is not the pinned one
         # is deleted by Save-PinnedFile and never reaches the line that runs it.
-        $source = Save-PinnedFile -Urls @($YtDlpPin.url) -Dest $ytDlp -Sha256 $YtDlpPin.sha256
+        # Downloaded once into the release cache (keyed by the pinned hash), then
+        # copied into the tree and held to the same pin there.
+        $cachedYtDlp = Join-Path (Get-RedistCacheDir -Tool 'yt-dlp' -Key $YtDlpPin.sha256) 'yt-dlp.exe'
+        New-Item -ItemType Directory -Force -Path (Split-Path $cachedYtDlp -Parent) | Out-Null
+        $source = Save-PinnedFile -Urls @($YtDlpPin.url) -Dest $cachedYtDlp -Sha256 $YtDlpPin.sha256
+        Copy-Item -LiteralPath $cachedYtDlp -Destination $ytDlp -Force
+        Save-PinnedFile -Urls @($YtDlpPin.url) -Dest $ytDlp -Sha256 $YtDlpPin.sha256 | Out-Null
         $reported = Get-ToolVersionLine $ytDlp @('--version')
         if ($reported -ne $YtDlpVersion) { throw "yt-dlp.exe matches its pinned SHA-256 but reports '$reported', not $YtDlpVersion; fix tools/release/yt-dlp.json." }
         $how = if ($source -eq 'cache') { 'cached' } else { 'downloaded' }
@@ -646,29 +699,44 @@ function Ensure-RedistTools {
     # Valid only while it reports the pinned version AND still lists every
     # component in components.json: an inventory that grew since the cache was
     # built rebuilds it, rather than shipping an ffmpeg that cannot do a job.
+    # Looked for in the tree's tools/redist first, then in the release cache
+    # (Get-FfmpegPinKey: the build script + ffmpeg-min/*), and built only when
+    # neither holds a valid one. Every source is held to the same two checks.
     try {
-        $cachedLine = Get-ToolVersionLine $ffmpeg @('-hide_banner', '-version')
-        $missing = @()
-        if ($cachedLine -and $cachedLine -match $FfmpegVersionPattern) { $missing = @(Test-FfmpegInventory $ffmpeg $FfmpegInventory) }
-        if ($cachedLine -and $cachedLine -match $FfmpegVersionPattern -and $missing.Count -eq 0) {
-            Write-Ok ("ffmpeg {0} cached ({1:N1} MB), all {2} inventory components present" -f (Get-FfmpegBuildVersion $cachedLine),
+        $ffmpegKey = Get-FfmpegPinKey -ReleaseDir $PSScriptRoot
+        $state = Get-FfmpegState $ffmpeg
+        $how = 'cached'
+        if (-not $state.Ok -and (Copy-RedistFromCache -Tool 'ffmpeg' -Key $ffmpegKey -Destination $RedistDir -Files $FfmpegRedistFiles)) {
+            $state = Get-FfmpegState $ffmpeg
+            if ($state.Ok) { $how = "from the release cache ($(Get-RedistCacheDir -Tool 'ffmpeg' -Key $ffmpegKey))" }
+            else {
+                Write-Warn2 "the release cache's ffmpeg ($(Get-RedistCacheDir -Tool 'ffmpeg' -Key $ffmpegKey)) fails its checks - dropping it."
+                Remove-RedistCacheEntry -Tool 'ffmpeg' -Key $ffmpegKey
+            }
+        }
+        if ($state.Ok) {
+            Write-Ok ("ffmpeg {0} {1} ({2:N1} MB), all {3} inventory components present" -f (Get-FfmpegBuildVersion $state.Line), $how,
                 ((Get-Item $ffmpeg).Length / 1MB), (Get-FfmpegInventoryCount $FfmpegInventory))
         }
         else {
-            if ($cachedLine -and $missing.Count -gt 0) { Write-Warn2 "cached ffmpeg lacks $($missing -join ', ') - rebuilding." }
-            elseif ($cachedLine) { Write-Warn2 "cached ffmpeg is '$(Get-FfmpegBuildVersion $cachedLine)', not the pinned build - rebuilding." }
+            if ($state.Line -and $state.Missing.Count -gt 0) { Write-Warn2 "cached ffmpeg lacks $($state.Missing -join ', ') - rebuilding." }
+            elseif ($state.Line) { Write-Warn2 "cached ffmpeg is '$(Get-FfmpegBuildVersion $state.Line)', not the pinned build - rebuilding." }
             Write-Step "Building the minimal ffmpeg $($FfmpegInventory.ffmpegVersion) (Build-MinimalFfmpeg.ps1, ~10 min the first time)"
             & $FfmpegBuildScript -OutDir $RedistDir
-            $cachedLine = Get-ToolVersionLine $ffmpeg @('-hide_banner', '-version')
-            if (-not ($cachedLine -and $cachedLine -match $FfmpegVersionPattern)) {
-                throw "the built ffmpeg.exe reports '$cachedLine', not the pinned $($FfmpegInventory.ffmpegVersion)-$($FfmpegInventory.extraVersion)."
+            $state = Get-FfmpegState $ffmpeg
+            if (-not $state.Line -or $state.Line -notmatch $FfmpegVersionPattern) {
+                throw "the built ffmpeg.exe reports '$($state.Line)', not the pinned $($FfmpegInventory.ffmpegVersion)-$($FfmpegInventory.extraVersion)."
             }
-            $missing = @(Test-FfmpegInventory $ffmpeg $FfmpegInventory)
-            if ($missing.Count -gt 0) { throw "the built ffmpeg.exe lacks $($missing -join ', ')." }
-            Write-Ok ("ffmpeg.exe {0} ({1:N1} MB)" -f (Get-FfmpegBuildVersion $cachedLine), ((Get-Item $ffmpeg).Length / 1MB))
+            if ($state.Missing.Count -gt 0) { throw "the built ffmpeg.exe lacks $($state.Missing -join ', ')." }
+            Write-Ok ("ffmpeg.exe {0} ({1:N1} MB)" -f (Get-FfmpegBuildVersion $state.Line), ((Get-Item $ffmpeg).Length / 1MB))
+        }
+        # A valid ffmpeg the cache does not hold yet fills it, so the next fresh tree copies it.
+        if (-not (Test-Path -LiteralPath (Join-Path (Get-RedistCacheDir -Tool 'ffmpeg' -Key $ffmpegKey) 'ffmpeg.exe'))) {
+            $saved = Save-RedistToCache -Tool 'ffmpeg' -Key $ffmpegKey -Source $RedistDir -Files $FfmpegRedistFiles
+            Write-Ok "ffmpeg stored in the release cache ($saved)"
         }
         $result.Ffmpeg  = $ffmpeg
-        $result.FfmpegVersion = Get-FfmpegBuildVersion $cachedLine
+        $result.FfmpegVersion = Get-FfmpegBuildVersion $state.Line
     }
     catch {
         $result.Errors += "ffmpeg: $_"
@@ -834,11 +902,15 @@ function Clear-ReleaseBuildOutputs([string[]]$RootProjects) {
 # readable metadata); no file may be non-empty and all zeros. The rules are
 # DotCharter.Services' ReleasePayloadIntegrity, pinned by
 # ReleasePayloadIntegrityTests in the default gate; this only applies them.
+# The same tool also refuses a native DLL/exe that imports a DLL which is neither
+# shipped beside it nor a Windows system DLL (NativeImportAudit, #176: v1.0.0's
+# juce_sharp.dll imported VCRUNTIME140/MSVCP140, which the zip did not carry).
 function Test-PayloadBinaries([string]$PayloadDir, [string]$Label) {
     & dotnet run $BinaryCheckTool $PayloadDir
     if ($LASTEXITCODE -ne 0) {
-        throw "The $Label payload carries corrupt binaries (named above) - not packing it. " +
-              'Delete the named build outputs (or bin/obj) and run the release again.'
+        throw "The $Label payload carries corrupt binaries or native imports nothing satisfies (named above) - not packing it. " +
+              'For a corrupt file delete the named build outputs (or bin/obj) and run the release again; ' +
+              'for an import, link that runtime statically or ship the DLL beside the image.'
     }
 }
 
@@ -1806,11 +1878,11 @@ function Invoke-HeadlessUiPass([string[]]$Filter, [string]$ResultsDir, [string]$
     }
 }
 
-function Invoke-HeadlessUiGate([string]$ResultsDir) {
-    Write-Step "Gate: headless UI suite ($HeadlessShards concurrent testhosts, plus the localized layout sweeps)"
+# DotCharter.Tests, built once per run: the headless gate and the release lane both run its output.
+function Build-ReleaseTestProject([string]$ResultsDir) {
+    if ($script:TestProjectBuilt) { return }
     $script:HeadlessTestProject = Join-Path $RepoRoot 'DotCharter.Tests/DotCharter.Tests.csproj'
     New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
-
     Write-Host '    building DotCharter.Tests…' -ForegroundColor DarkGray
     $buildLog = Join-Path $ResultsDir 'headless-ui-build.log'
     & dotnet build $script:HeadlessTestProject --nologo -v:m *> $buildLog
@@ -1819,11 +1891,63 @@ function Invoke-HeadlessUiGate([string]$ResultsDir) {
             ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
         throw "DotCharter.Tests failed to build — full log: $buildLog"
     }
+    $script:TestProjectBuilt = $true
+}
 
-    $pass = Invoke-HeadlessUiPass -Filter $HeadlessUiFilter -ResultsDir $ResultsDir `
-        -Label 'run1' -Culture 'en-US' -Shards $HeadlessShards
-    $run = $pass.Run
-    $product = @($pass.Product)
+# The release lane (tools/ci/release-lane.json): the slow corpus / integration / determinism
+# classes the default gate leaves out. NEVER skipped - only reused when a green run of it is on
+# record for this exact tree (the merge train records one; -ForceReleaseLane runs it anyway).
+function Invoke-ReleaseLaneGate([string]$ResultsDir) {
+    Write-Step "Gate: release lane (the slow classes tools/ci/release-lane.json lists, $HeadlessShards concurrent testhosts)"
+    Build-ReleaseTestProject -ResultsDir $ResultsDir
+    $tree = Get-CleanTreeId -Repo $RepoRoot
+    $recorded = $null
+    if (-not $tree) { Write-Host '    the tree is not clean HEAD, so no recorded release-lane run applies' -ForegroundColor DarkGray }
+    elseif ($ForceReleaseLane) { Write-Host '    -ForceReleaseLane: running the lane whatever is on record' -ForegroundColor DarkGray }
+    else { $recorded = Find-GateRecord -Trees (Get-GateRecordTrees -RepoRoot $RepoRoot -Tree $tree) -Kind releaseLane }
+    if ($recorded) {
+        Write-Ok "release lane NOT re-run: reusing the green run recorded for $(Format-GateRecord $recorded) (-ForceReleaseLane re-runs it)"
+        return
+    }
+    $laneArgs = @('-NoProfile', '-File', (Join-Path $RepoRoot 'tools/agent/Invoke-Gate.ps1'), '-ReleaseLane', '-NoBuild', '-Shards', $HeadlessShards)
+    & pwsh @laneArgs | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The release lane is red - not cutting a release. Re-run it alone: pwsh -NoProfile -File tools/agent/Invoke-Gate.ps1 -ReleaseLane'
+    }
+    Write-Ok 'release lane green'
+    if ($tree) {
+        $saved = Save-GateRecord -Tree $tree -Commit (git -C $RepoRoot rev-parse HEAD) -ReleaseLane -Source 'New-Release.ps1 release lane'
+        Write-Ok "recorded: a green release lane on tree $tree ($saved)"
+    }
+    $global:LASTEXITCODE = 0
+}
+
+function Invoke-HeadlessUiGate([string]$ResultsDir) {
+    Write-Step "Gate: headless UI suite ($HeadlessShards concurrent testhosts, plus the localized layout sweeps)"
+    $script:HeadlessTestProject = Join-Path $RepoRoot 'DotCharter.Tests/DotCharter.Tests.csproj'
+    New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
+
+    Build-ReleaseTestProject -ResultsDir $ResultsDir
+
+    # One test run per tree: a green main pass on record for this exact, clean tree is
+    # reused (named below); -ForceHeadlessUi runs it again. The sweeps below always run.
+    $tree = Get-CleanTreeId -Repo $RepoRoot
+    $recorded = $null
+    if (-not $tree) { Write-Host '    the tree is not clean HEAD, so no recorded headless run applies' -ForegroundColor DarkGray }
+    elseif ($ForceHeadlessUi) { Write-Host '    -ForceHeadlessUi: running the main pass whatever is on record' -ForegroundColor DarkGray }
+    else { $recorded = Find-GateRecord -Trees (Get-GateRecordTrees -RepoRoot $RepoRoot -Tree $tree) -Kind headless }
+
+    $product = @()
+    if ($recorded) {
+        Write-Ok "headless UI main pass NOT re-run: reusing the green run recorded for $(Format-GateRecord $recorded) (-ForceHeadlessUi re-runs it)"
+        $run = [pscustomobject]@{ Passed = 'recorded'; Skipped = 'recorded'; LogPath = (Get-GateRecordPath -Tree $recorded.Tree) }
+    }
+    else {
+        $pass = Invoke-HeadlessUiPass -Filter $HeadlessUiFilter -ResultsDir $ResultsDir `
+            -Label 'run1' -Culture 'en-US' -Shards $HeadlessShards
+        $run = $pass.Run
+        $product = @($pass.Product)
+    }
 
     # The localized layout sweeps. Only the classes that compare a size, because
     # a full run per culture would cost more than a release should spend before
@@ -1851,6 +1975,10 @@ function Invoke-HeadlessUiGate([string]$ResultsDir) {
 
     Write-Ok ("headless UI suite green ($($run.Passed) passed, $($run.Skipped) skipped), " +
               "and its layout classes green in $($HeadlessSweepCultures -join ' + ')")
+    if ($tree -and -not $recorded) {
+        $saved = Save-GateRecord -Tree $tree -Commit (git -C $RepoRoot rev-parse HEAD) -Headless -Source 'New-Release.ps1 headless gate'
+        Write-Ok "recorded: a green headless run on tree $tree ($saved)"
+    }
     # A tolerated session-race failure leaves $LASTEXITCODE at 1. Everything
     # after this point sets it before reading it, but a stale non-zero is a
     # footgun waiting for the next `if ($LASTEXITCODE -ne 0)` someone adds.
@@ -1863,6 +1991,7 @@ if ($SmokeOnly) {
     $source = (Resolve-Path -LiteralPath $SmokeOnly).Path
     # A pack being re-verified is a pack about to be uploaded: the plugin check first.
     Assert-ReleasePayloadPlugins $source $PluginAssemblies -WithPlugins:$WithPlugins
+    if ($PluginToolFiles.Count -gt 0) { Assert-ReleasePayloadPlugins $source $PluginToolFiles -WithPlugins:$WithPlugins }
     Write-Ok "$PluginModeText in $source"
     Invoke-PackSmoke -Source $source -ScratchRoot (Join-Path ([System.IO.Path]::GetTempPath()) "dotcharter-smoke-$([guid]::NewGuid().ToString('N'))")
     Write-Host "Smoke PASSED: $source" -ForegroundColor Green
@@ -1960,6 +2089,15 @@ elseif (-not $SkipUi) {
     Write-Warn2 'SKIPPING tonelab (-SkipTonelab): the install carries no tools/tonelab/, so the app offers no "Start Rocksmith".'
 }
 
+# The app-local VC++ runtime for ONNX Runtime, verified against its pin HERE for the same
+# reason: a missing or changed redistributable should cost seconds, not a pack.
+$vcRedistDir = Join-Path $OutputDir 'vcredist'
+if (-not $SkipUi) {
+    Write-Step "App-local VC++ runtime $($VcRedistPin.Version) for ONNX Runtime"
+    $vcSource = Install-VcRedist -Pin $VcRedistPin -Destination $vcRedistDir
+    Write-Ok "$(@($VcRedistPin.Files.Keys) -join ', ') from $vcSource, each matching its pinned SHA-256"
+}
+
 # The media tools are acquired HERE, not after the publishes: a pin that 404s
 # (BtbN deleted n7.1 under the v0.59.0 pack) should cost seconds, not a pack.
 $redist = $null
@@ -1987,6 +2125,10 @@ if ($SkipHeadlessUi) {
 else {
     Invoke-HeadlessUiGate -ResultsDir (Join-Path $OutputDir 'tests')
 }
+
+# --- Blocking gate: the release lane -----------------------------------------
+# The slow classes the default gate leaves out. Not skippable (see Invoke-ReleaseLaneGate).
+Invoke-ReleaseLaneGate -ResultsDir (Join-Path $OutputDir 'tests')
 
 $assets = @()
 
@@ -2049,6 +2191,12 @@ if (-not $SkipUi) {
         $script:ToolsSummary = 'skipped (-SkipTools)'
     }
 
+    if ($WithPlugins -and $PluginToolFiles.Count -gt 0) {
+        Write-Step 'Writing the plugin tools'' launchers into tools/'
+        Add-PluginToolLaunchers -RepoRoot $RepoRoot -InstallDir $publishDir
+        Write-Ok "launchers: $((@(Get-PluginReleaseTools $RepoRoot) | ForEach-Object { $_.Launcher }) -join ', ')"
+    }
+
     if (-not $SkipTonelab) {
         Write-Step 'Copying the pinned tonelab build into tools/tonelab/'
         $tonelabShipped = Add-Tonelab -PublishDir $publishDir
@@ -2057,6 +2205,11 @@ if (-not $SkipUi) {
     else {
         Write-Warn2 'tonelab NOT bundled (-SkipTonelab): no tools/tonelab/ in this install.'
     }
+
+    # onnxruntime.dll imports the dynamic C++ runtime: ship the pinned x64 DLLs beside it.
+    # The binary check below fails the release if one is missing.
+    foreach ($name in $VcRedistPin.Files.Keys) { Copy-Item -LiteralPath (Join-Path $vcRedistDir $name) -Destination (Join-Path $appDir $name) -Force }
+    Write-Ok "VC++ runtime $($VcRedistPin.Version) copied beside onnxruntime.dll: $(@($VcRedistPin.Files.Keys) -join ', ')"
 
     # Every binary in the payload, the bundled tools included, BEFORE anything is
     # hashed or zipped: a corrupt file never reaches a manifest or an asset.
@@ -2087,9 +2240,11 @@ if (-not $SkipUi) {
 
     Write-Step 'Zipping UI payload (folder-wrapped, forward-slash entries)'
     Assert-ReleasePayloadPlugins $publishDir $PluginAssemblies -WithPlugins:$WithPlugins
+    if ($PluginToolFiles.Count -gt 0) { Assert-ReleasePayloadPlugins $publishDir $PluginToolFiles -WithPlugins:$WithPlugins }
     New-FolderWrappedZip -Directory $publishDir -ZipPath $uiZip
     Test-ReleaseZip -ZipPath $uiZip -ExpectedRoot "$($ReleaseIdentity.RootName)/"
     Assert-ReleasePayloadPlugins $uiZip $PluginAssemblies -WithPlugins:$WithPlugins
+    if ($PluginToolFiles.Count -gt 0) { Assert-ReleasePayloadPlugins $uiZip $PluginToolFiles -WithPlugins:$WithPlugins }
     Write-Ok ("{0} ({1:N0} MB)" -f (Split-Path $uiZip -Leaf), ((Get-Item $uiZip).Length / 1MB))
 
     # Run what SHIPS: the zip, extracted, launched. The layout validator above

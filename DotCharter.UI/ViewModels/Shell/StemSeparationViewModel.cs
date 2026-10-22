@@ -521,14 +521,14 @@ public sealed partial class StemSeparationViewModel : ViewModelBase, ISongStemSe
             _logger.Info(AppLogCategory.Audio, $"Stems ready. Added/updated {finalStems.Count} stems (kept {keptCount}).");
             _stemMixer.Rebuild();
             StemsApplied?.Invoke();
-            // Persist the updated Stems collection into the .rscp so that
+            // Persist the updated Stems collection into the .dcproj so that
             // reopening the project picks them up without forcing the user
             // to re-run separation. Without this the in-memory project is
             // updated but the file on disk still has the old (or empty)
             // <stems/> node, so the inspector mixer starts empty on reload.
             // Skip the auto-save for transient sessions (PSARC imports etc.)
             // that have no project file path � SaveProject would otherwise
-            // write a stray "project.rscp" into the working directory.
+            // write a stray "project.dcproj" into the working directory.
             if (hasProject)
             {
                 // SaveProjectAsync handles its own faults; fire-and-forget is

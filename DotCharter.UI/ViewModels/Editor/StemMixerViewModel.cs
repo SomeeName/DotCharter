@@ -373,7 +373,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
             }
 
             // Resolve relative stem paths against the project file's directory —
-            // the base every persisted relative name in the .rscp uses (the cover
+            // the base every persisted relative name in the .dcproj uses (the cover
             // art does too; see parsing-psarc.md).
             // Pure string work — no disk access, safe on the UI thread.
             var projectDir = !string.IsNullOrWhiteSpace(_state.CurrentProjectPath)
@@ -477,7 +477,7 @@ public partial class StemMixerViewModel : ViewModelBase, IDisposable
 
         Tracks.Clear();
 
-        // Recovery path: when the .rscp doesn't reference any stems but a
+        // Recovery path: when the .dcproj doesn't reference any stems but a
         // `stems/` folder exists next to it, adopt the WAV files there. For
         // projects produced by older builds (or by separation runs that
         // finished before we started saving the project automatically), so

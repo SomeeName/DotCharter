@@ -20,7 +20,7 @@ public enum BackupSettingKind
     DataFolder,
 
     /// <summary>A list of project files (<c>RecentProjects</c>). Each entry is taken
-    /// only when it is a plain local <c>.rscp</c> that exists on this machine.</summary>
+    /// only when it is a plain local project file (<c>.dcproj</c> or <c>.rscp</c>) that exists on this machine.</summary>
     ExistingProjectFiles,
 
     /// <summary>Never taken: it names something the app executes, loads, opens at

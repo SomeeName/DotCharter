@@ -30,7 +30,7 @@ public sealed class FakeChartDiffScreen : FakeDialog<bool>, IChartDiffScreen
         new(FakeVariantNames.Error, Error)
     ];
 
-    public static FakeChartDiffScreen Default() => new("hysteria_v3.rscp", ["Lead (Lead)", "Rhythm (Rhythm)", "Bass (Bass)"],
+    public static FakeChartDiffScreen Default() => new("hysteria_v3.dcproj", ["Lead (Lead)", "Rhythm (Rhythm)", "Bass (Bass)"],
     [
         new Row("Added", "Level 12 · 0:41.250", "Note on string 3", "Fret 7", "added"),
         new Row("Removed", "Level 12 · 0:42.000", "Chord", "3 notes", "removed"),
@@ -42,7 +42,7 @@ public sealed class FakeChartDiffScreen : FakeDialog<bool>, IChartDiffScreen
     public static FakeChartDiffScreen Empty() => new("", [], [], "", "Pick a project file to compare with.");
 
     public static FakeChartDiffScreen LongText() => new(
-        "Hysterie – Liveaufnahme mit alternativer Stimmung (dritte überarbeitete Fassung).rscp",
+        "Hysterie – Liveaufnahme mit alternativer Stimmung (dritte überarbeitete Fassung).dcproj",
         ["Leadgitarre mit alternativer Stimmung (Lead)", "リズムギター（ドロップD・カポ2）(Rhythm)"],
         [
             new Row("Hinzugefügt", "Stufe 12 · 0:41.250", "Note auf Saite 3", "Bund 7, Sustain, Vibrato, Akzent", "added"),
@@ -50,7 +50,7 @@ public sealed class FakeChartDiffScreen : FakeDialog<bool>, IChartDiffScreen
         ], "1 hinzugefügt · 0 entfernt · 1 geändert", "");
 
     /// <summary>A re-charted song: the table scrolls.</summary>
-    public static FakeChartDiffScreen Full() => new("hysteria_v1.rscp", ["Lead (Lead)"],
+    public static FakeChartDiffScreen Full() => new("hysteria_v1.dcproj", ["Lead (Lead)"],
     [
         .. Enumerable.Range(0, 60).Select(IChartDiffRow (i) => (i % 3) switch
         {

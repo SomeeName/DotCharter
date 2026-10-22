@@ -324,7 +324,7 @@ public static class AudioMetadataExtractor
     /// <summary>
     ///     First non-blank tag among <paramref name="keys" />, CLEANED — not
     ///     merely trimmed. These strings come from an arbitrary file's tags and
-    ///     become project metadata, and the <c>.rscp</c> is XML: a single NUL
+    ///     become project metadata, and the <c>.dcproj</c> is XML: a single NUL
     ///     (ID3 text frames are NUL-terminated and taggers routinely leave one
     ///     behind; ffprobe hands it straight back in its JSON) makes every later
     ///     SAVE of that project throw out of <c>XmlWriter</c>, naming no field.

@@ -13,7 +13,7 @@ the issue or pull request that carried the discussion instead of repeating it.
 | [0001](0001-native-juce-audio-engine.md) | All real-time audio runs in a native JUCE engine behind a C ABI |
 | [0002](0002-vulkan-only-rendering.md) | The highway and the editor timeline are drawn with Vulkan only |
 | [0003](0003-avalonia-and-presentation-layer.md) | Avalonia UI, with screen contracts in a Presentation layer that never references Avalonia |
-| [0004](0004-rscp-and-dcsong-formats.md) | `.rscp` is the project format, `.dcsong` is the song package |
+| [0004](0004-rscp-and-dcsong-formats.md) | `.dcproj` is the project format (with a Charter `.rscp` companion), `.dcsong` is the song package |
 | [0005](0005-package-writer-only.md) | The repository holds the package writer; reading game packages is not part of it |
 | [0006](0006-stems-never-regenerated.md) | Separated stems are cached per song and never regenerated |
 | [0007](0007-ci-on-manual-trigger.md) | CI runs unattended only on the public repo |

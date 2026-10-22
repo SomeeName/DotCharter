@@ -241,6 +241,7 @@ public sealed class ToneMatcher(
         var target = trimmed.Content > TimeSpan.Zero ? trimmed.Audio : request.Target;
 
         var targetFeatures = extractor.Extract(target);
+        var targetSpectra = TargetSpectra(request, target);
         var floor = SelfDistance(target, extractor, request.TargetIsRender);
         var targetTooShort = !MatchTargetAudio.IsMeasurable(trimmed);
 
@@ -348,8 +349,7 @@ public sealed class ToneMatcher(
             ct.ThrowIfCancellationRequested();
             if (!budget.TryTake()) break;
             status?.Report(localization.Format("Progress_RenderingCandidate", i + 1, seeds.Count, budget.Used, budget.MaxRenders));
-            var (d, wet) = await EvaluateAsync(seeds[i].Rig, request, target, targetFeatures, ct)
-                .ConfigureAwait(false);
+            var (d, wet) = await EvaluateAsync(seeds[i].Rig, request, targetSpectra, targetFeatures, ct).ConfigureAwait(false);
             scored.Add(Candidate(seeds[i].Rig, d, seeds[i].Origin, request,
                 new Scoring(targetFeatures, wet, referenceFeatures, floor, targetTooShort)));
         }
@@ -430,7 +430,7 @@ public sealed class ToneMatcher(
                 {
                     if (!budget.TryTake()) return double.PositiveInfinity;
                     var rig = layout.Decode(Array.ConvertAll(x, static v => (float)v));
-                    var (d, wet) = await EvaluateAsync(rig, request, target, targetFeatures, token)
+                    var (d, wet) = await EvaluateAsync(rig, request, targetSpectra, targetFeatures, token)
                         .ConfigureAwait(false);
                     if (d < bestSeen) { bestSeen = d; bestWet = wet; }
                     status?.Report(
@@ -706,21 +706,29 @@ public sealed class ToneMatcher(
             ? 0.0
             : RigPlausibility.Penalty(rig, request.StemHint);
 
+    /// <summary>The raw-audio term compares every render of a match with ONE target, so
+    /// the target's spectra are taken once per match rather than once per render. Null
+    /// when the term does not apply (a recorded target, or a zero weight).</summary>
+    private double[]?[]? TargetSpectra(ToneMatchRequest request, MonoAudio target)
+        => request.TargetIsRender && _options.SpectralWeight > 0.0
+            ? MultiScaleSpectralDistance.Spectra(target)
+            : null;
+
     /// <summary>Render the reference DI through a rig and measure how far the result
     /// is from the target: the feature distance plus a small raw-audio term. This is
     /// the MEASUREMENT and carries no prior — see <see cref="Candidate" />.</summary>
     private async Task<(double Distance, ToneFeatures Wet)> EvaluateAsync(
         DcRigPreset rig,
         ToneMatchRequest request,
-        MonoAudio target,
+        double[]?[]? targetSpectra,
         ToneFeatures targetFeatures,
         CancellationToken ct)
     {
         var wet = await renderer.RenderAsync(request.ReferenceDi, rig, ct).ConfigureAwait(false);
         var wetFeatures = similarity.Extractor.Extract(wet);
         var d = similarity.Distance(wetFeatures, targetFeatures);
-        if (request.TargetIsRender && _options.SpectralWeight > 0.0)
-            d += _options.SpectralWeight * MultiScaleSpectralDistance.Distance(wet, target);
+        if (targetSpectra is not null)
+            d += _options.SpectralWeight * MultiScaleSpectralDistance.Distance(wet, targetSpectra);
         return (d, wetFeatures);
     }
 

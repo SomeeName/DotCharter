@@ -14,6 +14,7 @@ pwsh tools/release/New-Release.ps1 -SkipTools      # UI pack WITHOUT the bundled
 pwsh tools/release/New-Release.ps1 -SkipTonelab    # UI pack WITHOUT tools/tonelab/ (no pinned tonelab build here)
 pwsh tools/release/New-Release.ps1 -AllowMissingTools  # pack even if a pinned media tool can't be fetched (default: FAIL)
 pwsh tools/release/New-Release.ps1 -SkipHeadlessUi # skip the blocking UI test gate (escape hatch)
+pwsh tools/release/New-Release.ps1 -ForceHeadlessUi # re-run its main pass even when a green run of this tree is on record
 pwsh tools/release/New-Release.ps1 -SkipLaunchSmoke # skip starting the packed exe (escape hatch)
 pwsh tools/release/New-Release.ps1 -Tone3000ClientId t3k_pub_...  # bake the rig's TONE3000 key (never commit it)
 pwsh tools/release/New-Release.ps1 -SkipRigLab     # DotCharter only, no standalone rig
@@ -50,6 +51,7 @@ project file at the top; its assembly is named after that file
 | payload folder, zip, `-SmokeOnly` input | REFUSED when they carry a plugin assembly | REFUSED when they LACK one |
 | printed `gh release create -R` | `-Repo`, by default the public repo | `-Repo`, required, never the public repo |
 | `--target` | the HEAD of `-TagCheckout`, by default the DotCharter checkout | the same |
+| plugin console tools (`<DotCharterReleaseTool>true</DotCharterReleaseTool>` in a project below `plugins/<name>/`) | none shipped; a payload holding a tool's `.exe` / `.cmd` is REFUSED | each is published into `app/` (`Publish-PluginTools`) and gets `tools/<name>.cmd` (`Add-PluginToolLaunchers`); a payload lacking either file is REFUSED |
 
 Every check is one function in `PluginPayloadCheck.psm1` (`Assert-ReleasePayloadPlugins`,
 `Get-UiPluginPublishArgs`, `Resolve-ReleaseFeed`), run on fixtures by
@@ -77,7 +79,7 @@ failing the pack by default:
 | Check | When | Catches |
 |---|---|---|
 | **Clean Release build** (`Clear-ReleaseBuildOutputs`) | before the publishes | deletes `bin/Release` + `obj/Release` of every project in the ProjectReference closure of `DotCharter.UI` and `DotCharter.RigLab`, so every shipped byte is compiled by this run. `obj/project.assets.json` stays. A locked output fails here, by name |
-| **Binary check** (`CheckPayloadBinaries.cs` over `DotCharter.Services/Update/ReleasePayloadIntegrity`) | each staged payload (UI after the tools are bundled, RigLab) BEFORE hashing/zipping, and again on the extracted zip | every `.dll`/`.exe` must start with `MZ`, have PE headers that parse and — if managed — metadata that reads; no file of any kind may be non-empty and all zeros. Prints each offender with its fault (`AllZeros`, `NotPortableExecutable`, `BadPeHeaders`, `BadMetadata`, `Empty`). Rules pinned by `ReleasePayloadIntegrityTests` in the default gate. ~5 s on a real payload |
+| **Binary check** (`CheckPayloadBinaries.cs` over `DotCharter.Services/Update/ReleasePayloadIntegrity`) | each staged payload (UI after the tools are bundled, RigLab) BEFORE hashing/zipping, and again on the extracted zip | every `.dll`/`.exe` must start with `MZ`, have PE headers that parse and — if managed — metadata that reads; no file of any kind may be non-empty and all zeros. Prints each offender with its fault (`AllZeros`, `NotPortableExecutable`, `BadPeHeaders`, `BadMetadata`, `Empty`). Rules pinned by `ReleasePayloadIntegrityTests` in the default gate. The same tool then runs `NativeImportAudit` (#176): every native DLL/exe may import only Windows system DLLs or files in its own folder (the VC++ runtime is never "system", and there is no exception list: ONNX Runtime passes because `New-Release.ps1` copies the four x64 VC++ runtime DLLs it imports beside it from the Visual Studio redistributable, verified against `vcredist.json`, see `VcRedist.psm1`); rules pinned by `NativeImportAuditTests`. ~5 s on a real payload |
 | **Launch smoke** (`Invoke-PackSmoke`) | after the UI zip validates | extracts the ZIP to `artifacts/release/v<ver>/smoke`, points `DOTCHARTER_DATA_ROOT` at a folder inside that copy and writes `appconfig.json` there and beside the exe (config, profiles, logs and caches stay in the copy — your `%APPDATA%\DotCharter` and `%LOCALAPPDATA%\DotCharter` are never read or written; audio opens WASAPI, never ASIO), starts the TOP `DotCharter.exe` (the launcher) **on a hidden Win32 desktop** (`HiddenDesktop.psm1`, below), finds `app\DotCharter.exe` as its child, and requires that app's `StartupPhases:` log line within `-SmokeTimeoutSeconds` (120) and the app alive `-SmokeSettleSeconds` (5) later. FAILS if DotCharter ever owns the foreground window; prints the foreground window before/after. Kills the process tree and releases the desktop after. On failure it prints the exit code, stderr and the log tail, and DELETES the UI zip so the printed upload command cannot ship it. Warns if the line lacks `r2r=yes`. A real pack takes ~20 s |
 
 `-SmokeOnly <zip|folder>` runs the binary check and the launch smoke on an
@@ -152,6 +154,54 @@ What you see when you run it:
 `-SkipHeadlessUi` exists for iterating on the asset build. It prints a WARNING
 naming what is now unchecked. Do not use it to cut a real release.
 
+**One test run per tree.** When the working tree is exactly `HEAD` (no change, no
+untracked file, the submodule at its gitlink) and a green headless run of that TREE
+is on record (`ReleaseCache.psm1` `Find-GateRecord`), the main pass is not run
+again: the step prints `headless UI main pass NOT re-run: reusing the green run
+recorded for tree <id> (commit, source, date)`. The records come from
+`tools/agent/Merge-Train.ps1` (a green train with the headless suite), from an
+earlier release run (a green main pass is recorded), and, for a scratch export,
+from the dev tree it was cut from (`export-origin.json`, below). The test build
+and the localized layout sweeps run either way; `-ForceHeadlessUi` runs the main
+pass whatever is on record.
+
+**The release lane is a second blocking gate.** The default gate leaves the slowest
+corpus / integration / determinism classes out (`tools/ci/release-lane.json`, a reason
+each); preflight runs them right after the headless suite, as
+`Invoke-Gate.ps1 -ReleaseLane -NoBuild -Shards <HeadlessShards>`, before the clean
+release build. There is no skip switch: a release is not cut without them. Like the
+headless main pass it is reused only from a green record of the same clean tree
+(`ReleaseCache.psm1` kind `releaseLane`, written by `Merge-Train.ps1` and by an earlier
+release run); `-ForceReleaseLane` runs it anyway.
+
+## Release caches outside the tree (`ReleaseCache.psm1`)
+
+Everything a fresh tree would otherwise rebuild lives under
+`%LOCALAPPDATA%\DotCharter-release-cache` (`DOTCHARTER_RELEASE_CACHE` overrides it;
+the tests always do):
+
+| Folder | Holds | Keyed by |
+|---|---|---|
+| `redist\ffmpeg\<key>\` | `ffmpeg.exe`, `ffmpeg-LICENSE.txt`, `ffmpeg-BUILDINFO.txt` | `Get-FfmpegPinKey`: SHA-256 over `Build-MinimalFfmpeg.ps1` and every file under `ffmpeg-min/` (line endings ignored) |
+| `redist\yt-dlp\<sha256>\` | `yt-dlp.exe` | its pinned SHA-256 (`yt-dlp.json`) |
+| `gate-results\<tree>.json` | a green default gate and/or headless run, with commit, source and time | the git TREE id |
+
+The app-local VC++ runtime for ONNX Runtime (`VcRedist.psm1`, pin `vcredist.json`: version
+plus a SHA-256 per file) is taken from the installed Visual Studio's
+`VC\Redist\MSVC\<version>\x64\Microsoft.VC*.CRT\` (found with `vswhere`), cached under
+`redist\vcredist\<pin key>\`, and copied beside `onnxruntime.dll` in `app\`. A file that differs
+from its pin, or a version no Visual Studio carries and the cache lacks, fails the release before
+the publish. To move to a new redistributable, install it, check which CRT DLLs `onnxruntime*.dll`
+import, then update the version, folder and hashes in `vcredist.json`.
+
+A cache entry is never trusted unchecked: what `Ensure-RedistTools` copies out of
+it must pass the same version, inventory and hash checks as a tree copy, and an
+entry that fails them is deleted and rebuilt. A gate record is written only for a
+green run on a clean tree and read only for an identical one; a later record of
+the other kind is merged into it, never over it. `Infrastructure/ReleaseCacheTests`
+runs the module (the record functions under Windows PowerShell 5.1 too, which the
+merge train runs in) and keeps both scripts calling it.
+
 ## The assets
 
 | Asset | Built by |
@@ -175,6 +225,9 @@ publish a matching pair. The signature is what the release channel cannot forge.
 - **The private key lives outside the repository**, on the release machine:
   `..\DotCharter-local\release-signing\dotcharter-release-ed25519.key` beside
   the checkout (override with `-SigningKeyPath` or `DOTCHARTER_RELEASE_SIGNING_KEY`).
+  "The checkout" is the DEV checkout (`Get-ReleaseLocalDir`): the main one for a
+  worktree, and the one a scratch export was cut from when the script runs inside
+  that export (its `export-origin.json`).
   Base64 of the 32-byte Ed25519 seed; the folder's ACL is user-only. Never commit
   it, print it or put it in a log. `SignReleaseManifest.cs` never echoes it.
 - **Back it up offline.** If it is lost, no install from v1.1.0 on can take
@@ -231,7 +284,9 @@ PATH is consulted only with `DOTCHARTER_TOOLS_FROM_PATH=1`.
 How the script does it (`Ensure-RedistTools` + `Add-BundledTools`):
 
 - Binaries are cached in the **git-ignored** repo folder `tools/redist/win-x64/`
-  and reused **only while each still passes when RUN**: `yt-dlp.exe` must first
+  and, outside every tree, in the release cache (above), so a fresh scratch export
+  copies the minimal ffmpeg instead of spending ~10 minutes building it; a valid
+  ffmpeg the cache lacks fills it. Either copy is reused **only while it still passes when RUN**: `yt-dlp.exe` must first
   hash to its pin and then `yt-dlp --version` must report the pinned version,
   and `ffmpeg -version` must report the inventory's
   `<ffmpegVersion>-<extraVersion>` AND the exe must list every inventory
@@ -561,27 +616,49 @@ pwsh -NoProfile -File tools/release/Test-PublicLeaks.ps1 -Path <folder>         
   the snapshot's parent, and the tag `v<version>` absent or already naming the snapshot
   commit (an unchanged JuceSharp reuses its public commit and tag and pushes nothing). A
   tag for another commit means the version was not bumped: the export refuses and exits 1.
-- **Scratch:** `%TEMP%\dotcharter-public-export\{JuceSharp.git,DotCharter}`, recreated per run.
-  Both read the dev objects through `objects/info/alternates`: the dev checkout's working
-  tree, index, branches and refs are never written. `-PublicDotCharterUrl` /
-  `-PublicJuceSharpUrl` name the previous snapshots (fetched only).
+- **Scratch:** `%TEMP%\dotcharter-public-export\{JuceSharp.git,DotCharter}`. Both read the
+  dev objects through `objects/info/alternates`: the dev checkout's working tree, index,
+  branches and refs are never written. `-PublicDotCharterUrl` / `-PublicJuceSharpUrl` name
+  the previous snapshots (fetched only). Everything is recreated per run EXCEPT the
+  DotCharter work tree with its index (and JuceSharp's, `dotcharter-juce-snapshot.index` in
+  its git dir): its refs are cleared and it is updated like a checkout (`update-index
+  --refresh`, `reset --hard`, `read-tree --reset -u`), so unchanged files keep their
+  timestamps and `bin/`, `obj/` and `artifacts/` stay, and the public build is incremental.
+  `-Clean` drops the kept tree too.
+- **The scans read the tracked tree only.** Before the leak check and gitleaks, every
+  git-ignored path of the kept tree (build outputs, the copied native pair) is moved to
+  `<scratch>\build-cache` (`Move-SnapshotBuildOutputs`), stray untracked files are cleaned,
+  and `Assert-SnapshotTracksEverything` refuses to scan while `git ls-files --others` lists
+  anything. After both scans the outputs move back (`Restore-SnapshotBuildOutputs`; a run
+  that died in between leaves them parked, and the next run restores them).
+- **`export-origin.json`** beside the scratch tree names the dev checkout, commit and tree
+  and the snapshot tree. `New-Release.ps1` run inside the export reads it (only beside the
+  export marker) for the signing key's default and the dev tree's headless record. The
+  export also prints the exact `New-Release.ps1` command for the snapshot, with
+  `-SigningKeyPath` and `-TonelabDir` (`DOTCHARTER_TONELAB_DIR`, else a placeholder).
 - **`-Build` / `-Gate`** copy the native pair into the scratch tree and run
-  `tools/agent/Invoke-Gate.ps1 -Public -Build` (or `-Gate`) there.
+  `tools/agent/Invoke-Gate.ps1 -Public -Build` (or `-Gate`) there. **One test run per tree:**
+  with `-Gate`, a green default gate on record for this exact snapshot tree or for the dev
+  tree it was cut from (the merge train records those) is reused: the public variant is
+  still BUILT (`-Public -Build`), only the identical test run is skipped, and the build line
+  says `the gate was NOT re-run: reusing the green gate recorded for tree <id> ...`.
+  `-ForceGate` runs the gate anyway; a green gate run here is recorded for the snapshot tree.
 - **`-Push`** pushes each repo with `git push --atomic` (JuceSharp first: DotCharter's
   gitlink names it), after re-reading both preflights. It refuses, pushing nothing, without
   BOTH URLs; without `-Gate` in the same run; on any leak finding; when gitleaks is missing
   or reports findings; while the native pin is `PENDING`; when a commit or tag it would push
   has an author, committer or tagger email other than the snapshot identity; and on any
   preflight problem. Everything but the gate is checked before the gate runs.
-  **Gate evidence is the run itself:** `-Push` requires `-Gate`, which runs
-  `Invoke-Gate.ps1 -Public -Gate` in the very scratch tree being pushed, a moment before
-  the push. No recorded result is accepted, so there is no evidence file to go stale or
-  to match against a tree id. It never force-pushes, and creates no repository and no
-  release. The native publish command is printed, not run.
+  **Gate evidence:** `-Push` requires `-Gate`, so the very scratch tree being pushed is
+  built the public way a moment before the push, and has passed the default gate either in
+  this run or in a green run recorded for that exact tree or for the dev tree it was cut
+  from (named on the build line; `-ForceGate` when in doubt). It never force-pushes, and
+  creates no repository and no release. The native publish command is printed, not run.
 
 `Infrastructure/PublicSnapshotExportTests` runs the module on fixture repos, including
 every `-Push` refusal against fixture public repos (gitleaks and the snapshot's gate are
-stubs there).
+stubs there), the kept work tree with planted build-output leaks that the scans must not
+see, and the recorded-gate reuse.
 
 ### Public commits come back to dev first (`PublicSync.psm1`)
 

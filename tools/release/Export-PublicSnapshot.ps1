@@ -29,9 +29,15 @@
     3. Both trees are checked out under the scratch root and leak-checked
        (Find-PublicTreeLeaks, gzip files decompressed in memory, files with a NUL read as
        Latin-1); gitleaks runs too when it is installed.
+       The DotCharter work tree is KEPT between runs (-Clean drops it): it is updated like a
+       checkout and its build outputs are parked outside it while both scans run, so they
+       read the tracked tree only (Assert-SnapshotTracksEverything) and the build stays
+       incremental.
     4. -Build builds the snapshot the public way (tools/agent/Invoke-Gate.ps1 -Build
        -Public in the scratch tree, the dev native pair copied in); -Gate also runs
-       the default gate there.
+       the default gate there, unless a green gate is on record (ReleaseCache.psm1) for
+       this exact snapshot tree or the dev tree it was cut from: then it builds only and
+       names the record. -ForceGate runs the gate anyway. A green run is recorded.
     5. Prints the scratch paths, the commits, the native publish command, the leak report
        and what -Push would refuse. Exit code 1 when the leak check has findings or the
        push preflight refuses.
@@ -48,9 +54,9 @@
     -Push pushes main + the version tag of each scratch repo with `git push --atomic`
     (JuceSharp first, since DotCharter's gitlink names it), and only after BOTH repos pass
     the push preflight, which is re-read right before the first push. It refuses:
-      - without BOTH URLs, or without -Gate in the same run (the gate evidence is the run
-        itself: the exact scratch tree being pushed built and passed
-        Invoke-Gate.ps1 -Public -Gate a moment ago; no recorded result is accepted);
+      - without BOTH URLs, or without -Gate in the same run (the exact scratch tree being
+        pushed built the public way a moment ago, and passed the default gate in this run
+        or in a green run recorded for that tree or for the dev tree it was cut from);
       - on any leak finding; when gitleaks is not installed or reports findings;
       - when the native pin of the public JuceSharp commit is PENDING;
       - when a commit or tag it would push carries an author, committer or tagger email
@@ -73,14 +79,18 @@ param(
     [string]$DevRef = 'origin/main',
     # The dev JuceSharp object store; default: the superproject's modules/JuceSharp, else JuceSharp/'s own git dir.
     [string]$DevJuceSharpGitDir,
-    # Scratch root; wiped and recreated on every run.
+    # Scratch root; recreated on every run, except the DotCharter work tree and its build
+    # outputs, kept so the public build is incremental (-Clean drops them too).
     [string]$ScratchRoot = (Join-Path ([System.IO.Path]::GetTempPath()) 'dotcharter-public-export'),
+    [switch]$Clean,
     [string]$PublicDotCharterUrl,
     [string]$PublicJuceSharpUrl,
     # Folder holding juce_sharp.dll + juce_vst_host.exe built from the exported JuceSharp tree: pins real hashes.
     [string]$NativeDir,
     [switch]$Build,
     [switch]$Gate,
+    # Run the default gate even when a green one is on record for this tree or its dev tree.
+    [switch]$ForceGate,
     [switch]$Push,
     # Findings printed per rule (0 = all).
     [int]$ReportPerRule = 0
@@ -91,9 +101,10 @@ if ($Push -and -not ($PublicDotCharterUrl -and $PublicJuceSharpUrl)) {
     throw '-Push needs BOTH -PublicDotCharterUrl and -PublicJuceSharpUrl: the push target is never guessed.'
 }
 if ($Push -and -not $Gate) {
-    throw '-Push needs -Gate in the same run: what it pushes must have built and passed the default gate the public way (Invoke-Gate.ps1 -Public -Gate) in this scratch tree. No recorded result is accepted.'
+    throw '-Push needs -Gate in the same run: what it pushes must build the public way (Invoke-Gate.ps1 -Public) in this scratch tree and have passed the default gate (in this run, or a green run on record for this exact tree or the dev tree it was cut from).'
 }
 Import-Module (Join-Path $PSScriptRoot 'PublicSnapshot.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'ReleaseCache.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'PublicSync.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot '../setup/NativeRuntime.psm1') -Force
 
@@ -129,16 +140,26 @@ $abi = [int]([regex]::Match((Git "--git-dir=$DevJuceSharpGitDir" show "${devJuce
 # --- scratch ------------------------------------------------------------------------
 $ScratchRoot = [System.IO.Path]::GetFullPath($ScratchRoot)
 $marker = Join-Path $ScratchRoot '.dotcharter-public-export'
-if (Test-Path -LiteralPath $ScratchRoot) {
-    if (-not (Test-Path -LiteralPath $marker)) { throw "$ScratchRoot exists and is not an export scratch folder; refusing to delete it." }
-    Remove-Item -LiteralPath $ScratchRoot -Recurse -Force
-}
-New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
-Set-Content -LiteralPath $marker -Value 'scratch of tools/release/Export-PublicSnapshot.ps1; deleted on the next run'
 $juceRepo = Join-Path $ScratchRoot 'JuceSharp.git'
 $dcRepo = Join-Path $ScratchRoot 'DotCharter'
+# Kept between runs (unless -Clean): the DotCharter work tree with its index, and build
+# outputs a crashed run left parked. Everything else, the refs included, is new each run.
+$buildCache = Join-Path $ScratchRoot 'build-cache'
+$keep = @()
+if (Test-Path -LiteralPath $ScratchRoot) {
+    if (-not (Test-Path -LiteralPath $marker)) { throw "$ScratchRoot exists and is not an export scratch folder; refusing to delete it." }
+    if (-not $Clean -and (Test-Path -LiteralPath (Join-Path $dcRepo '.git'))) { $keep = @('DotCharter', 'build-cache') }
+    Get-ChildItem -LiteralPath $ScratchRoot -Force | Where-Object { $keep -notcontains $_.Name } | Remove-Item -Recurse -Force
+}
+New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
+Set-Content -LiteralPath $marker -Value 'scratch of tools/release/Export-PublicSnapshot.ps1; recreated on the next run (the DotCharter work tree and its build outputs are kept; -Clean drops them)'
+$keptTree = $keep.Count -gt 0
 [void](New-SnapshotScratchRepo -Path $juceRepo -AlternateObjectDirs @(Join-Path $DevJuceSharpGitDir 'objects') -Bare)
 $dcGitDir = New-SnapshotScratchRepo -Path $dcRepo -AlternateObjectDirs @(Join-Path $devGitCommon 'objects')
+if ($keptTree) { Reset-SnapshotScratchRefs -Repo $dcRepo }
+# JuceSharp's index for its checkout inside the DotCharter work tree, kept with it.
+$juceIndex = Join-Path $dcGitDir 'dotcharter-juce-snapshot.index'
+if (-not $keptTree -and (Test-Path -LiteralPath $juceIndex)) { Remove-Item -LiteralPath $juceIndex -Force }
 
 # --- 0. the public -> dev sync guard ---------------------------------------------------------
 # Every public commit after the last snapshot must be in dev (a Public-Commit trailer in the
@@ -202,6 +223,11 @@ $dcTree = New-PublicTree -Repo $dcRepo -SourceTree "$devCommit^{tree}" -Edit $ed
 $dc = New-SnapshotCommit -Repo $dcRepo -Tree $dcTree -Parent $dcParent `
     -Message (Get-SnapshotMessage -Product 'DotCharter' -Version $version -Parent $dcParent) `
     -Name $name -Email $email -Date $devDate -Tag "v$version"
+# Where this snapshot came from, for New-Release.ps1 run from the scratch tree: the owner's
+# DotCharter-local beside the DEV checkout, and the dev tree's recorded gate runs.
+$devTree = Git -C $DevRepo rev-parse "$devCommit^{tree}"
+$devCheckout = if ((Split-Path $devGitCommon -Leaf) -eq '.git') { Split-Path $devGitCommon -Parent } else { $DevRepo }
+[void](Write-ExportOrigin -RepoRoot $dcRepo -DevCheckout $devCheckout -DevCommit $devCommit -DevTree $devTree -PublicTree $dcTree)
 
 # --- 2b. push preflight: both public repos, before anything is pushed -----------------------
 # A -Push refusal: the reasons as plain lines (an error record wraps and prefixes them), then the stop.
@@ -240,8 +266,26 @@ $identityProblems = @(foreach ($s in $snapshots) {
     })
 
 # --- 3. leak check ------------------------------------------------------------------------
+# The kept work tree is updated like a checkout (unchanged files keep their timestamps, so
+# the build below is incremental), with its build outputs PARKED in $buildCache: the leak
+# check and gitleaks read the file system, and must read the tracked tree only.
+$workTrees = @(
+    @{ Prefix = ''; Git = @('-C', $dcRepo); Environment = @{} }
+    @{ Prefix = 'JuceSharp/'; Git = @("--git-dir=$juceRepo", "--work-tree=$(Join-Path $dcRepo 'JuceSharp')"); Environment = @{ GIT_INDEX_FILE = $juceIndex } }
+)
+[void](Move-SnapshotBuildOutputs -Root $dcRepo -Cache $buildCache -Trees $workTrees)
+# A refresh first: a file whose timestamp moved but whose bytes did not is then left alone
+# by the checkout below, instead of rewritten (which would recompile its project).
+foreach ($view in $workTrees) {
+    if (Test-Path -LiteralPath (Join-Path $dcRepo $view.Prefix)) {
+        Invoke-SnapshotGit -Arguments ($view.Git + @('update-index', '-q', '--refresh')) -Environment $view.Environment -AllowExitCodes 1 | Out-Null
+    }
+}
 Git -C $dcRepo -c core.longpaths=true reset -q --hard main | Out-Null
-Export-SnapshotWorkTree -GitDir $juceRepo -Commit $juce.Commit -Destination (Join-Path $dcRepo 'JuceSharp')
+Git -C $dcRepo -c core.longpaths=true clean -q -ffd | Out-Null
+Export-SnapshotWorkTree -GitDir $juceRepo -Commit $juce.Commit -Destination (Join-Path $dcRepo 'JuceSharp') -IndexPath $juceIndex
+Invoke-SnapshotGit -Arguments ($workTrees[1].Git + @('-c', 'core.longpaths=true', 'clean', '-q', '-ffd')) -Environment $workTrees[1].Environment | Out-Null
+Assert-SnapshotTracksEverything -Trees $workTrees
 $findings = @(Find-PublicTreeLeaks -Root $dcRepo)
 $report = Format-PublicLeakReport -Findings $findings -PerRule $ReportPerRule
 $reportPath = Join-Path $ScratchRoot 'leak-report.txt'
@@ -262,6 +306,9 @@ if ($gitleaks) {
     finally { Pop-Location }
     $gitleaksLine = if ($gitleaksExit -eq 0) { 'gitleaks: clean' } else { "gitleaks: FINDINGS (exit $gitleaksExit), see $(Join-Path $ScratchRoot 'gitleaks.txt')" }
 }
+# Both scans are done: the previous run's build outputs go back for the incremental build.
+$restored = @(Restore-SnapshotBuildOutputs -Root $dcRepo -Cache $buildCache)
+$keptLine = if ($keptTree) { "scratch: work tree kept from the last run, $($restored.Count) build output path(s) parked during the scans and restored" } else { 'scratch: fresh work tree (a first run, or -Clean)' }
 
 # Everything -Push refuses on, short of the gate. Checked BEFORE the gate runs.
 $pushBlockers = [System.Collections.Generic.List[string]]::new()
@@ -286,14 +333,24 @@ if ($Build -or $Gate) {
         if (-not (Test-Path -LiteralPath $source)) { throw "$source is missing: -Build needs the native pair built from this JuceSharp tree." }
         Copy-Item -LiteralPath $source -Destination $nativeTarget -Force
     }
+    # One test run per tree: a green default gate on record for this exact snapshot tree, or
+    # for the dev tree it was cut from (the merge train records those), is reused. The
+    # public variant is still BUILT here; only the identical test run is skipped.
+    $recordedGate = $null
+    if ($Gate -and -not $ForceGate) { $recordedGate = Find-GateRecord -Trees @($dcTree, $devTree) -Kind gate }
     $gateArgs = @('-NoProfile', '-File', (Join-Path $dcRepo 'tools/agent/Invoke-Gate.ps1'), '-Public')
-    $gateArgs += if ($Gate) { '-Gate' } else { '-Build' }
+    $gateArgs += if ($Gate -and -not $recordedGate) { '-Gate' } else { '-Build' }
     $previousSkip = $env:DotCharterSkipNativeFetch
     $env:DotCharterSkipNativeFetch = 'true'
     try { & pwsh @gateArgs; $buildExit = $LASTEXITCODE }
     finally { $env:DotCharterSkipNativeFetch = $previousSkip }
     $buildLine = "build: Invoke-Gate.ps1 $($gateArgs[-2..-1] -join ' ') exited $buildExit"
+    if ($recordedGate) { $buildLine += "; the gate was NOT re-run: reusing the green gate recorded for $(Format-GateRecord $recordedGate) (-ForceGate re-runs it)" }
     if ($Push -and $buildExit -ne 0) { Stop-Push 'refused' @("$buildLine (the snapshot must build and pass the gate)") }
+    if ($Gate -and -not $recordedGate -and $buildExit -eq 0) {
+        [void](Save-GateRecord -Tree $dcTree -Commit $dc.Commit -Gate -Source 'Export-PublicSnapshot.ps1 -Gate (the public variant)')
+        $buildLine += "; recorded for tree $dcTree"
+    }
 }
 
 # --- 5. report ------------------------------------------------------------------------------
@@ -322,7 +379,15 @@ Write-Host ''
 Write-Host $report
 Write-Host "full report: $reportPath"
 Write-Host $gitleaksLine
+Write-Host $keptLine
 Write-Host $buildLine
+# The release from this exact tree. New-Release.ps1 finds the signing key in the dev
+# checkout's DotCharter-local through export-origin.json; printed anyway, with the tonelab
+# folder, so the command can be pasted as it stands.
+$signingKey = if ($env:DOTCHARTER_RELEASE_SIGNING_KEY) { $env:DOTCHARTER_RELEASE_SIGNING_KEY } else { Join-Path (Get-ReleaseLocalDir -RepoRoot $dcRepo) 'release-signing/dotcharter-release-ed25519.key' }
+$tonelab = if ($env:DOTCHARTER_TONELAB_DIR) { $env:DOTCHARTER_TONELAB_DIR } else { '<tonelab build folder>' }
+Write-Host 'release from this snapshot (reuses a green headless run recorded for the dev tree it was cut from):'
+Write-Host "    pwsh -NoProfile -File `"$(Join-Path $dcRepo 'tools/release/New-Release.ps1')`" -SigningKeyPath `"$signingKey`" -TonelabDir `"$tonelab`""
 if ($preflightProblems.Count -gt 0) {
     Write-Host 'export refused by the push preflight:'
     foreach ($problem in $preflightProblems) { Write-Host "    $problem" }

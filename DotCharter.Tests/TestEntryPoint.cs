@@ -20,12 +20,15 @@ internal static class TestEntryPoint
 }
 
 /// <summary>
-/// The default filter of a plain <c>dotnet test</c>. The headless-UI suite
-/// (<c>*UiPerfSmokeTests</c>) shares Avalonia.Headless's process-global
-/// dispatcher, so in the same testhost as the gate almost every headless case
-/// fails and takes an unrelated gate test with it (AGENTS.md § Validation).
-/// So when <c>dotnet test</c> starts this executable WITHOUT any filter, the
-/// gate's own exclusion is added. Any explicit filter (every script, CI job and
+/// The default filter of a plain <c>dotnet test</c>: the DEFAULT GATE. The
+/// headless-UI suite (<c>*UiPerfSmokeTests</c>) shares Avalonia.Headless's
+/// process-global dispatcher, so in the same testhost as the gate almost every
+/// headless case fails and takes an unrelated gate test with it (AGENTS.md §
+/// Validation). And the release lane (<c>tools/ci/release-lane.json</c>, the
+/// heaviest corpus / integration / determinism classes) is run by
+/// <c>Invoke-Gate.ps1 -ReleaseLane</c>, the merge train, the release preflight
+/// and CI, not by every edit. So when <c>dotnet test</c> starts this executable
+/// WITHOUT any filter, the gate's own exclusions are added. Any explicit filter (every script, CI job and
 /// the release preflight passes one) switches the default off untouched, and so
 /// does an IDE's test explorer, which talks JSON-RPC rather than
 /// <c>dotnettestcli</c> and filters over the protocol.
@@ -37,7 +40,7 @@ internal static class DefaultRunFilter
 
     public static string[] Apply(string[] args) =>
         IsDotnetTestCli(args) && !args.Any(IsFilterOption)
-            ? [.. args, "--filter-not-class", ExcludedClasses]
+            ? [.. args, "--filter-not-class", ExcludedClasses, .. ReleaseLane.ExclusionArgs()]
             : args;
 
     // `dotnet test` (MTP mode, opted into by the root global.json) starts the

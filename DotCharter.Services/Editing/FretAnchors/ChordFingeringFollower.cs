@@ -88,7 +88,7 @@ public static class ChordFingeringFollower
     ///     the time, and reading every uniform shift of the suggestion as free
     ///     re-fingered 3,187 of their chords on the corpus (`--fhp-fingers
     ///     reference`, train) and cost 3.7 / 1.1 pp of guitar FHP (train /
-    ///     holdout). The flag is persisted in the <c>.rscp</c> and copied by
+    ///     holdout). The flag is persisted in the <c>.dcproj</c> and copied by
     ///     <c>Clone</c>, so it survives a reopen and a <c>ChartProjectCloner</c>
     /// snapshot alike.
     /// </summary>

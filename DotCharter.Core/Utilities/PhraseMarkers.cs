@@ -10,7 +10,7 @@ namespace DotCharter.Core.Utilities;
 ///         <b>There are two phrase stores and both can be live at once.</b> The
 ///         timeline and song-overview editors author phrases as
 ///         <see cref="EventPoint.Phrase" /> (the EOF-style text marker the
-///         <c>.rscp</c> format keeps), while the RS-XML and psarc readers fill
+///         <c>.dcproj</c> format keeps), while the RS-XML and psarc readers fill
 ///         <see cref="Arrangement.Phrases" /> +
 ///         <see cref="Arrangement.PhraseIterations" /> (the
 ///         <c>&lt;phraseIterations&gt;</c> element). Open an imported chart and

@@ -40,7 +40,7 @@ public sealed class DcSongProjectOpenerTests : IDisposable
 
         await Opener(new FakeDecoder(available: true)).OpenAsync(package);
 
-        var expected = Path.Combine(BaseDir, "The Artist - The Song", "project.rscp");
+        var expected = Path.Combine(BaseDir, "The Artist - The Song", "project.dcproj");
         Assert.Equal(new[] { expected }, _loaded);
         Assert.Equal(1, _replacePrompts);
         Assert.Equal(StatusSeverity.Warning, _state.MainDisplaySeverity);

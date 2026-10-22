@@ -27,7 +27,7 @@ public sealed partial class PlaySongItem : ObservableObject, IPlayedLibrarySong
         // (identity → text → tuning → capo → year → arrangements → playability).
         SongIdentity = IsOwnChart ? projectPath : LibrarySongIdentity.For(inner!.Song.SongKey);
 
-        // Every own chart is a project.rscp: named by its folder, not "project" — and that
+        // Every own chart is a project.dcproj: named by its folder, not "project" — and that
         // folder is "Artist - Title", so the list groups it under its artist rather than
         // "Unknown artist" with the artist folded into the title.
         var (ownArtist, ownTitle) = IsOwnChart

@@ -50,12 +50,16 @@ public static class GpPostProcessor
     /// pitch-class guess. Only the GP3-5 BINARY importer fills it so far — gpif
     /// chord diagrams and the Songsterr payload are both still unread, and both
     /// pass null, which leaves those paths byte-for-byte unchanged.</param>
+    /// <param name="graceTargets">Import-only set of the hammer or pull targets an on-beat
+    /// grace pushed late. <see cref="AdjustSustains"/> keeps the sustain of one written as a
+    /// quarter note or longer, however far the grace slot shortened it. Null ⇒ none.</param>
     /// <returns>The slide-in ornaments materialized (<see cref="MaterializeSlideIns"/>).</returns>
     public static int Run(ChartLevel level, Arrangement arrangement,
         GpImportSettings? settings = null, IReadOnlySet<GuitarNote>? onBeatGraces = null,
         IReadOnlySet<IGuitarSound>? tapOriginated = null,
         GpAuthoredFingering? authoredFingers = null,
-        GpAuthoredChordNames? authoredChordNames = null)
+        GpAuthoredChordNames? authoredChordNames = null,
+        IReadOnlySet<IGuitarSound>? graceTargets = null)
     {
         settings ??= GpImportSettings.Default;
         var stringCount = arrangement.StringCount;
@@ -84,7 +88,7 @@ public static class GpPostProcessor
         // sustain to render a technique is never truncated, so I08's swung slide
         // keeps its 2/3 sustain regardless. Runs last, on the finalized sustains.
         AdjustSustains(level, stringCount, settings.TruncateShortNotes, settings.TruncateShortChords,
-            tapOriginated);
+            tapOriginated, graceTargets);
         // A pitched slide must END at the note it slides into — an over-long
         // authored sustain otherwise runs the slide tail past the landing
         // (owner report). Runs after AdjustSustains so it survives
@@ -814,14 +818,15 @@ public static class GpPostProcessor
     /// </summary>
     public static void AdjustSustains(ChartLevel level, int stringCount,
         bool truncateShortNotes = true, bool truncateShortChords = false,
-        IReadOnlySet<IGuitarSound>? tapOriginated = null)
+        IReadOnlySet<IGuitarSound>? tapOriginated = null, IReadOnlySet<IGuitarSound>? graceTargets = null)
     {
         var targetSounds = NormaliseLegatoAndFindTargets(level, stringCount, tapOriginated);
 
         foreach (var note in level.Notes)
         {
             var isShort = note.Sustain.BeatId == 0;
-            var keepSustain = RequiresSustain(note, targetSounds);
+            var keepSustain = RequiresSustain(note, targetSounds) ||
+                              IsWrittenQuarterGraceTarget(note, note.NotationDuration, graceTargets);
             var isMutedOrHarmonic = note.Harmonic != HarmonicType.None || note.Mute != MuteType.None;
             // EOF truncate_short_notes gates the sub-quarter drop; the mute/harmonic
             // rule is independent of it. Either way a technique note keeps its sustain.
@@ -832,9 +837,20 @@ public static class GpPostProcessor
         foreach (var chord in level.Chords)
         {
             if (chord.ChordNotes.Count > 0)
-                AdjustChordSustain(chord, targetSounds, truncateShortChords);
+                AdjustChordSustain(chord, targetSounds, truncateShortChords, graceTargets);
         }
     }
+
+    /// <summary>
+    ///     A hammer or pull that an on-beat grace pushed late keeps its sustain when it is
+    ///     WRITTEN as a quarter note or longer. The grace takes an eighth of the beat off the
+    ///     front, so the remainder (or a tied tail merged onto it) falls below a quarter, and
+    ///     the sub-quarter drop would otherwise turn a held note into a bare strike. The
+    ///     written duration, not the shortened sustain, says whether it was a held note.
+    /// </summary>
+    private static bool IsWrittenQuarterGraceTarget(IGuitarSound sound, Fraction? written,
+        IReadOnlySet<IGuitarSound>? graceTargets) =>
+        graceTargets?.Contains(sound) == true && written is { } duration && duration >= Fraction.One;
 
     /// <summary>
     ///     Walks each string's sounds in order: turns a descending hammer-on into the
@@ -893,7 +909,8 @@ public static class GpPostProcessor
         note.Vibrato || note.Tremolo || note.SlideTo.HasValue || note.UnpitchedSlide || note.LinkNext ||
         note.BendValues.Count > 0 || targetSounds.Contains(note);
 
-    private static void AdjustChordSustain(Chord chord, HashSet<IGuitarSound> targetSounds, bool truncateShortChords)
+    private static void AdjustChordSustain(Chord chord, HashSet<IGuitarSound> targetSounds, bool truncateShortChords,
+        IReadOnlySet<IGuitarSound>? graceTargets)
     {
         var keepSustain = false;
         var isShort = true;
@@ -902,7 +919,9 @@ public static class GpPostProcessor
 
         foreach (var chordNote in chord.ChordNotes)
         {
-            if (RequiresSustain(chordNote, targetSounds)) keepSustain = true;
+            var needsSustain = RequiresSustain(chordNote, targetSounds) ||
+                               IsWrittenQuarterGraceTarget(chordNote, chord.NotationDuration, graceTargets);
+            if (needsSustain) keepSustain = true;
             if (chordNote.Sustain.BeatId != 0) isShort = false;
             if (chordNote.Harmonic != HarmonicType.None || chordNote.Mute != MuteType.None)
                 isMutedOrHarmonic = true;

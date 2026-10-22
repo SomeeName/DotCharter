@@ -75,15 +75,7 @@ public static class CommandCatalog
             () => k.NewProject));
         list.Add(FromCommand("file.openProject", "Keybind_OpenProject", fo, vm.Project.OpenProjectCommand,
             () => k.OpenProject));
-        // Open Recent (P1-5): the palette is rebuilt on every open, so the MRU
-        // rows are cheap parameterized entries — one per recent project, same
-        // item command the File ▸ Open Recent submenu binds.
-        foreach (var (recent, index) in vm.Project.RecentProjects.Select(static (r, i) => (r, i)))
-        {
-            list.Add(new AppCommand($"file.openRecent.{index}",
-                l.Format("Palette_OpenRecentFmt", recent.DisplayName), l[fo],
-                () => recent.OpenCommand.Execute(null)));
-        }
+        AddRecentProjects(list, vm, l, fo);
 
         list.Add(FromCommand("file.saveProject", "Keybind_SaveProject", fo, vm.Project.SaveProjectCommand,
             () => k.SaveProject));
@@ -93,6 +85,7 @@ public static class CommandCatalog
         list.Add(FromCommand("file.importEof", "Menu_ImportEof", fo, vm.Imports.ImportEofCommand));
         list.Add(FromCommand("file.importRsXml", "Menu_ImportRsXml", fo, vm.Imports.ImportRsXmlCommand));
         list.Add(FromCommand("file.importMidi", "Menu_ImportMidi", fo, vm.Imports.ImportMidiCommand));
+        list.Add(FromCommand("file.convertPackages", "Menu_ConvertPackages", fo, vm.Imports.ConvertPackagesCommand));
         list.Add(FromCommand("file.exportRocksmith", "Menu_ExportRocksmith", fo, vm.ShellDialogs.OpenRocksmithExportCommand));
         list.Add(FromCommand("file.exportDcSong", "Menu_ExportDcSong", fo, vm.ShellDialogs.OpenDcSongExportCommand));
         list.Add(FromCommand("file.exportGuitarPro", "Menu_ExportGuitarPro", fo, vm.Export.ExportGuitarProCommand));
@@ -524,6 +517,19 @@ public static class CommandCatalog
         // The YouTube entry is dropped when the public-build switch is off, a
         // package-reading one when the build cannot read packages.
         return ContestedFeatures.FilterPalette(list, c => c.Id, ContestedFeatures.Enabled, vm.Project.PackageFeatures);
+    }
+
+    /// <summary>Open Recent: the palette is rebuilt on every open, so the MRU rows are cheap
+    /// parameterized entries — one per recent project, same item command the File ▸ Open Recent
+    /// submenu binds.</summary>
+    private static void AddRecentProjects(List<AppCommand> list, MainWindowViewModel vm, ILocalizationService l, string category)
+    {
+        foreach (var (recent, index) in vm.Project.RecentProjects.Select(static (r, i) => (r, i)))
+        {
+            list.Add(new AppCommand($"file.openRecent.{index}",
+                l.Format("Palette_OpenRecentFmt", recent.DisplayName), l[category],
+                () => recent.OpenCommand.Execute(null)));
+        }
     }
 
     /// <summary>The capo is read at PRESS time from the arrangement being edited,

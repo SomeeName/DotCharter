@@ -5,6 +5,7 @@ using DotCharter.Localization;
 using DotCharter.Services.Audio.Coordination;
 using DotCharter.Services.Editing;
 using DotCharter.Services.Infrastructure.Documents;
+using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Services.State;
 using DotCharter.Tone.Diagnostics;
 
@@ -144,7 +145,7 @@ internal sealed class ProjectAutoBackup : IDisposable
 
         try
         {
-            var projectPath = Path.ChangeExtension(_projectState.CurrentProjectPath, ".rscp");
+            var projectPath = ProjectFiles.Beside(_projectState.CurrentProjectPath);
             var projectDirectory = Path.GetDirectoryName(projectPath);
             if (string.IsNullOrWhiteSpace(projectDirectory))
             {
@@ -160,7 +161,7 @@ internal sealed class ProjectAutoBackup : IDisposable
             }
 
             var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-            var entryName = $"{baseName}_{timestamp}.rscp";
+            var entryName = $"{baseName}_{timestamp}{ProjectFiles.Extension}";
 
             // Capture phase (UI thread): assemble exactly what a manual save
             // would persist, then deep-clone it. The worker below serializes
@@ -171,7 +172,7 @@ internal sealed class ProjectAutoBackup : IDisposable
                 _projectState.CurrentAudioFileName, _chartEditor.LyricPhrases);
             var snapshot = ChartProjectCloner.Clone(assembled);
 
-            tempPath = Path.Combine(Path.GetTempPath(), $"DotCharter_Backup_{Guid.NewGuid():N}.rscp");
+            tempPath = Path.Combine(Path.GetTempPath(), $"DotCharter_Backup_{Guid.NewGuid():N}{ProjectFiles.Extension}");
             var backupTempPath = tempPath;
 
             // The tick runs on the UI thread (DispatcherTimer); serializing
@@ -229,8 +230,8 @@ internal sealed class ProjectAutoBackup : IDisposable
 
     /// <summary>
     ///     Deletes this project's oldest auto-backups beyond <paramref name="keep" />.
-    /// Only files named exactly <c>&lt;base&gt;_&lt;yyyyMMdd&gt;_&lt;HHmmss&gt;[_n].rscp.zip</c>
-    ///     count, so another project's zips in the same folder (<c>song</c> vs
+    /// Only files named exactly <c>&lt;base&gt;_&lt;yyyyMMdd&gt;_&lt;HHmmss&gt;[_n].dcproj.zip</c>
+    ///     (or <c>.rscp.zip</c>, the name older builds gave them) count, so another project's zips in the same folder (<c>song</c> vs
     ///     <c>song_live</c>) and anything the user put there are never touched.
     ///     <paramref name="keep" /> &lt;= 0 keeps everything. A file that cannot be
     ///     deleted is logged and skipped. Returns how many were deleted.
@@ -239,10 +240,10 @@ internal sealed class ProjectAutoBackup : IDisposable
     {
         if (keep <= 0 || !Directory.Exists(backupDirectory)) return 0;
 
-        var pattern = new Regex("^" + Regex.Escape(baseName) + @"_(\d{8}_\d{6})(?:_(\d+))?\.rscp\.zip$",
+        var pattern = new Regex("^" + Regex.Escape(baseName) + @"_(\d{8}_\d{6})(?:_(\d+))?\.(?:dcproj|rscp)\.zip$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         var ours = new List<(string Path, string Stamp, int Suffix)>();
-        foreach (var path in Directory.EnumerateFiles(backupDirectory, "*.rscp.zip"))
+        foreach (var path in Directory.EnumerateFiles(backupDirectory, "*.zip"))
         {
             var match = pattern.Match(Path.GetFileName(path));
             if (!match.Success) continue;
@@ -274,15 +275,15 @@ internal sealed class ProjectAutoBackup : IDisposable
         return deleted;
     }
 
-    /// <summary>The first free <c>&lt;base&gt;_&lt;timestamp&gt;[_n].rscp.zip</c> in the folder.</summary>
+    /// <summary>The first free <c>&lt;base&gt;_&lt;timestamp&gt;[_n].dcproj.zip</c> in the folder.</summary>
     internal static string UniqueArchivePath(string backupDirectory, string baseName, string timestamp)
     {
-        var archivePath = Path.Combine(backupDirectory, $"{baseName}_{timestamp}.rscp.zip");
+        var archivePath = Path.Combine(backupDirectory, $"{baseName}_{timestamp}{ProjectFiles.Extension}.zip");
         var suffix = 1;
 
         while (File.Exists(archivePath))
         {
-            archivePath = Path.Combine(backupDirectory, $"{baseName}_{timestamp}_{suffix}.rscp.zip");
+            archivePath = Path.Combine(backupDirectory, $"{baseName}_{timestamp}_{suffix}{ProjectFiles.Extension}.zip");
             suffix++;
         }
 

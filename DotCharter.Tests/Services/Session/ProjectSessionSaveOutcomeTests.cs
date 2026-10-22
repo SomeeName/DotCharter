@@ -691,7 +691,8 @@ public sealed class ProjectSessionSaveOutcomeTests : IDisposable
                 messageDialog: Messages, statusBar: StatusBar,
                 uiDispatcher: uiDispatcher ?? new TestUiDispatcher(),
                 localization: FakeLocalization.English(),
-                checkpoints: checkpoints);
+                checkpoints: checkpoints,
+                pathRekey: new FakeProjectPathRekey());
         }
 
         public CheckpointService Checkpoints { get; }

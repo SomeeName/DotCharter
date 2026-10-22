@@ -495,17 +495,108 @@ function Get-PublicPushPlan {
 }
 
 # Writes the tree of $Commit (in $GitDir) into $Destination through a private index.
+# -IndexPath keeps that index between runs: a kept work tree is then updated like a
+# checkout (only changed files are written, deleted ones removed, the rest keep their
+# timestamps, so an incremental build stays incremental).
 function Export-SnapshotWorkTree {
-    param([Parameter(Mandatory)][string]$GitDir, [Parameter(Mandatory)][string]$Commit, [Parameter(Mandatory)][string]$Destination)
+    param([Parameter(Mandatory)][string]$GitDir, [Parameter(Mandatory)][string]$Commit, [Parameter(Mandatory)][string]$Destination,
+        [string]$IndexPath)
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    $base = @("--git-dir=$GitDir", "--work-tree=$Destination", '-c', 'core.autocrlf=false', '-c', 'core.longpaths=true')
+    if ($IndexPath) {
+        Invoke-SnapshotGit -Arguments ($base + @('read-tree', '--reset', '-u', $Commit)) -Environment @{ GIT_INDEX_FILE = $IndexPath } | Out-Null
+        return
+    }
     $index = Join-Path ([System.IO.Path]::GetTempPath()) ('dc-snapshot-index-' + [guid]::NewGuid().ToString('N'))
     try {
         $envIndex = @{ GIT_INDEX_FILE = $index }
-        $base = @("--git-dir=$GitDir", "--work-tree=$Destination", '-c', 'core.autocrlf=false', '-c', 'core.longpaths=true')
         Invoke-SnapshotGit -Arguments ($base + @('read-tree', $Commit)) -Environment $envIndex | Out-Null
         Invoke-SnapshotGit -Arguments ($base + @('checkout-index', '-a', '-f')) -Environment $envIndex | Out-Null
     }
     finally { Remove-Item -LiteralPath $index -Force -ErrorAction SilentlyContinue }
+}
+
+# --- the kept scratch work tree ---------------------------------------------------------
+# The export keeps its DotCharter work tree between runs so the public build is
+# incremental. Its build outputs (git-ignored: bin/, obj/, artifacts/, the copied native
+# pair) are PARKED outside the tree while the leak check and gitleaks read it, so both
+# scans see exactly the tracked files: Assert-SnapshotTracksEverything refuses a scan of
+# a tree holding anything git does not track. A $Trees entry is one git view of the work
+# tree: @{ Prefix = '' or 'JuceSharp/'; Git = <git arguments naming it>; Environment = @{} }.
+
+# Clears every ref of a kept scratch repo (branches, tags, the fetched public main), so
+# nothing from the previous run can be read as this run's; the index stays.
+function Reset-SnapshotScratchRefs {
+    param([Parameter(Mandatory)][string]$Repo)
+    $refs = Invoke-SnapshotGit -Arguments @('-C', $Repo, 'for-each-ref', '--format=%(refname)')
+    foreach ($ref in $refs.Split("`n", [StringSplitOptions]::RemoveEmptyEntries)) {
+        Invoke-SnapshotGit -Arguments @('-C', $Repo, 'update-ref', '-d', $ref.Trim()) | Out-Null
+    }
+    Invoke-SnapshotGit -Arguments @('-C', $Repo, 'symbolic-ref', 'HEAD', 'refs/heads/main') | Out-Null
+}
+
+# Every path of one work tree view that git does not track, untracked directories
+# collapsed (--directory); -Ignored: only the git-ignored ones.
+function Get-SnapshotUntrackedPaths {
+    param([Parameter(Mandatory)][string[]]$GitArguments, [hashtable]$Environment = @{}, [switch]$Ignored)
+    $arguments = $GitArguments + @('-c', 'core.quotepath=off', 'ls-files', '-z', '--others', '--directory')
+    if ($Ignored) { $arguments += @('--ignored', '--exclude-standard') }
+    $out = Invoke-SnapshotGit -Arguments $arguments -Environment $Environment
+    return @($out.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { $_.TrimEnd('/') } | Where-Object { $_ })
+}
+
+# Moves every git-ignored path of $Trees out of $Root into $Cache/tree/<same path>, and
+# lists them in $Cache/parked.txt (merged with a list a crashed run left). Returns the list.
+function Move-SnapshotBuildOutputs {
+    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Cache, [Parameter(Mandatory)][object[]]$Trees)
+    $manifest = Join-Path $Cache 'parked.txt'
+    $parked = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $manifest) { foreach ($line in Get-Content -LiteralPath $manifest) { if ($line) { $parked.Add($line) } } }
+    foreach ($tree in $Trees) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Root $tree.Prefix))) { continue }
+        foreach ($path in Get-SnapshotUntrackedPaths -GitArguments $tree.Git -Environment $tree.Environment -Ignored) {
+            $relative = $tree.Prefix + $path
+            $target = Join-Path (Join-Path $Cache 'tree') $relative
+            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+            Move-Item -LiteralPath (Join-Path $Root $relative) -Destination $target
+            if (-not $parked.Contains($relative)) { $parked.Add($relative) }
+        }
+    }
+    New-Item -ItemType Directory -Force -Path $Cache | Out-Null
+    Set-Content -LiteralPath $manifest -Value @($parked) -Encoding utf8NoBOM
+    return @($parked)
+}
+
+# Throws unless every view of $Trees has NOTHING git does not track: the scans that
+# follow read the file system, so this is what makes them read the tracked tree only.
+function Assert-SnapshotTracksEverything {
+    param([Parameter(Mandatory)][object[]]$Trees)
+    $stray = @(foreach ($tree in $Trees) {
+            foreach ($path in Get-SnapshotUntrackedPaths -GitArguments $tree.Git -Environment $tree.Environment) { $tree.Prefix + $path }
+        })
+    if ($stray.Count -gt 0) {
+        throw "Refusing to leak-check a work tree holding $($stray.Count) untracked path(s) (the scans must read the tracked tree only): $(($stray | Select-Object -First 10) -join ', ')"
+    }
+}
+
+# Moves the parked outputs back into $Root and deletes $Cache. A path the new tree now
+# occupies keeps the tree's version; its parked copy is dropped. Returns what moved back.
+function Restore-SnapshotBuildOutputs {
+    param([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Cache)
+    $manifest = Join-Path $Cache 'parked.txt'
+    if (-not (Test-Path -LiteralPath $manifest)) { return @() }
+    $restored = @(foreach ($relative in Get-Content -LiteralPath $manifest) {
+            if (-not $relative) { continue }
+            $source = Join-Path (Join-Path $Cache 'tree') $relative
+            $target = Join-Path $Root $relative
+            if (-not (Test-Path -LiteralPath $source) -or (Test-Path -LiteralPath $target)) { continue }
+            New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+            Move-Item -LiteralPath $source -Destination $target
+            $relative
+        })
+    Remove-Item -LiteralPath $Cache -Recurse -Force
+    return $restored
 }
 
 Export-ModuleMember -Function Get-PublicRenameMap, Convert-PublicText, Get-PublicExcludedPaths, Test-PublicExcludedPath,
@@ -513,4 +604,5 @@ Export-ModuleMember -Function Get-PublicRenameMap, Convert-PublicText, Get-Publi
     Format-PublicLeakReport, ConvertTo-LeakScanText, Expand-LeakScanGzip, Get-PublicPushPlan, Get-NativeRuntimePendingHash, Add-PublicNativeRuntimeEntry, Get-MsBuildVersion,
     Get-InheritedNativePins, Get-UserPathPlaceholders, Get-UserPathPlaceholderLookahead,
     Invoke-SnapshotGit, New-SnapshotScratchRepo, Get-PreviousSnapshot, New-PublicTree, Set-SnapshotIndexText,
-    Get-SnapshotIndexText, Get-SnapshotMessage, New-SnapshotCommit, Export-SnapshotWorkTree
+    Get-SnapshotIndexText, Get-SnapshotMessage, New-SnapshotCommit, Export-SnapshotWorkTree,
+    Reset-SnapshotScratchRefs, Get-SnapshotUntrackedPaths, Move-SnapshotBuildOutputs, Assert-SnapshotTracksEverything, Restore-SnapshotBuildOutputs

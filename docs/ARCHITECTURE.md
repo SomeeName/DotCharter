@@ -58,7 +58,7 @@ lays out in under 150 ms.
    `PlayModeViewModel.*.cs` files) drives a screen state machine:
    `Start → SongSelect → TuningCheck → Countdown → Playing ⇄ Paused → Results`
    (`PlayModeScreen`). The song list mixes library songs (`.dcsong`) and your own
-   `.rscp` projects.
+   `.dcproj` projects.
 2. **Get ready.** Pick an arrangement, path and speed; the tuning check listens to
    your guitar; the tone for the song is loaded into the rig.
 3. **Audio starts.** `JuceAudioPlaybackService` (Tone) tells the native engine to
@@ -75,8 +75,10 @@ lays out in under 150 ms.
 
 ## Flow 2: edit and save a chart
 
-1. **Open.** `ProjectSessionService` loads a `.rscp` (XML, `chartFormatVersion`
+1. **Open.** `ProjectSessionService` loads a `.dcproj` (XML, `chartFormatVersion`
    3) through the serializer registered for that extension, into `ProjectState`.
+   A Charter `.rscp` reads through the same serializer, and every save writes a
+   Charter-compatible `.rscp` beside the `.dcproj`.
 2. **Edit.** Every change is an `IChartAction` pushed through `HistoryService`, so
    every edit can be undone. Editors never mutate the chart behind the history's
    back.

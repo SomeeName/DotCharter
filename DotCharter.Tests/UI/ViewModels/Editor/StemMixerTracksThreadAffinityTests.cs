@@ -156,7 +156,7 @@ public sealed class StemMixerTracksThreadAffinityTests : IDisposable
         public void Dispose()
         {
             _queue.CompleteAdding();
-            _pump.Join(TimeSpan.FromSeconds(5));
+            _pump.Join(TimeSpan.FromSeconds(60));
             _queue.Dispose();
         }
     }

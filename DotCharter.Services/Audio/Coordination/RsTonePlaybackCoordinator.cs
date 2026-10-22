@@ -298,7 +298,7 @@ public sealed partial class RsTonePlaybackCoordinator
     /// project's own <see cref="ChartProject.ToneDefinitions"/> (see
     /// <see cref="BuildSummary"/>). It does NOT mean "no tones" (a stale
     /// claim to the contrary once got a fixed bug re-diagnosed as a live one).
-    /// An edited CDLC saved as an <c>.rscp</c> takes the second
+    /// An edited CDLC saved as a <c>.dcproj</c> takes the second
     /// branch: its bodies came from the package, but the package is gone.</para>
     /// <paramref name="songIdentity"/> is the practice-profile song key
     /// (<c>"lib:&lt;SongKey&gt;"</c> / project path) that keys the lookup of the

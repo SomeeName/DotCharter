@@ -1,4 +1,6 @@
-﻿namespace DotCharter.Services.Infrastructure.Configuration;
+﻿using DotCharter.Services.Parsing.Rscp;
+
+namespace DotCharter.Services.Infrastructure.Configuration;
 
 /// <summary>
 ///     One entry of the persisted "Open Recent" list (<see cref="AppConfig.RecentProjects" />).
@@ -6,7 +8,7 @@
 /// </summary>
 public sealed class RecentProjectEntry
 {
-    /// <summary>Absolute path to the <c>.rscp</c>.</summary>
+    /// <summary>Absolute path to the project file (<c>.dcproj</c>, or a Charter <c>.rscp</c>).</summary>
     public string Path { get; set; } = string.Empty;
 
     /// <summary>What the menu shows — the song name at the time it was opened,
@@ -87,12 +89,18 @@ public static class RecentProjectsList
 
     /// <summary>
     ///     Returns the entries whose files still exist (a deleted/renamed project
-    ///     must not render a dead menu row). <paramref name="fileExists" /> is
+    ///     must not render a dead menu row), minus every <c>.rscp</c> whose same-named
+    ///     <c>.dcproj</c> exists: that file is the project's Charter companion, and the
+    ///     project is listed under its <c>.dcproj</c>. <paramref name="fileExists" /> is
     ///     injectable so the rule tests without touching a disk.
     /// </summary>
     public static List<RecentProjectEntry> Prune(IEnumerable<RecentProjectEntry> list, Func<string, bool>? fileExists = null)
     {
         var exists = fileExists ?? File.Exists;
-        return list.Where(e => !string.IsNullOrWhiteSpace(e.Path) && exists(e.Path)).ToList();
+        return list.Where(e => !string.IsNullOrWhiteSpace(e.Path) && exists(e.Path) &&
+                               !IsShadowedCompanion(e.Path, exists)).ToList();
     }
+
+    private static bool IsShadowedCompanion(string path, Func<string, bool> exists) =>
+        CharterRscp.IsCharterProject(path) && exists(ProjectFiles.Beside(path));
 }

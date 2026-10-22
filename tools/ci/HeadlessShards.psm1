@@ -188,6 +188,10 @@ function Stop-ProcessTree([int]$RootId) {
     $ShardTimeout is a DEADLOCK DETECTOR for a hung testhost (the suite used to
     hang forever), never a budget: it is far above any run ever measured, and
     a shard it kills reports no TRX, so its classes are named as absent.
+
+    Invoke-HeadlessShards is Start-TestShards followed by Wait-TestShards. A
+    caller that runs two suites at once (Invoke-Gate.ps1 -Gate -Headless)
+    starts both and waits on all their shards together.
 #>
 function Invoke-HeadlessShards {
     param(
@@ -200,6 +204,25 @@ function Invoke-HeadlessShards {
         [TimeSpan]$ShardTimeout = [TimeSpan]::FromMinutes(60),
         [int]$SampleSeconds = 2
     )
+    $runs = @(Start-TestShards -Plan $Plan -DotnetTestArgs $DotnetTestArgs -ResultsDir $ResultsDir -Label $Label `
+        -Culture $Culture -WorkingDirectory $WorkingDirectory)
+    return Wait-TestShards -Runs $runs -ShardTimeout $ShardTimeout -SampleSeconds $SampleSeconds
+}
+
+<#
+    Starts one `dotnet test` per plan item and returns the runs, not waiting.
+    A plan item names its classes (one exact --filter-class each) or, when it
+    carries CommandArgs, gives its filter arguments itself (GateShards.psm1).
+#>
+function Start-TestShards {
+    param(
+        [object[]]$Plan,
+        [string[]]$DotnetTestArgs,
+        [string]$ResultsDir,
+        [string]$Label,
+        [string]$Culture = '',
+        [string]$WorkingDirectory = (Get-Location).Path
+    )
     New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
     $runs = @()
     $previousCulture = $env:DOTCHARTER_HEADLESS_CULTURE
@@ -210,7 +233,9 @@ function Invoke-HeadlessShards {
             if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
             New-Item -ItemType Directory -Force -Path $dir | Out-Null
             $trxName = "{0}-shard{1}.trx" -f $Label, $shard.Index
-            $filter = @(); foreach ($c in $shard.Classes) { $filter += @('--filter-class', $c) }
+            $filter = @()
+            if ($shard.PSObject.Properties['CommandArgs'] -and $null -ne $shard.CommandArgs) { $filter = @($shard.CommandArgs) }
+            else { foreach ($c in $shard.Classes) { $filter += @('--filter-class', $c) } }
             $argv = $DotnetTestArgs + $filter + @('--report-xunit-trx', '--report-xunit-trx-filename', $trxName, '--results-directory', $dir)
             $line = ($argv | ForEach-Object { ConvertTo-CommandLineArgument $_ }) -join ' '
             $out = Join-Path $dir 'stdout.log'; $err = Join-Path $dir 'stderr.log'
@@ -225,7 +250,22 @@ function Invoke-HeadlessShards {
         }
     }
     finally { $env:DOTCHARTER_HEADLESS_CULTURE = $previousCulture }
+    return $runs
+}
 
+<#
+    Samples every run's process tree for its peak working set, waits for all
+    of them, and fills in ExitCode, Elapsed, PeakBytes, LogPath and TrxPath
+    ($null when the shard wrote none). PeakSumBytes, on every run, is the
+    peak of all of them together.
+#>
+function Wait-TestShards {
+    param(
+        [object[]]$Runs,
+        [TimeSpan]$ShardTimeout = [TimeSpan]::FromMinutes(60),
+        [int]$SampleSeconds = 2
+    )
+    $runs = @($Runs)
     $peakSum = [long]0
     $finished = $false
     try {
@@ -545,7 +585,7 @@ function Save-HeadlessFailureEvidence {
 }
 
 Export-ModuleMember -Function Get-HeadlessClassName, Read-HeadlessTestListing, Get-HeadlessDiscovery, `
-    Read-HeadlessShardWeights, New-HeadlessShardPlan, Invoke-HeadlessShards, Merge-HeadlessTrx, `
+    Read-HeadlessShardWeights, New-HeadlessShardPlan, Invoke-HeadlessShards, Start-TestShards, Wait-TestShards, Merge-HeadlessTrx, `
     Write-HeadlessShardWeights, Stop-ProcessTree, ConvertTo-CommandLineArgument, `
     Get-HeadlessHarnessFaults, Test-HeadlessHarnessFault, Read-HeadlessTrxFailures, Get-HeadlessRaceRerunDecision, `
     Get-HeadlessFailureEvidenceRoot, Remove-OldHeadlessFailureFolders, Save-HeadlessFailureEvidence

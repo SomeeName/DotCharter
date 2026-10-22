@@ -187,7 +187,7 @@ public sealed class NewProjectViewModelTests : IDisposable
 
         var projectDir = Path.Combine(_tempDir, "Some Artist - Some Song");
         Assert.True(Directory.Exists(projectDir));
-        Assert.Equal(Path.Combine(projectDir, "project.rscp"), h.State.CurrentProjectPath);
+        Assert.Equal(Path.Combine(projectDir, "project.dcproj"), h.State.CurrentProjectPath);
 
         // No audio: nothing loaded, previous audio freed, no audio file name.
         Assert.Equal("", h.State.CurrentAudioFileName);
@@ -236,7 +236,7 @@ public sealed class NewProjectViewModelTests : IDisposable
     ///     always lands on the same one — and <c>Directory.CreateDirectory</c> is
     ///     a no-op on an existing folder. Creating over a folder that already
     ///     holds a project therefore pointed the session at its
-    ///     <c>project.rscp</c> (truncated by the first save) and, on the
+    ///     <c>project.dcproj</c> (truncated by the first save) and, on the
     ///     audio-backed path, overwrote its working audio outright.
     /// </summary>
     [Fact]
@@ -247,7 +247,7 @@ public sealed class NewProjectViewModelTests : IDisposable
 
         var existing = Path.Combine(_tempDir, "Some Artist - Some Song");
         Directory.CreateDirectory(existing);
-        File.WriteAllText(Path.Combine(existing, "project.rscp"), "<project>the earlier one</project>");
+        File.WriteAllText(Path.Combine(existing, "project.dcproj"), "<project>the earlier one</project>");
 
         h.Vm.StartWithoutAudioCommand.Execute(null);
         h.Vm.Artist = "Some Artist";
@@ -255,10 +255,10 @@ public sealed class NewProjectViewModelTests : IDisposable
 
         await h.CreateAsync();
 
-        Assert.Equal(Path.Combine(_tempDir, "Some Artist - Some Song (2)", "project.rscp"),
+        Assert.Equal(Path.Combine(_tempDir, "Some Artist - Some Song (2)", "project.dcproj"),
             h.State.CurrentProjectPath);
         Assert.Equal("<project>the earlier one</project>",
-            File.ReadAllText(Path.Combine(existing, "project.rscp")));
+            File.ReadAllText(Path.Combine(existing, "project.dcproj")));
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public sealed class NewProjectViewModelTests : IDisposable
 
         var projectDir = Path.Combine(_tempDir, "Tag Artist - Tag Title");
         Assert.True(Directory.Exists(projectDir));
-        Assert.Equal(Path.Combine(projectDir, "project.rscp"), h.State.CurrentProjectPath);
+        Assert.Equal(Path.Combine(projectDir, "project.dcproj"), h.State.CurrentProjectPath);
 
         // Audio copied as song.<ext> and loaded through the session.
         Assert.Equal("song.mp3", h.State.CurrentAudioFileName);

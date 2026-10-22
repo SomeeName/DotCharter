@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using DotCharter.Services.Parsing.Eof;
 using DotCharter.Services.Parsing.Midi;
 
@@ -85,14 +84,14 @@ public sealed class ImportHotPathTests
 
         var map = new MidiTempoMap(480, events);
 
-        var sw = Stopwatch.StartNew();
-        var beats = map.SuggestBeatGrid(100_000L * 480);
-        sw.Stop();
+        var beatCount = 0;
+        var bound = TimeSpan.FromSeconds(15);
+        var fastest = BestOfTiming.Fastest(() => beatCount = map.SuggestBeatGrid(100_000L * 480).Count, bound);
 
-        Assert.NotEmpty(beats);
+        Assert.NotEqual(0, beatCount);
         // Green runs in about a second; the linear scan is ~2e10 comparisons.
-        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(15),
-            $"building the grid took {sw.Elapsed.TotalSeconds:0.0}s — the tempo lookup is scanning again");
+        Assert.True(fastest < bound,
+            $"the fastest of {BestOfTiming.Attempts} grid builds took {fastest.TotalSeconds:0.0}s — the tempo lookup is scanning again");
     }
 
     private static int ReferenceMicrosecondsPerQuarterNote(List<MidiTempoEvent> events, long ticks)
@@ -187,18 +186,19 @@ public sealed class ImportHotPathTests
             { PositionMs = (uint)(i * 4), LengthMs = 2, NoteBitmask = 0x3F });
         }
 
-        var sw = Stopwatch.StartNew();
-        for (var n = 0; n < noteCount; n++)
+        var bound = TimeSpan.FromSeconds(5);
+        var fastest = BestOfTiming.Fastest(() =>
         {
-            var raw = new EofRawProGuitarNote { PositionMs = (uint)(n * 40), LengthMs = 30 };
-            for (var s = 0; s < 6; s++)
-                EofProGuitarTrackParser.FindApplicableTechNote(techNotes, raw, s);
-        }
+            for (var n = 0; n < noteCount; n++)
+            {
+                var raw = new EofRawProGuitarNote { PositionMs = (uint)(n * 40), LengthMs = 30 };
+                for (var s = 0; s < 6; s++)
+                    EofProGuitarTrackParser.FindApplicableTechNote(techNotes, raw, s);
+            }
+        }, bound);
 
-        sw.Stop();
-
-        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5),
-            $"the tech-note lookup took {sw.Elapsed.TotalSeconds:0.0}s — it is scanning from index 0 again");
+        Assert.True(fastest < bound,
+            $"the fastest of {BestOfTiming.Attempts} lookup sweeps took {fastest.TotalSeconds:0.0}s — it is scanning from index 0 again");
     }
 
     private static EofRawProGuitarNote? ReferenceTechNote(

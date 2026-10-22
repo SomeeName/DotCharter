@@ -8,7 +8,7 @@ using static DotCharter.Tests.Core.Linking.LinkFixture;
 namespace DotCharter.Tests.Services.Parsing.Rscp;
 
 /// <summary>
-///     <c>&lt;dcLinkGroups&gt;</c> (#88; <c>docs/RSCP-FORMAT-GUARANTEES.md</c> § Linked measures): the
+///     <c>&lt;dcLinkGroups&gt;</c> (#88; <c>docs/DCPROJ-FORMAT-GUARANTEES.md</c> § Linked measures): the
 ///     links round-trip, an older build reads the chart in full and keeps the node as residue, and
 ///     the load check unlinks — never rewrites — a copy that stopped matching.
 /// </summary>

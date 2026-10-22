@@ -248,11 +248,19 @@ internal static class RsChordDensity
         // them), and the compact chord tag has nowhere to put one that disagrees
         // with the strum. So anything the chord tag will not say for itself
         // keeps the full panel — the same "ANY doubt" side the rules above take.
+        //
+        // Accent and ignore: the chord's own flag is a WHOLE-chord flag, and
+        // the tag says it for every string. The SNG and XML importers, the
+        // whole-chord toggle and the spacing enforcer set it on the chord alone
+        // and leave each chord note's flag false, so a chord note that is false
+        // under a chord that is true says nothing the tag does not. Only a
+        // string that is set while the chord is not carries information the
+        // compact tag would drop.
         foreach (var cn in chord.ChordNotes)
         {
-            if (cn.Accent != chord.Accent)
+            if (cn.Accent && !chord.Accent)
                 return new RepeatChordVerdict(RepeatChordReason.PerStringAccent, cn.StringIndex);
-            if (cn.Ignore != chord.Ignore)
+            if (cn.Ignore && !chord.Ignore)
                 return new RepeatChordVerdict(RepeatChordReason.PerStringIgnore, cn.StringIndex);
             // A UNIFORM mute is expressible: all-Full becomes fretHandMute="1"
             // and all-Palm becomes palmMute="1" on the chord (Chord.IsFullyMuted

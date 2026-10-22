@@ -1,7 +1,7 @@
 namespace DotCharter.Services.Parsing.Rscp;
 
 /// <summary>
-/// The <c>.rscp</c> spelling of <see cref="ChartProvenance" />: a root
+/// The <c>.dcproj</c> spelling of <see cref="ChartProvenance" />: a root
 ///     <c>&lt;dcProvenance&gt;</c> for the project and a trailing
 ///     <c>&lt;dcArrangementProvenance&gt;</c> per arrangement, each absent when
 ///     unrestricted so every other chart stays byte-identical.

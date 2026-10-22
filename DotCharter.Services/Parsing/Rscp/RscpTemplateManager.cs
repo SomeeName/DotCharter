@@ -17,7 +17,7 @@ public class RscpTemplateManager
     ///     and handshapes are properly linked to chord templates
     /// </summary>
     /// <remarks>
-    ///     Every template is renumbered to its POSITION, because the <c>.rscp</c> is positional:
+    ///     Every template is renumbered to its POSITION, because the <c>.dcproj</c> is positional:
     ///     a <c>chordTemplate</c> element carries no id and the parser numbers templates by index.
     /// Every user is renumbered with it — see <see cref="RemapUsers" />.
     /// </remarks>

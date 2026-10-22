@@ -10,7 +10,6 @@ namespace DotCharter.Tests.Services.Audio.Coordination;
 ///     charter's own rig only when the project has no tone it can convert. Every
 ///     assertion reads the DSP CHAIN (what the audio runs through), never a flag.
 /// </summary>
-[Collection("GameplayToneHud")]
 public sealed class ChartTonePreviewSynthTests
 {
     private static IReadOnlyList<DspModuleType> Catalog() =>

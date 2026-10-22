@@ -897,7 +897,7 @@
     <data name="Settings_AsioOutChannelRight" xml:space="preserve"><value>ASIO-Ausgangskanal (rechts)</value></data>
     <data name="Settings_AsioOutChannelLeft" xml:space="preserve"><value>ASIO-Ausgangskanal (links)</value></data>
     <data name="Settings_AutoBackups" xml:space="preserve"><value>Auto-Backups</value></data>
-    <data name="Settings_BackupDescription" xml:space="preserve"><value>Backups werden als ZIP-Dateien in einem backups-Ordner neben der RSCP gespeichert.</value></data>
+    <data name="Settings_BackupDescription" xml:space="preserve"><value>Backups werden als ZIP-Dateien in einem backups-Ordner neben der Projektdatei gespeichert.</value></data>
     <data name="Settings_BackupMigrate_Title" xml:space="preserve"><value>Sicherung &amp; Umzug</value></data>
     <data name="Settings_BackupMigrate_Subtitle" xml:space="preserve"><value>Exportiert Einstellungen, Tastenkürzel, Profile und Spieldaten, Sprachpakete und Wiederherstellungspunkte als ein ZIP-Archiv. Anmeldedaten und Caches bleiben auf diesem Rechner.</value></data>
     <data name="Settings_BackupMigrate_Export" xml:space="preserve"><value>Sicherung exportieren…</value></data>
@@ -1005,7 +1005,7 @@
     <data name="Status_CreateProjectFailed" xml:space="preserve"><value>Fehler beim Erstellen des Projekts: {0}</value></data>
     <data name="Status_CreatedProject" xml:space="preserve"><value>Projekt {0} von {1} erstellt</value></data>
     <data name="Status_DecodingAudio" xml:space="preserve"><value>Audio wird dekodiert: {0}…</value></data>
-    <data name="Status_DragDrop" xml:space="preserve"><value>Audio, XML oder RSCP hier ablegen</value></data>
+    <data name="Status_DragDrop" xml:space="preserve"><value>Audio, XML oder ein Projekt (.dcproj, .rscp) hier ablegen</value></data>
     <data name="Status_FhpRegenerated" xml:space="preserve"><value>FHP neu erzeugt: {0} Anker ({1} ersetzt).</value></data>
     <data name="Status_FhpGenerated" xml:space="preserve"><value>{0} FHP-Anker erzeugt.</value></data>
     <data name="Status_FhpGeneratedForRange" xml:space="preserve"><value>{0} FHP-Anker für den ausgewählten Bereich erzeugt.</value></data>
@@ -1183,6 +1183,8 @@
     <data name="Status_CompanionPsarcBuilt" xml:space="preserve"><value>Rocksmith-Paket erstellt: {0}</value></data>
     <data name="Status_CompanionPsarcFailed" xml:space="preserve"><value>Rocksmith-Paket konnte nicht erstellt werden: {0}</value></data>
     <data name="Status_ProjectSavedTo" xml:space="preserve"><value>Projekt gespeichert unter {0}</value></data>
+    <data name="Status_ProjectSavedAsDcprojLegacyKept" xml:space="preserve"><value>Projekt gespeichert als {0}. DotCharter-Projekte sind jetzt .dcproj-Dateien; die ältere Datei bleibt als {1} erhalten, und daneben wird eine Charter-kompatible .rscp gespeichert.</value></data>
+    <data name="Status_ProjectSavedAsDcprojRscpKept" xml:space="preserve"><value>Projekt gespeichert als {0}. Die .rscp, aus der es geöffnet wurde ({1}), bleibt unverändert.</value></data>
     <data name="Status_SaveError" xml:space="preserve"><value>Speicherfehler: {0}</value></data>
     <data name="Export_PlayOnly" xml:space="preserve"><value>Dieses Chart ist nur zum Spielen freigegeben. Es lässt sich spielen, üben und ansehen, aber nicht exportieren.</value></data>
     <data name="Status_SelectNoteChordRange" xml:space="preserve"><value>Wähle zuerst einen Noten- oder Akkordbereich aus.</value></data>
@@ -1474,7 +1476,7 @@
     <data name="Settings_SaveCompanionRs2Dlc_RowLabel" xml:space="preserve"><value>DLC-Builder-Projekt</value></data>
     <data name="Settings_Tip_SaveCompanionRs2Dlc" xml:space="preserve"><value>Eine .rs2dlc in den Ordner DTRS XML schreiben, damit sich das Bündel direkt im DLC Builder öffnen lässt — und auf das Feld „Import rs2dlc“ bei CustomsForge gezogen werden kann, das die Metadaten dann selbst ausfüllt.</value></data>
     <data name="Settings_RsXmlSixString_RowLabel" xml:space="preserve"><value>RS-XML für 6-Saiten-Tools</value></data>
-    <data name="Settings_Tip_RsXmlSixString" xml:space="preserve"><value>Eine 7- oder 8-saitige Gitarre als sechssaitige .xml speichern: Noten auf den Zusatzsaiten entfallen, damit EOF und DLC Builder sie lesen können. Aus lässt alle Saiten stehen. Der Ordner DTRS XML und das DLC-Builder-Projekt nutzen immer die sechssaitige Fassung.</value></data>
+    <data name="Settings_Tip_RsXmlSixString" xml:space="preserve"><value>Eine 7- oder 8-saitige Gitarre als sechssaitige .xml speichern: Noten auf den Zusatzsaiten entfallen, damit EOF und DLC Builder sie lesen können. Aus lässt alle Saiten stehen. Gilt auch für den Ordner DTRS XML für DLC Builder; die Stimmung im DLC-Builder-Projekt listet immer die sechs Standardsaiten.</value></data>
     <data name="Settings_RsXmlMoverPhrases_RowLabel" xml:space="preserve"><value>RS-XML-Phrasen zwischen Beats als moveR</value></data>
     <data name="Settings_Tip_RsXmlMoverPhrases" xml:space="preserve"><value>Eine Phrase oder Section, die zwischen zwei Beats auf einer Note beginnt, als moveR auf dem Beat davor schreiben — für Tools, die diese Form erwarten. Aus schreibt die echte Zeit, die auch DLC Builder annimmt, mit oder ohne seine Verbesserungen. Gilt für die gespeicherte .xml und den Ordner DTRS XML; das Rocksmith-Paket nutzt immer die echte Zeit.</value></data>
     <data name="Settings_ExportGenerateDd_RowLabel" xml:space="preserve"><value>Dynamische Schwierigkeit für Arrangements mit einer Stufe erzeugen</value></data>
@@ -3385,6 +3387,23 @@
     <data name="Action_Generate" xml:space="preserve"><value>Generieren</value></data>
     <data name="Action_Run" xml:space="preserve"><value>Ausführen</value></data>
     <data name="Menu_ImportMidi" xml:space="preserve"><value>MIDI-Datei importieren…</value></data>
+    <data name="Menu_ConvertPackages" xml:space="preserve"><value>PSARC in DotCharter-Song umwandeln…</value></data>
+    <data name="Picker_ConvertPackages" xml:space="preserve"><value>PSARC-Dateien zum Umwandeln auswählen</value></data>
+    <data name="Picker_GamePackages" xml:space="preserve"><value>Rocksmith-Pakete</value></data>
+    <data name="Picker_ConvertOutputFolder" xml:space="preserve"><value>Ordner für die DotCharter-Songs wählen</value></data>
+    <data name="Convert_Prompt_Title" xml:space="preserve"><value>In DotCharter-Songs umwandeln</value></data>
+    <data name="Convert_Prompt_Message" xml:space="preserve"><value>Ausgewählte Pakete: {0}. OK speichert jede .dcsong neben ihrem Paket; Abbrechen lässt Sie stattdessen einen Ordner wählen.</value></data>
+    <data name="Status_ConvertingPackages" xml:space="preserve"><value>Pakete werden in DotCharter-Songs umgewandelt…</value></data>
+    <data name="Status_ConvertingPackage" xml:space="preserve"><value>{0} wird umgewandelt… ({1} fertig)</value></data>
+    <data name="Status_ConvertCancelled" xml:space="preserve"><value>Umwandlung abgebrochen.</value></data>
+    <data name="Status_ConvertUnavailable" xml:space="preserve"><value>Diese Version kann keine Pakete umwandeln.</value></data>
+    <data name="Convert_Summary_Title" xml:space="preserve"><value>Umwandlung abgeschlossen</value></data>
+    <data name="Convert_Summary_TitleProblems" xml:space="preserve"><value>Umwandlung mit Problemen abgeschlossen</value></data>
+    <data name="Convert_Summary_Counts" xml:space="preserve"><value>{0} umgewandelt, {1} übersprungen, {2} fehlgeschlagen.</value></data>
+    <data name="Convert_Summary_Where" xml:space="preserve"><value>Gespeichert in {0}</value></data>
+    <data name="Convert_Summary_FailedLine" xml:space="preserve"><value>• {0}: {1}</value></data>
+    <data name="Convert_Summary_More" xml:space="preserve"><value>…und {0} weitere.</value></data>
+    <data name="Convert_Summary_NoPackages" xml:space="preserve"><value>In der Auswahl wurde kein Paket gefunden.</value></data>
     <data name="Menu_GenerateLevels" xml:space="preserve"><value>Schwierigkeitsstufen generieren…</value></data>
     <data name="Menu_GenerateLevels_Tip" xml:space="preserve"><value>Erweitert die schwerste Stufe zu mehreren, zunehmend ausgedünnten Stufen, damit der Chart mit dynamischer Schwierigkeit statt mit einer einzigen Stufe exportiert wird.</value></data>
     <data name="Menu_PropagatePhrase" xml:space="preserve"><value>Phrase am Abspielkopf übertragen</value></data>
@@ -3493,14 +3512,14 @@
     <data name="Dialog_QualityReport_AudioRunning" xml:space="preserve"><value>Jede notierte Tonhöhe wird mit dem Audio abgeglichen …</value></data>
     <data name="Dialog_QualityReport_AudioDone" xml:space="preserve"><value>{0} von {1} Tönen vom Audio bestätigt.</value></data>
     <data name="Dialog_QualityReport_AudioFailed" xml:space="preserve"><value>Der Audioabgleich konnte nicht laufen: {0}</value></data>
-    <data name="Dialog_BatchLint_Subtitle" xml:space="preserve"><value>Prüft jedes .rscp-Projekt in einem Ordner, inklusive Unterordnern.</value></data>
+    <data name="Dialog_BatchLint_Subtitle" xml:space="preserve"><value>Prüft jedes Projekt (.dcproj, .rscp) in einem Ordner, inklusive Unterordnern.</value></data>
     <data name="Dialog_BatchLint_FolderWatermark" xml:space="preserve"><value>Kein Ordner ausgewählt</value></data>
     <data name="Dialog_BatchLint_ApplyFixes" xml:space="preserve"><value>Auto-Fix-Pipeline auf jedes Projekt anwenden</value></data>
     <data name="Dialog_BatchLint_SaveFixed" xml:space="preserve"><value>Korrigierte Projekte zurück auf die Festplatte speichern</value></data>
     <data name="Dialog_BatchLint_SaveFixed_Tip" xml:space="preserve"><value>Überschreibt die Projektdateien, die die Auto-Fix-Pipeline geändert hat. Das lässt sich nicht rückgängig machen — sichere den Ordner vorher.</value></data>
     <data name="Dialog_BatchLint_SaveFixed_NeedsAutoFix" xml:space="preserve"><value>Schalte oben die Auto-Korrektur ein — ohne sie gibt es nichts zu speichern.</value></data>
     <data name="BatchLint_NoFolder" xml:space="preserve"><value>Wähle einen zu prüfenden Ordner.</value></data>
-    <data name="BatchLint_NoProjects" xml:space="preserve"><value>In diesem Ordner wurden keine .rscp-Projektdateien gefunden.</value></data>
+    <data name="BatchLint_NoProjects" xml:space="preserve"><value>In diesem Ordner wurden keine Projektdateien (.dcproj, .rscp) gefunden.</value></data>
     <data name="BatchLint_Running" xml:space="preserve"><value>{0} Projekte werden geprüft…</value></data>
     <data name="BatchLint_RunningOne" xml:space="preserve"><value>{0} Projekt wird geprüft…</value></data>
     <data name="BatchLint_Summary" xml:space="preserve"><value>Projekte: {0}, Probleme: {1}, Korrekturen: {2}, gespeichert: {3}, fehlgeschlagen: {4}.</value></data>
@@ -3522,7 +3541,7 @@
     <data name="Dialog_ChartDiff_Subtitle" xml:space="preserve"><value>Vergleicht das Arrangement, das du bearbeitest, mit einem aus einer anderen Projektdatei.</value></data>
     <data name="Dialog_ChartDiff_FileWatermark" xml:space="preserve"><value>Keine Datei ausgewählt</value></data>
     <data name="Dialog_ChartDiff_Arrangement" xml:space="preserve"><value>Vergleichen mit</value></data>
-    <data name="ChartDiff_PickFile" xml:space="preserve"><value>Projektdatei (.rscp) zum Vergleich auswählen</value></data>
+    <data name="ChartDiff_PickFile" xml:space="preserve"><value>Projektdatei (.dcproj, .rscp) zum Vergleich auswählen</value></data>
     <data name="ChartDiff_NoArrangements" xml:space="preserve"><value>Dieses Projekt hat keine Arrangements.</value></data>
     <data name="ChartDiff_LoadFailed" xml:space="preserve"><value>Vergleich fehlgeschlagen: {0}</value></data>
     <data name="ChartDiff_Identical" xml:space="preserve"><value>Die beiden Charts haben identischen Toninhalt.</value></data>

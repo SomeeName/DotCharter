@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using System.Xml.Linq;
 using DotCharter.Services.Parsing.Xml.Song;
@@ -56,14 +55,14 @@ public sealed class RsXmlEventPointReadTests
 
         var xml = SongXml(sections, events);
 
-        var sw = Stopwatch.StartNew();
-        var arr = ReadFirstArrangement(xml);
-        sw.Stop();
+        Arrangement? arr = null;
+        var bound = TimeSpan.FromSeconds(10);
+        var fastest = BestOfTiming.Fastest(() => arr = ReadFirstArrangement(xml), bound);
 
-        Assert.True(arr.EventPoints.Count > count,
+        Assert.True(arr!.EventPoints.Count > count,
             $"expected more than {count} event points, got {arr.EventPoints.Count}");
-        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10),
-            $"reading took {sw.Elapsed.TotalSeconds:0.0}s — the event-point lookup is scanning again");
+        Assert.True(fastest < bound,
+            $"the fastest of {BestOfTiming.Attempts} reads took {fastest.TotalSeconds:0.0}s — the event-point lookup is scanning again");
     }
 
     // ---- helpers ------------------------------------------------------------

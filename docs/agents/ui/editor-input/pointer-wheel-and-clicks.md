@@ -96,10 +96,10 @@ letter, as Generate arpeggio is of Generate hand shape; #639) accept every dashe
 holding a selected sound. Each
 gesture is ONE undo node through `ArrangementHandShapeGenerator.BuildActions`, the
 #478 path (`HandShapeSuggestionAcceptor`). The click hit-tests the SAME list the
-timeline draws — `HandShapeSuggestionLatch`, keyed on the history revision — with the
-committed bars' own `ChartHitTester.HitTestHandShape`. The song map marks each open
-suggestion as a faint band (`MinimapOverviewControl.DrawSuggestions`, its own latch over
-the same inputs; `SongMapMarks.CollectSuggestions`).
+timeline draws — the editor's shared `HandShapeSuggestionLatch`, keyed on the history
+revision — with the committed bars' own `ChartHitTester.HitTestHandShape`. The song map marks
+each open suggestion as a faint band (`MinimapOverviewControl.DrawSuggestions`, the same latch
+over the same inputs; `SongMapMarks.CollectSuggestions`).
 `Services/Editing/HandShapes/HandShapeSuggestion*Tests`,
 `UI/Input/Tools/HandShapeSuggestionClickTests`, `UI/HandShapeSuggestionKeybindTests`,
 `UI/Controls/SongMapSuggestionMarksTests`.

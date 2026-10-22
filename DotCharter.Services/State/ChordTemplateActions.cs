@@ -196,7 +196,7 @@ public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction
 ///     <para>
 ///         Resolving it late is not a missed refresh, it is data loss in both
 ///         directions. Undo on a different arrangement removes nothing, so the
-///         template stays and is saved into the <c>.rscp</c> as an orphan. Redo
+///         template stays and is saved into the <c>.dcproj</c> as an orphan. Redo
 ///         then ADDS it to that other arrangement while re-pointing the ORIGINAL
 ///         arrangement's chords at its id — and the id was minted as
 ///         <c>max(Id) + 1</c> of the original, so in the other arrangement it

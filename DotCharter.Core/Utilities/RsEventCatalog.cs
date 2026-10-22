@@ -12,7 +12,7 @@ public readonly record struct RsEventDefinition(string Code, string DisplayName)
 ///         These are a separate vocabulary from <see cref="RsSectionCatalog" />
 ///         and are stored on the same marker — <c>EventPoint.Events</c>, a
 ///         comma-joined list, round-tripped by the RS-XML reader/writer and by
-///         the <c>.rscp</c> project format. This catalog is what lets the editor AUTHOR one:
+///         the <c>.dcproj</c> project format. This catalog is what lets the editor AUTHOR one:
 ///         without a control for it the list is only filled by the importers, and
 ///         the only way to get a crowd cue into a chart is to
 ///         import one that already has it.

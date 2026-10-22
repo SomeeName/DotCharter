@@ -34,6 +34,7 @@ internal sealed class ExternalProcessInserts
     private readonly IAppLogger? _logger;
     private readonly Func<IExternalInsertEngine?> _engine;
     private readonly Func<int, bool> _requestSampleRate;
+    private readonly Action<Action> _defer;
     private readonly object _gate = new();
     private readonly Request?[] _requests = new Request?[Dsp.DspPlayers.MaxPlayers];
     private readonly ExternalProcessInsertOpenResult[] _last = new ExternalProcessInsertOpenResult[Dsp.DspPlayers.MaxPlayers];
@@ -41,12 +42,16 @@ internal sealed class ExternalProcessInserts
     /// <param name="logger">Where opens, refusals and replays are reported.</param>
     /// <param name="engine">The current engine (null while none is up); one call per operation.</param>
     /// <param name="requestSampleRate">Asks for that device rate in place; true when the device now runs at it.
-    /// Never called under the caller's engine lock (the replay defers it to the thread pool).</param>
-    public ExternalProcessInserts(IAppLogger? logger, Func<IExternalInsertEngine?> engine, Func<int, bool> requestSampleRate)
+    /// Never called under the caller's engine lock (the replay defers it through <paramref name="defer" />).</param>
+    /// <param name="defer">Runs the replay's deferred work off the caller's thread; the thread pool when null.
+    /// Tests pass a queue they drain themselves.</param>
+    public ExternalProcessInserts(IAppLogger? logger, Func<IExternalInsertEngine?> engine, Func<int, bool> requestSampleRate,
+        Action<Action>? defer = null)
     {
         _logger = logger;
         _engine = engine;
         _requestSampleRate = requestSampleRate;
+        _defer = defer ?? (work => _ = Task.Run(work));
         Array.Fill(_last, ExternalProcessInsertOpenResult.Failed);
     }
 
@@ -129,7 +134,7 @@ internal sealed class ExternalProcessInserts
                 if (result == ExternalProcessInsertOpenResult.SampleRateMismatch && request.SampleRate > 0)
                 {
                     var seat = player;
-                    _ = Task.Run(() => ReopenAtRate(seat, request));
+                    _defer(() => ReopenAtRate(seat, request));
                 }
                 else if (result != ExternalProcessInsertOpenResult.Opened)
                 {

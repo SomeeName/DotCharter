@@ -223,6 +223,42 @@ public sealed class RepeatChordVerdictTests
         Assert.Single(l.HandShapes);
     }
 
+    /// <summary>
+    ///     Accent and ignore are WHOLE-chord flags: the importers, the whole-chord toggle and the spacing
+    ///     enforcer set them on the chord and leave every chord note's own flag false. The compact tag says
+    ///     the chord's flag for every string, so such a strum still ships as the repeat box.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void AWholeChordFlag_OnBothStrums_StillShipsTheSecondAsARepeat(bool accent, bool ignore)
+    {
+        var (level, second, _) = Pair((first, c) =>
+        {
+            foreach (var chord in new[] { first, c })
+            {
+                chord.Accent = accent;
+                chord.Ignore = ignore;
+            }
+        });
+
+        Assert.Equal(RepeatChordReason.Repeat, level.VerdictOf(second).Reason);
+        Assert.Contains(second, RepeatChords.Compute(level.Templates, level.Notes, level.Chords, level.HandShapes, level.Beats));
+    }
+
+    /// <summary>A per-string flag UNDER a whole-chord flag adds nothing the tag does not already say.</summary>
+    [Fact]
+    public void AStringFlag_UnderTheSameChordFlag_StillShipsAsARepeat()
+    {
+        var (level, second, _) = Pair((first, c) =>
+        {
+            first.Accent = c.Accent = true;
+            c.ChordNotes[2].Accent = true;
+        });
+
+        Assert.Equal(RepeatChordReason.Repeat, level.VerdictOf(second).Reason);
+    }
+
     [Fact]
     public void EveryReason_HasACase() =>
         Assert.Equal(Enum.GetValues<RepeatChordReason>().Order(), Cases.Keys.Order());

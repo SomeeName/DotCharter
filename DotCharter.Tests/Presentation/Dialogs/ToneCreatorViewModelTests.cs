@@ -223,13 +223,13 @@ public sealed class ToneCreatorViewModelTests
         vm.Description = Description;
 
         var run = ((IAsyncRelayCommand)vm.CreateCommand).ExecuteAsync(null);
-        Assert.True(entered.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken), "the model was never asked");
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken), "the model was never asked");
         Assert.False(run.IsCompleted);
         Assert.True(vm.IsBusy);
         Assert.False(vm.CreateCommand.CanExecute(null));
 
         vm.StopCommand.Execute(null);
-        await run.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        await run.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
 
         Assert.False(vm.IsBusy);
         Assert.False(vm.HasProposal);
@@ -327,7 +327,7 @@ public sealed class ToneCreatorViewModelTests
         public Task<ToneDesignModelReply> CompleteAsync(ToneDesignPrompt prompt, CancellationToken ct)
         {
             entered.Set();
-            ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(20));
+            ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(60));
             ct.ThrowIfCancellationRequested();
             throw new TimeoutException("never cancelled");
         }

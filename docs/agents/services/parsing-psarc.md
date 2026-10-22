@@ -725,7 +725,7 @@ its own copy of this guide for the reader's half.
   turning the one pass back into a full-document scan.
 
 - **The format PROMISE — what is frozen, what happens to unknown data, when the
-  version bumps — is [`docs/RSCP-FORMAT-GUARANTEES.md`](../../RSCP-FORMAT-GUARANTEES.md),
+  version bumps — is [`docs/DCPROJ-FORMAT-GUARANTEES.md`](../../DCPROJ-FORMAT-GUARANTEES.md),
   and its code half is `Parsing/Rscp/RscpFormatContract` (0.49).** Read it before
   changing anything about the wire shape. The short version:
   - A top-level element whose name is NOT in
@@ -789,7 +789,7 @@ its own copy of this guide for the reader's half.
   attribute. **When you persist one side of a mutually exclusive pair, ask what
   the other side is and where IT lives** — and note the attribute is written
   unconditionally, for the reason in
-  [../../RSCP-FORMAT-GUARANTEES.md](../../RSCP-FORMAT-GUARANTEES.md).
+  [../../DCPROJ-FORMAT-GUARANTEES.md](../../DCPROJ-FORMAT-GUARANTEES.md).
 
 - **…and PRESENCE is not FIDELITY, so there is a whole-graph value comparison
   too: `RscpDeepValueRoundTripTests`.** Every settable property on

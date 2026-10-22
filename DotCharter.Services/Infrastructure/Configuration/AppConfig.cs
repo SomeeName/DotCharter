@@ -915,7 +915,7 @@ public class AppConfig : RigConfig
     public bool ExportIncludeVocals { get; set; } = true;
 
     // ------ Save companions --------------------------------------------------
-    // Artifacts written alongside the .rscp on every save, so a project is
+    // Artifacts written alongside the .dcproj on every save, so a project is
     // directly openable by Editor on Fire and loadable by Rocksmith without a
     // manual export step. Both are best-effort: a failure here is reported but
     // NEVER fails the project save.

@@ -29,7 +29,8 @@ the root [`AGENTS.md`](../../AGENTS.md) § GitHub workflow; this is the loop aro
 3. **Test that would fail without the change**, in the default gate where possible.
    - **Prove it**: break the fix, watch the test fail, restore.
    - **The break must COMPILE.** A break that fails the build leaves the tests running the OLD binaries, and "it passed" means nothing. Check that the build line says OK before reading the result.
-4. **Gates**: `tools/agent/Invoke-Gate.ps1 -Gate`, plus `-Headless` (4 shards) after any view change.
+4. **Gates**: `tools/agent/Invoke-Gate.ps1 -Gate` (4 shards), or `-Gate -Headless` after any view change (both suites at once when RAM allows). `-Gate` leaves out the slow **release lane** (`tools/ci/release-lane.json`): the train, the release preflight and CI run it for you; run a lane class yourself with `-FilterClass` when you change its subsystem.
+   - While iterating, `Invoke-Gate.ps1 -Affected` runs only the classes that cover your diff (printed with the reason for each; `-SelectOnly` just prints). It is a loop aid: it records no green tree, falls back to the full gate on a change to `tools/`, a project or global config, and never replaces the full gate or the train.
    - A red class in a busy run is re-run ALONE before it is called a flake.
    - A test that flakes twice gets its own issue.
 5. **PR**: what, how, evidence (gate and headless numbers, the non-vacuity proofs), known limits.
@@ -48,7 +49,8 @@ powershell -NoProfile -File tools/agent/Merge-Train.ps1 -Prs 142,143,144 -Merge 
 ```
 
 It merges the PRs onto `origin/main` in order, runs the gate once (and the
-headless suite, 4 shards, if any PR touches a view), and with `-Merge` merges
+headless suite, 4 shards, if any PR touches a view), then the release lane
+(`Invoke-Gate.ps1 -ReleaseLane`, skipped only for a docs-only train), and with `-Merge` merges
 them on GitHub in the SAME order, refusing a PR whose head moved since it was
 tested. GitHub repeats exactly those merges, so the tested tree is the tree
 that lands. A PR that moves the JuceSharp gitlink is refused: merge it on its
@@ -58,17 +60,32 @@ harness-fault needle (`tools/ci/HeadlessShards.psm1`) is not a stop by itself:
 (2) times, and the train is green only if they pass; the verdict line and each
 merged PR's comment say so. A failure without a needle stops the train.
 
+A GREEN full-gate train records its tree id (with `+ headless` when the suite ran and
+`+ release lane`) in the release cache (`tools/release/ReleaseCache.psm1`, see
+`tools/release/README.md` § Release caches). The public export's `-Gate` and
+`New-Release.ps1`'s headless preflight then skip that identical test run on the
+same tree (the release lane's record is reused the same way); `-ForceGate` /
+`-ForceHeadlessUi` / `-ForceReleaseLane` run it anyway.
+
 What keeps it fast:
 
 - **One reused worktree, `.claude/worktrees/train`.** Each train resets it to
   `origin/main` and keeps its ignored `bin/obj`, so the build is incremental
-  (its builds run with `SuppressImplicitGitSourceLink=true`: SourceLink stamps
-  HEAD's commit id into every assembly, and a train's HEAD is a new merge commit
-  each run). It is rebuilt from scratch only when main's JuceSharp gitlink moved
+  (its builds run with `SuppressImplicitGitSourceLink=true`, as does every
+  `Invoke-Gate.ps1` build, both through `tools/agent/DevBuild.psm1`: SourceLink
+  stamps HEAD's commit id into every assembly, so each new commit would recompile
+  all projects; a one-line change rebuilds in ~15 s instead of ~65 s, #153). It is rebuilt from scratch only when main's JuceSharp gitlink moved
   since it was created (a marker in the worktree's git directory) or with
   `-Fresh`. A lock in the main `.git` stops a second train from resetting it
   under a running one. Never use it for anything else, and never delete it
   while a train runs.
+- **A XAML project keeps its reference assembly's timestamp.** Avalonia's XAML
+  compile rewrites `obj/refint` and deletes `obj/ref` before the SDK's copy, so
+  the copy always ran and a comment-only edit in `DotCharter.UI` recompiled
+  `DotCharter.UI.Gallery` and `DotCharter.Tests`. Two targets in
+  `Directory.Build.targets` restore `obj/ref`'s timestamp when the bytes are equal;
+  `Infrastructure/RefAssemblyStabilityLintTests` pins them. A public-API change
+  still rebuilds the dependents.
 - **Its `juce_sharp.dll` is kept too.** When a FRESH train's worktree script
   warns that the DLL was not built for the gitlink, copy one that was into the
   train worktree's `JuceSharp/src/JuceSharp/runtimes/win-x64/native/`; it then
@@ -79,8 +96,12 @@ What keeps it fast:
   `DocReferenceLintTests`) instead of the full gate. A new test that reads a
   guide's wording joins that list. `-Headless` forces the full path.
 - **Its own processes only.** It stops stray test hosts whose path lies inside
-  the train worktree, never another agent's, and moves itself to CPUs 8-15 at
-  below-normal priority on a 16-thread box (everything it starts inherits both).
+  the train worktree, never another agent's, and pins itself at
+  below-normal priority on a 16-thread box (everything it starts inherits both):
+  CPUs 8-15 by default (no game detection), ALL cores only with `-AllCores`.
+  `Invoke-Gate.ps1` decides the same way, so a gate needs no `cmd /c start
+  /affinity` wrapper; the train passes `-AllCores` on to its child gates, and
+  the choice is the first line of the output. The decision is `DevBuild.psm1`'s `Get-DevCpuPlan`.
 
 The decisions are pinned by `Infrastructure/MergeTrainModuleTests`.
 

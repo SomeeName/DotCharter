@@ -16,9 +16,6 @@ public class HandShapeInteractionTool : IEditorTool
 
     private FractionalPosition? _lastClickedPos;
 
-    // The suggested bars as the timeline draws them — the same latch, so a click
-    // accepts exactly the dashed bar under the pointer.
-    private readonly HandShapeSuggestionLatch _suggested = new();
     private readonly HandShapeSuggestionAcceptor _acceptor;
     private readonly ILocalizationService _localization;
     private HandShape? _hintedSuggestion;
@@ -345,12 +342,15 @@ public class HandShapeInteractionTool : IEditorTool
     {
         var vm = context.ViewModel;
         var track = context.Track;
-        var bars = _suggested.Get(track.Arrangement, track.Level, vm.ProjectState.ShowSuggestedHandShapes,
-            vm.ChartEditor.HistoryRevision, Environment.TickCount64);
+        // The set the timeline drew, from the editor's one shared latch, so a click accepts
+        // exactly the dashed bar under the pointer.
+        var set = vm.ChartEditor.SharedHandShapeSuggestions.Get(track.Arrangement, track.Level,
+            vm.ProjectState.ShowSuggestedHandShapes, vm.ChartEditor.HistoryRevision, Environment.TickCount64);
+        var bars = set.Bars;
         var hit = ChartHitTester.HitTestHandShape(context.Position, bars, vm.ProjectState.TimelineViewAnchorEffectiveMs,
             vm.ProjectState.PixelsPerMs, context.Viewport.ViewportWidth, context.Viewport.ViewportHeight,
             context.Viewport.TopMargin, context.Viewport.BottomMargin, track.Beats);
-        return hit == null ? null : (hit, _suggested.Suggestions[bars.IndexOf(hit)]);
+        return hit == null ? null : (hit, set.Suggestions[bars.IndexOf(hit)]);
     }
 
     /// <summary>Says how to accept the suggestion under the pointer, once per suggestion.</summary>

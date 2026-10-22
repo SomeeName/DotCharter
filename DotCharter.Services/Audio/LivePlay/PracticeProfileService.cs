@@ -294,6 +294,15 @@ public interface IPracticeProfileService
     bool AttachReplayFile(string songKey, string arrangementName, string replayFileName);
 
     /// <summary>
+    ///     Moves every arrangement stored under the own-chart song key <paramref name="fromSongKey" /> (a
+    ///     project path) to <paramref name="toSongKey" />, in EVERY player profile's store, merging with
+    ///     entries already there (<see cref="PracticeSongRekey" />). Idempotent: a second call moves nothing
+    ///     and writes nothing. A store that could not be read is left as it is. Returns how many
+    ///     arrangements moved; never throws.
+    /// </summary>
+    int RekeySong(string fromSongKey, string toSongKey);
+
+    /// <summary>
     ///     Drops the in-memory store so the next read re-loads it from disk.
     ///     Required after a backup import replaces the file behind the service.
     /// </summary>
@@ -560,6 +569,33 @@ public sealed class PracticeProfileService : IPracticeProfileService
 
             SaveLocked(profiles);
             return profile;
+        }
+    }
+
+    public int RekeySong(string fromSongKey, string toSongKey)
+    {
+        if (string.IsNullOrWhiteSpace(fromSongKey) || string.IsNullOrWhiteSpace(toSongKey) ||
+            string.Equals(fromSongKey, toSongKey, StringComparison.Ordinal))
+        {
+            return 0;
+        }
+
+        lock (_gate)
+        {
+            // A store that could not be READ is presumed intact and never written over.
+            var profiles = LoadLocked();
+            var moved = _storeUnreadable ? 0 : PracticeSongRekey.Apply(profiles, fromSongKey, toSongKey);
+            if (moved > 0) SaveLocked(profiles);
+
+            if (_playerProfiles is null) return moved;
+            foreach (var profile in _playerProfiles.Profiles)
+            {
+                if (profile.Id == _playerProfiles.ActiveProfile.Id) continue;
+                var file = Path.Combine(_playerProfiles.GetDataDirectory(profile.Id), StoreFileName);
+                moved += PracticeSongRekey.ApplyToFile(file, fromSongKey, toSongKey, JsonOptions, _logger);
+            }
+
+            return moved;
         }
     }
 

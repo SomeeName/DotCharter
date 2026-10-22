@@ -1,3 +1,5 @@
+using DotCharter.Services.Parsing.Rscp;
+
 namespace DotCharter.Services.Infrastructure.Recovery;
 
 /// <summary>
@@ -8,7 +10,8 @@ namespace DotCharter.Services.Infrastructure.Recovery;
 ///         as-is, so its <c>OriginalProjectPath</c> is a value somebody other than the
 ///         current session can have written (a restored backup, a copied config
 ///         folder). Adopting it blindly turned "recover" into "overwrite whatever path
-///         the file names". So it is taken only when it is a <c>.rscp</c> file, spelt
+///         the file names". So it is taken only when it is a project file (<c>.dcproj</c>,
+///         or a <c>.rscp</c> a session opened), spelt
 ///         as a plain absolute local path, outside the operating system's and the
 ///         installed programs' folders. Anything else leaves the session UNTITLED:
 ///         the work is still recovered, and the user chooses where it is saved.
@@ -21,7 +24,6 @@ namespace DotCharter.Services.Infrastructure.Recovery;
 /// </summary>
 public static class RecoveredProjectPath
 {
-    private const string ProjectExtension = ".rscp";
 
     private static readonly Environment.SpecialFolder[] ProtectedFolders =
     [
@@ -36,7 +38,7 @@ public static class RecoveredProjectPath
     public static bool IsAdoptable(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
-        if (!string.Equals(Path.GetExtension(path), ProjectExtension, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!ProjectFiles.IsOpenable(path)) return false;
 
         // UNC (\\server\share), device (\\?\, \\.\) and rooted-without-drive (\dir) forms.
         if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal)) return false;

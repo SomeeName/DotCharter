@@ -100,6 +100,18 @@ public sealed partial class ThirdPartyNoticeCoverageTests
         Assert.True(missing.Count == 0, $"{NoticesFileName} §2.4 has no entry for: {string.Join(", ", missing)}.");
     }
 
+    /// <summary>The app-local VC++ runtime DLLs the release copies beside onnxruntime.dll are read from the pin that declares them.</summary>
+    [Fact]
+    public void Every_app_local_VC_runtime_DLL_has_a_notice()
+    {
+        using var pin = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Root, "tools", "release", "vcredist.json")));
+        var dlls = pin.RootElement.GetProperty("files").EnumerateObject().Select(p => p.Name).ToList();
+        Assert.True(dlls.Count >= 4, $"Read only {dlls.Count} runtime DLLs - vcredist.json moved.");
+
+        var missing = Missing(Notices(), dlls);
+        Assert.True(missing.Count == 0, $"{NoticesFileName} §2.3 has no entry for: {string.Join(", ", missing)}.");
+    }
+
     [Fact]
     public void Every_downloadable_model_has_a_notice()
     {

@@ -21,7 +21,7 @@ public sealed class DialogStackTests
         Assert.True(stack.HasOpenDialog);
         result.SetResult(7);
 
-        Assert.Equal(7, await session.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.Equal(7, await session.Completion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public sealed class DialogStackTests
 
         Assert.True(stack.CloseTop());
 
-        Assert.Null(await top.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.Null(await top.Completion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
         Assert.False(bottom.Completion.IsCompleted);
         Assert.Equal(1, stack.Count);
 
@@ -50,7 +50,7 @@ public sealed class DialogStackTests
         result.SetException(new InvalidOperationException("boom"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            session.Completion.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            session.Completion.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -71,13 +71,13 @@ public sealed class DialogStackTests
         Assert.True(ok.HasMessage);
         Assert.True(ok.IsConfirmation);
         ok.OkCommand.Execute(null);
-        Assert.True(await ok.Result.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.True(await ok.Result.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
 
         var cancel = new MessagePromptViewModel();
         cancel.Configure("Title", "", isConfirmation: false);
         Assert.False(cancel.HasMessage);
         cancel.CancelCommand.Execute(null);
-        Assert.False(await cancel.Result.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.False(await cancel.Result.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
     }
 
     [Fact]

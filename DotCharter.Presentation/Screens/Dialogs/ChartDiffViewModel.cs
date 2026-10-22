@@ -9,6 +9,7 @@ using DotCharter.Presentation.Contracts.Dialogs;
 using DotCharter.Presentation.Dialogs;
 using DotCharter.Services.Infrastructure.Configuration;
 using DotCharter.Services.Infrastructure.Documents;
+using DotCharter.Services.Parsing.Rscp;
 using DotCharter.Tone.Infrastructure.Configuration;
 using DotCharter.Tone.Infrastructure.Storage;
 using DotCharter.Tone.Logging;
@@ -116,7 +117,7 @@ public sealed class ChartDiffViewModel : DialogViewModel<bool>, IChartDiffScreen
     {
         if (_isBusy) return;
         var path = await _storage.OpenFilePickerAsync(_l["ChartDiff_PickFile"],
-            [new FilePickerFilter("DotCharter Project", ["*.rscp"])], _config.LoadAppConfig().LastRscpDir);
+            [new FilePickerFilter("DotCharter Project", [.. ProjectFiles.OpenablePatterns])], _config.LoadAppConfig().LastRscpDir);
         if (string.IsNullOrEmpty(path)) return;
 
         _isBusy = true;

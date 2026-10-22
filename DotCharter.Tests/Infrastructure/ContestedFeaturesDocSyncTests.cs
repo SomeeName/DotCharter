@@ -131,7 +131,12 @@ public sealed partial class ContestedFeaturesDocSyncTests
             .SelectMany(f => f.MenuKeys.Select(k => (Key: k, f.Id)))
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => $"{p.Key}={p.Id}");
-        Assert.Equal(expected, marked.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"));
+        var contested = marked.Where(p => ContestedFeatures.All.Any(f => f.Id == p.Value)).ToList();
+        Assert.Equal(expected, contested.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"));
+
+        // The rows marked with a PACKAGE feature (removed when no plugin reads packages), pinned so a new one is a decision.
+        Assert.Equal(["Menu_ConvertPackages=game-packages"],
+            marked.Except(contested).OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"));
     }
 
     [Fact]

@@ -107,13 +107,18 @@ public sealed class StemToolChildProcessTests : IDisposable
         // `for` body silently makes it 9,000,000 lines.)
         var line = new string('z', 40);
 
-        Assert.True(
-            AudioFormatConverter.RunProcess("cmd.exe", ["/c", $"for /L %i in (1,1,3000) do @echo {line}"]),
-            "a child flooding STDOUT must be drained and reaped, not left blocked on a full pipe " +
-            "until the two-minute ceiling kills it.");
+        // The ceiling is the deadlock detector this test hands in: a saturated box runs the
+        // 3,000-line shell loop for minutes, and the product's own two-minute ceiling is a
+        // budget for a real decoder, not for this fixture.
+        var ceiling = TimeSpan.FromMinutes(10);
 
         Assert.True(
-            AudioFormatConverter.RunProcess("cmd.exe", ["/c", $"for /L %i in (1,1,3000) do @echo {line} 1>&2"]),
+            AudioFormatConverter.RunProcess("cmd.exe", ["/c", $"for /L %i in (1,1,3000) do @echo {line}"], ceiling),
+            "a child flooding STDOUT must be drained and reaped, not left blocked on a full pipe " +
+            "until the ceiling kills it.");
+
+        Assert.True(
+            AudioFormatConverter.RunProcess("cmd.exe", ["/c", $"for /L %i in (1,1,3000) do @echo {line} 1>&2"], ceiling),
             "a child flooding STDERR must be drained too — vgmstream is the chatty one there.");
     }
 
@@ -191,7 +196,7 @@ public sealed class StemToolChildProcessTests : IDisposable
         // the gate while its real assertion (below) passed. The stall it guards
         // against is unbounded, so no threshold between 20 s and infinity means
         // anything; only "did it finish" does.
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var sw = Stopwatch.StartNew();
         var ok = await FfmpegStemEncoder.RunProcessAsync(
             "cmd.exe", ["/c", "for /L %i in (1,1,3000) do @echo " + new string('z', 40)], cts.Token);
@@ -199,7 +204,7 @@ public sealed class StemToolChildProcessTests : IDisposable
 
         Assert.True(ok, "A flooding child must be drained and reaped, not left blocked on a full pipe.");
         Assert.False(cts.IsCancellationRequested,
-            $"The run stalled on a full pipe — it did not finish before the 2-minute deadline " +
+            $"The run stalled on a full pipe — it did not finish before the 10-minute deadline " +
             $"(elapsed {sw.Elapsed.TotalSeconds:0}s).");
     }
 }

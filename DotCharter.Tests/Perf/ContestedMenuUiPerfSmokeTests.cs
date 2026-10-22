@@ -24,8 +24,9 @@ public sealed class ContestedMenuUiPerfSmokeTests
         }
     }
 
+    /// <summary>The rows marked with a CONTESTED feature; a package row (game-packages) is the plugin gate's, not this switch's.</summary>
     private static List<MenuItem> Marked(ItemsControl menu) =>
-        [.. AllRows(menu).Where(r => ContestedMenu.GetFeature(r) is not null)];
+        [.. AllRows(menu).Where(r => ContestedFeatures.All.Any(f => f.Id == ContestedMenu.GetFeature(r)))];
 
     [Fact]
     public Task ContestedRows_ArePresentWhenOn_AndGoneWhenOff() =>

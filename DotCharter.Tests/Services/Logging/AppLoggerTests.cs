@@ -16,10 +16,9 @@ namespace DotCharter.Tests.Services.Logging;
 ///     handles, and that background churn perturbs unrelated allocation-sensitive
 ///     tests in the shared suite. The pipeline swap under test is the same either way.
 /// </remarks>
-// Mutates the AMBIENT culture, which is process-wide, so it shares the
-// serialized collection with the other culture tests. See
-// Infrastructure/CultureCollectionLintTests.
-[Collection("LocalizationSingleton")]
+// Sets CultureInfo.CurrentCulture for the calling flow only and restores it in a
+// finally, so no collection is needed. Infrastructure/CultureCollectionLintTests
+// serializes the classes that write the process-wide defaults.
 public sealed class AppLoggerTests
 {
     private static FakeConfigurationService SinklessConfig(string logPath) => new()
@@ -148,8 +147,8 @@ public sealed class AppLoggerTests
         }
         finally
         {
-            // Restored on the FAILURE path too: CurrentCulture is ambient state and
-            // every other collection runs in parallel with this one.
+            // Restored on the FAILURE path too: a leaked culture would colour
+            // whatever the same flow runs next.
             CultureInfo.CurrentCulture = previous;
         }
     }
