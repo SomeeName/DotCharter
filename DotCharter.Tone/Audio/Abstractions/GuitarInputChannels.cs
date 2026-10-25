@@ -4,8 +4,9 @@ namespace DotCharter.Tone.Audio.Abstractions;
 
 /// <summary>One physical input jack of the audio interface, as a picker row.
 /// <see cref="Jack" /> is the driver's 0-based channel index — the number
-/// <c>RigConfig.AsioInputChannelLeft</c> / <c>Right</c> store — and the label is
-/// what the user reads (1-based, "Input 2").</summary>
+/// <c>RigConfig.AsioInputChannelLeft</c> / <c>Right</c> store for ASIO and WASAPI
+/// alike, despite the names — and the label is what the user reads (1-based,
+/// "Input 2").</summary>
 public sealed record InputJackOption(int Jack, string Label)
 {
     public override string ToString() => Label;
@@ -41,16 +42,54 @@ public static class GuitarInputChannels
     /// configured jacks are always appended on top.</summary>
     public const int FallbackJackCount = 8;
 
-    /// <summary>True when the jack INDEXES do anything: the engine builds an
-    /// input channel mask only for ASIO (<c>RigConfig.AudioDriver</c>, the engine
-    /// driver — ASIO is single-driver-exclusive, so it is the input driver too).
-    /// WASAPI opens the device's first channels in order.</summary>
-    public static bool JackIndexesAreUsed(RigConfig config)
+    /// <summary>The engine's input channel mask is 32 bits wide, so a device
+    /// reporting more inputs offers the first 32: a jack the mask cannot name
+    /// would open the device's first channels instead.</summary>
+    public const int MaxJacks = 32;
+
+    /// <summary>
+    ///     The capture channels the engine opens, on EVERY driver: JUCE's ASIO and
+    ///     WASAPI devices both take an input channel bitmask, and WASAPI maps the
+    ///     named channels out of the endpoint's full mix format, so a guitar on
+    ///     input 2 opens alone in shared mode as well. 0 (input off) lets the
+    ///     channel count pick the first channels; a jack past
+    ///     <see cref="MaxJacks" /> adds no bit.
+    /// </summary>
+    public static uint InputChannelMask(RigConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
-        return config.EnableInput
-               && string.Equals(config.AudioDriver, "ASIO", StringComparison.OrdinalIgnoreCase);
+        if (!config.EnableInput) return 0u;
+        var mask = JackBit(config.AsioInputChannelLeft);
+        return config.AsioInputMono ? mask : mask | JackBit(config.AsioInputChannelRight);
     }
+
+    /// <summary>
+    ///     <see cref="InputChannelMask(RigConfig)" /> checked against the device
+    ///     that will open: when a chosen jack lies past the device's input count
+    ///     (an index picked on a 20-input ASIO interface, then a switch to a
+    ///     2-input WASAPI endpoint) JUCE drops the bit and the device would open
+    ///     with no capture channel at all, so the mask falls back to 0 and the
+    ///     first channels open. An unknown count (0) leaves the mask alone.
+    /// </summary>
+    public static uint InputChannelMask(RigConfig config, int deviceInputCount) =>
+        JackPastDevice(config, deviceInputCount) ? 0u : InputChannelMask(config);
+
+    /// <summary>True when the config's input is on and a jack it opens lies at or
+    /// past a KNOWN device input count (<paramref name="deviceInputCount" /> &gt; 0).</summary>
+    public static bool JackPastDevice(RigConfig config, int deviceInputCount)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        if (!config.EnableInput || deviceInputCount <= 0) return false;
+        return config.AsioInputChannelLeft >= deviceInputCount
+            || (!config.AsioInputMono && config.AsioInputChannelRight >= deviceInputCount);
+    }
+
+    /// <summary>The WARN line for a jack past the device's input count.</summary>
+    public static string PastDeviceMessage(RigConfig config, string deviceName, int deviceInputCount) =>
+        $"Input jack {config.AsioInputChannelLeft + 1}/{config.AsioInputChannelRight + 1} is past the " +
+        $"{deviceInputCount} inputs of '{deviceName}'; opening the first input channels instead.";
+
+    private static uint JackBit(int jack) => jack is >= 0 and < MaxJacks ? 1u << jack : 0u;
 
     /// <summary>How many input channels the engine OPENS for this config —
     /// mirrors <c>JuceAudioPlaybackService.ApplyAudioConfigurationCore</c>'s
@@ -102,10 +141,12 @@ public static class GuitarInputChannels
     ///     the config currently names even if it lies beyond the count — a saved
     ///     jack must never vanish from the list and silently read as "none".
     /// </summary>
+    /// <remarks>The channel names are the open device's (<see cref="ChannelNames" />);
+    /// null or empty gives numbered rows only.</remarks>
     public static IReadOnlyList<InputJackOption> JackOptions(ILocalizationService localization, int deviceJackCount,
-        params int[] alwaysInclude)
+        IReadOnlyList<string>? channelNames, params int[] alwaysInclude)
     {
-        var count = deviceJackCount > 0 ? deviceJackCount : FallbackJackCount;
+        var count = deviceJackCount > 0 ? Math.Min(deviceJackCount, MaxJacks) : FallbackJackCount;
         var jacks = new SortedSet<int>();
         for (var j = 0; j < count; j++) jacks.Add(j);
         foreach (var j in alwaysInclude)
@@ -114,24 +155,27 @@ public static class GuitarInputChannels
                 jacks.Add(j);
         }
 
-        return jacks.Select(j => new InputJackOption(j, JackLabel(localization, j))).ToList();
+        return jacks.Select(j => new InputJackOption(j, JackLabel(localization, j, channelNames))).ToList();
     }
 
-    /// <summary>"Input 2" for jack 1 — one label everywhere, so the rig, the
-    /// wizard and Settings can never disagree about which jack is which.</summary>
-    public static string JackLabel(ILocalizationService localization, int jack) =>
-        localization.Format("InputJack_LabelFmt", jack + 1);
+    /// <summary>"Input 2" for jack 1, followed by the driver's name for it when it
+    /// has one ("Input 2 · Hi-Z") — one label everywhere, so the rig, the wizard
+    /// and Settings can never disagree about which jack is which.</summary>
+    public static string JackLabel(ILocalizationService localization, int jack, IReadOnlyList<string>? channelNames = null) =>
+        ChannelNames.WithName(localization, localization.Format("InputJack_LabelFmt", jack + 1),
+            ChannelNames.Meaningful(channelNames, jack));
 
     /// <summary>
-    ///     The jack behind an index into the OPEN channel set. ASIO builds a mask
-    ///     and JUCE compacts the enabled bits ASCENDING, so with two channels open
-    ///     index 0 is the LOWER of the two jacks whichever box it was typed in;
-    ///     without a mask (WASAPI) the open index is the jack.
+    ///     The jack behind an index into the OPEN channel set. The engine opens the
+    ///     configured jacks as a mask on every driver and JUCE compacts the enabled
+    ///     bits ASCENDING, so with two channels open index 0 is the LOWER of the
+    ///     two jacks whichever box it was typed in; with input off nothing is
+    ///     masked and the open index is the jack.
     /// </summary>
     public static int JackForOpenChannel(RigConfig config, int openChannel)
     {
         ArgumentNullException.ThrowIfNull(config);
-        if (!JackIndexesAreUsed(config)) return Math.Max(0, openChannel);
+        if (!config.EnableInput) return Math.Max(0, openChannel);
         if (config.AsioInputMono) return config.AsioInputChannelLeft;
         var lo = Math.Min(config.AsioInputChannelLeft, config.AsioInputChannelRight);
         var hi = Math.Max(config.AsioInputChannelLeft, config.AsioInputChannelRight);

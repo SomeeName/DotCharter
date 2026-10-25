@@ -226,6 +226,7 @@ public static class ChartProjectRestorer
         live.Fingerless = snapshot.Fingerless;
         live.GhostMask = snapshot.GhostMask;
         live.Pinned = snapshot.Pinned;
+        live.Unnamed = snapshot.Unnamed;
         live.Frets = new Dictionary<int, int>(snapshot.Frets);
         live.Fingers = new Dictionary<int, int>(snapshot.Fingers);
     }

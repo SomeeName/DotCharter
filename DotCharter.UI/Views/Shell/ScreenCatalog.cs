@@ -9,6 +9,7 @@ using DotCharter.Presentation.Contracts.Onboarding;
 using DotCharter.Presentation.Contracts.Settings;
 using DotCharter.UI.Views.Dialogs;
 using DotCharter.UI.Views.Editor;
+using DotCharter.UI.Views.Editor.Inspector;
 using DotCharter.UI.Views.PlayMode.Redesign;
 using DotCharter.UI.Views.Prompts;
 using DotCharter.UI.Views.Home;
@@ -81,12 +82,17 @@ public sealed class ScreenCatalog
         Screen<IFilesSettingsScreen, FilesSettingsView>(Settings, "Files"),
         Screen<IKeybindsSettingsScreen, KeybindsSettingsView>(Settings, "Keybinds"),
         Screen<IStemModelsSettingsScreen, StemModelsSettingsView>(Settings, "StemModels"),
+        Screen<ILyricModelsSettingsScreen, LyricModelsSettingsView>(Settings, "LyricModels"),
         Screen<ITone3000SettingsScreen, Tone3000SettingsView>(Settings, "Tone3000"),
         Screen<IAiSettingsScreen, AiSettingsView>(Settings, "Ai"),
         Screen<IUpdatesSettingsScreen, UpdatesSettingsView>(Settings, "Updates"),
         Screen<ISystemCheckScreen, SystemCheckView>(Onboarding, "SystemCheck"),
-        Screen<IChordShapesScreen, ChordShapesView>(Editor, "ChordShapes"),
+        Screen<IPhrasesScreen, PhrasesInspectorView>(Editor, "Phrases"),
+        Screen<IMarkerGroupsScreen, MarkerGroupsView>(Editor, "Sections and tones"),
         Screen<IAiChatScreen, AiChatPaneView>(Editor, "AiChat"),
+        Screen<IShapePanelScreen, ShapesPanelView>(Editor, "Shapes"),
+        Dialog<IShapeEditScreen, ShapeEditDialogView>(Editor, "ShapeEdit"),
+        Dialog<IShapeCleanupScreen, ShapeCleanupDialogView>(Editor, "ShapeCleanup"),
         Dialog<IMessagePromptScreen, MessagePromptView>(Dialogs, "Message"),
         Dialog<IUnsavedChangesScreen, UnsavedChangesDialogView>(Dialogs, "UnsavedChanges"),
         Dialog<ISetBpmScreen, SetBpmDialogView>(Dialogs, "SetBpm"),

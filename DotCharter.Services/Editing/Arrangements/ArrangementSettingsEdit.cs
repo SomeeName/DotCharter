@@ -52,6 +52,8 @@ public static class ArrangementSettingsEdit
 
     public const string CustomPreset = "Custom";
 
+    /// <summary>The preset KEYS, named for six strings; the picker labels each one for the
+    ///     instrument (<see cref="PresetNotes" />: "E Standard" on a 7-string reads B Standard).</summary>
     public static IReadOnlyList<string> TuningPresets { get; } =
         ["E Standard", "Drop D", "Eb Standard", "D Standard", "Drop C", CustomPreset];
 
@@ -118,29 +120,53 @@ public static class ArrangementSettingsEdit
     };
 
     /// <summary>
-    ///     …and back. An unknown type is <b>Custom</b>, never "E Standard": the domain knows
-    ///     twenty-odd tunings this picker cannot name, and folding them onto the first entry
-    ///     mislabelled the row and zeroed its offsets. The two legacy spellings are still read.
+    ///     A preset's offsets for <paramref name="stringCount" /> strings; null for Custom (the
+    ///     offsets stay as typed). A preset is a RULE, not a six-entry array: one shift for every
+    ///     string of the instrument's standard (<see cref="ExtendedRangeTunings.StandardOffsets" />:
+    ///     B E A D G on a 5-string, B E A D G C on a 6-string bass), plus a further
+    ///     whole step on the LOWEST string (index 0 in every layout) for the drop entries, so
+    ///     every string of a 7-string moves with Eb Standard.
     /// </summary>
-    public static string TuningTypeToPreset(string? type) => type switch
+    public static int[]? PresetOffsets(string preset, int stringCount, bool bass)
     {
-        "E_DROP_D" or "DROP_D" => "Drop D",
-        "E_FLAT_STANDARD" => "Eb Standard",
-        "D_STANDARD" => "D Standard",
-        "D_DROP_C" or "DROP_C" => "Drop C",
-        "E_STANDARD" or "" or null => "E Standard",
-        _ => CustomPreset
-    };
+        if (PresetRule(preset) is not var (shift, drop)) return null;
+        var offsets = ExtendedRangeTunings.StandardOffsets(stringCount, bass);
+        for (var i = 0; i < offsets.Length; i++) offsets[i] += shift;
+        if (offsets.Length > 0) offsets[0] += drop;
+        return offsets;
+    }
 
-    /// <summary>A preset's canonical six-string offsets; null for Custom (the offsets stay as typed).</summary>
-    public static int[]? PresetOffsets(string preset) => preset switch
+    /// <summary>
+    ///     The name <paramref name="preset" /> has on this instrument ("7-String Drop A",
+    ///     "5-String Bass Standard", "Drop D"); null for Custom or a count nothing names.
+    /// </summary>
+    public static string? PresetName(string preset, int stringCount, bool bass) =>
+        PresetOffsets(preset, stringCount, bass) is { } offsets
+            ? TuningNameResolver.ResolveFromOffsets(stringCount, offsets)
+            : null;
+
+    /// <summary>The open-string notes <paramref name="preset" /> tunes to, lowest first; empty for Custom.</summary>
+    public static string[] PresetNotes(string preset, int stringCount, bool bass) =>
+        PresetOffsets(preset, stringCount, bass) is { } offsets ? TuningUtilities.GetTuningNames(stringCount, offsets) : [];
+
+    /// <summary>
+    ///     The preset whose rule produces <paramref name="offsets" />, or Custom: what the picker
+    ///     shows when the dialog opens. The OFFSETS decide, not the stored type: a type that does
+    ///     not describe its offsets must not name a row that would rewrite them. An unknown tuning (DADGAD, the open tunings, every drop below C) is
+    ///     Custom, never "E Standard": that row's offsets would replace the tuning.
+    /// </summary>
+    public static string PresetFromOffsets(IReadOnlyList<int> offsets, bool bass) =>
+        TuningPresets.FirstOrDefault(preset =>
+            PresetOffsets(preset, offsets.Count, bass) is { } candidate && candidate.SequenceEqual(offsets)) ?? CustomPreset;
+
+    private static (int Shift, int Drop)? PresetRule(string preset) => preset switch
     {
         CustomPreset or "" => null,
-        "Drop D" => [-2, 0, 0, 0, 0, 0],
-        "Eb Standard" => [-1, -1, -1, -1, -1, -1],
-        "D Standard" => [-2, -2, -2, -2, -2, -2],
-        "Drop C" => [-4, -2, -2, -2, -2, -2],
-        _ => [0, 0, 0, 0, 0, 0]
+        "Drop D" => (0, -2),
+        "Eb Standard" => (-1, 0),
+        "D Standard" => (-2, 0),
+        "Drop C" => (-2, -2),
+        _ => (0, 0)
     };
 
     /// <summary>The route mask an arrangement has AUTHORED (0 when it derives it).</summary>
@@ -182,10 +208,12 @@ public static class ArrangementSettingsEdit
         // the truth, and a shorthand nothing can expand must not be certified (the same
         // verdict as PhraseCatalogFragment.Build and RscpWriter).
         var actual = arrangement.TuningPitches.Select(t => t.Step).ToArray();
+        // rscharter's table is six-string: its drops lower the E wherever it sits and it has no
+        // B E A D G bass, so a bass or extended-range preset takes its ExtendedRangeTunings name.
         if (!TuningUtilities.TryGetOffsetsForTuningType(arrangement.TuningType, arrangement.StringCount,
                 out var canonical) || !canonical.SequenceEqual(actual))
         {
-            arrangement.TuningType = "CUSTOM";
+            arrangement.TuningType = ExtendedRangeTunings.TypeNameFor(actual) ?? "CUSTOM";
         }
 
         arrangement.Tuning = TuningUtilities.GetTuningNames(arrangement.StringCount, actual);

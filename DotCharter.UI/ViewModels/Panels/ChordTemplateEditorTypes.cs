@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.UI.ViewModels.Editor;
 
 namespace DotCharter.UI.ViewModels.Panels;
@@ -49,10 +50,13 @@ public partial class StringFingeringInput : ObservableObject
     public StringFingeringInput(int index) => StringIndex = index;
 }
 
-public class TemplateListItem(ChordTemplate template)
+/// <summary>One entry of the chord panel's template picker: the name, or for an unnamed grip its
+/// frets, which the picker shows as a placeholder (<see cref="IsUnnamed" />).</summary>
+public class TemplateListItem(ChordTemplate template, int stringCount)
 {
     public ChordTemplate Template { get; } = template;
-    public string DisplayName => string.IsNullOrWhiteSpace(Template.Name) ? $"Template {Template.Id}" : Template.Name;
+    public bool IsUnnamed => ChordShapeNames.IsUnnamed(Template);
+    public string DisplayName => ChordShapeNames.DisplayName(Template, stringCount);
 }
 
 /// <summary>

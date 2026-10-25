@@ -5,7 +5,7 @@ namespace DotCharter.Tests.UI;
 
 /// <summary>
 ///     The Song pane re-reads the whole project on EVERY committed edit, and it
-///     may not republish four bound collections when the answer did not move.
+///     may not republish three bound collections when the answer did not move.
 ///
 ///     <para>
 ///         <c>SongOverviewViewModel.Refresh</c> is subscribed to
@@ -22,14 +22,14 @@ namespace DotCharter.Tests.UI;
 ///     </para>
 ///     <para>
 ///         Republishing was also what discarded a half-typed rename: the row a
-///         <c>NewName</c> was being typed into is replaced by a new instance.
+///         <c>EditName</c> was being typed into is replaced by a new instance.
 ///     </para>
 /// </summary>
 public sealed class SongOverviewRefreshCostTests
 {
     /// <summary>
     ///     An edit that changes nothing the pane shows raises nothing on any of
-    ///     its four bound collections.
+    ///     its three bound collections.
     /// </summary>
     [Fact]
     public void AnEditThatChangesNothingThePaneShows_RepublishesNothing()
@@ -39,9 +39,8 @@ public sealed class SongOverviewRefreshCostTests
         vm.Refresh();
 
         // Not vacuous: the pane really is showing rows to republish.
-        Assert.Single(vm.Tones);
-        Assert.Single(vm.Sections);
-        Assert.Single(vm.Phrases);
+        Assert.Single(vm.TonesPanel.Groups);
+        Assert.Single(vm.SectionsPanel.Groups);
 
         var events = CountEventsOn(vm);
         history.Do(new NoOpAction());
@@ -69,7 +68,7 @@ public sealed class SongOverviewRefreshCostTests
         history.Do(new NoOpAction());
 
         Assert.True(events() > 0, "a new section name must reach the pane");
-        Assert.Equal(["Chorus", "Intro"], vm.Sections.Select(s => s.OriginalName));
+        Assert.Equal(["Intro", "Chorus"], vm.SectionsPanel.Groups.Select(s => s.Name));
     }
 
     /// <summary>
@@ -83,7 +82,7 @@ public sealed class SongOverviewRefreshCostTests
         var project = ProjectWith("Clean", "Intro", "riff1");
         state.ActiveProject = project;
         vm.Refresh();
-        Assert.Equal(1, vm.Sections[0].Count);
+        Assert.Single(vm.SectionsPanel.Groups[0].Occurrences);
 
         project.Arrangements[0].EventPoints.Add(new EventPoint
         {
@@ -91,13 +90,13 @@ public sealed class SongOverviewRefreshCostTests
         });
         history.Do(new NoOpAction());
 
-        Assert.Equal(["Intro"], vm.Sections.Select(s => s.OriginalName));
-        Assert.Equal(2, vm.Sections[0].Count);
+        Assert.Equal(["Intro"], vm.SectionsPanel.Groups.Select(s => s.Name));
+        Assert.Equal(2, vm.SectionsPanel.Groups[0].Occurrences.Count);
     }
 
     /// <summary>
     ///     A rename being TYPED survives an unrelated edit. The rows carry the
-    ///     user's in-progress <c>NewName</c>, and republishing replaced the
+    ///     user's in-progress <c>EditName</c>, and republishing replaced the
     ///     instance it was bound to.
     /// </summary>
     [Fact]
@@ -106,13 +105,13 @@ public sealed class SongOverviewRefreshCostTests
         var (vm, history, state) = NewPane();
         state.ActiveProject = ProjectWith("Clean", "Intro", "riff1");
         vm.Refresh();
-        var row = vm.Sections[0];
-        row.NewName = "Intr";
+        var row = vm.SectionsPanel.Groups[0];
+        row.EditName = "Intr";
 
         history.Do(new NoOpAction());
 
-        Assert.Same(row, Assert.Single(vm.Sections));
-        Assert.Equal("Intr", vm.Sections[0].NewName);
+        Assert.Same(row, Assert.Single(vm.SectionsPanel.Groups));
+        Assert.Equal("Intr", vm.SectionsPanel.Groups[0].EditName);
     }
 
     /// <summary>
@@ -136,13 +135,12 @@ public sealed class SongOverviewRefreshCostTests
 
     // ---- fixture -------------------------------------------------------------
 
-    /// <summary>Counts every notification on all four bound collections.</summary>
+    /// <summary>Counts every notification on all three bound collections.</summary>
     private static Func<int> CountEventsOn(SongOverviewViewModel vm)
     {
         var count = 0;
-        ((INotifyCollectionChanged)vm.Tones).CollectionChanged += (_, _) => count++;
-        ((INotifyCollectionChanged)vm.Sections).CollectionChanged += (_, _) => count++;
-        ((INotifyCollectionChanged)vm.Phrases).CollectionChanged += (_, _) => count++;
+        ((INotifyCollectionChanged)vm.TonesPanel.Groups).CollectionChanged += (_, _) => count++;
+        ((INotifyCollectionChanged)vm.SectionsPanel.Groups).CollectionChanged += (_, _) => count++;
         ((INotifyCollectionChanged)vm.KeyOptions).CollectionChanged += (_, _) => count++;
         return () => count;
     }
@@ -152,12 +150,14 @@ public sealed class SongOverviewRefreshCostTests
         var logger = new FakeAppLogger();
         var state = new ProjectState();
         var history = new HistoryService(logger);
-        return (new SongOverviewViewModel(state, history, logger, FakeLocalization.English()), history, state);
+        return (new SongOverviewViewModel(state, history, logger, FakeLocalization.English(),
+            DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.IChartEditorSurface>().Proxy), history, state);
     }
 
     private static ChartProject ProjectWith(string tone, string section, string phrase)
     {
         var project = new ChartProject();
+        for (var i = 0; i < 32; i++) project.Beats.Add(new BeatMarker { Time = i * 500.0, IsMeasure = i % 4 == 0 });
         var arrangement = new Arrangement { Name = "Lead", StartingTone = tone };
         arrangement.EventPoints.Add(new EventPoint
         {

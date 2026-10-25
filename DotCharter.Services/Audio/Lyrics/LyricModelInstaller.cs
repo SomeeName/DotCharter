@@ -55,6 +55,15 @@ public sealed class LyricModelInstaller(
     public string TargetDirectory(string id) => Path.Combine(Roots[0], id);
 
     /// <summary>True when the model is usable from any root.</summary>
+    /// <summary>Deletes the copy this installer writes (the first root), so a repair downloads it afresh.</summary>
+    public void Remove(string id)
+    {
+        var target = TargetDirectory(id);
+        if (!Directory.Exists(target)) return;
+        Directory.Delete(target, recursive: true);
+        logger?.Info(AppLogCategory.Audio, $"Lyric model '{id}' removed from '{target}' for a repair.");
+    }
+
     public bool IsInstalled(string id) =>
         Roots.Any(root => Required.All(f => File.Exists(Path.Combine(root, id, f))));
 

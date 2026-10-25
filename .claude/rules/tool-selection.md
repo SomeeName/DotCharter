@@ -68,11 +68,11 @@ instead). State the model in every Agent call.
 
 ## Manual only — never start these on your own
 
-`/code-review`, `/ralph-loop` (never start a Ralph loop unprompted, and never
-create `.claude/ralph-loop.local.md`), `/feature-dev` and its agents
-(`code-explorer`, `code-architect`, `code-reviewer` — an alternative to
-Superpowers, never stacked on it), `skill-creator`, CLAUDE.md/AGENTS.md
-audits (`claude-md-management`), and broad `/simplify` runs.
+`/code-review`, `/feature-dev` and its agents (`code-explorer`,
+`code-architect`, `code-reviewer` — an alternative to Superpowers, never
+stacked on it), CLAUDE.md/AGENTS.md audits, and broad `/simplify` runs. The
+ralph-loop, skill-creator and claude-md-management plugins are disabled to
+keep the per-session prompt small; the owner enables them when wanted.
 
 ## Simplification limits
 

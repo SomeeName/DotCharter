@@ -30,6 +30,11 @@ public sealed class StringColorSlotsTests
             Row(8));
 
     [Fact]
+    public void NineStrings_TheTwoLowestShareTheLastGrey_AndTheRestKeepTheirColours() =>
+        Assert.Equal([StringColorSlots.EighthStringSlot, StringColorSlots.EighthStringSlot,
+            StringColorSlots.SeventhStringSlot, 0, 1, 2, 3, 4, 5], Row(9));
+
+    [Fact]
     public void TheLowE_IsSlotZero_OnEveryGuitar()
     {
         // The low E is string 0 on a 6-string, 1 on a 7-string and 2 on an 8-string
@@ -37,6 +42,8 @@ public sealed class StringColorSlotsTests
         Assert.Equal(0, StringColorSlots.For(0, 6));
         Assert.Equal(0, StringColorSlots.For(1, 7));
         Assert.Equal(0, StringColorSlots.For(2, 8));
+        Assert.Equal(0, StringColorSlots.For(3, 9));
+        Assert.Equal(0, StandardOpenStrings.SemitonesAboveLowE(9, 3));
         Assert.Equal(0, StandardOpenStrings.SemitonesAboveLowE(7, 1));
         Assert.Equal(0, StandardOpenStrings.SemitonesAboveLowE(8, 2));
     }

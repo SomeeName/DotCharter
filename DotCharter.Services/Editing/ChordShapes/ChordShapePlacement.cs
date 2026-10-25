@@ -132,7 +132,9 @@ public static class ChordShapePlacement
         }
 
         if (created + reshaped == 0) return ChordShapePlacementPlan.Refused(ChordShapePlacementRefusal.SameShape, template);
-        return new ChordShapePlacementPlan(new CompositeAction(actions) { LabelKey = PlaceLabelKey },
+        // A chord re-shaped or run over by the placement can leave its old shape with no user.
+        return new ChordShapePlacementPlan(
+            StrandedShapes.Wrap(arrangement, new CompositeAction(actions) { LabelKey = PlaceLabelKey }),
             ChordShapePlacementRefusal.None, template, created, reshaped);
     }
 

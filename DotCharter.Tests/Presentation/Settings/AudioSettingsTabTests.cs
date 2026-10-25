@@ -16,7 +16,8 @@ public sealed class AudioSettingsTabTests
     /// <summary>
     ///     Contract setters that are NOT settings, each with its reason. The
     ///     device rows persist as NAMES and land on their value when the probe
-    ///     returns; the jack row mirrors <c>AsioInputChannelLeft</c>, which is
+    ///     returns; the jack row mirrors <c>AsioInputChannelLeft</c> and the output
+    ///     pair row mirrors <c>AsioOutputChannelLeft</c> / <c>Right</c>, which are
     ///     tracked; the disclosure is layout.
     /// </summary>
     private static readonly HashSet<string> NotSettings = new(StringComparer.Ordinal)
@@ -24,7 +25,8 @@ public sealed class AudioSettingsTabTests
         nameof(IAudioSettingsScreen.SelectedWasapiOutputIndex), nameof(IAudioSettingsScreen.SelectedAsioOutputIndex),
         nameof(IAudioSettingsScreen.SelectedWasapiInputIndex), nameof(IAudioSettingsScreen.SelectedAsioInputIndex),
         nameof(IAudioSettingsScreen.SelectedStreamingMirrorIndex), nameof(IAudioSettingsScreen.SelectedMidiOutputIndex),
-        nameof(IAudioSettingsScreen.SelectedInputJackIndex), nameof(IAudioSettingsScreen.IsAdvancedOpen)
+        nameof(IAudioSettingsScreen.SelectedInputJackIndex), nameof(IAudioSettingsScreen.SelectedOutputPairIndex),
+        nameof(IAudioSettingsScreen.IsAdvancedOpen)
     };
 
     private static AudioSettingsViewModel OpenedVm()

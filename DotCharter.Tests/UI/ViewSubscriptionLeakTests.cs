@@ -37,7 +37,10 @@ public sealed class ViewSubscriptionLeakGuardTests
         // so there is no detach-side cleanup to write. The host owns the scope
         // and the tab host is a child of the host's own screen, so it is never
         // re-parented under another scope.
-        "DotCharter.UI.Views.Shell.ScreenTabHost"
+        "DotCharter.UI.Views.Shell.ScreenTabHost",
+        // Reviewed 2026-10-23: the same borrow as ScreenTabHost, for one screen
+        // placed as a section of another; it subscribes to nothing.
+        "DotCharter.UI.Views.Shell.ScreenSlot"
     };
 
     /// <summary>

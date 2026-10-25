@@ -1,4 +1,7 @@
+using System.Collections.ObjectModel;
 using DotCharter.Services.Editing.Anchors;
+using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.HandShapes;
 using DotCharter.UI.Input.Actions;
 using DotCharter.UI.Input.Tools.EventInteractionGestures;
 using DotCharter.UI.ViewModels.Shell;
@@ -231,7 +234,12 @@ public sealed class TimelineWheelAdjuster
         var grips = new List<ResizeHandShapesAction.GripRewrite>();
         var minted = new List<ChordTemplate>();
         var arrangement = vm.ChartEditor.ActiveArrangement;
-        if (arrangement != null) RebuildGrips(vm, arrangement, targets, newStates, grips, minted);
+        if (arrangement != null)
+        {
+            RebuildGrips(_fingeringService, arrangement, _configService.LoadAppConfig().SyncHandShapeToChordTemplate,
+                vm.ChartEditor.Notes, vm.ChartEditor.Chords, vm.ChartEditor.HandShapes, targets, newStates, grips,
+                minted);
+        }
 
         if (!changed && grips.Count == 0 && minted.Count == 0) return WheelAdjustmentResult.NoChange;
 
@@ -239,28 +247,43 @@ public sealed class TimelineWheelAdjuster
         // dozens of ticks and the charter thinks of it as a single "make this
         // bar longer"; before the merge verb, one real session logged a 111-node
         // run here, and a grip edit pushed separately would undo on its own.
-        return _history.Do(new ResizeHandShapesAction(vm.ChartEditor.HandShapes, targets, oldStates, newStates,
-            arrangement?.ChordTemplates ?? [], grips, minted,
-            _highwayEditing.GetLinkNextUpdater()))
+        return _history.Do(BuildResize(vm.ChartEditor.HandShapes, arrangement, targets, oldStates, newStates, grips,
+            minted, _highwayEditing.GetLinkNextUpdater()))
             ? WheelAdjustmentResult.Changed
             : WheelAdjustmentResult.NoChange;
     }
+
+    /// <summary>
+    ///     The action one wheel tick commits. A bar that takes the template of the chord it now covers
+    ///     leaves its own private one with no user, and that template leaves in the same node. The removal
+    ///     renumbers ids, so the tick that does it is a node of its own and does not merge with the run
+    ///     around it. Visible for testing.
+    /// </summary>
+    public static IChartAction BuildResize(
+        ObservableCollection<HandShape> collection, Arrangement? arrangement, IReadOnlyList<HandShape> targets,
+        IReadOnlyList<HandShape> oldStates, IReadOnlyList<HandShape> newStates,
+        List<ResizeHandShapesAction.GripRewrite> grips, List<ChordTemplate> minted, Action? onPostExecute) =>
+        StrandedShapes.Wrap(arrangement, new ResizeHandShapesAction(collection, targets, oldStates, newStates,
+            arrangement?.ChordTemplates ?? [], grips, minted, onPostExecute));
 
     /// <summary>
     ///     Derives each resized bar's new grip and, for a bar that has no
     ///     template at all, mints the one it needs. <paramref name="newStates" />
     ///     is REPOINTED at a minted template, so the span action carries the id
     ///     change and undo takes it back with everything else.
+    ///     <para>
+    ///         With <paramref name="syncToChords" /> on, a bar whose new span plays exactly one chord's notes
+    ///         is repointed at THAT chord's template instead of getting a private copy of the same grip.
+    ///         Visible for testing.
+    ///     </para>
     /// </summary>
-    private void RebuildGrips(
-        MainWindowViewModel vm, Arrangement arrangement,
+    public static void RebuildGrips(
+        IFingeringGenerationService fingeringService, Arrangement arrangement, bool syncToChords,
+        IEnumerable<GuitarNote> notes, IEnumerable<Chord> chords, IEnumerable<HandShape> shapes,
         IReadOnlyList<HandShape> targets, IReadOnlyList<HandShape> newStates,
         List<ResizeHandShapesAction.GripRewrite> grips, List<ChordTemplate> minted)
     {
         var stringCount = StringDigitTargeting.StringCountOf(arrangement);
-        var notes = vm.ChartEditor.Notes;
-        var chords = vm.ChartEditor.Chords;
-        var shapes = vm.ChartEditor.HandShapes;
 
         for (var i = 0; i < targets.Count; i++)
         {
@@ -275,8 +298,17 @@ public sealed class TimelineWheelAdjuster
             // the bar is dragged; HandShapeAutoTemplate.Rebuild refuses it too.
             if (current is { IsPinned: true }) continue;
 
-            var seed = _fingeringService.BuildTemplateForRange(arrangement, notes, chords,
+            var seed = fingeringService.BuildTemplateForRange(arrangement, notes, chords,
                 next.Position, next.EndPosition);
+
+            if (syncToChords && seed != null &&
+                ChordHandShapeSync.TemplateOfChordPlaying(arrangement, chords, next.Position, next.EndPosition, seed)
+                    is { } playing)
+            {
+                next.TemplateId = playing.Id;
+                continue;
+            }
+
             var rebuilt = ArrangementFingeringStyle.RebuildHandShapeGrip(arrangement, current, seed, stringCount);
             if (rebuilt == null) continue;
 
@@ -288,7 +320,7 @@ public sealed class TimelineWheelAdjuster
 
             // No template yet — one mint for the whole gesture, because every
             // later tick finds the bar owning the template this one created.
-            rebuilt.Id = _fingeringService.NextTemplateId(arrangement) + minted.Count;
+            rebuilt.Id = fingeringService.NextTemplateId(arrangement) + minted.Count;
             minted.Add(rebuilt);
             next.TemplateId = rebuilt.Id;
         }

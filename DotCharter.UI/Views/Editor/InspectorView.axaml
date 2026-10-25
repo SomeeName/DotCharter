@@ -177,8 +177,8 @@
                                 <TextBlock Text="{localization:Loc Panel_PhraseCatalog_Title}" />
                             </StackPanel>
                         </ToggleButton>
-                        <!-- Chord shapes (#486): every chord template as a row. A
-                             target-architecture screen (IChordShapesScreen), hidden
+                        <!-- Chord shapes: every chord template as a card. A
+                             target-architecture screen (IShapePanelScreen), hidden
                              like the Riff Library when the shell did not supply it. -->
                         <ToggleButton AutomationProperties.Name="{localization:Loc Inspector_Tab_ChordShapes}" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem" Tag="8"
                                       IsVisible="{Binding ChordShapes, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -243,7 +243,7 @@
                 <editor:PhraseCatalogView
                     IsVisible="{Binding #InspectorRoot.((viewModels:InspectorViewModel)DataContext).IsRiffLibraryTabSelected}"
                     DataContext="{Binding RiffLibrary}" />
-                <editor:ChordShapesView
+                <editor:ShapesPanelView
                     IsVisible="{Binding #InspectorRoot.((viewModels:InspectorViewModel)DataContext).IsChordShapesTabSelected}"
                     DataContext="{Binding ChordShapes}" />
             </Grid>

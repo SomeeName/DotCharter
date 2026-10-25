@@ -4,7 +4,6 @@ using DotCharter.Core.Graphics;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Settings;
 using DotCharter.Tone.Audio.Abstractions;
-using DotCharter.Services.Editing;
 using DotCharter.Services.Infrastructure.Configuration;
 using DotCharter.Services.Infrastructure.Graphics;
 using DotCharter.Tone.Infrastructure.Configuration;
@@ -26,7 +25,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
     private readonly IConfigurationService _config;
     private readonly ProjectState _state;
     private readonly IGraphicsDeviceSettings _device;
-    private readonly IChartEditorSurface _editor;
     private readonly ILocalizationService _localization;
     private readonly ILatencyCalibrationPrompt _latencyWizard;
     private readonly IAppLogger? _logger;
@@ -35,7 +33,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
     [ObservableProperty] private double _renderScalePercent = GraphicsSettingsPolicy.DefaultRenderScalePercent;
     [ObservableProperty] private IGraphicsChoice? _selectedMaxFps;
     [ObservableProperty] private double _idleFps = GraphicsSettingsPolicy.DefaultIdleFps;
-    [ObservableProperty] private bool _animatedHomeHero;
     [ObservableProperty] private IGraphicsChoice? _selectedPresentMode;
     [ObservableProperty] private IGraphicsChoice? _selectedMsaa;
     [ObservableProperty] private double _anchorPreviewLeadMs = GraphicsSettingsPolicy.DefaultAnchorPreviewLeadMs;
@@ -52,15 +49,11 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
 
     [ObservableProperty] private double _cameraDistancePercent = 200 - GraphicsSettingsPolicy.DefaultCameraFillPercent;
     [ObservableProperty] private bool _show3DFingering;
-    [ObservableProperty] private bool _timeline2DPolish = true;
-    [ObservableProperty] private bool _timeline2DLaneTint;
-    [ObservableProperty] private bool _invertStrings;
 
     public GraphicsSettingsViewModel(
         IConfigurationService config,
         ProjectState state,
         IGraphicsDeviceSettings device,
-        IChartEditorSurface editor,
         ILocalizationService localization,
         ILatencyCalibrationPrompt latencyWizard,
         IAppLogger? logger = null)
@@ -68,7 +61,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
         _config = config;
         _state = state;
         _device = device;
-        _editor = editor;
         _localization = localization;
         _latencyWizard = latencyWizard;
         _logger = logger;
@@ -104,7 +96,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
         RenderScalePercent = GraphicsSettingsPolicy.ClampRenderScalePercent(config.RenderScalePercent);
         LoadChoices(config);
         IdleFps = GraphicsSettingsPolicy.ClampIdleFps(config.IdleFps);
-        AnimatedHomeHero = config.AnimatedHomeHero;
 
         LoadEffects(config);
         AnchorPreviewLeadMs = GraphicsSettingsPolicy.ClampAnchorPreviewLeadMs(config.AnchorPreviewLeadMs);
@@ -116,10 +107,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
         HighwayDrawDistanceZ = HighwaySpeedPolicy.ClampDrawDistanceZ((float)config.HighwayDrawDistanceZ);
         CameraDistancePercent = 200 - GraphicsSettingsPolicy.ClampCameraFillPercent(config.Preview3DCameraFill);
         Show3DFingering = config.Show3DFingering;
-
-        Timeline2DPolish = config.Timeline2DPolishEnabled;
-        Timeline2DLaneTint = config.Timeline2DLaneTint;
-        InvertStrings = config.InvertStrings;
         Rebaseline();
     }
 
@@ -130,7 +117,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
         config.RenderScalePercent = GraphicsSettingsPolicy.ClampRenderScalePercent((int)Math.Round(RenderScalePercent));
         config.MaxFps = GraphicsSettingsPolicy.ClampMaxFps(ValueOf(SelectedMaxFps));
         config.IdleFps = GraphicsSettingsPolicy.ClampIdleFps((int)Math.Round(IdleFps));
-        config.AnimatedHomeHero = AnimatedHomeHero;
         config.PresentMode = (SelectedPresentMode as Choice)?.Id ?? "Fifo";
         config.MsaaSamples = SelectedMsaa is Choice msaa ? msaa.Value : _device.DefaultMsaaSamples;
 
@@ -147,10 +133,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
         config.Preview3DCameraFill =
             GraphicsSettingsPolicy.ClampCameraFillPercent(200 - (int)Math.Round(CameraDistancePercent));
         config.Show3DFingering = Show3DFingering;
-
-        config.Timeline2DPolishEnabled = Timeline2DPolish;
-        config.Timeline2DLaneTint = Timeline2DLaneTint;
-        config.InvertStrings = InvertStrings;
 
         _config.SaveAppConfig(config);
         _device.SetFingeringOverlay(config.Show3DFingering);
@@ -267,22 +249,6 @@ public sealed partial class GraphicsSettingsViewModel : ObservableObject,
     // Live like every other row on this screen: a flip must show on the 3D
     // view at once, not after Save.
     partial void OnShow3DFingeringChanged(bool value) => _device.SetFingeringOverlay(value);
-
-    partial void OnTimeline2DPolishChanged(bool value) => ApplyTimelineVisuals();
-
-    partial void OnTimeline2DLaneTintChanged(bool value) => ApplyTimelineVisuals();
-
-    partial void OnInvertStringsChanged(bool value)
-    {
-        _state.InvertStrings = value;
-        _editor.RequestRedraw();
-    }
-
-    private void ApplyTimelineVisuals()
-    {
-        _device.SetTimelineVisuals(Timeline2DPolish, Timeline2DLaneTint);
-        _editor.RequestRedraw();
-    }
 
     private sealed record Choice(string Label, int Value, string Id) : IGraphicsChoice;
 }

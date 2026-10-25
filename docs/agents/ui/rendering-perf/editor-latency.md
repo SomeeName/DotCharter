@@ -219,9 +219,9 @@ rows above are the historical before-figure.
   distinct name) plus fifteen `Replace` into the key `ComboBox`. A note edit
   changes no tone/section/phrase name and no count, so every one of those
   rebuilds published the identical list — and it threw away a half-typed rename,
-  because `RenameableItem.NewName` is two-way bound and the row was replaced.
-  Both are no-change-guarded; the guard compares `OriginalName` and `Count` (and,
-  for tones, `IsUndefined`) and deliberately NOT `NewName` or `Error`.
+  because the row's rename text is two-way bound and the row was replaced.
+  Both are no-change-guarded: `MarkerGroupsViewModel.Refresh` compares each row's
+  name, warning and place labels, and deliberately NOT `EditName` or `Error`.
   `UI/SongOverviewRefreshCostTests`.
 - **The sheet strip's time → measure lookup was a scan from bar 1, in four
   places**, run on every coalesced playhead publish (≤60 Hz) while the strip is

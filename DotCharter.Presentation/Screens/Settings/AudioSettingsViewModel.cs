@@ -30,6 +30,8 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
     private readonly IUiDispatcher _ui;
     private readonly IMainWindowHandle? _mainWindow;
     private readonly ILocalizationService _localization;
+    private readonly InputJackPicker _jacks;
+    private readonly OutputPairPicker _pairs;
 
     /// <summary>The winmm id behind each MIDI row, from the SAME enumeration that built the names.</summary>
     private readonly List<int> _midiOutputDeviceIds = [];
@@ -94,6 +96,11 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
         _ui = ui;
         _mainWindow = windows.MainWindow;
         _devices.DeviceBufferFramesChanged += OnDeviceBufferFramesChanged;
+        _jacks = new InputJackPicker(devices, ui, localization, () => (AsioInputChannelLeft, AsioInputChannelRight), PickInputJack);
+        _pairs = new OutputPairPicker(devices, ui, localization, () => (AsioOutputChannelLeft, AsioOutputChannelRight),
+            (left, right) => (AsioOutputChannelLeft, AsioOutputChannelRight) = (left, right));
+        _jacks.PropertyChanged += OnPickerChanged;
+        _pairs.PropertyChanged += OnPickerChanged;
     }
 
     /// <summary>The probe <see cref="Open" /> started; never faults, <see cref="Task.CompletedTask" /> before the first Open.</summary>
@@ -165,6 +172,7 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
         InputChannelsAreSeparateGuitars = config.InputChannelsAreSeparateGuitars;
         SelectedDropTunerEngineIndex = DropTunerEngineMap.FromConfigString(config.DropTunerEngine);
         RefreshInputJackOptions(0);
+        RefreshOutputPairOptions(0);
         EnableStreamingMirror = config.EnableStreamingMirror;
 
         IsOpen = true;
@@ -187,7 +195,7 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
             var midi = _devices.GetMidiOutputDevices();
             // The SELECTED input driver's jack count: asking a driver the session will never open is a wasted round trip.
             var inputIsAsio = string.Equals(config.InputDriver, "ASIO", StringComparison.OrdinalIgnoreCase);
-            var jacks = _devices.GetInputDeviceChannelCount(
+            var (jacks, jackNames) = _jacks.ReadChannels(
                 inputIsAsio ? "ASIO" : "WASAPI", inputIsAsio ? config.AsioInputDeviceName : config.WasapiInputDeviceName);
 
             _ui.PostNormal(() =>
@@ -209,7 +217,8 @@ public partial class AudioSettingsViewModel : ObservableObject, IAudioSettingsSc
                 SelectedAsioInputIndex = ResolveIndex(AsioInputDevicesList, config.AsioInputDeviceName, config.AsioInputDevice);
                 SelectedStreamingMirrorIndex = ResolveIndex(
                     StreamingMirrorDevices, config.StreamingMirrorDeviceName, config.StreamingMirrorDevice);
-                RefreshInputJackOptions(jacks);
+                RefreshInputJackOptions(jacks, jackNames);
+                ProbePairCount();
                 DeviceListsLoaded = true;
 
                 MidiOutputDevices.Clear();

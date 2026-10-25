@@ -32,22 +32,23 @@ public sealed class EofImportLauncher(
 
     public const string ReadTaskId = "import.eof.read";
 
-    public async Task PickAsync()
+    /// <summary>True when a track selection was imported.</summary>
+    public async Task<bool> PickAsync()
     {
         var filePath = await storage.OpenFilePickerAsync(_localization["Picker_SelectEofFile"], null,
             config.LoadAppConfig().LastEofDir);
         if (string.IsNullOrEmpty(filePath))
         {
             _logger.Info(AppLogCategory.Import, "Editor on Fire import file picker canceled.");
-            return;
+            return false;
         }
 
         config.RememberDirectory(filePath, (c, d) => c.LastEofDir = d);
-        await OpenAsync(filePath);
+        return await OpenAsync(filePath);
     }
 
-    /// <summary>Reports every failure itself, so a caller has nothing to observe.</summary>
-    public async Task OpenAsync(string filePath)
+    /// <summary>Reports every failure itself, so a caller has nothing to observe. True when a new project was created.</summary>
+    public async Task<bool> OpenAsync(string filePath)
     {
         _logger.Info(AppLogCategory.Import, $"Reading Editor on Fire track list from '{filePath}'.");
         List<EofTrackInfo> tracks;
@@ -60,14 +61,17 @@ public sealed class EofImportLauncher(
         {
             _logger.Error(AppLogCategory.Import, $"Failed to read Editor on Fire tracks from '{filePath}'.", ex);
             state.SetMessage(_localization.Format("Status_EofImportFailed", ex.Message), StatusSeverity.Error);
-            return;
+            return false;
         }
         finally
         {
             statusBar.CompleteTask(ReadTaskId);
         }
 
-        if (await dialogs.ShowAsync(new EofImportRequest(filePath, tracks)) is { } selection)
-            await creator.CreateAsync(selection);
+        if (await dialogs.ShowAsync(new EofImportRequest(filePath, tracks)) is not { } selection) return false;
+
+        var before = state.ActiveProject;
+        await creator.CreateAsync(selection);
+        return !ReferenceEquals(before, state.ActiveProject);
     }
 }

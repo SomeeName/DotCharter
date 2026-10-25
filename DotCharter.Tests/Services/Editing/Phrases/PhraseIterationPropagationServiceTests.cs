@@ -216,6 +216,29 @@ public sealed class PhraseIterationPropagationServiceTests
         return new Harness(service, history, arrangement, level, source);
     }
 
+    /// <summary>A chart placed in the editor has phrase markers and no explicit iterations; the
+    ///     inspector hands over a resolved iteration, matched by position and phrase.</summary>
+    [Fact]
+    public void Propagate_WorksOnAMarkersOnlyArrangement()
+    {
+        var arrangement = new Arrangement { Name = "Lead" };
+        foreach (var (beat, name) in new[] { (0, "riff"), (8, "intro"), (12, "riff") })
+            arrangement.EventPoints.Add(new EventPoint { Position = Pos(beat), Phrase = name });
+        var level = new ChartLevel { DifficultyIndex = 0 };
+        level.Notes.Add(new GuitarNote { Position = Pos(1), StringIndex = 0, Fret = 3 });
+        level.Notes.Add(new GuitarNote { Position = Pos(13), StringIndex = 0, Fret = 99 });
+        arrangement.Levels.Add(level);
+        var scope = new EditingScope(new ProjectState { ActiveArrangement = arrangement });
+        var service = new PhraseIterationPropagationService(new HistoryService(new FakeAppLogger(), scope), scope,
+            new FakeAppLogger());
+
+        var count = service.PropagateToAllIterations(PhraseMarkers.Iterations(arrangement).Iterations[0]);
+
+        Assert.Equal(1, count);
+        Assert.Contains(level.Notes, n => n.Position == Pos(13) && n.Fret == 3);
+        Assert.DoesNotContain(level.Notes, n => n.Fret == 99);
+    }
+
     private static FractionalPosition Pos(int beat) => new(beat);
 
     private static string Fingerprint(ChartLevel level)

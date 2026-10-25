@@ -39,7 +39,9 @@ public class EofExporterTests
             // this exercises stream alignment across the whole file.
             var tracks = new EofImporter().GetAvailableTracks(path);
 
-            Assert.Equal(3, tracks.Count);
+            Assert.Equal(3, tracks.Count(t => !t.IsVocals));
+            // The fixture's lyrics list PART VOCALS too (#232).
+            Assert.Single(tracks, t => t.IsVocals);
             // Bass → PART REAL_BASS (8), Lead → PART REAL_GUITAR (9),
             // Rhythm → PART REAL_GUITAR_22 (12); names carried as alt names.
             Assert.Contains(tracks, t => t is { Id: 8, Name: "Bass" });

@@ -48,7 +48,8 @@ public sealed class PhraseIterationPropagationService : IPhraseIterationPropagat
         var arrangement = _scope.Arrangement;
         if (arrangement == null) return 0;
 
-        var iterations = arrangement.PhraseIterations.OrderBy(pi => pi.Position).ToList();
+        // Both stores: a chart placed in the editor has markers and no explicit iterations.
+        var iterations = PhraseMarkers.Iterations(arrangement).Iterations.OrderBy(pi => pi.Position).ToList();
         var resolvedSource = iterations.FirstOrDefault(pi => ReferenceEquals(pi, source))
                              ?? iterations.FirstOrDefault(pi =>
                                  pi.Position == source.Position && pi.PhraseId == source.PhraseId);

@@ -30,7 +30,7 @@ public sealed class EofDecodedFileCacheTests
             var imported = importer.ImportTracksWithMetadata(path, [9]);
 
             // Both halves really ran…
-            Assert.Equal(3, tracks.Count);
+            Assert.Equal(4, tracks.Count); // three Pro Guitar tracks and PART VOCALS (#232)
             Assert.Single(imported.Arrangements);
             // …on ONE decode.
             Assert.Equal(1, cache.DecodeCount);
@@ -58,7 +58,7 @@ public sealed class EofDecodedFileCacheTests
 
             var tracks = importer.GetAvailableTracks(path);
 
-            Assert.Equal(3, tracks.Count);
+            Assert.Equal(4, tracks.Count); // three Pro Guitar tracks and PART VOCALS (#232)
             Assert.Equal(2, cache.DecodeCount);
         }
         finally

@@ -54,6 +54,26 @@ public sealed class EofImportParityTests
         Assert.True(arrangement.PhraseInfos["solo_phrase"].Solo);
     }
 
+    /// <summary>EOF stores phrases as text events, which import as markers and no explicit
+    ///     iterations; every per-iteration reader resolves them through
+    ///     <see cref="PhraseMarkers.Iterations" />, so the Phrases inspector and the SNG see them.</summary>
+    [Fact]
+    public void ImportedEofPhrases_ResolveToIterations_InTimeOrder()
+    {
+        var arrangement = new Arrangement();
+        var metadata = new EofImportMetadata();
+        foreach (var (text, beat) in new[] { ("COUNT", 0), ("verse", 1), ("chorus", 2), ("verse", 3) })
+            metadata.TextEvents.Add(new EofTextEventInfo { Text = text, BeatPos = (uint)beat, Flags = 1, Track = 0 });
+        var beats = Enumerable.Range(0, 4).Select(i => new BeatMarker { Time = i * 500, Bpm = 120, IsMeasure = i == 0 })
+            .ToList();
+
+        EofImporter.ApplyTextEventsToArrangement(arrangement, 1, metadata, beats);
+
+        var (phrases, iterations) = PhraseMarkers.Iterations(arrangement);
+        Assert.Equal(["COUNT", "verse", "chorus", "verse"], iterations.Select(i => phrases[i.PhraseId]).ToArray());
+        Assert.Equal([0, 1, 2, 3], iterations.Select(i => i.Position.BeatId).ToArray());
+    }
+
     [Theory]
     [InlineData("Rhythm", ArrangementType.Rhythm)]
     [InlineData("REAL_BASS", ArrangementType.Bass)]

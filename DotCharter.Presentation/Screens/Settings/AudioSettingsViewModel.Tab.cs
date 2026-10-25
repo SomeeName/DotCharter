@@ -8,7 +8,7 @@ using static DotCharter.Presentation.Screens.Settings.AudioSettingsRules;
 
 namespace DotCharter.Presentation.Screens.Settings;
 
-/// <summary>The Settings-tab half (tracking, search), the driver predicates, the guitar-jack picker, and the contract.</summary>
+/// <summary>The Settings-tab half (tracking, search), the driver predicates, the guitar-jack and output-pair pickers, and the contract.</summary>
 public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSource
 {
     /// <summary>
@@ -112,17 +112,19 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
         }
     }
 
-    private bool _rebuildingJacks;
-    private int _lastJackCount;
-
-    [ObservableProperty] private int _selectedInputJackIndex = -1;
+    public int InputDeviceJackCount => _jacks.JackCount;
 
     /// <summary>
-    ///     The guitar's jack as a pick over the capture device's inputs — the
-    ///     rows the rig footer and the first-run wizard show. It mirrors
-    ///     <see cref="AsioInputChannelLeft" /> both ways: the row IS that box.
+    ///     WASAPI lists some interfaces as several capture devices, one per input
+    ///     pair, so a WASAPI device with two inputs or fewer (or a count not known
+    ///     yet) says to pick the device that carries the guitar before the jack.
     /// </summary>
-    public ObservableCollection<InputJackOption> InputJackOptions { get; } = [];
+    public bool IsWasapiDevicesNoteShown => EnableInput && SelectedDriver != "ASIO" && _jacks.JackCount <= 2;
+
+    public int SelectedInputJackIndex { get => _jacks.SelectedIndex; set => _jacks.SelectedIndex = value; }
+
+    /// <summary>The guitar's jack rows the rig footer and the first-run wizard show; see <see cref="InputJackPicker" />.</summary>
+    public ObservableCollection<InputJackOption> InputJackOptions => _jacks.Options;
 
     public bool IsAsioActive => SelectedDriver == "ASIO" || SelectedInputDriver == "ASIO";
 
@@ -133,71 +135,82 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
     public bool IsWasapiInput => SelectedInputDriver != "ASIO";
     public bool IsAsioInput => SelectedInputDriver == "ASIO";
 
-    /// <summary>
-    ///     The channel-index boxes route only when the ENGINE driver is ASIO: the
-    ///     engine builds its input mask there and nowhere else. The channel COUNT
-    ///     (Mono, two guitars) applies on every driver.
-    /// </summary>
-    public bool AreInputChannelIndexesUsed => SelectedDriver == "ASIO";
-
     /// <summary>Rebuilds the jack rows for a device with that many inputs (0 = unknown, the generic list).</summary>
-    public void RefreshInputJackOptions(int deviceJackCount)
-    {
-        _rebuildingJacks = true;
-        try
-        {
-            _lastJackCount = deviceJackCount;
-            InputJackOptions.Clear();
-            foreach (var o in GuitarInputChannels.JackOptions(_localization, deviceJackCount, AsioInputChannelLeft, AsioInputChannelRight))
-                InputJackOptions.Add(o);
-            SelectedInputJackIndex = IndexOfJack(AsioInputChannelLeft);
-        }
-        finally
-        {
-            _rebuildingJacks = false;
-        }
-    }
+    public void RefreshInputJackOptions(int deviceJackCount, IReadOnlyList<string>? channelNames = null) =>
+        _jacks.Refresh(deviceJackCount, channelNames);
 
-    private int IndexOfJack(int jack)
-    {
-        for (var i = 0; i < InputJackOptions.Count; i++)
-        {
-            if (InputJackOptions[i].Jack == jack)
-                return i;
-        }
+    /// <summary>The latest capture device's jack-count read; tests await it.</summary>
+    internal Task JackCountProbe => _jacks.Probe;
 
-        return -1;
-    }
-
-    partial void OnSelectedInputJackIndexChanged(int value)
+    private void PickInputJack(int jack)
     {
-        if (_rebuildingJacks || value < 0 || value >= InputJackOptions.Count) return;
-        var jack = InputJackOptions[value].Jack;
         if (jack == AsioInputChannelLeft) return;
         // Two open channels are two DIFFERENT jacks: taking the right box's jack swaps them.
         if (!AsioInputMono && AsioInputChannelRight == jack) AsioInputChannelRight = AsioInputChannelLeft;
         AsioInputChannelLeft = jack;
     }
 
-    partial void OnAsioInputChannelLeftChanged(int value)
-    {
-        if (_rebuildingJacks) return;
-        if (IndexOfJack(value) < 0) RefreshInputJackOptions(_lastJackCount);
-        else SelectedInputJackIndex = IndexOfJack(value);
-    }
+    partial void OnAsioInputChannelLeftChanged(int value) => _jacks.Sync(value);
 
     /// <summary>Another capture device means another jack count, enumerated off the UI thread like the probe.</summary>
     partial void OnSelectedAsioInputIndexChanged(int value)
     {
         if (value < 0 || value >= AsioInputDevicesList.Count) return;
-        var name = AsioInputDevicesList[value];
-        _ = Task.Run(() =>
+        _jacks.ProbeDevice("ASIO", AsioInputDevicesList[value]);
+    }
+
+    /// <summary>The WASAPI capture device's jack count, read the same way: the engine masks its jacks too.</summary>
+    partial void OnSelectedWasapiInputIndexChanged(int value)
+    {
+        if (value < 0 || value >= WasapiInputDevicesList.Count || SelectedInputDriver == "ASIO") return;
+        _jacks.ProbeDevice("WASAPI", WasapiInputDevicesList[value]);
+    }
+
+    /// <summary>The playback device's output count behind <see cref="OutputPairOptions" />; 0 = not known yet.</summary>
+    public int OutputDeviceChannelCount => _pairs.DeviceChannelCount;
+
+    public int SelectedOutputPairIndex { get => _pairs.SelectedIndex; set => _pairs.SelectedIndex = value; }
+
+    /// <summary>The master mix's pair rows the first-run wizard shows too; see <see cref="OutputPairPicker" />.</summary>
+    public ObservableCollection<OutputPairOption> OutputPairOptions => _pairs.Options;
+
+    /// <summary>Rebuilds the pair rows for a device with that many outputs (0 = unknown, the generic list).</summary>
+    public void RefreshOutputPairOptions(int deviceOutputCount, IReadOnlyList<string>? channelNames = null) =>
+        _pairs.Refresh(deviceOutputCount, channelNames);
+
+    partial void OnAsioOutputChannelLeftChanged(int value) => _pairs.Sync();
+
+    partial void OnAsioOutputChannelRightChanged(int value) => _pairs.Sync();
+
+    /// <summary>Another playback device means another output count; a device of the other driver re-reads nothing.</summary>
+    partial void OnSelectedWasapiOutputIndexChanged(int value) => ProbePairCount();
+
+    partial void OnSelectedAsioOutputIndexChanged(int value) => ProbePairCount();
+
+    /// <summary>The latest playback device's output-count read; tests await it.</summary>
+    internal Task OutputCountProbe => _pairs.Probe;
+
+    /// <summary>Reads the selected playback device's outputs, the first listed one (the engine's fallback) while none is.</summary>
+    private void ProbePairCount()
+    {
+        var asio = SelectedDriver == "ASIO";
+        var devices = asio ? AsioDevices : WasapiDevices;
+        var index = Math.Max(0, asio ? SelectedAsioOutputIndex : SelectedWasapiOutputIndex);
+        if (index < devices.Count) _pairs.ProbeDevice(asio ? "ASIO" : "WASAPI", devices[index]);
+    }
+
+    // The pickers' own notifications, under the names the screen binds.
+    private void OnPickerChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        string[] relayed = (sender == _jacks, e.PropertyName) switch
         {
-            int count;
-            try { count = _devices.GetInputDeviceChannelCount("ASIO", name); }
-            catch { count = 0; }
-            if (count > 0) _ui.PostNormal(() => RefreshInputJackOptions(count));
-        });
+            (true, nameof(InputJackPicker.SelectedIndex)) => [nameof(SelectedInputJackIndex)],
+            (true, nameof(InputJackPicker.JackCount)) => [nameof(InputDeviceJackCount), nameof(IsWasapiDevicesNoteShown)],
+            (false, nameof(OutputPairPicker.SelectedIndex)) => [nameof(SelectedOutputPairIndex)],
+            (false, nameof(OutputPairPicker.DeviceChannelCount)) => [nameof(OutputDeviceChannelCount)],
+            _ => []
+        };
+        foreach (var name in relayed) OnPropertyChanged(name);
     }
 
     partial void OnSelectedDriverChanged(string value)
@@ -205,8 +218,11 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
         OnPropertyChanged(nameof(IsAsioActive));
         OnPropertyChanged(nameof(IsWasapiOutput));
         OnPropertyChanged(nameof(IsAsioOutput));
-        OnPropertyChanged(nameof(AreInputChannelIndexesUsed));
+        OnPropertyChanged(nameof(IsWasapiDevicesNoteShown));
+        ProbePairCount();
     }
+
+    partial void OnEnableInputChanged(bool value) => OnPropertyChanged(nameof(IsWasapiDevicesNoteShown));
 
     partial void OnSelectedInputDriverChanged(string value)
     {
@@ -250,6 +266,7 @@ public partial class AudioSettingsViewModel : ISettingsTab, ISettingsChangeSourc
     IReadOnlyList<int> IAudioSettingsScreen.SampleRateOptions => SampleRateOptions;
     IReadOnlyList<int> IAudioSettingsScreen.BufferSizeOptions => BufferSizeOptions;
     IReadOnlyList<InputJackOption> IAudioSettingsScreen.InputJackOptions => InputJackOptions;
+    IReadOnlyList<OutputPairOption> IAudioSettingsScreen.OutputPairOptions => OutputPairOptions;
     ICommand IAudioSettingsScreen.MeasureLatencyCommand => MeasureLatencyCommand;
     ICommand IAudioSettingsScreen.OpenLatencyWizardCommand => OpenLatencyWizardCommand;
     ICommand IAudioSettingsScreen.OpenAsioControlPanelCommand => OpenAsioControlPanelCommand;

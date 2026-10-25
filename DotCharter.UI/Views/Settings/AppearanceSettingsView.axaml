@@ -89,6 +89,16 @@
                                        IsVisible="{Binding UiScaleChoiceIndex, Converter={x:Static converters:IntEqualsConverter.Instance}, ConverterParameter=0}" />
                         </Grid>
                     </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=appearance.animatedHomeHero}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_AnimatedHomeHero}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_AnimatedHomeHero_Desc}" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="AppearanceAnimatedHome" VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_Graphics_AnimatedHomeHero}"
+                                      IsChecked="{Binding AnimatedHomeHero, Mode=TwoWay}" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

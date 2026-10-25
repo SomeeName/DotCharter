@@ -14,8 +14,7 @@ public sealed partial class FakeAudioSettingsScreen : ObservableObject, IAudioSe
     [ObservableProperty] private string _selectedDriver = "WASAPI";
     [ObservableProperty] private int _selectedWasapiOutputIndex;
     [ObservableProperty] private int _selectedAsioOutputIndex;
-    [ObservableProperty] private int _asioOutputChannelLeft;
-    [ObservableProperty] private int _asioOutputChannelRight = 1;
+    [ObservableProperty] private int _selectedOutputPairIndex;
     [ObservableProperty] private bool _enableInput = true;
     [ObservableProperty] private string _selectedInputDriver = "WASAPI";
     [ObservableProperty] private int _selectedWasapiInputIndex;
@@ -61,6 +60,7 @@ public sealed partial class FakeAudioSettingsScreen : ObservableObject, IAudioSe
     public IReadOnlyList<string> WasapiInputDevicesList { get; private set; } = [];
     public IReadOnlyList<string> AsioInputDevicesList { get; private set; } = [];
     public IReadOnlyList<InputJackOption> InputJackOptions { get; private set; } = [];
+    public IReadOnlyList<OutputPairOption> OutputPairOptions { get; private set; } = [];
     public IReadOnlyList<int> SampleRateOptions { get; } = [44100, 48000, 88200, 96000, 176400, 192000];
     public IReadOnlyList<int> BufferSizeOptions { get; } = [32, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 2048];
     public IReadOnlyList<string> DropTunerEngineOptions { get; } = ["Tight", "Balanced", "Smooth"];
@@ -77,7 +77,7 @@ public sealed partial class FakeAudioSettingsScreen : ObservableObject, IAudioSe
     public bool IsWasapiInput => SelectedInputDriver != "ASIO";
     public bool IsAsioInput => SelectedInputDriver == "ASIO";
     public bool IsAsioActive => IsAsioOutput || IsAsioInput;
-    public bool AreInputChannelIndexesUsed => IsAsioOutput;
+    public bool IsWasapiDevicesNoteShown { get; set; }
     public bool IsManualAudioConfig => !AutoFollowDeviceSettings;
 
     public ICommand MeasureLatencyCommand { get; } = new RelayCommand(() => { });
@@ -88,18 +88,25 @@ public sealed partial class FakeAudioSettingsScreen : ObservableObject, IAudioSe
     {
     }
 
-    /// <summary>A laptop on WASAPI: speakers out, a USB interface in, mono guitar.</summary>
-    public static FakeAudioSettingsScreen Default() => With(
-        ["Speakers (Realtek(R) Audio)", "Scarlett 2i2 USB"],
-        ["Focusrite USB ASIO"],
-        ["Microphone Array (Realtek(R) Audio)", "Analogue 1 + 2 (Scarlett 2i2 USB)"],
-        ["Default MIDI Mapper", "Microsoft GS Wavetable Synth"]);
+    /// <summary>A laptop on WASAPI: speakers out, a two-input USB interface in, mono guitar.</summary>
+    public static FakeAudioSettingsScreen Default()
+    {
+        var screen = With(
+            ["Speakers (Realtek(R) Audio)", "Scarlett 2i2 USB"],
+            ["Focusrite USB ASIO"],
+            ["Microphone Array (Realtek(R) Audio)", "Analogue 1 + 2 (Scarlett 2i2 USB)"],
+            ["Default MIDI Mapper", "Microsoft GS Wavetable Synth"]);
+        screen.IsWasapiDevicesNoteShown = true;
+        return screen;
+    }
 
     /// <summary>The probe has not landed: every device list is still empty.</summary>
     public static FakeAudioSettingsScreen Empty()
     {
         var screen = With([], [], [], []);
         screen.SelectedWasapiOutputIndex = screen.SelectedWasapiInputIndex = screen.SelectedMidiOutputIndex = -1;
+        screen.OutputPairOptions = [];
+        screen.SelectedOutputPairIndex = -1;
         return screen;
     }
 
@@ -122,12 +129,18 @@ public sealed partial class FakeAudioSettingsScreen : ObservableObject, IAudioSe
         return screen;
     }
 
-    /// <summary>ASIO end to end, two guitars on two jacks, auto-follow on and a negotiated buffer to show.</summary>
+    /// <summary>ASIO end to end, two guitars on two jacks, auto-follow on and a negotiated buffer to show.
+    /// The driver names its channels, so the pair and jack rows carry those names.</summary>
     public static FakeAudioSettingsScreen Full()
     {
         var screen = Default();
         screen.SelectedDriver = "ASIO";
         screen.SelectedInputDriver = "ASIO";
+        screen.InputJackOptions = [new(0, "Input 1 · Mic 1"), new(1, "Input 2 · Hi-Z")];
+        screen.OutputPairOptions =
+            [new(0, 1, "Out 1 + 2 · Main"), new(2, 3, "Out 3 + 4 · Headphones"), new(4, 5, "Out 5 + 6 · Line 5/6")];
+        screen.SelectedOutputPairIndex = 1;
+        screen.IsWasapiDevicesNoteShown = false;
         screen.ReadoutDevice = "Focusrite USB ASIO";
         screen.ReadoutBuffer = "384 samples";
         screen.ReadoutLatency = "8.0 ms";
@@ -157,7 +170,8 @@ public sealed partial class FakeAudioSettingsScreen : ObservableObject, IAudioSe
             AsioInputDevicesList = asio,
             StreamingMirrorDevices = outputs,
             MidiOutputDevices = midi,
-            InputJackOptions = [new(0, "Input 1"), new(1, "Input 2")]
+            InputJackOptions = [new(0, "Input 1"), new(1, "Input 2")],
+            OutputPairOptions = [new(0, 1, "Out 1 + 2"), new(2, 3, "Out 3 + 4"), new(4, 5, "Out 5 + 6")]
         };
 
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
@@ -168,7 +182,6 @@ public sealed partial class FakeAudioSettingsScreen : ObservableObject, IAudioSe
             OnPropertyChanged(nameof(IsWasapiOutput));
             OnPropertyChanged(nameof(IsAsioOutput));
             OnPropertyChanged(nameof(IsAsioActive));
-            OnPropertyChanged(nameof(AreInputChannelIndexesUsed));
         }
         else if (e.PropertyName == nameof(SelectedInputDriver))
         {

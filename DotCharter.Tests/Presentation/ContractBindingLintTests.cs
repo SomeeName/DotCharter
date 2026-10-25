@@ -150,6 +150,21 @@ public sealed class ContractBindingLintTests
         Assert.Equal(["IProbeScreen.PlayCommand"], UnboundMembers(typeof(IProbeScreen), castToTheRow));
     }
 
+    /// <summary>An inline <c>DataType=</c> binds the type it names, not the enclosing scope.</summary>
+    [Fact]
+    public void Probe_an_inline_data_type_binding_counts_for_the_named_contract()
+    {
+        var inline = ProbeXaml.Replace("<TextBlock Text=\"{Binding Title}\" />",
+            "<TextBlock />", StringComparison.Ordinal).Replace("<ItemsControl ItemsSource=\"{Binding Path=Rows}\">",
+            "<ItemsControl ItemsSource=\"{Binding Path=Rows}\" DisplayMemberBinding=\"{Binding Title, DataType=p:ContractBindingLintTests+IProbeRow}\">",
+            StringComparison.Ordinal);
+        Assert.Empty(UnboundMembers(typeof(IProbeScreen), inline));
+
+        var onTheScreen = inline.Replace("{Binding Title, DataType=p:ContractBindingLintTests+IProbeRow}", "{Binding Title}",
+            StringComparison.Ordinal);
+        Assert.Equal(["IProbeRow.Title"], UnboundMembers(typeof(IProbeScreen), onTheScreen));
+    }
+
     [Fact]
     public void Probe_a_binding_under_another_data_type_does_not_count()
     {
@@ -262,7 +277,13 @@ public sealed class ContractBindingLintTests
         void Record(string value, Type? scope, XElement element)
         {
             foreach (Match m in BindingStart.Matches(value))
-                RecordPath(PathOf(ArgumentsAfter(value, m.Index + m.Length)), scope, element);
+            {
+                var args = ArgumentsAfter(value, m.Index + m.Length);
+                // `{Binding Label, DataType=c:IOption}` (a ComboBox's DisplayMemberBinding) binds the named type.
+                var typed = args.Select(a => a.Trim()).FirstOrDefault(a => a.StartsWith("DataType=", StringComparison.Ordinal));
+                var bindingScope = typed is null ? scope : ResolveType(element, typed["DataType=".Length..].Trim(), home);
+                RecordPath(PathOf(args), bindingScope, element);
+            }
         }
 
         void RecordPath(string path, Type? scope, XElement element)

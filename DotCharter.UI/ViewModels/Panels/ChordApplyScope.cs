@@ -259,6 +259,9 @@ public sealed class ChordApplyScope
 
     public ChordApplySounds SelectedSounds => _selected;
 
+    /// <summary>The shape the scope was prepared for.</summary>
+    public ChordTemplate Loaded => _loaded;
+
     /// <summary>
     ///     True when a template of the same grip is fingered differently from the
     ///     shown shape — so a Save on "+ the same grip elsewhere" has something to

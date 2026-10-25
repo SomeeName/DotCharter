@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
+             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Editor.Inspector.MarkerGroupsView"
+             x:DataType="contracts:IMarkerGroupsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        The Song tab's Sections and Tones, in the Phrases panel's shape: one row per name with
+        its count, folding open to every place it is used ("#2 · bar 17 · 0:42.0"), each a jump
+        there. The name renames in place (Apply and Enter only once the text changed, Esc puts
+        it back) and deletes with its effect named on the button. Every edit is one undo step.
+
+        A ListBox, not an ItemsControl: a dense arrangement can have hundreds of names, and the
+        list VIRTUALIZES inside its own bounded viewport once it is long (#141). Short lists
+        stack, so the hidden tab's prewarm builds every row (ItemsPanelConverters says why).
+    -->
+    <StackPanel Spacing="{StaticResource SpaceXs}">
+        <Border x:Name="MarkerStatusLine" Classes="FieldIssue Warn"
+                IsVisible="{Binding StatusLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="{StaticResource SpaceSm}">
+                <PathIcon Grid.Column="0" Data="{DynamicResource IconInfo}" />
+                <TextBlock Grid.Column="1" Text="{Binding StatusLine}" TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+
+        <!-- The Phrases panel's empty state: an icon and why the list is empty. -->
+        <StackPanel x:Name="MarkerEmpty" Classes="InspectorEmpty" IsVisible="{Binding !HasGroups}">
+            <PathIcon Data="{DynamicResource IconTechLinkNext}" />
+            <TextBlock Text="{Binding EmptyText}" />
+        </StackPanel>
+
+        <ListBox x:Name="MarkerGroups" ItemsSource="{Binding Groups}" MaxHeight="360" IsVisible="{Binding HasGroups}"
+                 AutomationProperties.Name="{Binding Title}"
+                 ItemsPanel="{Binding Groups.Count, Converter={x:Static converters:ItemsPanelConverters.StackedWhenShort}}">
+            <ListBox.Styles>
+                <!-- A row is announced by its own words, not its CLR type name (#311). -->
+                <Style Selector="ListBoxItem" x:DataType="contracts:IMarkerGroupRow">
+                    <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                </Style>
+            </ListBox.Styles>
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="contracts:IMarkerGroupRow">
+                    <!-- The Phrases panel's row: a hairline under each name. -->
+                    <Border Padding="{StaticResource GapBottomSm}" Margin="{StaticResource GapBottomSm}"
+                            BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
+                    <StackPanel Spacing="2">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="{StaticResource SpaceXs}">
+                            <ToggleButton x:Name="MarkerGroupExpand" Grid.Column="0" Classes="MarkerFold"
+                                          IsChecked="{Binding IsExpanded}"
+                                          AutomationProperties.Name="{localization:Loc Inspector_Markers_ShowPlaces}"
+                                          ToolTip.Tip="{localization:Loc Inspector_Markers_ShowPlaces}">
+                                <PathIcon Data="{DynamicResource IconChevronRight}" />
+                            </ToggleButton>
+                            <TextBox x:Name="MarkerRenameBox" Grid.Column="1" Text="{Binding EditName}"
+                                     FontWeight="SemiBold" VerticalAlignment="Center"
+                                     AutomationProperties.Name="{Binding Name}"
+                                     ToolTip.Tip="{localization:Loc Inspector_Markers_RenameTip}">
+                                <TextBox.KeyBindings>
+                                    <KeyBinding Gesture="Enter"
+                                                Command="{Binding $parent[UserControl].((contracts:IMarkerGroupsScreen)DataContext).RenameCommand}"
+                                                CommandParameter="{Binding}" />
+                                    <KeyBinding Gesture="Escape"
+                                                Command="{Binding $parent[UserControl].((contracts:IMarkerGroupsScreen)DataContext).CancelRenameCommand}"
+                                                CommandParameter="{Binding}" />
+                                </TextBox.KeyBindings>
+                            </TextBox>
+                            <Button x:Name="MarkerRenameApply" Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                    Content="{localization:Loc Action_Apply}" IsVisible="{Binding IsRenameDirty}"
+                                    Command="{Binding $parent[UserControl].((contracts:IMarkerGroupsScreen)DataContext).RenameCommand}"
+                                    CommandParameter="{Binding}" />
+                            <TextBlock Grid.Column="3" Text="{Binding CountLabel}" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       FontSize="{StaticResource FontSizeSm}" />
+                            <Button x:Name="MarkerDelete" Grid.Column="4" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                    Content="{localization:Loc Action_Delete}"
+                                    ToolTip.Tip="{Binding DeleteTip}" AutomationProperties.Name="{Binding DeleteTip}"
+                                    Command="{Binding $parent[UserControl].((contracts:IMarkerGroupsScreen)DataContext).DeleteCommand}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                        <!-- A tone placed with no definition plays the game's default tone. -->
+                        <Border x:Name="MarkerWarning" Classes="FieldIssue Warn" IsVisible="{Binding HasWarning}"
+                                ToolTip.Tip="{localization:Loc Inspector_Tones_NotDefinedTip}">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <PathIcon Grid.Column="0" Data="{DynamicResource IconInfo}"
+                                          Margin="{StaticResource GapRightSm}" />
+                                <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{Binding Warning}" />
+                            </Grid>
+                        </Border>
+                        <!-- Why the last rename was refused. -->
+                        <Border x:Name="MarkerRenameRefusal" Classes="FieldIssue Warn" IsVisible="{Binding HasError}">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <PathIcon Grid.Column="0" Data="{DynamicResource IconAlert}"
+                                          Margin="{StaticResource GapRightSm}" />
+                                <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{Binding Error}" />
+                            </Grid>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding Occurrences}" IsVisible="{Binding IsExpanded}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="contracts:IMarkerOccurrenceRow">
+                                    <Button x:Name="MarkerJump" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            Command="{Binding $parent[UserControl].((contracts:IMarkerGroupsScreen)DataContext).JumpToCommand}"
+                                            CommandParameter="{Binding}">
+                                        <!-- A TextBlock: string Content would read an arrangement's "_" as an access key. -->
+                                        <TextBlock Text="{Binding Label}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </StackPanel>
+</UserControl>

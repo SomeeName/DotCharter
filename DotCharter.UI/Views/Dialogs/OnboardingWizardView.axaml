@@ -15,8 +15,9 @@
          primary is a single button whose caption and command follow the page
          (Next everywhere, Finish on the last one). Everything else is the
          shared dialog grammar (Views/Dialogs/DialogStyles.axaml, included once
-         by DialogContainerView). The one local style is the page title, the
-         same shape LatencyCalibrationWizardView keeps for its steps. -->
+         by DialogContainerView). The local styles are the page title (the
+         same shape LatencyCalibrationWizardView keeps for its steps), the choice
+         cards and the String order cards' string picture. -->
     <UserControl.Styles>
         <Style Selector="TextBlock.OnboardingStepTitle">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
@@ -27,6 +28,13 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Padding" Value="{DynamicResource FirePadCard}" />
+        </Style>
+        <!-- The String order cards' picture of the strings, top to bottom as the timeline stacks them. -->
+        <Style Selector="TextBlock.OnboardingStringPreview">
+            <Setter Property="FontFamily" Value="{DynamicResource FireFontMono}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeSm}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+            <Setter Property="LineHeight" Value="{DynamicResource FireLineHeightXsTight}" />
         </Style>
     </UserControl.Styles>
 
@@ -75,6 +83,29 @@
                                     </StackPanel>
                                 </RadioButton>
                             </Grid>
+                            <!-- String order (#229), the editor's reading preference: offered to a charter,
+                                 each card a small picture of the strings as the timeline will stack them. -->
+                            <StackPanel x:Name="OnboardingStringOrder" IsVisible="{Binding IsCharter}" Spacing="{DynamicResource FireSpaceXs}">
+                                <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_StringOrder}" />
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="{DynamicResource FireSpaceSm}">
+                                <RadioButton x:Name="OnboardingStringOrderRocksmith" Grid.Column="0" Classes="OnboardingRole" GroupName="OnboardingStringOrder"
+                                             IsChecked="{Binding IsRocksmithStringOrder, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Settings_StringOrder_Rocksmith}">
+                                    <StackPanel Spacing="{DynamicResource FireSpaceXxs}">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_StringOrder_Rocksmith}" />
+                                        <TextBlock Classes="OnboardingStringPreview" Text="E ──────&#10;A ──────&#10;D ──────&#10;G ──────&#10;B ──────&#10;e ──────" />
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton x:Name="OnboardingStringOrderTab" Grid.Column="1" Classes="OnboardingRole" GroupName="OnboardingStringOrder"
+                                             IsChecked="{Binding IsTabStringOrder, Mode=TwoWay}"
+                                             AutomationProperties.Name="{localization:Loc Settings_StringOrder_Tab}">
+                                    <StackPanel Spacing="{DynamicResource FireSpaceXxs}">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_StringOrder_Tab}" />
+                                        <TextBlock Classes="OnboardingStringPreview" Text="e ──────&#10;B ──────&#10;G ──────&#10;D ──────&#10;A ──────&#10;E ──────" />
+                                    </StackPanel>
+                                </RadioButton>
+                                </Grid>
+                            </StackPanel>
                             <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
                                 <StackPanel VerticalAlignment="Center" Grid.Column="0">
                                     <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_Language}" />
@@ -140,7 +171,7 @@
                         </StackPanel>
 
                         <!-- ============ 3. Audio output ============ -->
-                        <StackPanel IsVisible="{Binding IsAudio}" Spacing="{DynamicResource FireSpaceMd}">
+                        <StackPanel x:Name="OnboardingAudioStep" IsVisible="{Binding IsAudio}" Spacing="{DynamicResource FireSpaceMd}">
                             <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Audio_Title}" />
                             <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Audio_Body}" />
                             <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
@@ -159,6 +190,19 @@
                                           IsVisible="{Binding Audio.IsAsioOutput}"
                                           ItemsSource="{Binding Audio.AsioDevices}"
                                           SelectedIndex="{Binding Audio.SelectedAsioOutputIndex, Mode=TwoWay}" />
+                            </Grid>
+                            <!-- WHICH OUTPUT PAIR, on ASIO and WASAPI alike: the engine opens
+                                 the picked pair as an output channel mask on both. The test
+                                 click below plays through the pair chosen here. -->
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_OutChannels}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{localization:Loc Onboarding_Audio_PairDesc}" />
+                                </StackPanel>
+                                <ComboBox VerticalAlignment="Center" Grid.Column="1" x:Name="OnboardingOutputPair"
+                                          AutomationProperties.Name="{localization:Loc Settings_OutChannels}"
+                                          ItemsSource="{Binding Audio.OutputPairOptions}"
+                                          SelectedIndex="{Binding Audio.SelectedOutputPairIndex, Mode=TwoWay}" />
                             </Grid>
                             <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
                                 <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel" Text="{localization:Loc Settings_SampleRate}" />
@@ -191,7 +235,7 @@
                         </StackPanel>
 
                         <!-- ============ 4. Guitar input ============ -->
-                        <StackPanel IsVisible="{Binding IsInput}" Spacing="{DynamicResource FireSpaceMd}">
+                        <StackPanel x:Name="OnboardingInputStep" IsVisible="{Binding IsInput}" Spacing="{DynamicResource FireSpaceMd}">
                             <TextBlock Classes="OnboardingStepTitle" Text="{localization:Loc Onboarding_Input_Title}" />
                             <TextBlock Theme="{DynamicResource DlgBodyText}" Classes="DlgBody" Text="{localization:Loc Onboarding_Input_Body}" />
                             <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260">
@@ -217,15 +261,19 @@
                                           ItemsSource="{Binding Audio.AsioInputDevicesList}"
                                           SelectedIndex="{Binding Audio.SelectedAsioInputIndex, Mode=TwoWay}" />
                             </Grid>
-                            <!-- WHICH JACK. The page opened the device and lit a
-                                 meter without ever asking which input the guitar
-                                 is on; a guitar on the second jack read as silence
-                                 on the meter below. ASIO only - the engine builds
-                                 an input mask for ASIO alone, and the visibility
-                                 keys on the ENGINE driver like Settings does. -->
+                            <!-- WASAPI lists some interfaces as one capture device per
+                                 input pair: on a device with two inputs or fewer the
+                                 guitar's jack may live on a sibling device, so the page
+                                 says to pick that device first. -->
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" x:Name="OnboardingWasapiDevicesNote"
+                                    IsVisible="{Binding Audio.IsWasapiDevicesNoteShown}">
+                                <TextBlock TextWrapping="Wrap" Text="{localization:Loc Settings_InChannels_WasapiNote}" />
+                            </Border>
+                            <!-- WHICH JACK, on ASIO and WASAPI alike: the engine opens
+                                 the picked jack as an input channel mask on both, so a
+                                 guitar on the second jack moves the meter below. -->
                             <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260"
-                                  IsEnabled="{Binding Audio.EnableInput}"
-                                  IsVisible="{Binding Audio.AreInputChannelIndexesUsed}">
+                                  IsEnabled="{Binding Audio.EnableInput}">
                                 <StackPanel VerticalAlignment="Center" Grid.Column="0">
                                     <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Settings_InputJack}" />
                                     <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{localization:Loc Onboarding_Input_JackDesc}" />
@@ -235,6 +283,24 @@
                                           ItemsSource="{Binding Audio.InputJackOptions}"
                                           SelectedIndex="{Binding Audio.SelectedInputJackIndex, Mode=TwoWay}" />
                             </Grid>
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260"
+                                  IsEnabled="{Binding Audio.EnableInput}">
+                                <StackPanel VerticalAlignment="Center" Grid.Column="0">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Input_Find}" />
+                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" TextWrapping="Wrap" Text="{localization:Loc Onboarding_Input_FindDesc}" />
+                                </StackPanel>
+                                <Border Grid.Column="1" VerticalAlignment="Center" DataContext="{Binding InputFinder}">
+                                    <Button x:DataType="onboarding:GuitarJackFinder" Theme="{DynamicResource SecondaryButton}" Classes="Secondary" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center" x:Name="OnboardingFindGuitar"
+                                            Content="{localization:Loc Onboarding_Input_Find}"
+                                            Command="{Binding FindCommand}" />
+                                </Border>
+                            </Grid>
+                            <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" x:Name="OnboardingFindGuitarStatus"
+                                    Classes.Error="{Binding InputFinder.HeardNothing}"
+                                    IsVisible="{Binding InputFinder.HasStatus}">
+                                <TextBlock TextWrapping="Wrap" Text="{Binding InputFinder.Status}" />
+                            </Border>
                             <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,260" IsEnabled="{Binding Audio.EnableInput}">
                                 <StackPanel VerticalAlignment="Center" Grid.Column="0">
                                     <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc Onboarding_Input_Mono}" />

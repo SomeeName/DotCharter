@@ -75,7 +75,7 @@ public sealed class FilesSettingsViewModelTests : IDisposable
     {
         var off = NewRig(withCache: false, features: DotCharter.Services.Plugins.PackageFeatures.None).Vm;
         var on = NewRig(withCache: false, features: DotCharter.Services.Plugins.PackageFeatures.All).Vm;
-        string[] reader = ["files.group.2", "files.psarcCache", "files.group.3", "files.psarcHardestOnly"];
+        string[] reader = ["files.group.4", "files.psarcCache", "files.group.1", "files.psarcHardestOnly"];
 
         foreach (var key in reader)
         {
@@ -109,6 +109,30 @@ public sealed class FilesSettingsViewModelTests : IDisposable
         Assert.Equal(1, rig.Vm.SaveCompanionPsarcCodecIndex);   // 0 = Vorbis, 1 = PCM
         Assert.False(rig.Vm.SaveCompanionEof);
         Assert.Equal(5, rig.Vm.AutoBackupIntervalMinutes);
+        Assert.Empty(rig.Vm.UnsavedSettings);
+    }
+
+    /// <summary>Guitar Pro import moved here from Editor: the same AppConfig fields, read and written by this tab.</summary>
+    [Fact]
+    public void GuitarProImport_LoadsAndSaves()
+    {
+        var rig = NewRig(c =>
+        {
+            c.GpImportSlideInFretDistance = 3;
+            c.GpImportMarkersToSections = true;
+            c.OnlineLatinNameLookup = false;
+        });
+        Assert.Equal(3, rig.Vm.GpImportSlideInFretDistance);
+        Assert.True(rig.Vm.GpImportMarkersToSections);
+        Assert.False(rig.Vm.OnlineLatinNameLookup);
+
+        rig.Vm.GpImportSlideInFretDistance = 9;
+        rig.Vm.GpImportTimeSignatures = false;
+        Assert.Contains("files.GpImportTimeSignatures", rig.Vm.UnsavedSettings);
+        rig.Vm.Save();
+
+        Assert.Equal(3, rig.Config.AppConfig.GpImportSlideInFretDistance);
+        Assert.False(rig.Config.AppConfig.GpImportTimeSignatures);
         Assert.Empty(rig.Vm.UnsavedSettings);
     }
 
@@ -292,7 +316,7 @@ public sealed class FilesSettingsViewModelTests : IDisposable
     public void Search_HidesWhatDoesNotMatch()
     {
         var rig = NewRig();
-        var migrate = rig.Vm.SearchGroups[1].Rows.Single(r => r.Key == "files.backupMigrate");
+        var migrate = rig.Vm.SearchGroups[3].Rows.Single(r => r.Key == "files.backupMigrate");
 
         rig.Vm.ApplySearch(migrate.Label);
 

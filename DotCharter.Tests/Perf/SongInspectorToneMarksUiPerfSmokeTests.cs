@@ -23,7 +23,8 @@ public sealed class SongInspectorToneMarksUiPerfSmokeTests
         {
             var logger = new FakeAppLogger();
             var state = new ProjectState();
-            var vm = new SongOverviewViewModel(state, new HistoryService(logger), logger, FakeLocalization.English());
+            var vm = new SongOverviewViewModel(state, new HistoryService(logger), logger, FakeLocalization.English(),
+            DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.IChartEditorSurface>().Proxy);
             var tab = new SongInspectorView { DataContext = vm };
             // #601: the tones are a section of the Song tab's rail; open it, as its entry's click does.
             tab.Rail.Choose("SongTonesBody");
@@ -37,22 +38,22 @@ public sealed class SongInspectorToneMarksUiPerfSmokeTests
             {
                 state.ActiveProject = Project();
                 Settle(window);
-                Assert.Equal(["lead_clean", "lead_dist", "solo"], vm.Tones.Select(t => t.OriginalName));
+                Assert.Equal(["lead_clean", "lead_dist", "solo"], vm.TonesPanel.Groups.Select(t => t.Name));
 
-                var marks = Named(tab, "ToneNotDefinedMark");
+                var marks = Named(tab, "MarkerWarning");
                 var shown = marks.Where(m => m.IsEffectivelyVisible).ToList();
                 var solo = Assert.Single(shown);
-                Assert.Equal("solo", ((RenameableItem)solo.DataContext!).OriginalName);
+                Assert.Equal("solo", ((MarkerGroupRow)solo.DataContext!).Name);
                 AssertMeasured(solo, "the \"no definition\" mark of 'solo'");
-                Assert.All(Named(tab, "ToneRenameRefusal"), r => Assert.False(r.IsEffectivelyVisible));
+                Assert.All(Named(tab, "MarkerRenameRefusal"), r => Assert.False(r.IsEffectivelyVisible));
                 Capture(window, "song-tab-tones-listed.png");
 
-                var dist = vm.Tones.Single(t => t.OriginalName == "lead_dist");
-                dist.NewName = "lead_clean";
-                vm.RenameToneCommand.Execute(dist);
+                var dist = vm.TonesPanel.Groups.Single(t => t.Name == "lead_dist");
+                dist.EditName = "lead_clean";
+                vm.TonesPanel.RenameCommand.Execute(dist);
                 Settle(window);
 
-                var refusal = Assert.Single(Named(tab, "ToneRenameRefusal"), r => r.IsEffectivelyVisible);
+                var refusal = Assert.Single(Named(tab, "MarkerRenameRefusal"), r => r.IsEffectivelyVisible);
                 Assert.Same(dist, refusal.DataContext);
                 AssertMeasured(refusal, "the refused rename's reason");
                 var text = refusal.GetVisualDescendants().OfType<TextBlock>().Single();

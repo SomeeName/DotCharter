@@ -1,4 +1,4 @@
-using DotCharter.UI.ViewModels.Panels;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.Tests.UI.ViewModels.Panels;
 

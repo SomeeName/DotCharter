@@ -72,9 +72,16 @@ public interface IAudioSettingsScreen : INotifyPropertyChanged
 
     int SelectedAsioOutputIndex { get; set; }
 
-    int AsioOutputChannelLeft { get; set; }
+    /// <summary>
+    ///     The pair that carries the master mix as a PICK over the playback
+    ///     device's outputs ("Out 1 + 2", "Out 3 + 4", a mono row for a last odd
+    ///     output) — on ASIO and WASAPI alike, since the engine opens the pair as
+    ///     an output channel mask on both. It mirrors the left and right output
+    ///     channels both ways, so Save keeps writing the two fields it always wrote.
+    /// </summary>
+    IReadOnlyList<OutputPairOption> OutputPairOptions { get; }
 
-    int AsioOutputChannelRight { get; set; }
+    int SelectedOutputPairIndex { get; set; }
 
     // ── capture ──────────────────────────────────────────────────────────
 
@@ -94,9 +101,7 @@ public interface IAudioSettingsScreen : INotifyPropertyChanged
 
     int SelectedAsioInputIndex { get; set; }
 
-    /// <summary>ASIO addresses capture channels by index; WASAPI does not, so the two index rows are hidden there.</summary>
-    bool AreInputChannelIndexesUsed { get; }
-
+    /// <summary>The second open input's jack (0-based); the engine masks it on ASIO and WASAPI alike.</summary>
     int AsioInputChannelRight { get; set; }
 
     bool AsioInputMono { get; set; }
@@ -121,6 +126,13 @@ public interface IAudioSettingsScreen : INotifyPropertyChanged
     IReadOnlyList<InputJackOption> InputJackOptions { get; }
 
     int SelectedInputJackIndex { get; set; }
+
+    /// <summary>
+    ///     Input is on, the engine driver is WASAPI and the capture device reports
+    ///     two inputs or fewer: some interfaces appear in WASAPI as one capture
+    ///     device per input pair, so the note says to pick that device first.
+    /// </summary>
+    bool IsWasapiDevicesNoteShown { get; }
 
     // ── clock ────────────────────────────────────────────────────────────
 

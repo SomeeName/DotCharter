@@ -21,6 +21,7 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
 {
     private readonly ChartEditDialogServices _edit;
     private readonly ObservableCollection<TuningStep> _tuningOffsets = [];
+    private readonly TuningPresetOption[] _tuningPresets;
     private Arrangement? _target;
     private bool _isNew;
     private string _openedTuningType = "";
@@ -46,6 +47,8 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         PathOptions = [.. ArrangementSettingsEdit.Paths.Select(p => new PathOption(edit.Localization[p.LabelKey], p.RouteMask))];
         AuthoredFlags = [.. ArrangementSettingsEdit.AuthoredFlags.Select(f => new FlagItem(edit.Localization[f.LabelKey]))];
         DerivedFlags = [.. ArrangementSettingsEdit.DerivedFlags.Select(f => new FlagItem(edit.Localization[f.LabelKey]))];
+        _tuningPresets = [.. ArrangementSettingsEdit.TuningPresets.Select(key => new TuningPresetOption(key))];
+        LabelTuningPresets();
         SaveCommand = new RelayCommand(Save);
         CancelCommand = new RelayCommand(() => TryCancel());
     }
@@ -61,7 +64,12 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         get => _type;
         set
         {
-            if (SetProperty(ref _type, value)) OnPropertyChanged(nameof(IsBass));
+            // A 6-string bass is B E A D G C, so the type moves a preset row and its names.
+            var followsPreset = !_seedingTuningPreset && OffsetsFollowPreset();
+            if (!SetProperty(ref _type, value)) return;
+            OnPropertyChanged(nameof(IsBass));
+            if (followsPreset) ApplyPresetOffsets();
+            LabelTuningPresets();
         }
     }
 
@@ -93,9 +101,13 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         get => _strings;
         set
         {
+            var followsPreset = !_seedingTuningPreset && OffsetsFollowPreset();
             if (!SetProperty(ref _strings, value)) return;
             while (_tuningOffsets.Count < value) _tuningOffsets.Add(new TuningStep(0));
             while (_tuningOffsets.Count > value) _tuningOffsets.RemoveAt(_tuningOffsets.Count - 1);
+            // A row that was the preset stays the preset at the new count: an added string
+            // otherwise arrives at 0 and turns Eb Standard into a mixed tuning.
+            if (followsPreset) ApplyPresetOffsets();
             LabelTuningRow();
         }
     }
@@ -107,13 +119,21 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         {
             if (!SetProperty(ref _tuningPreset, value) || _seedingTuningPreset) return;
             _tuningPresetTouched = true;
-            if (ArrangementSettingsEdit.PresetOffsets(value) is not { } offsets) return;
-            for (var i = 0; i < _tuningOffsets.Count; i++)
-                _tuningOffsets[i].Step = i < offsets.Length ? offsets[i] : 0;
+            ApplyPresetOffsets();
         }
     }
 
-    public IReadOnlyList<string> TuningPresets => ArrangementSettingsEdit.TuningPresets;
+    private bool OffsetsFollowPreset() =>
+        ArrangementSettingsEdit.PresetOffsets(_tuningPreset, _tuningOffsets.Count, IsBass) is { } offsets
+        && offsets.SequenceEqual(_tuningOffsets.Select(t => t.Step));
+
+    private void ApplyPresetOffsets()
+    {
+        if (ArrangementSettingsEdit.PresetOffsets(_tuningPreset, _tuningOffsets.Count, IsBass) is not { } offsets) return;
+        for (var i = 0; i < _tuningOffsets.Count; i++) _tuningOffsets[i].Step = offsets[i];
+    }
+
+    public IReadOnlyList<ITuningPresetOption> TuningPresets => _tuningPresets;
 
     public IReadOnlyList<ITuningStep> TuningOffsets => _tuningOffsets;
 
@@ -167,6 +187,9 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
             : _edit.Editor.ActiveArrangement;
         if (_target == null) return;
 
+        // Seeding the type, the row and the picker must not rewrite the arrangement's offsets.
+        _seedingTuningPreset = true;
+
         Name = _target.Name;
         Type = _isNew ? ArrangementType.Lead : _target.ArrangementType;
         Subtype = _isNew ? ArrangementSubtype.Main : _target.Subtype;
@@ -178,12 +201,10 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
         while (_tuningOffsets.Count < Strings) _tuningOffsets.Add(new TuningStep(0));
         LabelTuningRow();
 
-        // Seeding the picker must not rewrite the arrangement's own offsets, and the type
-        // it ARRIVED with is remembered so an untouched picker writes it back (see Apply).
+        // The type it ARRIVED with is remembered so an untouched picker writes it back (see Apply).
         _openedTuningType = _target.TuningType ?? "";
         _tuningPresetTouched = false;
-        _seedingTuningPreset = true;
-        TuningPreset = ArrangementSettingsEdit.TuningTypeToPreset(_openedTuningType);
+        TuningPreset = ArrangementSettingsEdit.PresetFromOffsets(_tuningOffsets.Select(t => t.Step).ToArray(), IsBass);
         _seedingTuningPreset = false;
         LoadRocksmithProperties(_target);
     }
@@ -258,6 +279,35 @@ public sealed class ArrangementSettingsViewModel : DialogViewModel<bool>, IArran
             var number = _tuningOffsets.Count - i;
             _tuningOffsets[i].Place(i, _tuningOffsets.Count, labels[i],
                 _edit.Localization.Format("Dialog_TuningStringName", number, labels[i]));
+        }
+
+        LabelTuningPresets();
+    }
+
+    /// <summary>Names every preset for this instrument ("7-String Drop A", "5-String Bass Standard")
+    ///     with the notes it tunes to beside it; a count nothing names shows the notes alone.</summary>
+    private void LabelTuningPresets()
+    {
+        var count = _strings;
+        foreach (var option in _tuningPresets)
+        {
+            var notes = string.Join(" ", ArrangementSettingsEdit.PresetNotes(option.Key, count, IsBass));
+            option.Label = ArrangementSettingsEdit.PresetName(option.Key, count, IsBass) is { } name
+                ? _edit.Localization.Format("Dialog_TuningPreset_WithNotes", name, notes)
+                : notes.Length > 0 ? notes : _edit.Localization["Dialog_TuningPreset_Custom"];
+        }
+    }
+
+    private sealed class TuningPresetOption(string key) : ObservableObject, ITuningPresetOption
+    {
+        private string _label = key;
+
+        public string Key { get; } = key;
+
+        public string Label
+        {
+            get => _label;
+            set => SetProperty(ref _label, value);
         }
     }
 

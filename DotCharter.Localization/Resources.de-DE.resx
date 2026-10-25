@@ -130,7 +130,17 @@
     <data name="Inspector_Phrases_PropagatedFmt" xml:space="preserve"><value>{0} Iterationen überschrieben. Undo stellt sie wieder her.</value></data>
     <data name="Inspector_Phrases_PropagatedOne" xml:space="preserve"><value>{0} Iteration überschrieben. Undo stellt sie wieder her.</value></data>
     <data name="Inspector_Phrases_Empty" xml:space="preserve"><value>Keine Phrasen-Iterationen in diesem Arrangement.</value></data>
-    <data name="Inspector_Phrases_Refresh" xml:space="preserve"><value>Aktualisieren</value></data>
+    <data name="Inspector_Phrases_Refresh" xml:space="preserve"><value>Aktualisieren</value></data>
+    <data name="Inspector_Phrases_DeleteTipOne" xml:space="preserve"><value>„{1}“ löschen: entfernt seine {0} Wiederholung. Strg+Z macht es rückgängig.</value></data>
+    <data name="Inspector_Phrases_DeleteTipFmt" xml:space="preserve"><value>„{1}“ löschen: entfernt alle {0} Wiederholungen. Strg+Z macht es rückgängig.</value></data>
+    <data name="Inspector_Phrases_DeletedOne" xml:space="preserve"><value>„{1}“ gelöscht ({0} Wiederholung). Strg+Z holt sie zurück.</value></data>
+    <data name="Inspector_Phrases_DeletedFmt" xml:space="preserve"><value>„{1}“ gelöscht ({0} Wiederholungen). Strg+Z holt sie zurück.</value></data>
+    <data name="Inspector_Phrases_Renamed" xml:space="preserve"><value>„{0}“ in „{1}“ umbenannt.</value></data>
+    <data name="Inspector_Phrases_RenameTip" xml:space="preserve"><value>Diese Phrase im ganzen Arrangement umbenennen. Eingabe übernimmt, Esc bricht ab.</value></data>
+    <data name="Inspector_Phrases_ShowIterations" xml:space="preserve"><value>Wiederholungen ein- oder ausblenden</value></data>
+    <data name="Inspector_Phrases_ExportAddsCountEnd" xml:space="preserve"><value>Beim Export: COUNT wird am Anfang und END nach der letzten Note ergänzt.</value></data>
+    <data name="Inspector_Phrases_ExportAddsCount" xml:space="preserve"><value>Beim Export: COUNT wird am Anfang ergänzt.</value></data>
+    <data name="Inspector_Phrases_ExportAddsEnd" xml:space="preserve"><value>Beim Export: END wird nach der letzten Note ergänzt.</value></data>
     <data name="Inspector_AudioLint_Title" xml:space="preserve"><value>Audio-Lint</value></data>
     <data name="Inspector_AudioLint_Run" xml:space="preserve"><value>Gegen Audio prüfen</value></data>
     <data name="Inspector_AudioLint_RunTip" xml:space="preserve"><value>Offline-Analyse des Song-Audios: Klingt jede gechartete Tonhöhe wirklich zu ihrer Zeit? Beratend — Funde sind Review-Hinweise, keine Fehler.</value></data>
@@ -146,6 +156,8 @@
     <data name="Dialog_Fhp_Title" xml:space="preserve"><value>Handanker setzen</value></data>
     <data name="Dialog_EofImport_Subtitle" xml:space="preserve"><value>Wähle die einzuschließenden Spuren aus. Der neue Projektordner wird neben der Audiodatei angelegt.</value></data>
     <data name="Dialog_EofImport_Busy" xml:space="preserve"><value>Editor-on-Fire-Chart wird gelesen…</value></data>
+    <data name="Dialog_EofImport_VocalTrack_One" xml:space="preserve"><value>{1} ({0} Silbe)</value></data>
+    <data name="Dialog_EofImport_VocalTrack_Many" xml:space="preserve"><value>{1} ({0} Silben)</value></data>
     <data name="Dialog_RsXmlImport_Title" xml:space="preserve"><value>Rocksmith-XML importieren</value></data>
     <data name="Dialog_RsXmlImport_Subtitle" xml:space="preserve"><value>Das Dokument wird in das geöffnete Projekt eingefügt.</value></data>
     <data name="Dialog_RsXmlImport_Busy" xml:space="preserve"><value>Rocksmith-XML-Dokument wird gelesen…</value></data>
@@ -214,6 +226,8 @@
     <data name="Dialog_SongBrowser_Title" xml:space="preserve"><value>Bibliothek</value></data>
     <data name="Dialog_HalfStepsOffset" xml:space="preserve"><value>Halbtonschritte</value></data>
     <data name="Dialog_TuningStringName" xml:space="preserve"><value>Saite {0} ({1}), Halbtöne</value></data>
+    <data name="Dialog_TuningPreset_Custom" xml:space="preserve"><value>Eigene</value></data>
+    <data name="Dialog_TuningPreset_WithNotes" xml:space="preserve"><value>{0} ({1})</value></data>
     <data name="Dialog_LyricColor" xml:space="preserve"><value>Lyrikfarbe</value></data>
     <data name="Dialog_LyricColor_Desc" xml:space="preserve"><value>Wie sich die Lyrics dieser Spur auf der Zeitleiste lesen.</value></data>
     <data name="Dialog_LyricColor_Custom" xml:space="preserve"><value>Eigene Farbe</value></data>
@@ -354,11 +368,26 @@
     <data name="Inspector_Minor" xml:space="preserve"><value>Moll</value></data>
     <data name="Inspector_Tones" xml:space="preserve"><value>Tones</value></data>
     <data name="Inspector_Tones_None" xml:space="preserve"><value>Keine Tones in diesem Projekt.</value></data>
+    <data name="Inspector_Markers_OccurrenceFmt" xml:space="preserve"><value>#{0} · Takt {1} · {2}</value></data>
+    <data name="Inspector_Markers_OccurrenceNoBarFmt" xml:space="preserve"><value>#{0} · {1}</value></data>
+    <data name="Inspector_Markers_RenameTip" xml:space="preserve"><value>Neuen Namen eingeben: Enter benennt überall um, wo er verwendet wird, Esc stellt den Namen wieder her.</value></data>
+    <data name="Inspector_Markers_ShowPlaces" xml:space="preserve"><value>Zeigen, wo es verwendet wird</value></data>
+    <data name="Inspector_Markers_Renamed" xml:space="preserve"><value>„{0}“ in „{1}“ umbenannt.</value></data>
+    <data name="Inspector_Markers_Deleted" xml:space="preserve"><value>„{0}“ gelöscht. Strg+Z holt es zurück.</value></data>
+    <data name="Inspector_Sections_PlacesOne" xml:space="preserve"><value>{0} Stelle</value></data>
+    <data name="Inspector_Sections_PlacesFmt" xml:space="preserve"><value>{0} Stellen</value></data>
+    <data name="Inspector_Sections_DeleteTipOne" xml:space="preserve"><value>„{1}“ löschen: entfernt seine {0} Stelle. Strg+Z macht es rückgängig.</value></data>
+    <data name="Inspector_Sections_DeleteTipFmt" xml:space="preserve"><value>„{1}“ löschen: entfernt alle {0} Stellen. Strg+Z macht es rückgängig.</value></data>
+    <data name="Inspector_Tones_UsesOne" xml:space="preserve"><value>{0} Verwendung</value></data>
+    <data name="Inspector_Tones_UsesFmt" xml:space="preserve"><value>{0} Verwendungen</value></data>
+    <data name="Inspector_Tones_DeleteTipOne" xml:space="preserve"><value>„{1}“ löschen: entfernt seine {0} Verwendung und seine Definition. Strg+Z macht es rückgängig.</value></data>
+    <data name="Inspector_Tones_DeleteTipFmt" xml:space="preserve"><value>„{1}“ löschen: entfernt alle {0} Verwendungen und seine Definition. Strg+Z macht es rückgängig.</value></data>
+    <data name="Inspector_Tones_DeleteTipUnplaced" xml:space="preserve"><value>„{0}“ löschen: entfernt seine Definition. Strg+Z macht es rückgängig.</value></data>
+    <data name="Inspector_Tones_StartOccurrence" xml:space="preserve"><value>Startsound</value></data>
     <data name="Inspector_Tones_NotDefined" xml:space="preserve"><value>Keine Definition: spielt den Standardklang des Spiels.</value></data>
     <data name="Inspector_Tones_NotDefinedTip" xml:space="preserve"><value>Gestalte diesen Tone im Tone-Designer oder benenne einen gestalteten Tone in diesen Key um.</value></data>
     <data name="Inspector_Tones_RenameTaken" xml:space="preserve"><value>Ein Tone namens „{0}“ existiert bereits. Tones werden nie zusammengeführt: Wähle einen anderen Namen oder lösche zuerst diesen Tone.</value></data>
     <data name="Inspector_Sections" xml:space="preserve"><value>Abschnitte</value></data>
-    <data name="Inspector_Phrases" xml:space="preserve"><value>Phrasen</value></data>
     <data name="Action_Apply" xml:space="preserve"><value>Anwenden</value></data>
     <data name="Action_Delete" xml:space="preserve"><value>Löschen</value></data>
     <data name="Picker_AudioFiles" xml:space="preserve"><value>Audio-Dateien</value></data>
@@ -587,6 +616,7 @@
     <data name="Menu_AcceptSuggestedHandShapes_Tip" xml:space="preserve"><value>Macht aus den gestrichelten vorgeschlagenen Griffbildern über den ausgewählten Noten echte Griffbilder, als ein Rückgängig-Schritt.</value></data>
     <data name="Menu_AcceptSuggestedArpeggios_Tip" xml:space="preserve"><value>Macht aus den gestrichelten vorgeschlagenen Griffbildern über den ausgewählten Noten Arpeggio-Griffbilder, als ein Rückgängig-Schritt.</value></data>
     <data name="Menu_ShowSuggestedHandShapes" xml:space="preserve"><value>Vorgeschlagene Griffbilder anzeigen</value></data>
+    <data name="Menu_TabStringOrder" xml:space="preserve"><value>Saitenreihenfolge wie Tabulatur (tiefe Saite unten)</value></data>
     <data name="Menu_InsertBeatAtPlayhead" xml:space="preserve"><value>Beat an Wiedergabeposition einfügen</value></data>
     <data name="Menu_RemoveBeatAtPlayhead" xml:space="preserve"><value>Beat an Wiedergabeposition entfernen</value></data>
     <data name="Menu_InsertVocalAtPlayhead" xml:space="preserve"><value>Platzhalter-Vokal an Wiedergabeposition einfügen</value></data>
@@ -880,22 +910,23 @@
     <data name="Settings_Graphics_BackgroundSubtitle" xml:space="preserve"><value>Animierter Hintergrund hinter dem Highway.</value></data>
     <data name="Settings_Graphics_CrowdBackground" xml:space="preserve"><value>Publikumsgesteuerter Hintergrund</value></data>
     <data name="Settings_Graphics_CrowdBackground_Desc" xml:space="preserve"><value>Hintergrundverlauf, der sich im Live Play mit deiner Performance aufhellt.</value></data>
-    <data name="Settings_Graphics_Timeline2DTitle" xml:space="preserve"><value>2D-Timeline</value></data>
-    <data name="Settings_Graphics_Timeline2DSubtitle" xml:space="preserve"><value>Visueller Stil der Editor-Timeline.</value></data>
     <data name="Settings_Graphics_Timeline2DPolish" xml:space="preserve"><value>Timeline-Politur</value></data>
     <data name="Settings_Graphics_Timeline2DPolish_Desc" xml:space="preserve"><value>Reichere Noten-Gems, Wellenform mit Farbverlauf, Beat-Raster-Tiefe, Abspielkopf-Glühen und Sektions-Chip-Schatten. Aus stellt den flachen Look wieder her.</value></data>
     <data name="Settings_Graphics_Timeline2DLaneTint" xml:space="preserve"><value>Saiten-Spuren-Tönung</value></data>
     <data name="Settings_Graphics_Timeline2DLaneTint_Desc" xml:space="preserve"><value>Ein zarter Farbton der Saite hinter ihrer Spur, damit Spuren ohne zusätzliche Rasterlinien lesbar sind.</value></data>
-    <data name="Settings_Graphics_InvertStrings" xml:space="preserve"><value>Umgekehrte Saiten (Tabulatur-Layout)</value></data>
-    <data name="Settings_Graphics_InvertStrings_Desc" xml:space="preserve"><value>Kehrt die vertikale Saitenreihenfolge im 3D-Highway und in der 2D-Timeline um, damit Charts wie eine normale Tabulatur gelesen werden (tiefe E-Saite unten). Bearbeitung und Wiedergabe bleiben unverändert.</value></data>
+    <data name="Settings_StringOrder" xml:space="preserve"><value>Saitenreihenfolge</value></data>
+    <data name="Settings_StringOrder_Rocksmith" xml:space="preserve"><value>Rocksmith (tiefe Saite oben)</value></data>
+    <data name="Settings_StringOrder_Tab" xml:space="preserve"><value>Tabulatur (tiefe Saite unten)</value></data>
+    <data name="Settings_Tip_StringOrder" xml:space="preserve"><value>Wie die 2D-Zeitleiste und die 3D-Vorschau des Editors die Saiten stapeln. Tabulatur legt die tiefe Saite nach unten, so wie Tabs geschrieben werden; die Tasten zum Saitenwechsel folgen ihr.</value></data>
+    <data name="Settings_Tip_PlayStringOrder" xml:space="preserve"><value>Wie der Highway die Saiten in einem Play-Mode-Durchlauf stapelt. Getrennt von der Einstellung des Editors: Du kannst in Tab-Reihenfolge charten und in der des Spiels spielen.</value></data>
+    <data name="Settings_TimelineView_Title" xml:space="preserve"><value>Zeitleistenansicht</value></data>
+    <data name="Settings_TimelineView_Subtitle" xml:space="preserve"><value>Wie das Chart im Editor zu lesen ist.</value></data>
     <data name="Settings_InChannels" xml:space="preserve"><value>Eingangskanäle (L/R)</value></data>
     <data name="Settings_AsioInChannelRight" xml:space="preserve"><value>Eingangskanal (rechts)</value></data>
-    <data name="Settings_InChannels_WasapiNote" xml:space="preserve"><value>WASAPI öffnet die ersten Kanäle des gewählten Aufnahmegeräts und kann sie nicht auswählen — ein Gerät mit nur einem Eingang lässt beide Gitarren auf demselben Signal. Wähle ASIO als Audiotreiber, um bestimmte Kanäle zu benennen.</value></data>
+    <data name="Settings_InChannels_WasapiNote" xml:space="preserve"><value>Unter WASAPI erscheinen manche Interfaces als mehrere Aufnahmegeräte, eines pro Eingangspaar (etwa „Analogue 3 + 4“). Steht der Eingang deiner Gitarre nicht in der Liste, wähle zuerst das Aufnahmegerät, an dem er liegt.</value></data>
     <data name="Settings_InputTwoGuitars" xml:space="preserve"><value>Zwei Gitarren, eine pro Kanal</value></data>
     <data name="Settings_InputTwoGuitars_Tip" xml:space="preserve"><value>Aktiviere dies, wenn die beiden offenen Kanäle zwei verschiedene Instrumente führen: Jedes bekommt seinen eigenen Amp und steht mittig, statt dass ein Spieler in jedem Ohr landet. Lass es aus für einen echten Stereo-Tonabnehmer, dessen zwei Kanäle links und rechts eines Instruments sind.</value></data>
-    <data name="Settings_AsioOutChannels" xml:space="preserve"><value>ASIO-Ausgangskanäle (L/R)</value></data>
-    <data name="Settings_AsioOutChannelRight" xml:space="preserve"><value>ASIO-Ausgangskanal (rechts)</value></data>
-    <data name="Settings_AsioOutChannelLeft" xml:space="preserve"><value>ASIO-Ausgangskanal (links)</value></data>
+    <data name="Settings_OutChannels" xml:space="preserve"><value>Ausgangskanäle</value></data>
     <data name="Settings_AutoBackups" xml:space="preserve"><value>Auto-Backups</value></data>
     <data name="Settings_BackupDescription" xml:space="preserve"><value>Backups werden als ZIP-Dateien in einem backups-Ordner neben der Projektdatei gespeichert.</value></data>
     <data name="Settings_BackupMigrate_Title" xml:space="preserve"><value>Sicherung &amp; Umzug</value></data>
@@ -1409,11 +1440,11 @@
  <data name="Settings_Tip_Language" xml:space="preserve"><value>Anzeigesprache der gesamten App. Community-Sprachpakete aus dem languages-Ordner erscheinen ebenfalls hier.</value></data>
  <data name="Settings_Tip_AudioDriver" xml:space="preserve"><value>Audio-Ausgabe-API. WASAPI ist der sichere Standard; ASIO liefert die niedrigste Latenz, wenn dein Interface einen ASIO-Treiber mitbringt.</value></data>
  <data name="Settings_Tip_Device" xml:space="preserve"><value>Ausgabegerät, über das die Engine spielt.</value></data>
- <data name="Settings_Tip_AsioOutChannels" xml:space="preserve"><value>Welches ASIO-Ausgangskanalpaar den Master-Mix trägt — Interfaces bieten viele.</value></data>
+ <data name="Settings_Tip_OutChannels" xml:space="preserve"><value>Welches Paar der Ausgänge des Wiedergabegeräts den Master-Mix trägt — wähle das, an dem Kopfhörer oder Monitore hängen. Gilt unter ASIO und WASAPI.</value></data>
  <data name="Settings_Tip_EnableLiveInput" xml:space="preserve"><value>Instrumenten-Eingang durch die Engine leiten — nötig für Live Play, Tuner und das Tone-Rig.</value></data>
  <data name="Settings_Tip_InputDriver" xml:space="preserve"><value>Eingabe-API für das Instrumentensignal. Für spielbare Latenz wird ASIO dringend empfohlen.</value></data>
  <data name="Settings_Tip_InputDevice" xml:space="preserve"><value>Aufnahmegerät, an dem das Instrument hängt.</value></data>
- <data name="Settings_Tip_AsioInChannels" xml:space="preserve"><value>Eingangskanäle mit dem Instrument; Mono öffnet einen einzelnen Kanal. Die Kanalnummern gelten nur bei ASIO.</value></data>
+ <data name="Settings_Tip_AsioInChannels" xml:space="preserve"><value>Eingangskanäle mit dem Instrument; Mono öffnet einen einzelnen Kanal.</value></data>
  <data name="Settings_Tip_SampleRate" xml:space="preserve"><value>Samplerate der Engine. 48 kHz empfohlen — neuronale Amp-Captures (NAM/AIDA-X) sind 48-kHz-nativ und überbrücken bei anderen Raten sauber.</value></data>
  <data name="Settings_Tip_BufferSize" xml:space="preserve"><value>Frames pro Audioblock: kleiner = weniger Latenz, aber weniger Reserven; größer = sicherer. 128 Frames sind ca. 2,7 ms bei 48 kHz.</value></data>
  <data name="Settings_Tip_StreamingMirrorDevice" xml:space="preserve"><value>Das Gerät, das den gespiegelten Mix erhält.</value></data>
@@ -1506,7 +1537,6 @@
     <data name="Settings_GpDropMidBeatTempo" xml:space="preserve"><value>Tempo abseits des Beats</value></data>
     <data name="Settings_Tip_GpDropMidBeatTempo" xml:space="preserve"><value>Verwirft beim Erstellen der Beatmap Tempowechsel, die nicht auf einem Beat liegen.</value></data>
     <data name="Settings_AppearanceTab" xml:space="preserve"><value>Darstellung</value></data>
-    <data name="Settings_StemModelsTab" xml:space="preserve"><value>Stem-Modelle</value></data>
     <data name="Settings_ChartEditingSubtitle" xml:space="preserve"><value>Regeln beim Bearbeiten von Noten und Akkorden.</value></data>
     <data name="Settings_OutputRouting_Subtitle" xml:space="preserve"><value>Treiber und Gerät für die Audiowiedergabe auswählen.</value></data>
     <data name="Settings_InstrumentInput_Subtitle" xml:space="preserve"><value>Live-Instrumenteneingang (Gitarre, Bass, MIDI) aktivieren und routen.</value></data>
@@ -1881,7 +1911,6 @@
     <data name="Tuner_SeatNotLive_Short" xml:space="preserve"><value>Eingang aus</value></data>
     <data name="Tuner_Listening_Short" xml:space="preserve"><value>Saite zupfen</value></data>
     <data name="Rig_Input_Unavailable_Off_Short" xml:space="preserve"><value>Aus</value></data>
-    <data name="Rig_Input_Unavailable_Wasapi_Short" xml:space="preserve"><value>Nur ASIO</value></data>
     <data name="Tuner_NoArrangement" xml:space="preserve"><value>Kein Gitarren- oder Bass-Arrangement aktiv — zuerst eines öffnen</value></data>
     <data name="Tuner_Listening" xml:space="preserve"><value>Eine Saite anschlagen…</value></data>
     <data name="Tuner_SeatNotLive" xml:space="preserve"><value>Der Eingang dieses Spielers ist aus — schalte „Zwei Gitarren, eine pro Kanal“ unter Einstellungen ▸ Audio ein.</value></data>
@@ -2010,7 +2039,9 @@
     <data name="Menu_AutoFixChart" xml:space="preserve"><value>Arrangements automatisch korrigieren</value></data>
     <data name="Menu_AutoFixChart_Tip" xml:space="preserve"><value>Repariert, was kaputt ist, in allen Arrangements (Log-Charter-Parität): Sortierung, Duplikate, Notenlängen, Slides, Capo-Bünde, Anker an Phrasenanfängen. „Chart verbessern“ poliert ein bereits gültiges Chart.</value></data>
     <data name="Settings_SuppressDoubleStopNames" xml:space="preserve"><value>Keine Akkordnamen bei Doppelgriffen</value></data>
-    <data name="Settings_Tip_SuppressDoubleStopNames" xml:space="preserve"><value>Lässt zweisaitige Formen unbenannt und entfernt beim Export einen verbliebenen Namen. Zwei Töne legen keinen Akkord fest, ein erkannter Name ist also geraten. Im Inspektor kannst du einen Doppelgriff weiterhin von Hand benennen.</value></data>
+    <data name="Settings_Tip_SuppressDoubleStopNames" xml:space="preserve"><value>Lässt zweisaitige Formen unbenannt und entfernt beim Export einen verbliebenen Namen. Zwei Töne legen keinen Akkord fest, ein erkannter Name ist also geraten. Im Inspektor kannst du einen Doppelgriff weiterhin von Hand benennen.</value></data>
+    <data name="Settings_AutoNameNewChords" xml:space="preserve"><value>Neue Akkorde automatisch benennen</value></data>
+    <data name="Settings_Tip_AutoNameNewChords" xml:space="preserve"><value>Jede Akkordform, die der Editor anlegt, erhält einen vorgeschlagenen Namen (neue Akkorde, Umformungen, übernommene Handform-Vorschläge, Fingersätze erzeugen, Guitar-Pro-Akkorde ohne Namen). Aus lässt neue Akkorde unbenannt; ein Name aus der Datei bleibt in beiden Fällen erhalten.</value></data>
     <data name="Settings_KeepPowerChordNames" xml:space="preserve"><value>…aber Power-Chord-Namen behalten</value></data>
     <data name="Settings_Tip_KeepPowerChordNames" xml:space="preserve"><value>Nimmt Grundton-Quinte-Formen aus, sodass G5 seinen Namen behält, eine mehrdeutige zweitönige Form aber nicht. Aus entspricht Editor on Fire, das auch Power Chords unterdrückt.</value></data>
     <data name="Settings_MusicalChordNames" xml:space="preserve"><value>Musikalische Akkordnamen</value></data>
@@ -2096,11 +2127,18 @@
     <data name="LatencyWizard_Judging_Measure" xml:space="preserve"><value>Messen</value></data>
     <data name="LatencyWizard_Judging_Stop" xml:space="preserve"><value>Stopp</value></data>
     <data name="InputJack_LabelFmt" xml:space="preserve"><value>Eingang {0}</value></data>
+    <data name="OutputPair_LabelFmt" xml:space="preserve"><value>Ausgang {0} + {1}</value></data>
+    <data name="OutputPair_MonoLabelFmt" xml:space="preserve"><value>Ausgang {0} (Mono)</value></data>
+    <data name="ChannelLabel_NamedFmt" xml:space="preserve"><value>{0} · {1}</value></data>
     <data name="Settings_InputJack" xml:space="preserve"><value>Gitarren-Eingangsbuchse</value></data>
     <data name="Onboarding_Input_JackDesc" xml:space="preserve"><value>An welchem Eingang des Interfaces die Gitarre steckt. Der Pegel darunter liest diese Buchse.</value></data>
+    <data name="Onboarding_Input_Find" xml:space="preserve"><value>Gitarre finden</value></data>
+    <data name="Onboarding_Input_FindDesc" xml:space="preserve"><value>Schlag die Saiten an und spiel weiter: Jeder Eingang wird nacheinander geöffnet, und der, den deine Gitarre bewegt, wird ihr Eingang.</value></data>
+    <data name="Onboarding_Input_FindListeningFmt" xml:space="preserve"><value>Weiterspielen … höre auf {0} ({1} von {2}).</value></data>
+    <data name="Onboarding_Input_FoundFmt" xml:space="preserve"><value>Gitarre an {0} gefunden. Der Pegel darunter hört jetzt diesen Eingang.</value></data>
+    <data name="Onboarding_Input_NotFound" xml:space="preserve"><value>Kein Eingang hat deine Gitarre gehört. Prüfe das Kabel, den Lautstärkeregler der Gitarre und den Gain des Interfaces und versuch es noch einmal.</value></data>
     <data name="Rig_Input" xml:space="preserve"><value>Eingang</value></data>
     <data name="Rig_Input_Tip" xml:space="preserve"><value>An welcher Buchse des Audio-Interfaces die Gitarre dieses Rigs steckt. Wird sofort übernommen — dieselbe Einstellung wie Einstellungen ▸ Audio ▸ Eingangskanäle.</value></data>
-    <data name="Rig_Input_Unavailable_Wasapi" xml:space="preserve"><value>Wähle in Einstellungen ▸ Audio ASIO als Audiotreiber, um eine Eingangsbuchse zu wählen — WASAPI öffnet die ersten Kanäle des Geräts der Reihe nach.</value></data>
     <data name="Rig_Input_Unavailable_Off" xml:space="preserve"><value>Der Live-Eingang ist aus — aktiviere ihn in Einstellungen ▸ Audio.</value></data>
     <data name="LatencyWizard_Judging_ListenOn" xml:space="preserve"><value>Abhören auf</value></data>
     <data name="LatencyWizard_Judging_ListeningOnFmt" xml:space="preserve"><value>Abhören auf {0}.</value></data>
@@ -2936,7 +2974,11 @@
     <data name="History_RemoveAnchors" xml:space="preserve"><value>Anker entfernen</value></data>
     <data name="History_RemoveAnnotation" xml:space="preserve"><value>Anmerkung entfernen</value></data>
     <data name="History_RemoveChords" xml:space="preserve"><value>Akkorde entfernen</value></data>
-    <data name="History_RemoveChordTemplates" xml:space="preserve"><value>Akkordvorlagen entfernen</value></data>
+    <data name="History_RemoveChordTemplates" xml:space="preserve"><value>Akkordvorlagen entfernen</value></data>
+    <data name="History_EditPhrases" xml:space="preserve"><value>Phrasen bearbeiten</value></data>
+    <data name="History_Phrases_Rename" xml:space="preserve"><value>Phrase umbenennen</value></data>
+    <data name="History_Phrases_Delete" xml:space="preserve"><value>Phrase löschen</value></data>
+    <data name="History_DeleteChordShapes" xml:space="preserve"><value>Akkordformen löschen</value></data>
     <data name="History_RemoveElements" xml:space="preserve"><value>Elemente entfernen</value></data>
     <data name="History_RemoveEventPoints" xml:space="preserve"><value>Events entfernen</value></data>
     <data name="History_RemoveHandShapes" xml:space="preserve"><value>Handformen entfernen</value></data>
@@ -3681,7 +3723,9 @@
     <data name="ChordTemplate_Name" xml:space="preserve"><value>Akkordname</value></data>
     <data name="ChordTemplate_ArpeggioTip" xml:space="preserve"><value>Die Form als Arpeggio markieren. Das gehört zur Identität des Templates — es ändert den Export (violette Klammern statt Handform-Balken).</value></data>
     <data name="ChordTemplate_Nop" xml:space="preserve"><value>Doppelgriff-Panel (RS -nop)</value></data>
-    <data name="ChordTemplate_NopTip" xml:space="preserve"><value>Rocksmiths Nop-Akkordflag, exportiert als Suffix „-nop“ am Anzeigenamen. Rocksmith2014.NET beschreibt es als Doppelgriff-Panel; die Rocksmith-2014-Originalcharts setzen es bei 121 Formen, fast alle unbenannte Doppelgriffe auf zwei oder drei Saiten. Wie es im Spiel genau aussieht, ist hier nicht geprüft. Gehört zum Template, ein Umbenennen des Akkords ändert es also nie.</value></data>
+    <data name="ChordTemplate_NopTip" xml:space="preserve"><value>Rocksmiths Nop-Akkordflag, exportiert als Suffix „-nop“ am Anzeigenamen. Rocksmith2014.NET beschreibt es als Doppelgriff-Panel; die Rocksmith-2014-Originalcharts setzen es bei 121 Formen, fast alle unbenannte Doppelgriffe auf zwei oder drei Saiten. Wie es im Spiel genau aussieht, ist hier nicht geprüft. Gehört zum Template, ein Umbenennen des Akkords ändert es also nie.</value></data>
+    <data name="ChordTemplate_NoName" xml:space="preserve"><value>Kein Name</value></data>
+    <data name="ChordTemplate_NoNameTip" xml:space="preserve"><value>Dieser Akkord hat absichtlich keinen Namen: Listen zeigen seine Bünde, Exporte schreiben einen leeren Namen, und nichts füllt automatisch einen ein. Abwählen stellt den vorherigen Namen wieder her oder schlägt einen vor.</value></data>
     <data name="ChordTemplate_Fingerless" xml:space="preserve"><value>Ohne Fingersatz</value></data>
     <data name="ChordTemplate_FingerlessTip" xml:space="preserve"><value>Ohne Fingersatz: Dieser Akkord hat absichtlich keinen Fingersatz (EOFs Flag „Fingerless“). Jeder Finger wird als -1 exportiert, die Fingersatz-Prüfungen überspringen ihn und das Auto-Füllen lässt ihn in Ruhe. Einschalten löscht die Finger; ein gesetzter Finger schaltet es aus. Gehört zum Template und reicht daher so weit, wie „Anwenden auf“ zeigt.</value></data>
     <data name="ChordTemplate_FingerlessStripTip" xml:space="preserve"><value>Ohne Fingersatz: Dieser Akkord hat absichtlich keinen Fingersatz. Um ihn zu greifen, schalte „Ohne Fingersatz“ aus oder tippe einen Finger auf der Akkordbox und speichere.</value></data>
@@ -4316,8 +4360,8 @@
   <data name="Settings_EditorTab_Desc" xml:space="preserve"><value>Bearbeitungsregeln, Einfügen, Import</value></data>
   <data name="Settings_PlayTab" xml:space="preserve"><value>Spielen</value></data>
   <data name="Settings_PlayTab_Desc" xml:space="preserve"><value>Einzähler, Metronom, Energieanzeige</value></data>
-  <data name="Settings_FilesTab" xml:space="preserve"><value>Dateien &amp; Sicherungen</value></data>
-  <data name="Settings_FilesTab_Desc" xml:space="preserve"><value>Begleitdateien, Sicherungen, Audio-Cache</value></data>
+  <data name="Settings_FilesTab" xml:space="preserve"><value>Import &amp; Export</value></data>
+  <data name="Settings_FilesTab_Desc" xml:space="preserve"><value>Guitar-Pro-Import, PSARC, Sicherungen, Audio-Cache</value></data>
   <data name="Settings_General_AdvancedSubtitle" xml:space="preserve"><value>Protokollierung, für die Fehlersuche</value></data>
   <data name="Settings_Tip_ConsoleOutput" xml:space="preserve"><value>Log-Zeilen in das Konsolenfenster schreiben.</value></data>
   <data name="Settings_Tip_ColoredLevels" xml:space="preserve"><value>Jede Konsolenzeile nach ihrem Schweregrad einfärben.</value></data>
@@ -4330,7 +4374,6 @@
   <data name="Settings_GraphicsTab_Desc" xml:space="preserve"><value>Renderer, Bildratenlimit, Qualität</value></data>
   <data name="Settings_AudioTab_Desc" xml:space="preserve"><value>Gerät, Puffer, Monitoring</value></data>
   <data name="Settings_KeybindsTab_Desc" xml:space="preserve"><value>Tastenkürzel und Akkorde</value></data>
-  <data name="Settings_StemModelsTab_Desc" xml:space="preserve"><value>Trennqualität</value></data>
   <data name="Settings_UpdatesTab_Desc" xml:space="preserve"><value>Kanal und Verlauf</value></data>
   <data name="Settings_UnsavedOne" xml:space="preserve"><value>{0} ungespeicherte Änderung</value></data>
   <data name="Settings_Unsaved" xml:space="preserve"><value>{0} ungespeicherte Änderungen</value></data>
@@ -4396,7 +4439,8 @@
     <data name="Onboarding_Audio_Title" xml:space="preserve"><value>Audioausgabe</value></data>
     <data name="Onboarding_Audio_Body" xml:space="preserve"><value>Wähle das Gerät, an dem deine Lautsprecher oder Kopfhörer hängen. ASIO bietet die geringste Latenz, wenn dein Interface einen Treiber hat.</value></data>
     <data name="Onboarding_Audio_OutputDevice" xml:space="preserve"><value>Ausgabegerät</value></data>
-    <data name="Onboarding_Audio_TestDesc" xml:space="preserve"><value>Übernimmt die Auswahl und spielt einen kurzen Klick darüber ab.</value></data>
+    <data name="Onboarding_Audio_PairDesc" xml:space="preserve"><value>An welchen Ausgängen des Geräts Kopfhörer oder Monitore hängen. Der Testklick läuft über dieses Paar.</value></data>
+    <data name="Onboarding_Audio_TestDesc" xml:space="preserve"><value>Übernimmt die Auswahl und spielt einen kurzen Klick über das gewählte Ausgangspaar ab.</value></data>
     <data name="Onboarding_Audio_Test" xml:space="preserve"><value>Testklick abspielen</value></data>
     <data name="Onboarding_Audio_TestPlayed" xml:space="preserve"><value>Klick über {0} mit {1} Hz abgespielt. Hast du ihn gehört?</value></data>
     <data name="Onboarding_Audio_TestNoEngine" xml:space="preserve"><value>Es läuft keine Audio-Engine. Prüfe Treiber und Gerät und versuche es erneut.</value></data>
@@ -4671,8 +4715,24 @@
   <data name="ToneDesign_Manual_CopyFailed" xml:space="preserve"><value>Der Prompt konnte nicht in die Zwischenablage kopiert werden. Versuche es noch einmal.</value></data>
   <data name="ToneDesign_Manual_InvalidReply" xml:space="preserve"><value>Diese Antwort enthält keinen Sound, den dieses Rig nutzen kann. Füge die ganze Antwort von ChatGPT ein, samt JSON-Block.</value></data>
   <data name="ToneDesign_Manual_Meta" xml:space="preserve"><value>Von ChatGPT (Kopieren &amp; Einfügen)</value></data>
-  <data name="Settings_AiTab" xml:space="preserve"><value>KI</value></data>
-  <data name="Settings_AiTab_Desc" xml:space="preserve"><value>Anbieter, Modell und Schlüssel für den Sound-Entwurf</value></data>
+  <data name="Settings_AiTab" xml:space="preserve"><value>KI &amp; Modelle</value></data>
+  <data name="Settings_AiTab_Desc" xml:space="preserve"><value>Sound-Entwurf, Stem-Trennung und Lyrics-Sync-Modelle</value></data>
+  <data name="Settings_LyricModels_Title" xml:space="preserve"><value>Lyrics-Autosync</value></data>
+  <data name="Settings_LyricModels_Subtitle" xml:space="preserve"><value>Die Modelle, die eingefügte Lyrics am Gesang ausrichten. Jedes wird einmal heruntergeladen.</value></data>
+  <data name="Settings_LyricModels_Multilingual" xml:space="preserve"><value>Mehrsprachiges Modell</value></data>
+  <data name="Settings_LyricModels_Multilingual_Desc" xml:space="preserve"><value>Erforderlich. Richtet romanisierte Lyrics in über 1.100 Sprachen aus, auch Japanisch in Romaji.</value></data>
+  <data name="Settings_LyricModels_English" xml:space="preserve"><value>Englisches Modell</value></data>
+  <data name="Settings_LyricModels_English_Desc" xml:space="preserve"><value>Optional. Genaueres Timing für englische Lyrics; läuft zusammen mit dem mehrsprachigen Modell.</value></data>
+  <data name="Settings_LyricModels_Installed" xml:space="preserve"><value>Installiert</value></data>
+  <data name="Settings_LyricModels_Missing" xml:space="preserve"><value>Nicht installiert · {0} MB Download</value></data>
+  <data name="Settings_LyricModels_RunsOnGpu" xml:space="preserve"><value>Läuft auf der GPU ({0}).</value></data>
+  <data name="Settings_LyricModels_RunsOnCpu" xml:space="preserve"><value>Läuft auf der CPU: kein GPU-Anbieter verfügbar.</value></data>
+  <data name="Settings_LyricModels_CpuFallback" xml:space="preserve"><value>Läuft auf der CPU: es ist in dieser Sitzung auf der GPU fehlgeschlagen.</value></data>
+  <data name="Settings_LyricModels_NotRunYet" xml:space="preserve"><value>Nutzt die GPU, wenn eine verfügbar ist. In dieser Sitzung noch nicht gelaufen.</value></data>
+  <data name="Settings_LyricModels_Download" xml:space="preserve"><value>Herunterladen</value></data>
+  <data name="Settings_LyricModels_Repair" xml:space="preserve"><value>Reparieren</value></data>
+  <data name="Settings_LyricModels_RetryGpu" xml:space="preserve"><value>GPU erneut versuchen</value></data>
+  <data name="Settings_LyricModels_Failed" xml:space="preserve"><value>Der Download ist fehlgeschlagen. Der Grund steht im Log.</value></data>
   <data name="Ai_Title" xml:space="preserve"><value>KI-Sound-Entwurf</value></data>
   <data name="Ai_Subtitle" xml:space="preserve"><value>Welches Modell im Rig auf „Sound entwerfen“ antwortet.</value></data>
   <data name="Ai_Unavailable" xml:space="preserve"><value>Dieser Build enthält keine Unterstützung für KI-Anbieter.</value></data>
@@ -5080,12 +5140,7 @@
   <data name="Inspector_Tab_More" xml:space="preserve"><value>Mehr</value></data>
   <data name="Inspector_Tab_More_Tip" xml:space="preserve"><value>Die Tabs, die bei dieser Breite nicht in die Leiste passen. Ein breiterer Bereich holt sie zurück.</value></data>
   <data name="Menu_PanelChordShapes" xml:space="preserve"><value>Akkordformen</value></data>
-  <data name="ChordShapes_Finger_Complete" xml:space="preserve"><value>Mit Fingersatz</value></data>
-  <data name="ChordShapes_Finger_Suggested" xml:space="preserve"><value>Vorgeschlagener Fingersatz</value></data>
-  <data name="ChordShapes_Finger_Missing" xml:space="preserve"><value>Fingersatz fehlt</value></data>
   <data name="ChordShapes_Unused" xml:space="preserve"><value>Nicht benutzt</value></data>
-  <data name="ChordShapes_LevelUses" xml:space="preserve"><value>Diese Stufe: {0}</value></data>
-  <data name="ChordShapes_AllUses" xml:space="preserve"><value>Alle Stufen: {0}</value></data>
   <data name="ChordShapes_UsesPair" xml:space="preserve"><value>{0} · {1}</value></data>
   <data name="ChordShapes_ChordsOne" xml:space="preserve"><value>{0} Akkord</value></data>
   <data name="ChordShapes_Chords" xml:space="preserve"><value>{0} Akkorde</value></data>
@@ -5093,23 +5148,10 @@
   <data name="ChordShapes_HandShapes" xml:space="preserve"><value>{0} Handformen</value></data>
   <data name="ChordShapes_UseCountOne" xml:space="preserve"><value>{0} Verwendung</value></data>
   <data name="ChordShapes_UseCount" xml:space="preserve"><value>{0} Verwendungen</value></data>
-  <data name="ChordShapes_DuplicateOne" xml:space="preserve"><value>Dieselben Bünde wie {0} andere</value></data>
-  <data name="ChordShapes_Duplicate" xml:space="preserve"><value>Dieselben Bünde wie {0} andere</value></data>
-  <data name="ChordShapes_MergeTarget" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
-  <data name="ChordShapes_Summary" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
   <data name="ChordShapes_ShapeCountOne" xml:space="preserve"><value>{0} Form</value></data>
   <data name="ChordShapes_ShapeCount" xml:space="preserve"><value>{0} Formen</value></data>
-  <data name="ChordShapes_DuplicateCountOne" xml:space="preserve"><value>{0} Duplikat</value></data>
-  <data name="ChordShapes_DuplicateCount" xml:space="preserve"><value>{0} Duplikate</value></data>
-  <data name="ChordShapes_MissingCountOne" xml:space="preserve"><value>{0} ohne Fingersatz</value></data>
-  <data name="ChordShapes_MissingCount" xml:space="preserve"><value>{0} ohne Fingersatz</value></data>
-  <data name="ChordShapes_Filter_All" xml:space="preserve"><value>Alle {0}</value></data>
-  <data name="ChordShapes_Filter_Duplicates" xml:space="preserve"><value>Duplikate {0}</value></data>
-  <data name="ChordShapes_Filter_Duplicates_Tip" xml:space="preserve"><value>Formen, die ihre Bünde mit einer anderen Form derselben Art (normal oder Arpeggio) teilen.</value></data>
-  <data name="ChordShapes_Filter_Missing" xml:space="preserve"><value>Ohne Fingersatz {0}</value></data>
   <data name="ChordShapes_Empty_NoArrangement" xml:space="preserve"><value>Öffne ein Chart, um seine Akkordformen zu sehen.</value></data>
   <data name="ChordShapes_Empty_NoTemplates" xml:space="preserve"><value>Dieses Arrangement hat noch keine Akkordformen. Setze einen Akkord, dann erscheint seine Form hier.</value></data>
-  <data name="ChordShapes_Empty_NoMatch" xml:space="preserve"><value>Keine Akkordform passt zu diesem Filter.</value></data>
   <data name="ChordShapes_Status_NoUseOnLevel" xml:space="preserve"><value>Kein Akkord und keine Handform auf dieser Stufe benutzt diese Form.</value></data>
   <data name="ChordShapes_Status_Selected" xml:space="preserve"><value>{0} auf dieser Stufe ausgewählt.</value></data>
   <data name="ChordShapes_Status_SelectedElsewhere" xml:space="preserve"><value>{0} auf dieser Stufe ausgewählt. Andere Stufen: {1}.</value></data>
@@ -5125,22 +5167,25 @@
   <data name="ChordShapes_Refused_SelectionIsEveryUse" xml:space="preserve"><value>Die Auswahl umfasst jede Verwendung dieser Form. Benenne stattdessen die Form um.</value></data>
   <data name="ChordShapes_Refused_NotInArrangement" xml:space="preserve"><value>Diese Form ist nicht mehr im Arrangement.</value></data>
   <data name="ChordShapes_NameBox" xml:space="preserve"><value>Akkordname</value></data>
-  <data name="ChordShapes_RenameApply" xml:space="preserve"><value>Übernehmen</value></data>
-  <data name="ChordShapes_RenameCancel" xml:space="preserve"><value>Abbrechen</value></data>
-  <data name="ChordShapes_SelectUses" xml:space="preserve"><value>Verwendungen auswählen</value></data>
+  <data name="ChordShapes_SelectUses" xml:space="preserve"><value>Stellen wählen</value></data>
   <data name="ChordShapes_SelectUses_Tip" xml:space="preserve"><value>Wählt jeden Akkord und jede Handform auf dieser Stufe aus, die diese Form benutzt.</value></data>
-  <data name="ChordShapes_NextUse" xml:space="preserve"><value>Nächste Verwendung</value></data>
+  <data name="ChordShapes_NextUse" xml:space="preserve"><value>Nächste Stelle</value></data>
   <data name="ChordShapes_NextUse_Tip" xml:space="preserve"><value>Springt zum nächsten Akkord oder zur nächsten Handform auf dieser Stufe, die diese Form benutzt.</value></data>
-  <data name="ChordShapes_Rename" xml:space="preserve"><value>Umbenennen</value></data>
-  <data name="ChordShapes_MergeInto" xml:space="preserve"><value>Zusammenführen mit…</value></data>
-  <data name="ChordShapes_MergeInto_Tip" xml:space="preserve"><value>Hängt jeden Akkord und jede Handform, die diese Form benutzt, auf eine andere Form mit denselben Bünden um. Ein Rückgängig-Schritt.</value></data>
-  <data name="ChordShapes_Split" xml:space="preserve"><value>Auswahl abtrennen</value></data>
+  <data name="ChordShapes_Split" xml:space="preserve"><value>Abtrennen</value></data>
   <data name="ChordShapes_Split_Tip" xml:space="preserve"><value>Gibt den ausgewählten Akkorden und Handformen eine eigene Kopie dieser Form, damit sich ihr Name oder Fingersatz allein ändern kann. Ein Rückgängig-Schritt.</value></data>
+  <data name="ChordShapes_Delete" xml:space="preserve"><value>Löschen</value></data>
+  <data name="ChordShapes_Delete_Tip" xml:space="preserve"><value>Diese Form löschen. Keine Ebene benutzt sie. Ein Rückgängig-Schritt.</value></data>
+  <data name="ChordShapes_Refused_InUse" xml:space="preserve"><value>Diese Form wird noch benutzt. Führe sie zuerst mit einer anderen Form zusammen und lösche sie dann.</value></data>
+  <data name="ChordShapes_Refused_NothingUnused" xml:space="preserve"><value>Jede Form wird benutzt, also gibt es nichts zu entfernen.</value></data>
+  <data name="ChordShapes_Status_Deleted" xml:space="preserve"><value>{0} gelöscht.</value></data>
+  <data name="ChordShapes_Status_RemovedUnusedOne" xml:space="preserve"><value>{0} unbenutzte Form entfernt.</value></data>
+  <data name="ChordShapes_Status_RemovedUnused" xml:space="preserve"><value>{0} unbenutzte Formen entfernt.</value></data>
+  <data name="History_ChordShapes_Delete" xml:space="preserve"><value>Akkordform löschen</value></data>
+  <data name="History_ChordShapes_RemoveUnused" xml:space="preserve"><value>Unbenutzte Akkordformen entfernen</value></data>
+  <data name="History_RemoveStrandedShapes" xml:space="preserve"><value>Unbenutzte Akkordformen entfernen</value></data>
   <data name="History_ChordShapes_Merge" xml:space="preserve"><value>Akkordform zusammenführen</value></data>
   <data name="History_ChordShapes_Split" xml:space="preserve"><value>Akkordform abtrennen</value></data>
   <data name="History_ChordShapes_Rename" xml:space="preserve"><value>Akkordform umbenennen</value></data>
-  <data name="ChordShapes_PlaceHint" xml:space="preserve"><value>Klicke auf ein Griffdiagramm, um diesen Akkord am Abspielkopf zu setzen. Mit ausgewählten Klängen werden stattdessen diese umgeformt.</value></data>
-  <data name="ChordShapes_Recent" xml:space="preserve"><value>Zuletzt gesetzt</value></data>
   <data name="ChordShapes_Place" xml:space="preserve"><value>Setzen</value></data>
   <data name="ChordShapes_Place_Tip" xml:space="preserve"><value>Diesen ganzen Akkord mit Name und Fingersatz am Abspielkopf setzen. Mit ausgewählten Klängen wird stattdessen jeder davon in diese Form gebracht. Ein Rückgängig-Schritt.</value></data>
   <data name="ChordShapes_RepeatPrevious_Tip" xml:space="preserve"><value>Die Form des nächsten Akkords vor dem Abspielkopf am Abspielkopf setzen, mit derselben Akkordvorlage. Ein Rückgängig-Schritt.</value></data>
@@ -5600,4 +5645,131 @@
   <data name="Status_LinkSuggestionsLinked" xml:space="preserve"><value>{0} Taktgruppen verknüpft. Ein Rückgängig hebt alle auf.</value></data>
   <data name="Status_LinkSuggestionsNone" xml:space="preserve"><value>Diese Takte lassen sich nicht mehr verknüpfen: Sie wurden geändert oder sind schon verknüpft.</value></data>
   <data name="History_LinkSuggestions" xml:space="preserve"><value>Vorgeschlagene Takte verknüpfen</value></data>
+  <data name="ShapeEdit_Title" xml:space="preserve"><value>Form bearbeiten</value></data>
+  <data name="ChordTemplate_EditShape" xml:space="preserve"><value>Form bearbeiten…</value></data>
+  <data name="ChordTemplate_EditShapeTip" xml:space="preserve"><value>Diese Form ändern, wobei der Umfang zuerst gewählt wird: dieser Akkord, die Auswahl oder jede Verwendung.</value></data>
+  <data name="ShapeEdit_ScopeSection" xml:space="preserve"><value>Was sich ändert</value></data>
+  <data name="ShapeEdit_StripLabel" xml:space="preserve"><value>Verwendungen im Song</value></data>
+  <data name="ShapeEdit_GripSection" xml:space="preserve"><value>Griff</value></data>
+  <data name="ShapeEdit_Before" xml:space="preserve"><value>Jetzt</value></data>
+  <data name="ShapeEdit_After" xml:space="preserve"><value>Danach</value></data>
+  <data name="ShapeEdit_String" xml:space="preserve"><value>Saite</value></data>
+  <data name="ShapeEdit_Fret" xml:space="preserve"><value>Bund</value></data>
+  <data name="ShapeEdit_Finger" xml:space="preserve"><value>Finger</value></data>
+  <data name="ShapeEdit_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="ShapeEdit_NameDesc" xml:space="preserve"><value>Wird im Spiel über dem Akkord angezeigt.</value></data>
+  <data name="ShapeEdit_NoName" xml:space="preserve"><value>Kein Name</value></data>
+  <data name="ShapeEdit_NoNameDesc" xml:space="preserve"><value>Das Spiel zeigt über dieser Form keinen Namen.</value></data>
+  <data name="ShapeEdit_UseSuggested" xml:space="preserve"><value>Vorgeschlagenen Namen verwenden</value></data>
+  <data name="ShapeEdit_HandShapes" xml:space="preserve"><value>Handformen synchron halten</value></data>
+  <data name="ShapeEdit_UseMatch" xml:space="preserve"><value>Diese Form verwenden</value></data>
+  <data name="ShapeEdit_Scope_This" xml:space="preserve"><value>Dieser Akkord</value></data>
+  <data name="ShapeEdit_Scope_Selection" xml:space="preserve"><value>Auswahl</value></data>
+  <data name="ShapeEdit_Scope_Every" xml:space="preserve"><value>Jede Verwendung</value></data>
+  <data name="ShapeEdit_OpenedFromList" xml:space="preserve"><value>Aus der Liste der Akkordformen</value></data>
+  <data name="ShapeEdit_OpenedFromChord" xml:space="preserve"><value>Der Akkord in Takt {0}</value></data>
+  <data name="ShapeEdit_OpenedFromChordNoBar" xml:space="preserve"><value>Der Akkord, von dem aus Sie geöffnet haben</value></data>
+  <data name="ShapeEdit_Detail_None" xml:space="preserve"><value>Nichts betroffen</value></data>
+  <data name="ShapeEdit_Detail_Levels" xml:space="preserve"><value>{0} auf {1} Stufen</value></data>
+  <data name="ShapeEdit_Detail_AtBar" xml:space="preserve"><value>{0} · Takt {1}</value></data>
+  <data name="ShapeEdit_Preview_None" xml:space="preserve"><value>Kein Akkord betroffen.</value></data>
+  <data name="ShapeEdit_Preview_All" xml:space="preserve"><value>{0} ändern sich</value></data>
+  <data name="ShapeEdit_Preview_Rest" xml:space="preserve"><value>{0} ändern sich · {1} behalten „{2}“</value></data>
+  <data name="ShapeEdit_Result_Changes" xml:space="preserve"><value>„{0}“ selbst ändert sich, also spielt jede Verwendung den neuen Griff.</value></data>
+  <data name="ShapeEdit_Result_NewOne" xml:space="preserve"><value>Für diesen Akkord wird eine neue Form angelegt; die übrigen {0} behalten „{1}“.</value></data>
+  <data name="ShapeEdit_Result_NewMany" xml:space="preserve"><value>Für diese {0} Akkorde wird eine neue Form angelegt; die übrigen {1} behalten „{2}“.</value></data>
+  <data name="ShapeEdit_Result_Join" xml:space="preserve"><value>{0} wechseln zu „{1}“; es wird keine neue Form angelegt.</value></data>
+  <data name="ShapeEdit_Result_None" xml:space="preserve"><value>Noch ändert sich nichts: ändern Sie einen Bund, einen Finger oder den Namen.</value></data>
+  <data name="ShapeEdit_Apply_Every" xml:space="preserve"><value>Auf jede Verwendung anwenden ({0})</value></data>
+  <data name="ShapeEdit_Apply_This" xml:space="preserve"><value>Auf diesen Akkord anwenden</value></data>
+  <data name="ShapeEdit_Apply_Many" xml:space="preserve"><value>Auf {0} Akkorde anwenden</value></data>
+  <data name="ShapeEdit_Hands_None" xml:space="preserve"><value>Keine Handform liegt über diesen Akkorden.</value></data>
+  <data name="ShapeEdit_Hands_FollowOne" xml:space="preserve"><value>{0} Handform über diesen Akkorden folgt dem neuen Griff.</value></data>
+  <data name="ShapeEdit_Hands_Follow" xml:space="preserve"><value>{0} Handformen über diesen Akkorden folgen dem neuen Griff.</value></data>
+  <data name="ShapeEdit_Hands_KeepOne" xml:space="preserve"><value>{0} Handform behält den alten Griff und passt nicht mehr zu ihrem Akkord.</value></data>
+  <data name="ShapeEdit_Hands_Keep" xml:space="preserve"><value>{0} Handformen behalten den alten Griff und passen nicht mehr zu ihren Akkorden.</value></data>
+  <data name="ShapeEdit_MatchOne" xml:space="preserve"><value>Diese Bünde und Finger sind bereits „{0}“ (1 Verwendung).</value></data>
+  <data name="ShapeEdit_Match" xml:space="preserve"><value>Diese Bünde und Finger sind bereits „{0}“ ({1} Verwendungen).</value></data>
+  <data name="History_ChordShapes_Edit" xml:space="preserve"><value>Akkordform bearbeiten</value></data>
+  <data name="Shapes_Search" xml:space="preserve"><value>Formen suchen</value></data>
+  <data name="Shapes_Edit" xml:space="preserve"><value>Ändern</value></data>
+  <data name="Shapes_Edit_Tip" xml:space="preserve"><value>Bünde, Finger oder Namen ändern und zuerst wählen, was die Änderung erreicht</value></data>
+  <data name="Shapes_Merge" xml:space="preserve"><value>Vereinen…</value></data>
+  <data name="Shapes_Merge_Tip" xml:space="preserve"><value>Diese Form wählen, dann die, zu der sie werden soll, oder sie darauf ziehen</value></data>
+  <data name="Shapes_MergeHere" xml:space="preserve"><value>Hierhin zusammenführen</value></data>
+  <data name="ShapeCleanup_Title" xml:space="preserve"><value>Formen aufräumen</value></data>
+  <data name="ShapeCleanup_Subtitle" xml:space="preserve"><value>Alle angehakten Änderungen werden als ein Rückgängig-Schritt angewendet.</value></data>
+  <data name="ShapeCleanup_DuplicatesDesc" xml:space="preserve"><value>Gleiche Bünde, Finger und Merkmale. Jede Gruppe wird zu der Form, die den Namen behält.</value></data>
+  <data name="ShapeCleanup_UnusedDesc" xml:space="preserve"><value>Kein Akkord und keine Handform auf irgendeiner Stufe verwendet diese.</value></data>
+  <data name="ShapeCleanup_ReviewDesc" xml:space="preserve"><value>Fast gleich. Nichts ändert sich, bis Sie wählen.</value></data>
+  <data name="ShapeCleanup_Tidy" xml:space="preserve"><value>Die Formen dieses Arrangements sind aufgeräumt.</value></data>
+  <data name="ShapeCleanup_DuplicatesHeader" xml:space="preserve"><value>Duplikate ({0})</value></data>
+  <data name="ShapeCleanup_UnusedHeader" xml:space="preserve"><value>Ungenutzt ({0})</value></data>
+  <data name="ShapeCleanup_ReviewHeader" xml:space="preserve"><value>Prüfen ({0})</value></data>
+  <data name="ShapeCleanup_SummaryDuplicatesOne" xml:space="preserve"><value>{0} Duplikatgruppe</value></data>
+  <data name="ShapeCleanup_SummaryDuplicates" xml:space="preserve"><value>{0} Duplikatgruppen</value></data>
+  <data name="ShapeCleanup_SummaryUnused" xml:space="preserve"><value>{0} ungenutzt</value></data>
+  <data name="ShapeCleanup_SummaryReview" xml:space="preserve"><value>{0} zu prüfen</value></data>
+  <data name="ShapeCleanup_ApplyOne" xml:space="preserve"><value>{0} Änderung anwenden</value></data>
+  <data name="ShapeCleanup_Apply" xml:space="preserve"><value>{0} Änderungen anwenden</value></data>
+  <data name="ShapeCleanup_MergeTitle" xml:space="preserve"><value>{0} ×{1}</value></data>
+  <data name="ShapeCleanup_MergeNamed" xml:space="preserve"><value>Behält „{0}“ und übernimmt {1}</value></data>
+  <data name="ShapeCleanup_MergeUnnamed" xml:space="preserve"><value>{0} unbenannte Kopien werden zu einer Form, die {1} übernimmt</value></data>
+  <data name="ShapeCleanup_NearLabel" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="ShapeCleanup_NearFingersOne" xml:space="preserve"><value>Gleiche Bünde, anderer Finger auf der {0}-Saite</value></data>
+  <data name="ShapeCleanup_NearFingers" xml:space="preserve"><value>Gleiche Bünde, andere Finger auf den Saiten {0}</value></data>
+  <data name="ShapeCleanup_NearName" xml:space="preserve"><value>Gleiche Bünde und Finger, zwei Namen: „{0}“ und „{1}“</value></data>
+  <data name="ShapeCleanup_NearFlags" xml:space="preserve"><value>Gleiche Bünde und Finger, andere Merkmale</value></data>
+  <data name="ShapeCleanup_Choice_Both" xml:space="preserve"><value>Beide behalten</value></data>
+  <data name="ShapeCleanup_Choice_Left" xml:space="preserve"><value>Die linke verwenden</value></data>
+  <data name="ShapeCleanup_Choice_Right" xml:space="preserve"><value>Die rechte verwenden</value></data>
+  <data name="ShapeCleanup_Status_AppliedOne" xml:space="preserve"><value>Formen aufgeräumt: {0} Form entfernt.</value></data>
+  <data name="ShapeCleanup_Status_Applied" xml:space="preserve"><value>Formen aufgeräumt: {0} Formen entfernt.</value></data>
+  <data name="History_ChordShapes_CleanUp" xml:space="preserve"><value>Akkordformen aufräumen</value></data>
+  <data name="Shapes_CleanUp" xml:space="preserve"><value>Aufräumen ({0})</value></data>
+  <data name="Shapes_CleanUp_Tip" xml:space="preserve"><value>Gleiche Kopien zusammenführen, unbenutzte Formen entfernen und fast gleiche prüfen. Ein Rückgängig-Schritt.</value></data>
+  <data name="Shapes_EditSelected" xml:space="preserve"><value>Gemeinsam bearbeiten</value></data>
+  <data name="Shapes_EditSelected_Tip" xml:space="preserve"><value>Bünde oder Fingersatz für alle angehakten Formen auf einmal festlegen; danach identische Kopien werden zu einer Form</value></data>
+  <data name="Shapes_MergeSelected" xml:space="preserve"><value>Zu einer zusammenführen</value></data>
+  <data name="Shapes_ClearSelection" xml:space="preserve"><value>Auswahl aufheben</value></data>
+  <data name="Shapes_Select" xml:space="preserve"><value>Für eine Sammelbearbeitung auswählen</value></data>
+  <data name="Shapes_Issue_SameFrets" xml:space="preserve"><value>Gleiche Bünde wie „{0}“</value></data>
+  <data name="Shapes_Issue_NoFingering" xml:space="preserve"><value>Kein Fingersatz</value></data>
+  <data name="Shapes_Fix_Merge" xml:space="preserve"><value>Zusammenführen</value></data>
+  <data name="Shapes_Fix_Finger" xml:space="preserve"><value>Fingersatz setzen</value></data>
+  <data name="Shapes_Summary" xml:space="preserve"><value>{0} · Aufmerksamkeit nötig: {1}</value></data>
+  <data name="Shapes_SummaryTidy" xml:space="preserve"><value>{0} · alles in Ordnung</value></data>
+  <data name="Shapes_Filter_Attention" xml:space="preserve"><value>Aufmerksamkeit nötig ({0})</value></data>
+  <data name="Shapes_Filter_Attention_Tip" xml:space="preserve"><value>Nur die Formen zeigen, die Aufmerksamkeit brauchen: ein Duplikat, eine Handform ohne Abgleich oder fehlende Griffe.</value></data>
+  <data name="Shapes_Empty_NoMatch" xml:space="preserve"><value>Keine Form passt zur Suche.</value></data>
+  <data name="Shapes_MergeHint" xml:space="preserve"><value>Wähle die Form, zu der „{0}“ werden soll. Angeboten werden nur Formen mit denselben Bünden.</value></data>
+  <data name="Shapes_DragHint" xml:space="preserve"><value>Lege „{0}“ auf der Form ab, zu der es werden soll. Nur Formen mit denselben Bünden können es aufnehmen.</value></data>
+  <data name="Shapes_Pending_Merge" xml:space="preserve"><value>„{0}“ mit „{1}“ zusammenführen. Auf „{1}“ umgehängt: {2}. „{0}“ wird entfernt, „{1}“ behält seine eigenen Finger und seinen Namen. Ein Rückgängig-Schritt.</value></data>
+  <data name="Shapes_Pending_Delete" xml:space="preserve"><value>„{0}“ wird noch von {1} benutzt. Beim Löschen wechseln diese zu „{2}“ (gleiche Bünde); ihre Noten bleiben. Ein Rückgängig-Schritt.</value></data>
+  <data name="Shapes_Pending_MergeConfirm" xml:space="preserve"><value>Zusammenführen</value></data>
+  <data name="Shapes_Pending_DeleteConfirm" xml:space="preserve"><value>Löschen und {0} umhängen</value></data>
+  <data name="Shapes_Status_NoName" xml:space="preserve"><value>„{0}“ hat jetzt keinen Namen.</value></data>
+  <data name="Shapes_Status_NameFree" xml:space="preserve"><value>„{0}“ kann wieder einen Namen bekommen.</value></data>
+  <data name="Shapes_Status_Fingered" xml:space="preserve"><value>{0} mit Fingersatz versehen.</value></data>
+  <data name="Shapes_Status_DeletedMoved" xml:space="preserve"><value>{0} gelöscht; {1} auf {2} umgehängt.</value></data>
+  <data name="Shapes_Refused_Pinned" xml:space="preserve"><value>Diese Form ist fixiert, ihre Finger bleiben deshalb unverändert.</value></data>
+  <data name="Shapes_Refused_NoSuggestion" xml:space="preserve"><value>Für diese Form lässt sich kein Fingersatz vorschlagen.</value></data>
+  <data name="ShapeEdit_Scope_ThisShape" xml:space="preserve"><value>Diese Form</value></data>
+  <data name="ShapeEdit_Scope_Together" xml:space="preserve"><value>{0} ausgewählte Formen</value></data>
+  <data name="ShapeEdit_OpenedFromTicked" xml:space="preserve"><value>Geöffnet auf {0} angehakten Formen im Formen-Bereich</value></data>
+  <data name="ShapeEdit_Result_Together" xml:space="preserve"><value>Die {0} Formen sind danach identisch und werden zu einer Form; die {1} geleerten Kopien werden im selben Rückgängig-Schritt entfernt.</value></data>
+  <data name="ShapeEdit_Result_TogetherOne" xml:space="preserve"><value>Die {0} Formen sind danach identisch und werden zu einer Form; die {1} geleerte Kopie wird im selben Rückgängig-Schritt entfernt.</value></data>
+  <data name="ShapeEdit_Result_TogetherJoin" xml:space="preserve"><value>Die {0} Formen wechseln zu „{1}“, das diesen Griff schon hat; Kopien, die danach niemand mehr benutzt, werden im selben Rückgängig-Schritt entfernt.</value></data>
+  <data name="ShapeEdit_Result_TogetherKept" xml:space="preserve"><value>Jeder Akkord spielt denselben Griff. Die Kopien bleiben, weil Handformen sie noch benutzen.</value></data>
+  <data name="ShapeEdit_Apply_Together" xml:space="preserve"><value>Auf {0} Formen anwenden ({1} Akkorde)</value></data>
+  <data name="Shapes_Selection" xml:space="preserve"><value>{0} ausgewählt · {1}</value></data>
+  <data name="Shapes_Pending_MergeMany" xml:space="preserve"><value>{0} Formen mit „{1}“ ({2}) zusammenführen. Darauf umgehängt: {3}; {4} Kopien werden entfernt. Finger und Name sind die der behaltenen Form. Ein Rückgängig-Schritt.</value></data>
+  <data name="Shapes_Pending_MergeManyOne" xml:space="preserve"><value>{0} Formen mit „{1}“ ({2}) zusammenführen. Darauf umgehängt: {3}; {4} Kopie wird entfernt. Finger und Name sind die der behaltenen Form. Ein Rückgängig-Schritt.</value></data>
+  <data name="Shapes_Pending_DeleteMany" xml:space="preserve"><value>{0} Formen löschen? Ihre Verwendungen wechseln zur nächsten Form mit gleichen Bünden: {1}. Die Noten bleiben. Ein Rückgängig-Schritt.</value></data>
+  <data name="Shapes_Pending_DeleteManyConfirm" xml:space="preserve"><value>{0} Formen löschen</value></data>
+  <data name="Shapes_Status_DeletedMany" xml:space="preserve"><value>{0} Formen gelöscht; {1} auf die Formen mit gleichen Bünden umgehängt.</value></data>
+  <data name="Shapes_Refused_NeedTwo" xml:space="preserve"><value>Hake mindestens zwei Formen an, um sie zusammenzuführen.</value></data>
+  <data name="Shapes_Refused_BulkFrets" xml:space="preserve"><value>Nicht zusammengeführt: Die angehakten Formen haben nicht alle dieselben Bünde. Hake Kopien eines Griffs an oder nutze „Gemeinsam bearbeiten“.</value></data>
+  <data name="Shapes_Refused_NoTarget" xml:space="preserve"><value>Nicht gelöscht: Eine angehakte Form wird noch benutzt, und keine andere Form hat ihre Bünde, um ihre Verwendungen zu übernehmen. Hake sie ab oder führe sie zuerst mit einer anderen Form zusammen.</value></data>
+  <data name="History_ChordShapes_Finger" xml:space="preserve"><value>Akkordform mit Fingersatz versehen</value></data>
 </root>

@@ -19,10 +19,9 @@ namespace DotCharter.Tone.UI.ViewModels.Settings;
 ///         one field, not a second copy of it.
 ///     </para>
 ///     <para>
-///         Ships DISABLED WITH ITS REASON when the jack cannot be chosen: input
-///         off, or a WASAPI engine (no input mask, the device's first channels
-///         open in order). A picker that looked live over WASAPI would be a
-///         control with nothing behind it.
+///         Ships DISABLED WITH ITS REASON while input is off. On ASIO and WASAPI
+///         alike the engine opens the picked jack as an input channel mask, and
+///         the jack list is the engine driver's capture device's.
 ///     </para>
 /// </summary>
 public partial class LiveInputChannelViewModel : ViewModelBase
@@ -61,7 +60,7 @@ public partial class LiveInputChannelViewModel : ViewModelBase
     [ObservableProperty] private string _hint = string.Empty;
 
     /// <summary>Why the picker is disabled, in the few words the footer's 80 px
-    /// cell holds ("Input off", "ASIO only"); <see cref="Hint" /> is its tooltip.
+    /// cell holds ("Input off"); <see cref="Hint" /> is its tooltip.
     /// Empty while the picker is available.</summary>
     [ObservableProperty] private string _shortHint = string.Empty;
 
@@ -89,28 +88,39 @@ public partial class LiveInputChannelViewModel : ViewModelBase
         }
 
         var config = _config.LoadRigConfig();
-        Rebuild(config, deviceJackCount: 0);
+        Rebuild(config, deviceJackCount: 0, []);
         if (!IsAvailable) return;
 
         var driver = config.AudioDriver;
-        var name = config.AsioInputDeviceName;
+        var name = string.Equals(driver, "ASIO", StringComparison.OrdinalIgnoreCase)
+            ? config.AsioInputDeviceName
+            : config.WasapiInputDeviceName;
         if (_ui == null)
         {
-            Rebuild(config, _audio.GetInputDeviceChannelCount(driver, name));
+            Rebuild(config, _audio.GetInputDeviceChannelCount(driver, name), _audio.GetInputChannelNames(driver, name));
             return;
         }
 
         _ = Task.Run(() =>
         {
             int count;
-            try { count = _audio.GetInputDeviceChannelCount(driver, name); }
-            catch { count = 0; }
+            IReadOnlyList<string> names;
+            try
+            {
+                count = _audio.GetInputDeviceChannelCount(driver, name);
+                names = _audio.GetInputChannelNames(driver, name);
+            }
+            catch
+            {
+                return;
+            }
+
             if (count <= 0) return;
-            _ui.Post(() => Rebuild(_config.LoadRigConfig(), count));
+            _ui.Post(() => Rebuild(_config.LoadRigConfig(), count, names));
         });
     }
 
-    private void Rebuild(RigConfig config, int deviceJackCount)
+    private void Rebuild(RigConfig config, int deviceJackCount, IReadOnlyList<string> channelNames)
     {
         _loading = true;
         try
@@ -125,16 +135,7 @@ public partial class LiveInputChannelViewModel : ViewModelBase
                 return;
             }
 
-            if (!GuitarInputChannels.JackIndexesAreUsed(config))
-            {
-                Selected = null;
-                IsAvailable = false;
-                Hint = _loc["Rig_Input_Unavailable_Wasapi"];
-                ShortHint = _loc["Rig_Input_Unavailable_Wasapi_Short"];
-                return;
-            }
-
-            foreach (var o in GuitarInputChannels.JackOptions(_loc, deviceJackCount,
+            foreach (var o in GuitarInputChannels.JackOptions(_loc, deviceJackCount, channelNames,
                          config.AsioInputChannelLeft, config.AsioInputChannelRight))
             {
                 Options.Add(o);

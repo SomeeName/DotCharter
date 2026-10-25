@@ -18,6 +18,8 @@ public interface IEditorSettingsScreen : INotifyPropertyChanged
 
     bool SyncAnchorToChordFingering { get; set; }
 
+    bool AutoNameNewChords { get; set; }
+
     bool SuppressDoubleStopChordNames { get; set; }
 
     bool KeepPowerChordNames { get; set; }
@@ -39,6 +41,16 @@ public interface IEditorSettingsScreen : INotifyPropertyChanged
 
     /// <summary>0 milliseconds, 1 a fraction of a measure, 2 a fraction of a beat.</summary>
     int MinNoteDistanceModeIndex { get; set; }
+
+    /// <summary>String order: 0 Rocksmith (low string on top), 1 Tab (low string at the bottom). Drives the 2D timeline, its
+    /// string-move keys and the editor's 3D preview, and applies as it is picked.</summary>
+    int StringOrderIndex { get; set; }
+
+    /// <summary>The 2D timeline's polish pass.</summary>
+    bool Timeline2DPolish { get; set; }
+
+    /// <summary>Each string's lane tinted in its own colour.</summary>
+    bool Timeline2DLaneTint { get; set; }
 
     /// <summary>True in the milliseconds mode: the millisecond row applies and the denominator does not.</summary>
     bool IsMinNoteDistanceInMilliseconds { get; }
@@ -70,27 +82,6 @@ public interface IEditorSettingsScreen : INotifyPropertyChanged
     double LeadingSilenceSeconds { get; set; }
 
     double TrailingSilenceSeconds { get; set; }
-
-    // ── Guitar Pro import ────────────────────────────────────────────────
-
-    bool GpImportTruncateShortNotes { get; set; }
-
-    bool GpImportTruncateShortChords { get; set; }
-
-    bool GpImportPreserveShortRests { get; set; }
-
-    bool OnlineLatinNameLookup { get; set; }
-
-    bool GpImportBeatTextTechniques { get; set; }
-
-    bool GpImportMarkersToSections { get; set; }
-
-    bool GpImportTimeSignatures { get; set; }
-
-    bool GpImportDropMidBeatTempoChanges { get; set; }
-
-    /// <summary>Frets below or above the target a slide-in starts from, 1 to 3.</summary>
-    int GpImportSlideInFretDistance { get; set; }
 
     // ── search ───────────────────────────────────────────────────────────
 

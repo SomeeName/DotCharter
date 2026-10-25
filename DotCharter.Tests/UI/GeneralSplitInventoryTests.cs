@@ -30,7 +30,7 @@ public sealed class GeneralSplitInventoryTests
     /// </summary>
     private static readonly string[] ExpectedBindings =
     [
-        "AutoBackupEnabled", "AutoBackupIntervalMinutes", "AutoBackupKeepCount", "Backup.ExportCommand", "Backup.HasStatus",
+        "AutoBackupEnabled", "AutoNameNewChords", "AutoBackupIntervalMinutes", "AutoBackupKeepCount", "Backup.ExportCommand", "Backup.HasStatus",
         "Backup.ImportCommand", "Backup.IsBusy", "Backup.StatusText", "CaptureExternalConsoleLogs",
         "ClearLibraryAudioCacheCommand", "CoalesceRepeatedLogs", "CrashReportOptIn", "DefaultCharterName",
         "EnableConsoleColors", "EnableConsoleLogging", "EnableFileLogging", "GameplayClapsEnabled",
@@ -51,32 +51,36 @@ public sealed class GeneralSplitInventoryTests
         "SaveCompanionEofAudio", "SaveCompanionPsarc", "SaveCompanionPsarcCodecIndex", "SaveCompanionRs2Dlc", "RsXmlSixStringProjection", "RsXmlMoverPhrases",
         "ExportGenerateDynamicDifficulty", "ExportDdUseMlModel", "ExportApplyDlcBuilderFixes",
         "SelectedLanguageIndex", "SelectedStartupScreenIndex", "SuppressDoubleStopChordNames",
-        "SyncAnchorToChordFingering", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset", "TrailingSilenceSeconds",
+        "StringOrderIndex", "SyncAnchorToChordFingering", "Timeline2DLaneTint", "Timeline2DPolish", "SyncHandShapeToChordTemplate", "TappedHarmonicFretOffset", "TrailingSilenceSeconds",
         "UseFastChartingInput"
     ];
 
-    /// <summary>The old tab's eleven sections, now spread over four views. A regroup may move them; dropping one is red.</summary>
+    /// <summary>The old tab's sections, now spread over four views, and the groups added since. A regroup may move them; dropping one is red.</summary>
     private static readonly string[] ExpectedGroupTitleKeys =
     [
         "Settings_LanguageRegion_Title", "Settings_Diagnostics", "Settings_Logging",
         "Settings_ChartEditing", "Settings_CopyPaste_Title", "Settings_NewProject", "Settings_Import_Title",
         "Settings_Gameplay",
-        "Settings_SaveCompanions", "Settings_AutoBackups", "Settings_PsarcAudioCache_Title", "Settings_PsarcOpen_Title"
+        "Settings_SaveCompanions", "Settings_AutoBackups", "Settings_PsarcAudioCache_Title", "Settings_PsarcOpen_Title",
+        "Settings_TimelineView_Title"
     ];
 
     /// <summary>
     ///     Rows per view. 57 against the old 54: the log's two checkbox rows
     ///     ("Outputs", "Console") became four switches of their own, and Files gained
     ///     the auto-backup Keep row (#318). Editor's "Musical chord names" (#493)
-    ///     makes 58. Files' three DLC Builder rows (#952) make 61, and its moveR
-    ///     row makes 62.
+    ///     makes 58. Files' three DLC Builder rows (#952) make 61, its moveR
+    ///     row makes 62, Editor's "Name new chords automatically" makes 63, and
+    ///     the String order rows on Editor and Play make 65; the 2D timeline's two
+    ///     rows, moved over from Graphics, make 67. Guitar Pro import moved from
+    ///     Editor to Files without changing the total.
     /// </summary>
     private static readonly Dictionary<string, int> ExpectedRows = new(StringComparer.Ordinal)
     {
         ["GeneralSettingsView.axaml"] = 17,
-        ["EditorSettingsView.axaml"] = 26,
-        ["PlaySettingsView.axaml"] = 4,
-        ["FilesSettingsView.axaml"] = 16
+        ["EditorSettingsView.axaml"] = 21,
+        ["PlaySettingsView.axaml"] = 5,
+        ["FilesSettingsView.axaml"] = 25
     };
 
     [Fact]

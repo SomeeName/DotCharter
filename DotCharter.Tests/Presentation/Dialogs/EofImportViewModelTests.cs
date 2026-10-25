@@ -40,6 +40,17 @@ public sealed class EofImportViewModelTests : IDisposable
         Assert.All(vm.AvailableTracks, t => Assert.True(t.IsSelected));
     }
 
+    /// <summary>#232: the lyrics are a track of their own, counted in lyrics, ticked like the rest.</summary>
+    [Fact]
+    public void It_offers_the_vocal_track_counted_in_lyrics()
+    {
+        var vm = Open(EofProjectCreatorTests.WriteFixtureEofFile(Path.Combine(_tempDir, "vocals")));
+
+        var vocals = Assert.Single(vm.AvailableTracks, t => t.Name.EndsWith("lyrics)", StringComparison.Ordinal));
+        Assert.Equal("PART VOCALS (2 lyrics)", vocals.Name);
+        Assert.True(vocals.IsSelected);
+    }
+
     /// <summary>A parse failure appears INSIDE the dialog and leaves it open.</summary>
     [Fact]
     public async Task When_the_parse_throws_the_error_shows_in_the_dialog_and_it_stays_open()

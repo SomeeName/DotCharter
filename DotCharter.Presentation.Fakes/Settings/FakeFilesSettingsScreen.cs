@@ -22,6 +22,15 @@ public sealed partial class FakeFilesSettingsScreen : ObservableObject, IFilesSe
     [ObservableProperty] private int _autoBackupIntervalMinutes = 5;
     [ObservableProperty] private int _autoBackupKeepCount = 50;
     [ObservableProperty] private bool _psarcOpenHardestLevelOnly;
+    [ObservableProperty] private bool _gpImportTruncateShortNotes = true;
+    [ObservableProperty] private bool _gpImportTruncateShortChords;
+    [ObservableProperty] private bool _gpImportPreserveShortRests = true;
+    [ObservableProperty] private bool _onlineLatinNameLookup = true;
+    [ObservableProperty] private bool _gpImportBeatTextTechniques = true;
+    [ObservableProperty] private bool _gpImportMarkersToSections;
+    [ObservableProperty] private bool _gpImportTimeSignatures = true;
+    [ObservableProperty] private bool _gpImportDropMidBeatTempoChanges;
+    [ObservableProperty] private int _gpImportSlideInFretDistance = 2;
 
     private FakeFilesSettingsScreen(FakeBackupMigratePart backup) => Backup = backup;
 
@@ -41,7 +50,7 @@ public sealed partial class FakeFilesSettingsScreen : ObservableObject, IFilesSe
 
     /// <summary>The keys a build without the package reader hides: the decoded-audio cache and the open options.</summary>
     public static IReadOnlySet<string> PackageReaderKeys { get; } =
-        new HashSet<string> { "files.group.2", "files.psarcCache", "files.group.3", "files.psarcHardestOnly" };
+        new HashSet<string> { "files.group.4", "files.psarcCache", "files.group.1", "files.psarcHardestOnly" };
 
     public static FakeFilesSettingsScreen Default() => new(new FakeBackupMigratePart())
     {

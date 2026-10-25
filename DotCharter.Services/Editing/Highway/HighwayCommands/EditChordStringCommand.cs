@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.State;
 using BendValue = DotCharter.Core.Domain.Guitar.BendValue;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using ChordNote = DotCharter.Core.Domain.Guitar.ChordNote;
 using GuitarNote = DotCharter.Core.Domain.Guitar.GuitarNote;
+using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
 
 namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 
@@ -23,6 +25,7 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
     private readonly ObservableCollection<Chord> _placedChords;
     private readonly ObservableCollection<GuitarNote> _placedNotes;
     private readonly int _stringIndex;
+    private readonly ObservableCollection<HandShape>? _syncedHandShapes;
 
     public EditChordStringCommand(
         ObservableCollection<GuitarNote> placedNotes,
@@ -30,8 +33,10 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
         Arrangement? arrangement,
         Chord chord,
         int stringIndex,
-        Action? onPostExecute)
+        Action? onPostExecute,
+        ObservableCollection<HandShape>? syncedHandShapes = null)
     {
+        _syncedHandShapes = syncedHandShapes;
         _placedNotes = placedNotes;
         _placedChords = placedChords;
         _arrangement = arrangement;
@@ -47,7 +52,8 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
     public bool Execute(IHistoryService history)
     {
         var action = BuildAction();
-        return action != null && history.Do(action);
+        // The chord's old template can be left with no user (a reshape, or the chord collapsing into a note).
+        return action != null && history.Do(StrandedShapes.Wrap(_arrangement, action));
     }
 
     private IChartAction? BuildAction()
@@ -132,5 +138,5 @@ internal sealed class EditChordStringCommand : IHighwayEditCommand
     ///     would pin it as template drift). The rule lives in
     ///     <see cref="ChordReshapeAction" />, shared with the placement path.
     /// </summary>
-    private IChartAction BuildReshapeAction(Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, _chord, oldState, newState, _onPostExecute);
+    private IChartAction BuildReshapeAction(Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, _chord, oldState, newState, _onPostExecute, _syncedHandShapes);
 }

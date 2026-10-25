@@ -537,6 +537,7 @@
       "dotcharter-lyricsync": {
         "type": "Project",
         "dependencies": {
+          "DotCharter.Analysis": "[1.0.0, )",
           "DotCharter.Services": "[1.0.0, )",
           "DotCharter.Tone": "[1.0.0, )"
         }

@@ -10,8 +10,8 @@ namespace DotCharter.Tests.UI;
 ///     amp you cannot select the channel"). It must offer the device's jacks,
 ///     write the SAME config fields Settings ▸ Audio writes, re-apply the engine
 ///     through <c>ApplyAudioConfiguration</c> (the one writer of the live seat
-///     baseline), follow the seat, and ship disabled with its reason where a
-///     jack cannot be chosen.
+///     baseline), follow the seat on ASIO and WASAPI alike, and ship disabled
+///     with its reason while input is off.
 /// </summary>
 public sealed class LiveInputChannelViewModelTests
 {
@@ -91,13 +91,22 @@ public sealed class LiveInputChannelViewModelTests
     }
 
     [Fact]
-    public void Wasapi_ShipsDisabledWithItsReason()
+    public void Wasapi_OffersTheCaptureDevicesJacks_AndReappliesThePick()
     {
-        var (vm, audio, _) = Build(c => c.AudioDriver = "WASAPI");
-        Assert.False(vm.IsAvailable);
-        Assert.Empty(vm.Options);
-        Assert.Equal(FakeLocalization.English()["Rig_Input_Unavailable_Wasapi"], vm.Hint);
-        Assert.Empty(audio.AppliedConfigs);
+        var (vm, audio, config) = Build(c =>
+        {
+            c.AudioDriver = "WASAPI";
+            c.WasapiInputDeviceName = "Line (20-in interface)";
+            c.AsioInputDeviceName = "Some ASIO driver";
+        }, jacks: 20);
+
+        Assert.True(vm.IsAvailable);
+        Assert.Equal(Enumerable.Range(0, 20).ToArray(), vm.Options.Select(o => o.Jack).ToArray());
+        Assert.Contains(("WASAPI", "Line (20-in interface)"), audio.InputChannelCountProbes);
+
+        vm.Selected = vm.Options.Single(o => o.Jack == 1);
+        Assert.Equal(1, config.AppConfig.AsioInputChannelLeft);
+        Assert.Equal(1, Assert.Single(audio.AppliedConfigs).AsioInputChannelLeft);
     }
 
     [Fact]

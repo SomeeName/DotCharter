@@ -64,23 +64,25 @@ where the data was already sorted or already in hand**:
    attribute each time. One `foreach` with a `switch` and `??=` keeps the first
    element per name — what `FirstOrDefault` returned — and allocates nothing.
 
-### Byte-exactness, and the four things that stop an export reproducing
+### Byte-exactness, and the five things that stop an export reproducing
 
 All four changes are pinned as BYTE comparisons against output captured from the
 pre-change code (`9cc50f87`) on real artifacts:
 `ExportBytePinTests`
-(`DotCharter.Tests/Services/Export/ExportBytePinTests.cs`) — 34 cases over 31
-hashed artifacts: four `.rscp` projects round-tripped, fourteen SNGs, four
-Guitar Pro imports (three gpif + one GP3-5 binary) and three real covers at
-three sizes each, plus three cases asserting the batched art encoder matches
-three separate calls. It
+(`DotCharter.Tests/Services/Export/ExportBytePinTests.cs`) — four `.rscp`
+projects round-tripped, fourteen SNGs, four Guitar Pro imports (three gpif +
+one GP3-5 binary) and three real covers at three sizes each, plus three cases
+asserting the batched art encoder matches three separate calls. A deliberate
+export change re-pins a hash only with proof that the change is ALL that moved:
+the SNG pins carry two such "put it back" theories (the split-only templates,
+the closing noguitar section). It
 SKIPS without `TestData/`, so `RsChordDensityLookupEquivalenceTests` carries the
 same decision on a synthetic fixture that runs everywhere, against a fingerprint
 captured from the same pre-change build.
 
-**Building that pin turned up four places where an export does not reproduce
+**Building that pin turned up five places where an export does not reproduce
 from the same input.** Anyone adding a byte comparison over this pipeline hits
-all four, in this order:
+all five, in this order:
 
 - **`RocksmithSngWriter.WritePackedPc` generates a fresh random 16-byte AES-CTR
   IV per call** (`iv ??= RandomNumberGenerator.GetBytes(16)`), so the packed SNG
@@ -103,6 +105,10 @@ all four, in this order:
   deep-equal to itself. A round-trip test's EXPECTATION is the original with
   the same regeneration applied (`RscpDeepValueRoundTripTests`,
   `RscpTestDataParseAllTests`): saving canonicalizes templates on purpose.
+- **Every `.rscp` carries the app's release version** (`<dcWriterVersion>`,
+  `RscpFormatContract.CurrentWriterVersion`), so a release bump moves every hash
+  over a written project. The pins put the stamp back to the value they were
+  captured with before hashing, as they drop the per-project `<dcProjectId>`.
 
 ## Still open
 

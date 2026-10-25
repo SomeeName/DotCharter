@@ -8,7 +8,8 @@ public static class EditorModule
 {
     public static void Register(IServiceCollection services)
     {
-        services.AddSingleton<IChordShapesScreen, ChordShapesViewModel>();
+        services.AddSingleton<ShapesPanelParts>();
+        services.AddSingleton<IShapePanelScreen, ShapesPanelViewModel>();
         services.AddSingleton<AiChatServices>();
         services.AddSingleton<AiChatViewModel>();
         // the Issues tab reaches the chat lazily, so building the inspector does not build the chat pane.

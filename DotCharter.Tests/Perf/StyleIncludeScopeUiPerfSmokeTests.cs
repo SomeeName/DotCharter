@@ -103,14 +103,16 @@ public sealed class StyleIncludeScopeUiPerfSmokeTests
     ///     export (#707) and 1,395 once the empty state's text rule became a CHILD rule
     ///     (`Border.DlgEmpty > TextBlock`, attached to ~70 TextBlocks instead of ~700).
     ///     The strip text rule became child rules the same way (`Border.DlgStrip > TextBlock`, …):
-    ///     the dialog host measured 818 with the Tone Designer's AI creator in it.
+    ///     the dialog host measured 818 with the Tone Designer's AI creator in it, reached 912
+    ///     with the onboarding output pair (#263), and 583 once the card's centring rule
+    ///     (`Grid.DialogScrim > Border.DialogCard`) moved into the DialogCardBorder theme.
     ///     Shrink-only: lower a ceiling when a cut lands; raising one is the regression this
     ///     exists to stop.
     /// </summary>
     private static readonly (string Scope, Func<StyledElement, bool> Controls, int Ceiling)[] RuleFrameCeilings =
     [
         ("PlayModeView", e => e is Border or TextBlock or Panel, 500),
-        ("DialogContainerView", e => e is Border or TextBlock or Panel, 900),
+        ("DialogContainerView", e => e is Border or TextBlock or Panel, 600),
         ("SettingsShellView", e => e is Border or TextBlock or Panel, 0),
         ("SettingsView", e => e is Border or TextBlock or Panel, 3_800),
         ("App", e => e is Panel, 200),

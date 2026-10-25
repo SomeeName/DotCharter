@@ -1,4 +1,5 @@
 using DotCharter.Services.Editing.Fingering;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.Services.Editing;
 
@@ -78,7 +79,7 @@ public static class ChordTemplateResolver
         // The arrangement's own 1·3 / 1·4 for a power chord or an octave.
         ArrangementFingeringStyle.SetSuggestedFingers(arrangement, template, arrangement.StringCount);
         template.Name = string.IsNullOrWhiteSpace(preferredName)
-            ? ChordNameSuggester.SuggestFirstChordName(arrangement, template.Frets)
+            ? NewChordNames.For(arrangement, template.Frets)
             : preferredName;
         template.Id = NextId(arrangement, created);
 

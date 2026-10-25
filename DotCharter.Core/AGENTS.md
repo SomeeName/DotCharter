@@ -30,7 +30,7 @@ the point.
 | `Domain/Vocals/` | `VocalTrack` → `LyricPhrase` → `LyricEvent` | `domain-model.md` |
 | `Domain/Validation/` | result types ONLY: `ArrangementIssue`, `ArrangementIssueType` (~60 codes), `ArrangementIssueSeverity`. The validation *service* is in `DotCharter.Services` | `guitar-and-tuning.md` § validation codes |
 | `Utilities/` — timing + graph | `TimelineMath`, `ITimedElement`, `ChartProjectCloner` + `ChartProjectRestorer`, `ChartProjectPositions`, `BulkObservableCollection<T>`, `ChartPositionLabel`, `BarCount` | `timeline-and-project.md` |
-| `Utilities/` — guitar + tuning | `FretboardMath`, `TuningUtilities`, `StandardOpenStrings` (the ONE open-string table, extra strings extend DOWN), `StringColorSlots` (string → colour slot by identity: low E red on any guitar, extra low strings grey), `TuningNameResolver`, `ArrangementInstrument` (bass PART vs path, the A220 octave), `TuningOffsetResolution`, `ChordNameSuggester` + `ChordNamingOptions` + `ChordKeyEstimator` (naming style and key), `ChordTemplateFingerSetter` (+ `LearnedChordFingerings`), `ShowlightCatalog`, `ChartDifficultyEstimator`, `ArrangementPropertiesDeriver`, `PhraseMarkers`, `RsSectionCatalog`, `RsEventCatalog` | `guitar-and-tuning.md` |
+| `Utilities/` — guitar + tuning | `FretboardMath`, `TuningUtilities`, `StandardOpenStrings` (the ONE open-string table, extra strings extend DOWN, up to 9 strings; a package spells 8 so a 9-string is refused on export), `StringColorSlots` (string → colour slot by identity: low E red on any guitar, extra low strings grey), `TuningNameResolver` + `ExtendedRangeTunings` (standard/drop names for 5/6-string bass and 7/8/9-string guitar, which rscharter's six-string `TuningType` table cannot name; written to a .rscp as CUSTOM + offsets and re-derived on load), `ArrangementInstrument` (bass PART vs path, the A220 octave), `TuningOffsetResolution`, `ChordNameSuggester` + `ChordNamingOptions` + `ChordKeyEstimator` (naming style and key), `ChordTemplateFingerSetter` (+ `LearnedChordFingerings`), `ShowlightCatalog`, `ChartDifficultyEstimator`, `ArrangementPropertiesDeriver`, `PhraseMarkers`, `RsSectionCatalog`, `RsEventCatalog` | `guitar-and-tuning.md` |
 | `Linking/` | `MeasureContentIndex` (THE measure-content comparison, detection + integrity keys), `MeasureContentKey`, `MeasureContentOptions`, `SpacingGap` (the enforcer's gap, one implementation), `MeasureGrid`, `LinkCandidateDetector` + `LinkCompatibility` (repeated-run detection), `LinkRuns` (placements on the grid, keys, splits), `LinkedRunCopier` (one copy onto another placement), `LinkGroupVerifier` (the load check); the model is `Domain/Project/LinkGroup` | `domain-model.md` § `Linking/` |
 | `Diff/` | `ChartDiffEngine.Diff(old, new)` + `ChartDiffResult` — the pure beat-aligned structural diff, plus `DiffStructure` for everything that is NOT a sound | `domain-model.md` § `Diff/` |
 
@@ -126,7 +126,12 @@ is near one, open the file it points at (all under `docs/agents/core/`).
   through `Utilities/PhraseMarkers`.** Reading one is a silent whole-feature
   failure: over the 89 hand-finished exports in `TestData/EOF`, `EventPoint.Phrase`
   yields **0** markers and `PhraseIterations` yields **2,596**. It has bitten three
-  separate pieces of code.
+  separate pieces of code. `PhraseMarkers.All` gives the markers;
+  `PhraseMarkers.Iterations` gives phrase list + iterations (explicit ones kept, editor
+  markers merged in, names minted) and is what the RS-XML writer, the SNG mapper, the
+  Phrases inspector and propagation read, so XML and SNG ship the same iterations. Both
+  stores stay: nothing normalises one into the other on load, which keeps imported
+  charts round-tripping byte-identically.
   → `guitar-and-tuning.md`
 - **A chart states its tuning on the ARRANGEMENT and there is NO project-level
   copy — do not add one back (0.44.2).** `ChartData.Tuning` was one, it was a lie

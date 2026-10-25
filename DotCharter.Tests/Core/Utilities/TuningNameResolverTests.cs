@@ -93,9 +93,48 @@ public sealed class TuningNameResolverTests
     [Fact]
     public void ResolveFromOffsets_RejectsUnsupportedCountsAndLengthMismatch()
     {
-        Assert.Null(TuningNameResolver.ResolveFromOffsets(7, new[] { 0, 0, 0, 0, 0, 0, 0 })); // 7-string unsupported
+        Assert.Null(TuningNameResolver.ResolveFromOffsets(10, new int[10]));                  // past 9 strings
+        Assert.Null(TuningNameResolver.ResolveFromOffsets(3, new int[3]));
         Assert.Null(TuningNameResolver.ResolveFromOffsets(6, new[] { 0, 0, 0 }));             // length mismatch
         Assert.Null(TuningNameResolver.ResolveFromOffsets(6, null));
+    }
+
+    /// <summary>The 5/6-string bass and the 7/8-string guitar: standards named for the six-string
+    ///     equivalent, drops for the lowest note, from offsets and from note letters alike.</summary>
+    [Theory]
+    [InlineData(new[] { -5, -5, -5, -5, -4 }, "B E A D G", "5-String Bass Standard")]
+    [InlineData(new[] { -9, -7, -7, -7, -6 }, "G D G C F", "5-String Bass Drop G")]
+    [InlineData(new[] { -5, -5, -5, -5, -4, -4 }, "B E A D G C", "6-String Bass Standard")]
+    [InlineData(new[] { -6, -6, -6, -6, -5, -5 }, "Bb Eb Ab Db Gb B", "6-String Bass Eb Standard")]
+    [InlineData(new[] { -7, -5, -5, -5, -4, -4 }, "A E A D G C", "6-String Bass Drop A")]
+    [InlineData(new[] { 0, 0, 0, 0, 0, 0, 0 }, "B E A D G B E", "7-String Standard")]
+    [InlineData(new[] { -2, 0, 0, 0, 0, 0, 0 }, "A E A D G B E", "7-String Drop A")]
+    [InlineData(new[] { -1, -1, -1, -1, -1, -1, -1 }, "Bb Eb G# C# F# Bb Eb", "7-String Eb Standard")]
+    [InlineData(new[] { -4, -2, -2, -2, -2, -2, -2 }, "G D G C F A D", "7-String Drop G")]
+    [InlineData(new[] { 0, 0, 0, 0, 0, 0, 0, 0 }, "F# B E A D G B E", "8-String Standard")]
+    [InlineData(new[] { -2, 0, 0, 0, 0, 0, 0, 0 }, "E B E A D G B E", "8-String Drop E")]
+    public void ExtendedRangeAndBassTunings_HaveNames(int[] offsets, string notes, string expected)
+    {
+        Assert.Equal(expected, TuningNameResolver.ResolveFromOffsets(offsets.Length, offsets));
+        Assert.Equal(expected, TuningNameResolver.Resolve(notes));
+    }
+
+    /// <summary>Every generated name expands back to its offsets at its own string count only, and
+    ///     is unique; none of them is a name rscharter's table already knows.</summary>
+    [Fact]
+    public void ExtendedRangeTypeNames_RoundTrip_AndStayOutOfTheRscharterTable()
+    {
+        Assert.Equal(ExtendedRangeTunings.All.Count, ExtendedRangeTunings.All.Select(t => t.TypeName).Distinct().Count());
+        foreach (var tuning in ExtendedRangeTunings.All)
+        {
+            Assert.True(TuningUtilities.TryGetOffsetsForTuningType(tuning.TypeName, tuning.StringCount, out var offsets));
+            Assert.Equal(tuning.Offsets, offsets);
+            Assert.False(TuningUtilities.TryGetOffsetsForTuningType(tuning.TypeName, tuning.StringCount + 1, out _));
+            Assert.Equal(tuning.TypeName, ExtendedRangeTunings.TypeNameFor(tuning.Offsets));
+        }
+
+        Assert.Equal("7_STRING_DROP_A", ExtendedRangeTunings.TypeNameFor([-2, 0, 0, 0, 0, 0, 0]));
+        Assert.Equal("5_STRING_BASS_E_FLAT_STANDARD", ExtendedRangeTunings.TypeNameFor([-6, -6, -6, -6, -5]));
     }
 
     [Fact]

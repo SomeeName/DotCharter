@@ -245,24 +245,15 @@ internal static class SngFromDomainMapper
     private static (List<IterationInfo> Iterations, List<string> PhraseNames) ExtractIterations(
         Arrangement arrangement, IList<BeatMarker> beats, int songLengthMs)
     {
-        var phraseNames = arrangement.Phrases.ToList();
-        var raw = new List<(int timeMs, int phraseId)>();
-
-        if (arrangement.PhraseIterations.Count > 0)
-        {
-            foreach (var iteration in arrangement.PhraseIterations)
-                raw.Add((MsInt(iteration.Position.GetPositionMs(beats)), iteration.PhraseId));
-        }
-        else
-        {
-            foreach (var ep in arrangement.EventPoints)
-            {
-                if (string.IsNullOrEmpty(ep.Phrase)) continue;
-                var phraseId = phraseNames.IndexOf(ep.Phrase);
-                if (phraseId < 0) continue;
-                raw.Add((MsInt(ep.Position.GetPositionMs(beats)), phraseId));
-            }
-        }
+        // Both stores, read the way the XML writer reads them: a marker's name does not have
+        // to be in Phrases (nothing in the editor adds it there), and a marker beside explicit
+        // iterations joins them.
+        var effective = PhraseMarkers.Iterations(arrangement,
+            () => EndNoGuitarSection.BeatAfterContent(arrangement, beats) ?? new FractionalPosition(beats.Count - 1));
+        var phraseNames = effective.Phrases.ToList();
+        var raw = effective.Iterations
+            .Select(iteration => (timeMs: MsInt(iteration.Position.GetPositionMs(beats)), phraseId: iteration.PhraseId))
+            .ToList();
 
         raw = raw
             .Where(it => it.phraseId >= 0 && it.phraseId < phraseNames.Count)

@@ -66,7 +66,8 @@
     Release version. Defaults to <Version> parsed from DotCharter.UI.csproj.
 
 .PARAMETER OutputDir
-    Where assets land. Defaults to artifacts/release/v<Version> under the repo root.
+    Where assets land. Defaults to artifacts/release/v<Version>-public, or v<Version>-full
+    with -WithPlugins, under the repo root. A folder holding the other mode's pack is refused.
 
 .PARAMETER SkipUi
     Skip the (slow, ~300 MB) UI publish + zip. For iterating on the other assets.
@@ -210,7 +211,7 @@
 .EXAMPLE
     pwsh tools/release/New-Release.ps1 -SkipTools   # fast pack without the media tools
 .EXAMPLE
-    pwsh tools/release/New-Release.ps1 -SmokeOnly artifacts/release/v0.59.0/DotCharter-v0.59.0-win-x64.zip
+    pwsh tools/release/New-Release.ps1 -SmokeOnly artifacts/release/v0.59.0-public/DotCharter-v0.59.0-win-x64.zip
 .EXAMPLE
     pwsh tools/release/New-Release.ps1 -PayloadOnly -OutputDir $env:TEMP/dc-payload   # the public payload, nothing else
 .EXAMPLE
@@ -1516,7 +1517,9 @@ $HeadlessLayoutFilter = @(
     '--filter-class', '*DialogWindowFitUiPerfSmokeTests',
     '--filter-class', '*RocksmithExportLayoutUiPerfSmokeTests',
     '--filter-class', '*OnboardingSystemCheckUiPerfSmokeTests',
-    '--filter-class', '*ChordShapesConstructionUiPerfSmokeTests',
+    '--filter-class', '*ShapesPanelConstructionUiPerfSmokeTests',
+    '--filter-class', '*ShapeEditDialogLiveUiPerfSmokeTests',
+    '--filter-class', '*ShapeCleanupDialogLiveUiPerfSmokeTests',
     '--filter-class', '*SoundTabRailUiPerfSmokeTests',
     '--filter-class', '*AiChatPaneConstructionUiPerfSmokeTests',
     '--filter-class', '*AiChatDockUiPerfSmokeTests',
@@ -2003,9 +2006,10 @@ if ($SmokeOnly) {
 # ---------------------------------------------------------------------------
 if (-not $Version) { $Version = Get-AppVersion }
 $ReleaseIdentity = Get-ReleaseIdentity $Version
-if (-not $OutputDir) { $OutputDir = Join-Path $RepoRoot "artifacts/release/v$Version" }
+if (-not $OutputDir) { $OutputDir = Get-ReleaseOutputDir -RepoRoot $RepoRoot -Version $Version -WithPlugins:$WithPlugins }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $OutputDir = (Resolve-Path $OutputDir).Path
+Set-ReleaseOutputMode -OutputDir $OutputDir -WithPlugins:$WithPlugins
 
 # -WithPlugins needs a plugin checked out; and where the printed command points is
 # settled before anything is built, so a missing -Repo fails in seconds.
@@ -2061,12 +2065,18 @@ if ($existingTag) { Write-Warn2 "Tag v$Version already exists locally." }
 # has not imported (a contributor's merged PR) is caught, before the next public snapshot
 # would overwrite it. The export (Export-PublicSnapshot.ps1) stays the hard stop too.
 if ($SkipPublicSyncCheck) {
-    Write-Warn2 'SKIPPING the public sync check (-SkipPublicSyncCheck): run tools/release/Find-UnimportedPublicCommits.ps1 before the next export.'
+    Write-Warn2 'SKIPPING the public sync check and the JuceSharp version check (-SkipPublicSyncCheck): run tools/release/Find-UnimportedPublicCommits.ps1 and Test-JuceSharpVersionBump.ps1 before the next export.'
 }
 else {
     Write-Step 'Every public commit since the last snapshot is imported into dev (Find-UnimportedPublicCommits.ps1)'
     & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Find-UnimportedPublicCommits.ps1') -DevRepo $RepoRoot -DevRef HEAD -FailOnMissing
     if ($LASTEXITCODE -ne 0) { throw 'Public commits are not imported into dev (listed above): import each with tools/release/Import-PublicCommit.ps1, or pass -SkipPublicSyncCheck.' }
+
+    # Before anything is built from it: a JuceSharp tree that changed since its public
+    # snapshot needs a new <Version>, and the bump means a native rebuild and new packs.
+    Write-Step 'JuceSharp''s version moves with its tree (Test-JuceSharpVersionBump.ps1)'
+    & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-JuceSharpVersionBump.ps1') -DevRepo $RepoRoot -DevRef HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'JuceSharp''s <Version> must be bumped before this release (see above), or pass -SkipPublicSyncCheck.' }
 }
 
 # Dependency licences (#828): the committed inventory must match the packages

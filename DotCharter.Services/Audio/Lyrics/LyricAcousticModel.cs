@@ -143,7 +143,13 @@ public sealed class LyricAcousticModel : IDisposable
         // on EVERY load (two per auto-sync run) and the whole InferenceSession
         // leaked on the two metadata throws. Model-load failure is a routine,
         // user-triggerable path. Same shape as OnnxStemSeparator's ctor.
-        var session = BuildOrRelease(() => new InferenceSession(modelPath, bundle.Options), bundle.Options);
+        // A torch.export model (the published v1 archives) still carries Reshape allowzero, which fails the first run on
+        // DirectML; drop it in memory for a GPU session. The CPU reads it fine.
+        var stripped = bundle.Active == OnnxExecutionProvider.Cpu ? null : OnnxReshapeAllowZero.StripIfPresent(modelPath);
+        if (stripped != null) log?.Invoke("Lyric alignment model: removed Reshape allowzero in memory so DirectML can run it.");
+        var session = stripped == null
+            ? BuildOrRelease(() => new InferenceSession(modelPath, bundle.Options), bundle.Options)
+            : BuildOrRelease(() => new InferenceSession(stripped, bundle.Options), bundle.Options);
 
         return BuildOrRelease(() =>
         {

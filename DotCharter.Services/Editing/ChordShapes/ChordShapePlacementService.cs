@@ -29,8 +29,6 @@ public interface IChordShapePlacementService
 
     /// <summary>The shapes placed most recently on <paramref name="arrangement" />, newest first.</summary>
     IReadOnlyList<ChordTemplate> RecentShapes(Arrangement arrangement);
-
-    event EventHandler? RecentShapesChanged;
 }
 
 /// <inheritdoc />
@@ -71,8 +69,6 @@ public sealed class ChordShapePlacementService : IChordShapePlacementService
         _localization = localization;
         _logger = logger;
     }
-
-    public event EventHandler? RecentShapesChanged;
 
     public ChordShapePlacementResult PlaceShape(ChordTemplate template, int gridDivisor)
     {
@@ -183,7 +179,6 @@ public sealed class ChordShapePlacementService : IChordShapePlacementService
         _recent.RemoveAll(t => ReferenceEquals(t, shape));
         _recent.Insert(0, shape);
         if (_recent.Count > RecentCapacity * 4) _recent.RemoveRange(RecentCapacity * 4, _recent.Count - RecentCapacity * 4);
-        RecentShapesChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private string NameOf(ChordTemplate template) =>

@@ -1,6 +1,7 @@
 using DotCharter.Services.Editing.Tracks;
 using DotCharter.Services.Editing.Fingering;
 using DotCharter.Services.Editing.Highway;
+using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
 using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
 
@@ -25,20 +26,28 @@ namespace DotCharter.Services.Editing;
 ///     one here would be a second, divergent answer to a question the chart model
 ///     already answers.
 ///     </para>
+///     <para>
+///     A tail that plays exactly one chord's notes takes THAT chord's template while
+///     <c>AppConfig.SyncHandShapeToChordTemplate</c> is on, so the bar and its chord do not end up on
+///     two equal-fret templates (<see cref="ChordHandShapeSync.TemplateOfChordPlaying" />).
+///     </para>
 /// </summary>
 public sealed class HandShapeSplitter
 {
     private readonly IFingeringGenerationService _fingeringService;
     private readonly IHighwayEditingService _highwayEditingService;
     private readonly ISelectionService _selectionManager;
+    private readonly IConfigurationService _configService;
     private readonly IAppLogger _logger;
 
     public HandShapeSplitter(
         IFingeringGenerationService fingeringService,
         IHighwayEditingService highwayEditingService,
         ISelectionService selectionManager,
+        IConfigurationService configService,
         IAppLogger logger)
     {
+        _configService = configService;
         _fingeringService = fingeringService;
         _highwayEditingService = highwayEditingService;
         _selectionManager = selectionManager;
@@ -162,6 +171,14 @@ public sealed class HandShapeSplitter
     {
         var seed = _fingeringService.BuildTemplateForRange(track.Arrangement, track.Notes, track.Chords, start, end);
         if (seed == null) return fallbackTemplateId;
+
+        // A tail that is exactly one chord's notes belongs on THAT chord's template, so the bar and its
+        // chord stay on one template instead of the first equal-fret one a lookup meets.
+        if (_configService.LoadAppConfig().SyncHandShapeToChordTemplate &&
+            ChordHandShapeSync.TemplateOfChordPlaying(track.Arrangement, track.Chords, start, end, seed) is { } playing)
+        {
+            return playing.Id;
+        }
 
         // Re-check against templates already queued in this batch so two spans
         // with the same shape share one template (the ChordTemplate rule: shared,

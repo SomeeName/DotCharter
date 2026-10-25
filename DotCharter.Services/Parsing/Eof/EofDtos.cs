@@ -17,6 +17,9 @@ public class EofTrackInfo
     public string Name { get; set; } = "";
     public int Format { get; set; }
 
+    /// <summary>The <c>PART VOCALS</c> track: <see cref="NoteCount" /> counts its lyrics.</summary>
+    public bool IsVocals => Format == EofConstants.TrackFormatVocal;
+
     /// <summary>
     ///     Note count discovered during the track-listing pre-pass. Lets the import
     ///     dialog hide arrangements that would import as completely empty
@@ -66,5 +69,9 @@ public class EofImportMetadata
 public class EofImportResult
 {
     public List<Arrangement> Arrangements { get; } = [];
+
+    /// <summary>The <c>PART VOCALS</c> lyrics, one track per lyric set; empty when the
+    /// vocal track was not asked for or has no lyrics.</summary>
+    public List<VocalTrack> VocalTracks { get; } = [];
     public EofImportMetadata Metadata { get; } = new();
 }

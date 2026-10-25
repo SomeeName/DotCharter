@@ -114,6 +114,11 @@ public readonly record struct LyricSyncSyllable(
 /// <param name="OnsetBiasSeconds">The total bias applied — the combination's own plus the caller's.</param>
 /// <param name="AudioSeconds">Duration the emissions covered.</param>
 /// <param name="Warnings">Decoder notes, a stem whose name does not say "vocals", a degraded ensemble.</param>
+/// <param name="Envelope">
+///     The loudness envelope of the audio that was listened to, or null when that
+///     was the MIX: only an isolated vocal stem measures the voice, because a mix's
+///     envelope is the band's and never falls silent between syllables.
+/// </param>
 public sealed record LyricSyncResult(
     bool Ran,
     string? Error,
@@ -128,7 +133,8 @@ public sealed record LyricSyncResult(
     bool IsEnsemble,
     double OnsetBiasSeconds,
     double AudioSeconds,
-    IReadOnlyList<string> Warnings)
+    IReadOnlyList<string> Warnings,
+    VocalEnvelope? Envelope = null)
 {
     /// <summary>A run that could not start. <paramref name="warnings" /> is kept — the decoder's
     /// notes are often the explanation.</summary>

@@ -138,8 +138,8 @@ public sealed class LyricSyncSeamTests : IDisposable
     {
         var roots = InstallModel();
 
-        var result = await Core(roots)
-            .AlignAsync("a-b", Touch("song.wav"), Exact(), cancellationToken: Ct);
+        var result = await Core(roots, Spell("bc"))
+            .AlignAsync("b-c", Touch("song.wav"), Exact(), cancellationToken: Ct);
 
         Assert.True(result.Ran, result.Error);
         Assert.Equal(2, result.Syllables.Count);
@@ -150,7 +150,7 @@ public sealed class LyricSyncSeamTests : IDisposable
         Assert.Equal(0.02, result.Syllables[0].StartSeconds, 3);
         Assert.Equal(0.10, result.Syllables[1].StartSeconds, 3);
 
-        // Structure survives the projection: "a-b" is one word.
+        // Structure survives the projection: "b-c" is one word.
         Assert.True(result.Syllables[0].ContinuesWord);
         Assert.False(result.Syllables[1].ContinuesWord);
         Assert.True(result.Syllables[1].EndsLine);
@@ -363,8 +363,8 @@ public sealed class LyricSyncSeamTests : IDisposable
     {
         var roots = InstallModel();
 
-        var shifted = await Core(roots)
-            .AlignAsync("a-b", Touch("song.wav"), Exact(onsetBiasSeconds: 0.25),
+        var shifted = await Core(roots, Spell("bc"))
+            .AlignAsync("b-c", Touch("song.wav"), Exact(onsetBiasSeconds: 0.25),
                 cancellationToken: Ct);
 
         Assert.True(shifted.Ran, shifted.Error);
@@ -372,6 +372,44 @@ public sealed class LyricSyncSeamTests : IDisposable
         // The same 0.02 / 0.10 frames, moved a quarter second later.
         Assert.Equal(0.27, shifted.Syllables[0].StartSeconds, 3);
         Assert.Equal(0.35, shifted.Syllables[1].StartSeconds, 3);
+    }
+
+    /// <summary>
+    ///     A syllable that opens on a vowel is shifted by the multilingual head's
+    ///     measured vowel-initial correction; a consonant-initial one is not. The
+    ///     shift never carries a start before its predecessor's.
+    /// </summary>
+    [Fact]
+    public async Task AVowelInitialSyllableCarriesTheMeasuredEarlierShift()
+    {
+        var roots = InstallModel();
+
+        // "c" fires at frame 1 (0.02 s; the wildcard takes frame 0), "a" at frame 5
+        // (0.10 s), "b" at frame 10 (0.20 s).
+        var result = await Core(roots, Spell("cab"))
+            .AlignAsync("c a b", Touch("song.wav"), Exact(), cancellationToken: Ct);
+
+        Assert.True(result.Ran, result.Error);
+        Assert.Equal(0.02, result.Syllables[0].StartSeconds, 3);
+        Assert.Equal(0.05, result.Syllables[1].StartSeconds, 3);
+        Assert.Equal(0.20, result.Syllables[2].StartSeconds, 3);
+    }
+
+    [Fact]
+    public void OnlyTheMultilingualHeadCarriesTheVowelInitialShift()
+    {
+        var roots = InstallModel();
+        InstallModel(LyricModelCatalog.EnglishId);
+        var sheet = LyricSheetParser.Parse("c a b");
+
+        var romaji = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: false);
+        var english = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: true);
+        var soloRomaji = LyricModelCatalog.SelectForSheet(sheet, [roots], forceEnglish: false, allowEnsemble: false);
+
+        // The measured value; changing it means re-running the romaji probe.
+        Assert.Equal(-0.050, romaji.VowelInitialOnsetBiasSeconds, 6);
+        Assert.Equal(-0.050, soloRomaji.VowelInitialOnsetBiasSeconds, 6);
+        Assert.Equal(0.0, english.VowelInitialOnsetBiasSeconds);
     }
 
     /// <summary>

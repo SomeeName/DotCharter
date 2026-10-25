@@ -33,6 +33,15 @@ public sealed record LyricAlignmentOptions
     public double OnsetBiasSeconds { get; init; }
 
     /// <summary>
+    ///     Added on top of <see cref="OnsetBiasSeconds" /> to syllables that OPEN
+    ///     ON A VOWEL. CTC fires on the confident vowel, and a sung vowel that
+    ///     follows another vowel (a-i) or a breath has no consonant to anchor the
+    ///     frame, so its span starts late. Negative moves them EARLIER. Zero for
+    ///     a model whose vowel-initial error has not been measured.
+    /// </summary>
+    public double VowelInitialOnsetBiasSeconds { get; init; }
+
+    /// <summary>
     ///     Cost of one frame of wildcard.
     ///     <para>
     ///         <b>Measured, and the measurement overruled the theory.</b>
@@ -149,6 +158,7 @@ public static class LyricAligner
         var bias = options.OnsetBiasSeconds;
         var placed = new AlignedSyllable[sheet.Syllables.Count];
         var measured = new bool[sheet.Syllables.Count];
+        var previousStart = 0.0;
 
         foreach (var syllable in tokenization.Syllables)
         {
@@ -160,10 +170,18 @@ public static class LyricAligner
             var score = 0.0;
             for (var t = 0; t < syllable.TokenCount; t++) score += alignment.Tokens[syllable.TokenStart + t].Score;
 
+            // A per-class shift may move a start earlier than its predecessor's; the
+            // order the trellis found is kept.
+            var startBias = SyllableOnsetClassifier.Classify(sheet.Syllables[syllable.SyllableIndex].Text) == SyllableOnsetClass.Vowel
+                ? bias + options.VowelInitialOnsetBiasSeconds
+                : bias;
+            var start = Math.Max(previousStart, Math.Max(0.0, first.StartFrame * spf + startBias));
+            previousStart = start;
+
             placed[syllable.SyllableIndex] = new AlignedSyllable(
                 syllable.SyllableIndex,
-                Math.Max(0.0, first.StartFrame * spf + bias),
-                Math.Max(0.0, (last.EndFrame + 1) * spf + bias),
+                start,
+                Math.Max(start, (last.EndFrame + 1) * spf + bias),
                 Math.Exp(score / syllable.TokenCount),
                 IsInterpolated: false);
             measured[syllable.SyllableIndex] = true;

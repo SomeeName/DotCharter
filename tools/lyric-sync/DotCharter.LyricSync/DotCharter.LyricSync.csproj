@@ -21,6 +21,7 @@
              AssemblyLayeringTests is a hand-written table over the five LIBRARY
              assemblies and does not enumerate the solution, so nothing here is a
              subject of it — the same position tools/rig-dataset is in. -->
+        <ProjectReference Include="..\..\..\DotCharter.Analysis\DotCharter.Analysis.csproj" />
         <ProjectReference Include="..\..\..\DotCharter.Services\DotCharter.Services.csproj" />
         <ProjectReference Include="..\..\..\DotCharter.Tone\DotCharter.Tone.csproj" />
     </ItemGroup>

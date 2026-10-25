@@ -44,9 +44,7 @@ public sealed partial class ChartMaintenanceService
             // A=[0,4) B=[4,8)), so a chord sitting exactly ON a shape's end counted
             // as inside it — and because Chord.ApplyTemplate rewrites ChordNotes from
             // the template's frets, a chord that belongs to NO shape (or to the next
-            // one) was silently re-fretted to the previous shape. Fixed twice before
-            // in exactly this form: GlobalEditingCoordinator's orphan sweep and
-            // RefretService.ApplyChordGroup.
+            // one) was silently re-fretted to the previous shape.
             HandShape? containing = null;
             foreach (var hs in handShapes)
             {
@@ -74,7 +72,7 @@ public sealed partial class ChartMaintenanceService
 
         var action = new SwitchTemplateAction(targets, newStates,
             [], [], _chartEditor);
-        if (!_historyService.Do(action)) return;
+        if (!_historyService.Do(ChordShapes.StrandedShapes.Wrap(arrangement, action))) return;
 
         _chartEditor.RequestRedraw();
         _projectState.MainDisplayMessage = _localization.Plural("Status_ApplyHandShapeTemplate_DoneOne", "Status_ApplyHandShapeTemplate_Done", targets.Count);

@@ -620,8 +620,11 @@ public class RscpWriter
         // reader can expand. TryGet says so instead.
         var known = TuningUtilities.TryGetOffsetsForTuningType(arr.TuningType, arr.StringCount, out var canonical);
         var actual = TuningOffsetResolution.Resolve(arr).ToArray();
+        // A DotCharter-only name (ExtendedRangeTunings: 7_STRING_DROP_A, the B E A D G bass)
+        // is honest but rscharter cannot read it, so the .rscp says CUSTOM beside the offsets.
         var nameIsHonest = known &&
                            arr.TuningType != "CUSTOM" &&
+                           !ExtendedRangeTunings.IsExtendedName(arr.TuningType) &&
                            actual.Length == arr.StringCount &&
                            canonical.Length >= arr.StringCount &&
                            !actual.Where((step, i) => step != canonical[i]).Any();
@@ -1108,6 +1111,8 @@ public class RscpWriter
         // old project are untouched.
         if (tmpl.GhostMask != 0) ct.Add(new XAttribute("ghost", RscpGhostStrings.Format(tmpl.GhostMask)));
         if (tmpl.Pinned) ct.Add(new XAttribute("pinned", "T"));
+        // No name on purpose. Additive: absent when false.
+        if (tmpl.Unnamed) ct.Add(new XAttribute("unnamed", "T"));
 
         var fingersStr = string.Join(",",
             tmpl.Fingers

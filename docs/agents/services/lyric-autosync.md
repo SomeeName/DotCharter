@@ -84,17 +84,27 @@ file is the service half (models, decode, stem selection, windowing, install).
     fails keeps the multilingual head on the GPU. A session reports the provider it
     really attached through `ILyricAcousticSession.ActiveProvider` (default: CPU,
     which is never retried). Pinned by `LyricProviderFallbackTests`.
-    **The reason the multilingual head needs it:** `lyric-align` is a `torch.export`
-    graph, which writes `allowzero=1` on every one of its 145 `Reshape` nodes, and
+    **Why the published models need it:** both v1 exports (the archives the app downloads) are `torch.export` graphs, which
+    write `allowzero=1` on every `Reshape` (145 nodes multilingual, 97 English), and
     ONNX Runtime 1.24.4's DirectML provider fails the first `Run` on that
     (`Reshape 'node_view_1'`) for every window length, adapter, optimisation level
-    and graph-fusion setting; the fp32 and fp16 exports of the same model fail
-    identically, so it is not the int8 quantisation. The shapes contain no zero
-    dimension, so dropping the attribute is a no-op on the CPU and makes the graph
-    run on DirectML (about 130 ms per 24 s window against 3.1 s on the CPU). The
-    shipped file still carries the attribute, so until it is re-exported without
-    it the multilingual head runs on the CPU after one failed attempt per process.
-    The English head is a different export and runs on DirectML.
+    and graph-fusion setting. The shapes contain no zero dimension, so dropping the
+    attribute is a no-op on the CPU and makes the graph run on DirectML (about
+    130 ms per 24 s window against 3.1 s on the CPU). **The fix (#222) is in
+    the app, not in the archive:** the download stays `lyric-align-v1.zip` /
+    `lyric-align-en-v1.zip` (no `-v2` asset is published), and
+    `LyricAcousticModel.Load` strips the attribute IN MEMORY for a GPU session
+    when the installed file still has it (`Audio/Lyrics/OnnxReshapeAllowZero`, a
+    protobuf rewrite that copies every other byte; the file on disk is untouched).
+    A re-export without the attribute is the way to produce a future archive
+    (`tools/lyric-sync/export-models.md`); stripping v1 gives that file byte for
+    byte. Measured on the romaji probe corpus with the stripped model on DirectML
+    against the CPU, accuracy is within 0.5 points on every row, and the run takes
+    96 s instead of 282 s.
+    Pinned by `OnnxReshapeAllowZeroTests` and the catalogue pins (v1 names and hashes) in
+    `LyricModelGraphTests`; with model folders configured, also by the file scan
+    there and `LyricModelDirectMlSmokeTests`. The CPU fallback stays for every
+    other failure.
   - **`LyricAcousticModel.Encode` reports the frames it really WROTE, never
     `samples / 320`** (`Audio/Lyrics/LyricWindowStitch`). A song is encoded in
     overlapping windows, and wav2vec2's conv front end emits **n − 1** rows for
@@ -128,6 +138,102 @@ file is the service half (models, decode, stem selection, windowing, install).
     the next sync. Pinned by `LyricPhraseBuildingTests`; the mapping and the
     call site by `LyricAutoSyncOptionsFactoryTests` (source lint — a call site
     reverted to `Default` ships two settings that do nothing).
+  - **With a vocal STEM the end follows the voice in both directions**
+    (`Analysis/Lyrics/VocalEnvelope` + `VocalEndRefiner`, folded in by
+    `BuildPhrases`). `Align` builds a 10 ms RMS envelope from the samples it
+    already decoded — never a second decode — and only when the audio is a stem
+    (`LyricSyncResult.Envelope` is null for a mix). From the CTC end, the end
+    runs until the envelope stays under 30% of the phrase's level (p90 over the
+    phrase) for 50 ms: a held phrase-final vowel extends to its fade, and an
+    in-word span stops at a breath instead of bridging it. Bounds are the old
+    ones — never below the CTC end, never past the next onset minus the minimum
+    gap, never past `MaxSyllableSeconds`. Where the voice never falls silent
+    before the bound, a boundary the chart spans runs to the bound (as before)
+    and one it does not span keeps the CTC end. Measured on the romaji corpus
+    (stem): phrase-final ends median −308 → −15 ms from the hand-synced end,
+    within 100 ms 6.9% → 65.1%, later than 50 ms 4.0% → 21.7%; all ends within
+    100 ms 84.3% → 89.8%, p90 178 → 101 ms. The thresholds are the sweep's pick:
+    among the settings with the lowest phrase-final late share, the highest
+    phrase-final within-100 ms (10% / 80 ms keeps the fade tail: 44% / 32.6%
+    late). On a MIX the same rule moves little (the band's loudness never
+    falls silent), so it is not applied.
+  - **The app and the dotcharter-lyricsync CLI end syllables through ONE rule**,
+    `Analysis/Lyrics/LyricSyllableEnds.Compute`: clamp the CTC end to the next
+    onset and `MaxSyllableSeconds`, then move it toward the latest allowed end by
+    the span rule, or by the voice when there is an envelope. Each caller passes
+    only what differs: its span rule and where a spanned end may reach (the beat
+    grid's minimum gap in `BuildPhrases`, the fixed `MinGapSeconds` in
+    `LyricSyncCommand.SpanEnds`, which now gets the stem's envelope from the
+    seam's `LyricSyncResult.Envelope`). `LyricSyncEndParityTests` gives both the
+    same spans and envelope and expects the same ends.
+  - **Vowel-initial syllables are the late ones, not the unvoiced-consonant
+    ones** (`LyricAlignmentOptions.VowelInitialOnsetBiasSeconds`, fed from
+    `LyricModelSelection.VowelInitialOnsetBiasSeconds`, −50 ms for the
+    multilingual head only). See lyric-alignment.md for the measurement and the
+    envelope onset snap that was tried and rejected.
+
+## Probes: the corpus, and what it measured
+
+The accuracy numbers on this page come from committed probes that skip without
+the corpus (#237), so anyone with the inputs can rerun them:
+
+- `DotCharter.Tests/Services/Audio/Lyrics/Probes/`. `LyricProbeCorpus` is the
+  on-disk format: `corpus.json`, plus one folder per song holding `mix.f32` and
+  `vocals.f32`, raw 16 kHz mono decoded once. `LyricProbeReport` is the pure
+  arithmetic, pinned in the gate by `LyricProbeReportTests`. Errors are SIGNED,
+  positive = late, and "late" means more than 50 ms.
+- **Building the corpus** (`LyricCorpusBuildProbeTests`): `ExportRomajiSources`
+  writes `*.lyric-truth.json` sources for the four hand-synced romaji charts in
+  `TestData/EOF`. The add-on's lyric-truth exporter (its `Local/` probes) writes the same sources
+  for the first 40 stock English vocal arrangements, because only the package
+  reader can open them, and it needs the real keys (`DOTCHARTER_RS_KEYS`).
+  `BuildCorpus` then separates every source with `htdemucs-6s-onnx`,
+  downloading it into `DOTCHARTER_LYRIC_STEM_MODELS`, never the user's models
+  folder. It runs about 25 s a song on DirectML.
+- **Measuring** (`LyricCorpusProbeTests.MeasureCorpus`): it aligns every song on
+  the mix and on the stem through the real `Align` seam and folds them onto the
+  song's own beat grid through `BuildPhrases`. The report covers onsets overall
+  and by `SyllableOnsetClassifier` class, all ends, phrase-final ends, a
+  further-vowel-shift what-if and the vocal-end threshold sweep. It writes the
+  markdown to `DOTCHARTER_LYRIC_PROBE_OUT`. The variables are listed in
+  `DotCharter.Tests/AGENTS.md`.
+
+**Romaji, vocal stem** (4 songs, 2,036 syllables, measured 2026-10-23; the sheet
+runs the `lyric-align` + `lyric-align-en` ensemble, w 0.75, with its −50 ms
+vowel-initial shift):
+
+| | n | median | p90 abs | within 50 ms | within 100 ms | late > 50 ms | early |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| onset, all | 2,036 | -14 ms | 77 ms | 81.6% | 93.1% | 8.5% | 65.7% |
+| onset, vowel-initial | 258 | +13 ms | 88 ms | 74.8% | 93.0% | 17.4% | 36.8% |
+| onset, voiced-initial | 1,023 | -12 ms | 54 ms | 88.3% | 95.6% | 6.9% | 66.3% |
+| onset, unvoiced-initial | 755 | -22 ms | 101 ms | 75.0% | 89.7% | 7.7% | 74.8% |
+| end, all | 2,036 | -4 ms | 106 ms | 75.1% | 89.5% | 9.6% | 53.2% |
+| end, phrase-final | 175 | -13 ms | 333 ms | 45.1% | 62.9% | 18.9% | 58.3% |
+
+On the MIX the onsets are a little worse (90.8% within 100 ms, p90 90 ms). The
+phrase-final ends are where the stem matters: 5.7% within 100 ms, median
+−274 ms, because there is no envelope to follow.
+
+- **The threshold sweep (30-50% of the phrase level, held 30/50/80 ms) does not
+  beat the shipped 30% / 50 ms.** Every step up in ratio trades phrase-final
+  within-100 ms for a lower late share: 62.9% / 18.9% late at 30%, then 58.9% /
+  13.7% at 40% and 50.3% / 10.3% at 50%. All-ends within-100 ms falls too
+  (89.5% → 87.1%). Within 30%, a 30 ms hold is 1.7 points better phrase-final
+  (64.6%), which is three syllables of 175, so the default stays.
+- **The vowel-initial shift is about right.** After the ensemble's −50 ms,
+  vowel-initial onsets still sit at +13 ms against −16 ms for consonants. A
+  further −25 ms centres them (−12 ms) and halves their late share (17.4% →
+  8.5%), but within-50/100 ms do not improve (74.8 → 74.4%, 93.0 → 92.6%) on
+  258 syllables of one artist, so the constant stays where it is.
+- **English is not measured here.** This machine has no Rocksmith keys, so the
+  stock arrangements cannot be exported. Until it is measured, the English
+  numbers above (#223's `lyric-alignment.md` figures) are the latest, and the
+  vowel shift stays off for the English head. The recipe: set
+  `DOTCHARTER_RS_KEYS`, `DOTCHARTER_LYRIC_SOURCES` and `DOTCHARTER_LYRIC_LIBRARY`,
+  run the add-on's lyric-truth exporter (filter `*LyricTruthExport*`), then `*LyricCorpusBuildProbeTests`
+  and `*LyricCorpusProbeTests`. The report then gains an `english` section in
+  the same shape.
 
 ## The SEAM: everything above the beat grid, and the standalone tool on top of it
 

@@ -114,7 +114,8 @@ public sealed class SongOverviewKeySignatureTests
         var logger = new FakeAppLogger();
         var state = new ProjectState();
         var history = new HistoryService(logger);
-        return (new SongOverviewViewModel(state, history, logger, FakeLocalization.English()), history, state);
+        return (new SongOverviewViewModel(state, history, logger, FakeLocalization.English(),
+            DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.IChartEditorSurface>().Proxy), history, state);
     }
 
     private static ChartProject NewProject()

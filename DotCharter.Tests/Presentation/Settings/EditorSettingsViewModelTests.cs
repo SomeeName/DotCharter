@@ -13,7 +13,7 @@ namespace DotCharter.Tests.Presentation.Settings;
 /// </summary>
 public sealed class EditorSettingsViewModelTests
 {
-    private sealed record Rig(EditorSettingsViewModel Vm, FakeConfigurationService Config, ProjectState State, RedrawCounter Editor);
+    private sealed record Rig(EditorSettingsViewModel Vm, FakeConfigurationService Config, ProjectState State, RedrawCounter Editor, FakeDevice Device);
 
     private static Rig NewRig(Action<AppConfig>? seed = null)
     {
@@ -21,9 +21,10 @@ public sealed class EditorSettingsViewModelTests
         seed?.Invoke(config.AppConfig);
         var state = new ProjectState();
         var editor = DispatchProxy.Create<IChartEditorSurface, RedrawCounter>();
-        var vm = new EditorSettingsViewModel(config, FakeLocalization.English(), state, editor, new FakeAppLogger());
+        var device = new FakeDevice();
+        var vm = new EditorSettingsViewModel(config, FakeLocalization.English(), state, editor, device, new FakeAppLogger());
         vm.Load();
-        return new Rig(vm, config, state, (RedrawCounter)(object)editor);
+        return new Rig(vm, config, state, (RedrawCounter)(object)editor, device);
     }
 
     [Fact]
@@ -37,7 +38,6 @@ public sealed class EditorSettingsViewModelTests
             c.PasteIncludeTones = false;
             c.DefaultCharterName = "Alex";
             c.LeadingSilenceSeconds = -3;
-            c.GpImportSlideInFretDistance = 3;
         });
 
         Assert.Equal(2, rig.Vm.MinNoteDistanceModeIndex);
@@ -47,13 +47,12 @@ public sealed class EditorSettingsViewModelTests
         Assert.False(rig.Vm.PasteIncludeTones);
         Assert.Equal("Alex", rig.Vm.DefaultCharterName);
         Assert.Equal(0, rig.Vm.LeadingSilenceSeconds);
-        Assert.Equal(3, rig.Vm.GpImportSlideInFretDistance);
         Assert.Empty(rig.Vm.UnsavedSettings);
     }
 
     [Fact]
     public void EverySettableMember_CountsOnce_AndPuttingItBackCountsNothing() =>
-        SplitTabAssert.EverySettableMember_CountsOnce<IEditorSettingsScreen>(() => NewRig().Vm, atLeast: 30);
+        SplitTabAssert.EverySettableMember_CountsOnce<IEditorSettingsScreen>(() => NewRig().Vm, atLeast: 25);
 
     /// <summary>The millisecond row and the denominator row enable by the mode, so the flag must be raised when it changes.</summary>
     [Fact]
@@ -78,8 +77,6 @@ public sealed class EditorSettingsViewModelTests
         rig.Vm.MinNoteDistanceDivisor = 0;
         rig.Vm.DefaultCharterName = "  Alex  ";
         rig.Vm.PasteIncludeEvents = false;
-        rig.Vm.GpImportSlideInFretDistance = 9;
-        rig.Vm.GpImportMarkersToSections = true;
 
         rig.Vm.Save();
 
@@ -89,8 +86,6 @@ public sealed class EditorSettingsViewModelTests
         Assert.Equal(1, c.MinNoteDistanceDivisor);
         Assert.Equal("Alex", c.DefaultCharterName);
         Assert.False(c.PasteIncludeEvents);
-        Assert.Equal(3, c.GpImportSlideInFretDistance);
-        Assert.True(c.GpImportMarkersToSections);
         Assert.Equal(1, rig.Editor.Redraws);
         Assert.Equal(FakeLocalization.English()["Status_EditorSettingsApplied"], rig.State.MainDisplayMessage);
         Assert.Empty(rig.Vm.UnsavedSettings);
@@ -111,6 +106,68 @@ public sealed class EditorSettingsViewModelTests
         rig.Vm.MusicalChordNames = true;
         rig.Vm.Save();
         Assert.Equal(ChordNamingStyle.Musical, rig.Config.AppConfig.ChordNamingStyle);
+    }
+
+    /// <summary>#229: String order lives on this tab, turns the timeline as soon as it is picked, and saves to InvertStrings.</summary>
+    [Fact]
+    public void TheStringOrder_LoadsAppliesLiveAndSaves()
+    {
+        var rig = NewRig(c => c.InvertStrings = true);
+        Assert.Equal(1, rig.Vm.StringOrderIndex);
+        Assert.True(rig.State.InvertStrings);
+        var redraws = rig.Editor.Redraws;
+
+        rig.Vm.StringOrderIndex = 0;
+        Assert.False(rig.State.InvertStrings);
+        Assert.Equal(redraws + 1, rig.Editor.Redraws);
+        Assert.Contains("editor.StringOrderIndex", rig.Vm.UnsavedSettings);
+
+        rig.Vm.Save();
+        Assert.False(rig.Config.AppConfig.InvertStrings);
+        Assert.False(rig.Config.AppConfig.PlayModeInvertStrings);
+    }
+
+    /// <summary>The 2D timeline's look sits beside the String order now, and applies the same way: live, then saved.</summary>
+    [Fact]
+    public void TheTimelineLook_AppliesLiveAndSaves()
+    {
+        var rig = NewRig(c => c.Timeline2DLaneTint = false);
+        rig.Device.Calls.Clear();
+        var redraws = rig.Editor.Redraws;
+
+        rig.Vm.Timeline2DLaneTint = true;
+
+        Assert.Contains("timeline:True/True", rig.Device.Calls);
+        Assert.Equal(redraws + 1, rig.Editor.Redraws);
+        Assert.Contains("editor.Timeline2DLaneTint", rig.Vm.UnsavedSettings);
+        rig.Vm.Save();
+        Assert.True(rig.Config.AppConfig.Timeline2DLaneTint);
+        Assert.True(rig.Config.AppConfig.Timeline2DPolishEnabled);
+    }
+
+    /// <summary>Revert puts a live-applied String order back on the timeline too.</summary>
+    [Fact]
+    public void Revert_PutsTheStringOrderBackOnTheTimeline()
+    {
+        var rig = NewRig();
+        rig.Vm.StringOrderIndex = 1;
+        Assert.True(rig.State.InvertStrings);
+
+        rig.Vm.Revert();
+
+        Assert.Equal(0, rig.Vm.StringOrderIndex);
+        Assert.False(rig.State.InvertStrings);
+    }
+
+    [Fact]
+    public void TheStringOrder_IsFoundBySearch()
+    {
+        var rig = NewRig();
+        var row = rig.Vm.SearchGroups.SelectMany(g => g.Rows).Single(r => r.Key.EndsWith("stringOrder", StringComparison.Ordinal));
+
+        rig.Vm.ApplySearch(row.Label);
+
+        Assert.DoesNotContain(row.Key, rig.Vm.HiddenKeys);
     }
 
     [Fact]

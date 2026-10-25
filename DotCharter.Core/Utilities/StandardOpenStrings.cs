@@ -10,7 +10,7 @@ namespace DotCharter.Core.Utilities;
 ///     tuning offset means the same note everywhere.
 ///     <para>
 ///         <b>Extra strings extend DOWN.</b> A 7-string is B1 E2 A2 D3 G3 B3 E4 and an
-///         8-string F#1 B1 E2 …: the convention of every tab format, the tuning
+///         8-string F#1 B1 E2 … and a 9-string C#1 F#1 B1 E2 …: the convention of every tab format, the tuning
 ///         names and Rocksmith's RS7 layout. Five private copies of
 ///         <c>[0, 5, 10, 15, 19, 24, 29]</c> would extend UP instead (a high A4
 ///         7th string), which would shift every string of a 7-string chart by a fourth
@@ -34,7 +34,7 @@ public static class StandardOpenStrings
     public const int BassLowEMidi = 28;
 
     /// <summary>The most strings an arrangement carries (<c>StringEditMask</c>).</summary>
-    public const int MaxStringCount = 8;
+    public const int MaxStringCount = 9;
 
     /// <summary>String count assumed when an arrangement states none.</summary>
     public const int DefaultStringCount = 6;
@@ -42,6 +42,7 @@ public static class StandardOpenStrings
     private static readonly int[] UpToSix = [0, 5, 10, 15, 19, 24];
     private static readonly int[] Seven = [-5, 0, 5, 10, 15, 19, 24];
     private static readonly int[] Eight = [-10, -5, 0, 5, 10, 15, 19, 24];
+    private static readonly int[] Nine = [-15, -10, -5, 0, 5, 10, 15, 19, 24];
 
     /// <summary>The low E a path's offsets are measured from (E1 for bass, E2 otherwise).</summary>
     public static int LowEMidi(bool bass) => bass ? BassLowEMidi : GuitarLowEMidi;
@@ -77,12 +78,13 @@ public static class StandardOpenStrings
         return result;
     }
 
-    // Past eight strings the top E repeats (row[^1]), which is what the tuning
+    // Past nine strings the top E repeats (row[^1]), which is what the tuning
     // namer has always padded with.
     private static int[] RowFor(int stringCount) => stringCount switch
     {
         <= 6 => UpToSix,
         7 => Seven,
-        _ => Eight
+        8 => Eight,
+        _ => Nine
     };
 }

@@ -70,12 +70,12 @@ public static class AlphaTexExporter
     {
         4 => [28, 33, 38, 43],                     // bass E1 A1 D2 G2
         5 => TuningUtilities.GetStandardMidiPitchesFor(5, type), // bass E1 A1 D2 G2 B2 (guitar: E2 .. B3)
-        // 7-string B1 E2 A2 D3 G3 B3 E4, 8-string F#1 B1 E2 ... — read from the one
+        // 7-string B1 E2 A2 D3 G3 B3 E4, 8-string F#1 B1 E2 ..., 9-string C#1 F#1 ... — read from the one
         // table (Core/Utilities/StandardOpenStrings) the importers compute their
         // offsets against and the tuning chips print. An 8-string must NOT fall to the
         // `_` six-string row: the `Math.Min(domainString, Length - 1)` clamp in
         // AppendStaffMetadata then handed both extra low strings the top E4.
-        // Arrangement.StringCount tops out at 8 (Services/Editing/StringEditMask).
+        // Arrangement.StringCount tops out at 9 (StandardOpenStrings.MaxStringCount).
         // 5 is E A D G B (an octave down for a bass): the app reads 5 strings that way and
         // the GP importers subtract it, so a B E A D G bass carries offsets -5 -5 -5 -5 -4.
         >= 7 => TuningUtilities.GetStandardMidiPitches(Math.Min(stringCount, StandardOpenStrings.MaxStringCount)),

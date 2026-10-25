@@ -522,4 +522,45 @@ public sealed class SettingsShellViewModelTests
         Assert.DoesNotContain("load", rig.General.Log);
         Assert.False(shell.HasUnsavedChanges);
     }
+
+    /// <summary>
+    ///     A hosted tab (stem separation and the lyric models under AI &amp; models)
+    ///     has no rail row and no screen of its own in the tab host, yet it loads,
+    ///     saves, counts and resets with its host's page, follows its host's
+    ///     visibility, and a search hit on one of its rows lands on the host.
+    /// </summary>
+    [Fact]
+    public async Task AHostedTab_LivesOnItsHostsPage()
+    {
+        var rig = new Rig();
+        var ai = new FakeTab(SettingsTabKeys.Ai, typeof(IAiSettingsScreen));
+        var stems = new FakeTab(SettingsTabKeys.StemModels, typeof(IStemModelsSettingsScreen))
+        {
+            SearchGroups = [new SettingsSearchGroup("GPU", null, [new SettingsSearchRow("stemModels.gpuAdapter", "GPU adapter")])]
+        };
+        FakeTab[] tabs = [stems, rig.General, ai];
+        using var shell = new SettingsShellViewModel(tabs, tabs, rig.Session, FakeLocalization.English(), rig.Ui, rig.Dialogs, rig.Logger);
+
+        Assert.DoesNotContain(shell.Sections.SelectMany(s => s.Items).Cast<SettingsRailItemViewModel>(), i => i.Tab.Key == SettingsTabKeys.StemModels);
+        Assert.DoesNotContain(typeof(IStemModelsSettingsScreen), shell.TabScreens);
+
+        shell.Select(SettingsTabKeys.StemModels);
+        Assert.Same(ai, shell.SelectedTab);
+        Assert.Contains("shown", stems.Log);
+
+        shell.SearchQuery = "adapter";
+        rig.Ui.Drain();
+        Assert.Equal(FakeLocalization.English()[SettingsRail.Find(SettingsTabKeys.Ai)!.TitleKey], Assert.Single(shell.SearchResults).TabName);
+
+        stems.SetUnsaved("stemModels.Provider");
+        await ((IAsyncRelayCommand)shell.ResetSectionCommand).ExecuteAsync(null);
+        Assert.Contains("reset", stems.Log);
+        Assert.Contains("reset", ai.Log);
+
+        shell.Select(SettingsTabKeys.General);
+        Assert.Contains("hidden", stems.Log);
+        stems.SetUnsaved("stemModels.Provider");
+        shell.SaveCommand.Execute(null);
+        Assert.Contains("save", stems.Log);
+    }
 }

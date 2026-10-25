@@ -137,6 +137,26 @@ public sealed class MidiImportViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task A_nine_string_guitar_draft_maps_onto_all_nine_open_strings()
+    {
+        IReadOnlyList<int>? open = null;
+        var h = new Harness((_, options) =>
+        {
+            open = options.OpenStringMidi;
+            return new MidiChartDraft([], []);
+        });
+        var guitar = h.State.ActiveArrangement!;
+        guitar.ArrangementType = ArrangementType.Lead;
+        guitar.StringCount = 9;
+        guitar.TuningPitches.Clear();
+        for (var i = 0; i < 9; i++) guitar.TuningPitches.Add(new TuningOffset(0));
+
+        await h.OpenAsync(WriteFixtureMidiFile());
+
+        Assert.Equal([25, 30, 35, 40, 45, 50, 55, 59, 64], open);
+    }
+
+    [Fact]
     public async Task An_honestly_empty_conversion_explains_itself_and_shows_no_error()
     {
         var h = new Harness((_, _) => new MidiChartDraft([], []));

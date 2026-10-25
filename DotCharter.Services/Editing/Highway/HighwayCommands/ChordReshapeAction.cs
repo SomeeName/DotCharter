@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
+using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
 
 namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 
@@ -23,6 +25,11 @@ namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 ///         nothing to disagree with. A null arrangement (headless harness) is
 ///         left alone rather than minting into nothing.
 ///     </para>
+///     <para>
+///         With <c>syncedHandShapes</c> (the level's bars, passed only while
+///         <c>AppConfig.SyncHandShapeToChordTemplate</c> is on) the hand shape over the chord
+///         moves onto the chord's new template in the SAME action, so one undo takes both back.
+///     </para>
 /// </summary>
 internal static class ChordReshapeAction
 {
@@ -37,7 +44,8 @@ internal static class ChordReshapeAction
         Chord target,
         Chord oldState,
         Chord newState,
-        Action? onPostExecute)
+        Action? onPostExecute,
+        ObservableCollection<HandShape>? syncedHandShapes = null)
     {
         var mutate = new MutateChordsAction(placedChords, new[] { target }, new[] { oldState }, new[] { newState },
             onPostExecute);
@@ -46,14 +54,22 @@ internal static class ChordReshapeAction
 
         var created = new List<ChordTemplate>();
         newState.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, newState, created).Id;
-        if (created.Count == 0) return mutate;
+
+        // The hand shape over the chord follows it onto the new template, in the same undo node.
+        var follow = syncedHandShapes == null
+            ? null
+            : ChordHandShapeSync.BuildAction(syncedHandShapes,
+                ChordHandShapeSync.Follow(syncedHandShapes, placedChords,
+                    [new ChordHandShapeSync.ChordMove(target, target.TemplateId, newState.TemplateId)]),
+                onPostExecute);
+        if (created.Count == 0 && follow == null) return mutate;
 
         // The template add runs FIRST: MutateChordsAction's post-execute is the
         // spacing enforcer, which resolves template ids.
-        return new CompositeAction(new IChartAction[]
-        {
-            new AddChordTemplatesAction(arrangement.ChordTemplates, created),
-            mutate
-        });
+        var actions = new List<IChartAction>(3);
+        if (created.Count > 0) actions.Add(new AddChordTemplatesAction(arrangement.ChordTemplates, created));
+        actions.Add(mutate);
+        if (follow != null) actions.Add(follow);
+        return new CompositeAction(actions);
     }
 }

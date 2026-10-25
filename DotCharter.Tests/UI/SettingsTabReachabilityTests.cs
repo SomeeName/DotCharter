@@ -61,6 +61,12 @@ public sealed class SettingsTabReachabilityTests
         // the box; the setting simply is not the thing bound.
         ["AudioSettingsViewModel.AsioInputChannelLeft"] =
             "mirrored both ways by the SelectedInputJackIndex ComboBox",
+        // The output-pair ComboBox binds SelectedOutputPairIndex and mirrors
+        // both output channels the same way (the jack picker's shape).
+        ["AudioSettingsViewModel.AsioOutputChannelLeft"] =
+            "mirrored both ways by the SelectedOutputPairIndex ComboBox",
+        ["AudioSettingsViewModel.AsioOutputChannelRight"] =
+            "mirrored both ways by the SelectedOutputPairIndex ComboBox",
         // Reachable, but not from Settings: the mixer inspector's MIDI-offset
         // slider binds Transport.MidiOffsetMs, whose setter persists this exact
         // field (TransportViewModel.PersistMidiOffset) and pushes it at the

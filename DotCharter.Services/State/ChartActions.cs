@@ -2,9 +2,18 @@
 
 namespace DotCharter.Services.State;
 
-public class CompositeAction(IEnumerable<IChartAction> actions) : IChartAction, IMergeableAction, ILinkPolicyAction
+public class CompositeAction(IEnumerable<IChartAction> actions)
+    : IChartAction, IMergeableAction, ILinkPolicyAction, ITemplateUseReporter
 {
     private readonly List<IChartAction> _actions = actions.Where(a => a.HasEffect).ToList();
+
+    public void ReportTemplateUses(TemplateUseDelta delta)
+    {
+        foreach (var action in _actions)
+        {
+            if (action is ITemplateUseReporter reporter) reporter.ReportTemplateUses(delta);
+        }
+    }
 
     /// <summary>
     ///     What the ONE deferred post-pass changed outside every child's owned
@@ -572,12 +581,14 @@ public class AddElementsAction<T>(
     IEnumerable<T> items,
     Func<T, FractionalPosition> getPosition,
     Action? onPostExecute = null)
-    : CollectionActionBase<T>(collection, getPosition, onPostExecute)
+    : CollectionActionBase<T>(collection, getPosition, onPostExecute), ITemplateUseReporter
     where T : class
 {
     private readonly List<T> _items = items.ToList();
 
     public override bool HasEffect => _items.Count > 0;
+
+    public void ReportTemplateUses(TemplateUseDelta delta) => delta.Added(_items);
 
     public override void Execute()
     {
@@ -612,7 +623,7 @@ public class RemoveElementsAction<T>(
     IEnumerable<T> items,
     Func<T, FractionalPosition> getPosition,
     Action? onPostExecute = null)
-    : CollectionActionBase<T>(collection, getPosition, onPostExecute)
+    : CollectionActionBase<T>(collection, getPosition, onPostExecute), ITemplateUseReporter
     where T : class
 {
     private readonly List<T> _items = items.ToList();
@@ -628,6 +639,8 @@ public class RemoveElementsAction<T>(
     /// </summary>
     public override bool HasEffect =>
         _items.Count > 0 && (_removed?.Count > 0 || (_removed is null && Present(_items).Count > 0));
+
+    public void ReportTemplateUses(TemplateUseDelta delta) => delta.Removed(_items);
 
     public override void Execute()
     {
@@ -659,12 +672,14 @@ public class MutateElementsAction<T>(
     Func<T, FractionalPosition> getPosition,
     Action? onPostExecute = null,
     string mergeVerb = "")
-    : CollectionActionBase<T>(collection, getPosition, onPostExecute), IMergeableAction
+    : CollectionActionBase<T>(collection, getPosition, onPostExecute), IMergeableAction, ITemplateUseReporter
     where T : class
 {
     private readonly List<T> _newStates = newStates.ToList();
     private readonly List<T> _oldStates = oldStates.ToList();
     private readonly List<T> _targets = targets.ToList();
+
+    public void ReportTemplateUses(TemplateUseDelta delta) => delta.Moved(_targets, _oldStates, _newStates);
 
     public override bool HasEffect
     {

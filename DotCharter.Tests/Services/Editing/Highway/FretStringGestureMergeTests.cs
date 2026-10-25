@@ -184,8 +184,9 @@ public sealed class FretStringGestureMergeTests
 
     /// <summary>
     ///     The expensive half of the old loop: each of the twelve steps resolved a
-    ///     chord template for an intermediate shape, and nothing in this app ever
-    ///     garbage-collects a <c>ChordTemplate</c>. One pass mints exactly one.
+    ///     chord template for an intermediate shape, and each intermediate shape
+    ///     stays in the arrangement for the life of the file unless something
+    ///     removes it. One pass mints exactly one.
     /// </summary>
     [Fact]
     public void TheOctaveShiftOnAChordMintsExactlyOneTemplate()
@@ -193,6 +194,7 @@ public sealed class FretStringGestureMergeTests
         var h = new Harness();
         h.AddTemplate(0, (0, 3), (1, 5));
         var chord = h.AddChord(2, 0, (0, 3), (1, 5));
+        h.KeepInUse(0);
         h.Selection.SelectedChords.Add(chord);
 
         h.Service.MoveSelectedFretByOctave(1);
@@ -210,7 +212,8 @@ public sealed class FretStringGestureMergeTests
 
     /// <summary>
     ///     What the loop actually cost, spelled out so the regression is visible:
-    ///     twelve nodes and eleven surplus templates for ONE keystroke.
+    ///     twelve nodes for ONE keystroke. Each step takes the shape it leaves behind
+    ///     out with it, so the arrangement never collects surplus templates.
     /// </summary>
     [Fact]
     public void TheOldTwelveStepLoopIsWhatTheOneShotReplaces()
@@ -225,7 +228,7 @@ public sealed class FretStringGestureMergeTests
 
         Assert.Equal(new[] { 15, 17 }, chord.ChordNotes.Select(n => n.Fret));
         Assert.Equal(12, h.History.GetUndoSteps().Count);
-        Assert.Equal(13, h.Arrangement.ChordTemplates.Count);
+        Assert.Single(h.Arrangement.ChordTemplates);
     }
 
     /// <summary>
@@ -357,6 +360,14 @@ public sealed class FretStringGestureMergeTests
             State.PlacedChords.Add(c);
             return c;
         }
+
+        /// <summary>A bar far from every edit that keeps <paramref name="templateId" /> in use, so the edit does not strand it.</summary>
+        public void KeepInUse(int templateId) => Arrangement.Levels[0].HandShapes.Add(new HandShape
+        {
+            Position = new FractionalPosition(12),
+            EndPosition = new FractionalPosition(13),
+            TemplateId = templateId
+        });
     }
 
     internal sealed class TestClock

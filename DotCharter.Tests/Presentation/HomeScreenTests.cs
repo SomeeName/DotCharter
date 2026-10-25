@@ -527,6 +527,9 @@ public sealed class HomeScreenTests
         public List<string> GetWasapiInputDevices() => [];
         public List<string> GetAsioInputDevices() => [];
         public int GetInputDeviceChannelCount(string driver, string deviceName) => 0;
+        public int GetOutputDeviceChannelCount(string driver, string deviceName) => 0;
+        public IReadOnlyList<string> GetOutputChannelNames(string driver, string deviceName) => [];
+        public IReadOnlyList<string> GetInputChannelNames(string driver, string deviceName) => [];
         public IReadOnlyList<DotCharter.Tone.Audio.Midi.MidiOutputDeviceInfo> GetMidiOutputDevices() => [];
     }
 

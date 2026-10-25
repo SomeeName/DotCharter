@@ -127,6 +127,14 @@ public sealed partial class JuceAudioPlaybackService
             inputDeviceId = outputDeviceId;
         }
 
+        var inputCount = GetInputDeviceChannelCount(config.AudioDriver, inputDeviceId);
+        if (GuitarInputChannels.JackPastDevice(config, inputCount))
+            _logger?.Warning(AppLogCategory.Audio, GuitarInputChannels.PastDeviceMessage(config, inputDeviceId, inputCount));
+
+        var outputCount = GetOutputDeviceChannelCount(config.AudioDriver, outputDeviceId);
+        if (OutputChannelPairs.PairPastDevice(config, outputCount))
+            _logger?.Warning(AppLogCategory.Audio, OutputChannelPairs.PastDeviceMessage(config, outputDeviceId, outputCount));
+
         // WASAPI device labels carry an optional " (Exclusive)" / " (Low Latency)"
         // suffix (see LabelWasapiModes). Split it off so OutputDeviceId is the
         // bare JUCE device name and OutputTypeName is the matching
@@ -148,14 +156,8 @@ public sealed partial class JuceAudioPlaybackService
             // ONE expression, shared with every consumer that has to know how
             // many input channels are open — see LiveInputSeatLayout.OpenInputChannels.
             InputChannels = Abstractions.LiveInputSeatLayout.OpenInputChannels(config),
-            OutputChannelMask = driver == JuceDriver.Asio
-                ? BuildStereoMask(config.AsioOutputChannelLeft, config.AsioOutputChannelRight)
-                : 0u,
-            InputChannelMask = (config.EnableInput && driver == JuceDriver.Asio)
-                ? (config.AsioInputMono
-                    ? BuildMonoMask(config.AsioInputChannelLeft)
-                    : BuildStereoMask(config.AsioInputChannelLeft, config.AsioInputChannelRight))
-                : 0u,
+            OutputChannelMask = OutputChannelPairs.ChannelMask(config, outputCount),
+            InputChannelMask = GuitarInputChannels.InputChannelMask(config, inputCount),
             OutputDeviceId = outputDeviceId,
             InputDeviceId = inputDeviceId,
             OutputTypeName = outputTypeName,
@@ -294,20 +296,6 @@ public sealed partial class JuceAudioPlaybackService
             _logger?.Warning(AppLogCategory.Audio,
                 $"Master limiter apply failed ({ex.GetType().Name}: {ex.Message}). The bus runs unlimited.");
         }
-    }
-
-    private static uint BuildMonoMask(int channelIndex)
-    {
-        if (channelIndex is < 0 or > 31) return 0u;
-        return 1u << channelIndex;
-    }
-
-    private static uint BuildStereoMask(int leftIndex, int rightIndex)
-    {
-        var m = 0u;
-        if (leftIndex is >= 0 and <= 31) m |= 1u << leftIndex;
-        if (rightIndex is >= 0 and <= 31) m |= 1u << rightIndex;
-        return m;
     }
 
     private static string ResolveOutputDeviceId(RigConfig cfg, JuceDriver driver)

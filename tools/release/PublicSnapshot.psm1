@@ -335,8 +335,25 @@ function Get-PreviousSnapshot {
     param([Parameter(Mandatory)][string]$Repo, [string]$Url)
     if (-not $Url) { return $null }
     if (-not (Invoke-SnapshotGit -Arguments @('ls-remote', '--heads', $Url, 'main'))) { return $null }
-    Invoke-SnapshotGit -Arguments @('-C', $Repo, 'fetch', '-q', '--no-tags', $Url, '+refs/heads/main:refs/remotes/public/main') | Out-Null
+    # Never into submodules: the kept work tree's JuceSharp is a plain checkout, and an
+    # on-demand recursion into it fails the fetch ("Could not access submodule").
+    Invoke-SnapshotGit -Arguments @('-C', $Repo, '-c', 'fetch.recurseSubmodules=false', 'fetch', '-q', '--no-tags', '--no-recurse-submodules',
+        $Url, '+refs/heads/main:refs/remotes/public/main') | Out-Null
     return Invoke-SnapshotGit -Arguments @('-C', $Repo, 'rev-parse', 'refs/remotes/public/main^{commit}')
+}
+
+# JuceSharp's <Version> moves with its tree: a public tree $Tree that differs from the
+# previous snapshot $Parent's while Directory.Build.props still says $Version would put a
+# second tree under one version (its tag, its packs, its native pin). The reason, or $null.
+function Get-JuceSharpVersionProblem {
+    param([Parameter(Mandatory)][string]$Repo, [Parameter(Mandatory)][string]$Tree, [string]$Parent, [Parameter(Mandatory)][string]$Version)
+    if (-not $Parent) { return $null }
+    if ((Invoke-SnapshotGit -Arguments @('-C', $Repo, 'rev-parse', "$Parent^{tree}")) -eq $Tree) { return $null }
+    try { $parentVersion = Get-MsBuildVersion (Invoke-SnapshotGit -Arguments @('-C', $Repo, 'show', "${Parent}:Directory.Build.props")) }
+    catch { return $null }
+    if ($parentVersion -cne $Version) { return $null }
+    return "JuceSharp changed since its last public snapshot ($($Parent.Substring(0, 12))) but its <Version> is still ${Version}: " +
+        'bump it in JuceSharp/Directory.Build.props first, then build the native pair and the packs from that tree'
 }
 
 # Rewrites the tree $SourceTree (readable in $Repo) for the public repo: excluded paths
@@ -552,16 +569,19 @@ function Move-SnapshotBuildOutputs {
     $manifest = Join-Path $Cache 'parked.txt'
     $parked = [System.Collections.Generic.List[string]]::new()
     if (Test-Path -LiteralPath $manifest) { foreach ($line in Get-Content -LiteralPath $manifest) { if ($line) { $parked.Add($line) } } }
-    foreach ($tree in $Trees) {
-        if (-not (Test-Path -LiteralPath (Join-Path $Root $tree.Prefix))) { continue }
-        foreach ($path in Get-SnapshotUntrackedPaths -GitArguments $tree.Git -Environment $tree.Environment -Ignored) {
-            $relative = $tree.Prefix + $path
-            $target = Join-Path (Join-Path $Cache 'tree') $relative
-            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
-            Move-Item -LiteralPath (Join-Path $Root $relative) -Destination $target
-            if (-not $parked.Contains($relative)) { $parked.Add($relative) }
-        }
+    # Every view is listed BEFORE anything moves, so the manifest is what git reported at
+    # the start; a path inside one another view listed has gone with it by its turn.
+    $listed = @(foreach ($tree in $Trees) {
+            if (-not (Test-Path -LiteralPath (Join-Path $Root $tree.Prefix))) { continue }
+            foreach ($path in Get-SnapshotUntrackedPaths -GitArguments $tree.Git -Environment $tree.Environment -Ignored) { $tree.Prefix + $path }
+        })
+    foreach ($relative in $listed) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Root $relative))) { continue }
+        $target = Join-Path (Join-Path $Cache 'tree') $relative
+        if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path (Split-Path $target -Parent) | Out-Null
+        Move-Item -LiteralPath (Join-Path $Root $relative) -Destination $target
+        if (-not $parked.Contains($relative)) { $parked.Add($relative) }
     }
     New-Item -ItemType Directory -Force -Path $Cache | Out-Null
     Set-Content -LiteralPath $manifest -Value @($parked) -Encoding utf8NoBOM
@@ -603,6 +623,6 @@ Export-ModuleMember -Function Get-PublicRenameMap, Convert-PublicText, Get-Publi
     Get-PersonalDataPatterns, Get-PublicLeakRules, Find-PublicLeaksInText, Find-PublicLeaksInPath, Find-PublicTreeLeaks,
     Format-PublicLeakReport, ConvertTo-LeakScanText, Expand-LeakScanGzip, Get-PublicPushPlan, Get-NativeRuntimePendingHash, Add-PublicNativeRuntimeEntry, Get-MsBuildVersion,
     Get-InheritedNativePins, Get-UserPathPlaceholders, Get-UserPathPlaceholderLookahead,
-    Invoke-SnapshotGit, New-SnapshotScratchRepo, Get-PreviousSnapshot, New-PublicTree, Set-SnapshotIndexText,
+    Invoke-SnapshotGit, New-SnapshotScratchRepo, Get-PreviousSnapshot, Get-JuceSharpVersionProblem, New-PublicTree, Set-SnapshotIndexText,
     Get-SnapshotIndexText, Get-SnapshotMessage, New-SnapshotCommit, Export-SnapshotWorkTree,
     Reset-SnapshotScratchRefs, Get-SnapshotUntrackedPaths, Move-SnapshotBuildOutputs, Assert-SnapshotTracksEverything, Restore-SnapshotBuildOutputs

@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using DotCharter.Services.Editing.Anchors;
 using DotCharter.UI.ViewModels.Editor;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.UI.ViewModels.Panels;
 
@@ -119,6 +120,7 @@ internal sealed class ChordTemplateEditPlanner
     private ChordTemplate EditInPlace(ChordTemplate loaded, ChordTemplate oldState, ChordTemplate newState,
         ChordApplyTargets targets, List<IChartAction> gripActions)
     {
+        if (JoinTarget(loaded, newState, targets) is { } joined) return JoinExisting(loaded, joined, targets);
         var targetChords = targets.BoundChords.ToList();
         var globalChords = targetChords.Select(c =>
         {
@@ -131,6 +133,7 @@ internal sealed class ChordTemplateEditPlanner
         // merge verb and the history folds the run into one undo node. A
         // shape/fingering/arpeggio edit is a discrete gesture and stays its own.
         var nameOnly = targets.Kind == ChordTemplateEditKind.Name && targets.GripTemplates.Count == 0
+                       && oldState.Unnamed == newState.Unnamed
                        && !string.Equals(oldState.Name, newState.Name, StringComparison.Ordinal);
         var actions = new List<IChartAction>
         {
@@ -175,8 +178,56 @@ internal sealed class ChordTemplateEditPlanner
         // Reload the REAL template, which Execute rewrites in place — never the
         // clone, or the next keystroke of a rename fails `templateIsReal` and
         // mints a template per character.
-        _historyService.Do(actions.Count == 1 ? actions[0] : new CompositeAction(actions));
+        _historyService.Do(StrandedShapes.Wrap(_editor.ActiveArrangement,
+            actions.Count == 1 ? actions[0] : new CompositeAction(actions), _editor.RequestRedraw));
         return loaded;
+    }
+
+    /// <summary>
+    ///     The existing shape an in-place fret or fingering edit would duplicate: the edit gives
+    ///     <paramref name="loaded" /> exactly the frets and fingers another shape already has, so the
+    ///     uses JOIN that shape instead of leaving two copies behind. Null for every other edit,
+    ///     and when the edit also writes other grips.
+    /// </summary>
+    private ChordTemplate? JoinTarget(ChordTemplate loaded, ChordTemplate newState, ChordApplyTargets targets)
+    {
+        if (targets.Kind is not (ChordTemplateEditKind.Shape or ChordTemplateEditKind.Fingering)) return null;
+        if (targets.GripTemplates.Count > 0 || _editor.ActiveArrangement is not { } arrangement) return null;
+        return ShapeEditPlanner.FindMatch(arrangement, loaded, newState);
+    }
+
+    /// <summary>
+    ///     Points every use of <paramref name="loaded" /> — the chords and hand shapes on every level,
+    ///     and the sounds that join it — at <paramref name="target" />, which keeps its own name. The
+    ///     emptied shape goes in the same undo node.
+    /// </summary>
+    private ChordTemplate JoinExisting(ChordTemplate loaded, ChordTemplate target, ChordApplyTargets targets)
+    {
+        var arrangement = _editor.ActiveArrangement!;
+        var (boundChords, boundHandShapes) = ChordShapeEdits.UsesOf(arrangement, loaded);
+        var chords = boundChords.Concat(targets.Sounds.Chords).Distinct(ReferenceEqualityComparer.Instance).Cast<Chord>().ToList();
+        var handShapes = boundHandShapes.Concat(targets.Sounds.HandShapes).Distinct(ReferenceEqualityComparer.Instance).Cast<HandShape>().ToList();
+        var moved = chords.Select(c =>
+        {
+            var clone = c.Clone();
+            clone.TemplateId = target.Id;
+            clone.ChordNotes = ProjectNotesOntoTemplate(clone, target);
+            return clone;
+        }).ToList();
+        var movedHandShapes = handShapes.Select(h =>
+        {
+            var clone = h.Clone();
+            clone.TemplateId = target.Id;
+            return clone;
+        }).ToList();
+        var actions = new List<IChartAction> { new SwitchTemplateAction(chords, moved, handShapes, movedHandShapes, _editor) };
+        actions.AddRange(AnchorSyncActions(target, chords.Where(c => _editor.PlacedChords.Contains(c)).ToList()));
+        _logger?.Info(AppLogCategory.Editing,
+            $"Chord shape '{Show(loaded.Name)}' edited into '{Show(target.Name)}': its {chords.Count} chord(s) and " +
+            $"{handShapes.Count} hand shape(s) joined the existing shape.");
+        _historyService.Do(StrandedShapes.Wrap(arrangement,
+            new CompositeAction(actions) { LabelKey = ShapeEditPlanner.EditLabelKey }, _editor.RequestRedraw));
+        return target;
     }
 
     /// <summary>
@@ -197,7 +248,7 @@ internal sealed class ChordTemplateEditPlanner
         {
             if (targets.Kind == ChordTemplateEditKind.Name)
             {
-                var rename = new SetTemplateNameAction(grip, grip.Name, newState.Name, _editor);
+                var rename = new SetTemplateNameAction(grip, grip.Name, newState.Name, _editor, newState.Unnamed);
                 if (!rename.HasEffect) continue;
                 actions.Add(rename);
                 changed.Add(grip);
@@ -274,7 +325,11 @@ internal sealed class ChordTemplateEditPlanner
         // old name describes the shape being left behind, and the isolate branch
         // must not append "(Isolated)" to it — a name that would then show on the
         // highway and in the export. A reused template keeps its own.
-        if (isNew && !shapeUnchanged) target.Name = ChordNameSuggester.SuggestFirstChordName(arr, target.Frets);
+        if (isNew && !shapeUnchanged)
+        {
+            target.Name = NewChordNames.For(arr, target.Frets);
+            target.Unnamed = false;
+        }
 
         var newChords = selectedChords.Select(c =>
         {
@@ -310,9 +365,9 @@ internal sealed class ChordTemplateEditPlanner
         if (targets.Kind == ChordTemplateEditKind.Fingering && equiv is { FollowedFingering: true })
             followUps.Add(SetTemplateFingersAction.MarkAuthored(equiv, _editor));
         followUps.AddRange(gripActions);
-        _historyService.Do(followUps.Count == 0
-            ? bind
-            : new CompositeAction([bind, .. followUps]));
+        // The shape the targets leave behind goes in the same node when they were its last users.
+        _historyService.Do(StrandedShapes.Wrap(arr,
+            followUps.Count == 0 ? bind : new CompositeAction([bind, .. followUps]), _editor.RequestRedraw));
         return target;
     }
 
@@ -358,7 +413,8 @@ internal sealed class ChordTemplateEditPlanner
             return nhs;
         }).ToList();
 
-        _historyService.Do(new SwitchTemplateAction(chords, newChords, handShapes, newHandShapes, _editor));
+        _historyService.Do(StrandedShapes.Wrap(_editor.ActiveArrangement,
+            new SwitchTemplateAction(chords, newChords, handShapes, newHandShapes, _editor), _editor.RequestRedraw));
     }
 
     /// <summary>
@@ -478,25 +534,8 @@ internal sealed class ChordTemplateEditPlanner
     /// already existed and adding a bare note where it did not. The chord passed
     /// in must already be a clone — its notes are mutated in place.
     /// </summary>
-    private static ObservableCollection<ChordNote> ProjectNotesOntoTemplate(Chord clone, ChordTemplate template)
-    {
-        var newNotes = new List<ChordNote>();
-        foreach (var kvp in template.Frets)
-        {
-            var existing = clone.ChordNotes.FirstOrDefault(n => n.StringIndex == kvp.Key);
-            if (existing != null)
-            {
-                existing.Fret = kvp.Value;
-                newNotes.Add(existing);
-            }
-            else
-            {
-                newNotes.Add(new ChordNote { StringIndex = kvp.Key, Fret = kvp.Value });
-            }
-        }
-
-        return new ObservableCollection<ChordNote>(newNotes);
-    }
+    private static ObservableCollection<ChordNote> ProjectNotesOntoTemplate(Chord clone, ChordTemplate template) =>
+        ChordNoteProjection.OnTo(clone, template);
 
     /// <summary>True when <paramref name="template"/>'s fret pattern is exactly
     /// the chord's set of (string, fret) pairs — same shape, nothing added or

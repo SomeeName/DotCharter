@@ -86,6 +86,9 @@ public sealed class NullAudioPlaybackService : IAudioPlaybackService
     public List<string> GetWasapiInputDevices() => [];
     public List<string> GetAsioInputDevices() => [];
     public int GetInputDeviceChannelCount(string driver, string deviceName) => 0;
+    public int GetOutputDeviceChannelCount(string driver, string deviceName) => 0;
+    public IReadOnlyList<string> GetOutputChannelNames(string driver, string deviceName) => [];
+    public IReadOnlyList<string> GetInputChannelNames(string driver, string deviceName) => [];
     public IReadOnlyList<Midi.MidiOutputDeviceInfo> GetMidiOutputDevices() => Midi.WinMMMidiOutput.EnumerateDevices();
     public Task LoadAudioAsync(string filePath) => Task.CompletedTask;
     public Task LoadAudioFromMemoryAsync(ReadOnlyMemory<byte> bytes, string formatHint, string? displayPath = null) => Task.CompletedTask;

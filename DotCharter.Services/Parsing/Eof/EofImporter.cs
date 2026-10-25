@@ -8,9 +8,10 @@ namespace DotCharter.Services.Parsing.Eof;
 ///     <c>editor-on-fire/src/song.c</c> (<c>eof_load_song_pf</c>). Files are
 ///     wrapped in an Allegro PACKFILE (LZSS) compressed container; the importer
 ///     transparently decompresses before parsing.
-///     Only Pro Guitar tracks (format 4) become DotCharter <see cref="Arrangement"/>s;
-///     other track formats (legacy, vocal) are walked over for stream alignment but
-///     not surfaced.
+///     Pro Guitar tracks (format 4) become DotCharter <see cref="Arrangement"/>s and
+///     the vocal track (format 2) becomes the project's lyrics
+///     (<see cref="EofImportResult.VocalTracks"/>); legacy tracks are walked over for
+///     stream alignment but not surfaced.
 /// </summary>
 public sealed class EofImporter
 {
@@ -49,8 +50,9 @@ public sealed class EofImporter
             // Surface only Pro Guitar tracks that actually have notes — EOF
             // routinely saves stub Pro Guitar tracks (alternate tunings, 22-fret
             // slots) with zero notes that would otherwise clutter the dialog
-            // and produce empty arrangements after import.
-            if (info.Format == EofConstants.TrackFormatProGuitar && noteCount > 0)
+            // and produce empty arrangements after import. The vocal track is
+            // offered the same way, once it holds a lyric.
+            if (info.Format is EofConstants.TrackFormatProGuitar or EofConstants.TrackFormatVocal && noteCount > 0)
                 tracks.Add(info);
         }
 
@@ -85,6 +87,10 @@ public sealed class EofImporter
                 var arr = EofProGuitarTrackParser.Parse(reader, info, beatMarkers);
                 ApplyTextEventsToArrangement(arr, info.Id, result.Metadata, beatMarkers);
                 result.Arrangements.Add(arr);
+            }
+            else if (info.Format == EofConstants.TrackFormatVocal && trackIdsToImport.Contains(info.Id))
+            {
+                result.VocalTracks.AddRange(EofVocalTrackParser.Parse(reader, beatMarkers));
             }
             else
             {

@@ -57,12 +57,13 @@ public sealed class ChordTemplateIntegrityTests
     public void RightClickChordEdit_ReusesAnExistingTemplateWithTheSameShape()
     {
         // Resolve-OR-create: minting a duplicate for a shape the arrangement
-        // already has is the other half of the invariant (templates are never
-        // garbage collected, so duplicates accumulate for the life of the file).
+        // already has is the other half of the invariant (a duplicate is a second
+        // shape to keep in step for the life of the file).
         var h = new Harness();
         h.AddTemplate(0, (0, 3), (1, 5));
         var target = h.AddTemplate(1, (0, 3), (1, 5), (2, 0));
         var chord = h.AddChord(2, 0, (0, 3), (1, 5));
+        h.KeepInUse(0);
 
         h.Service.HandleRightClickChord(chord, 2);
 
@@ -76,6 +77,7 @@ public sealed class ChordTemplateIntegrityTests
         var h = new Harness();
         var shared = h.AddTemplate(0, (0, 3), (1, 5));
         var chord = h.AddChord(2, 0, (0, 3), (1, 5));
+        h.KeepInUse(0);
 
         var dropped = new GuitarNote { Position = new FractionalPosition(2), StringIndex = 2, Fret = 7 };
         h.Service.CommitHandShapeDragAndDrop(
@@ -214,5 +216,13 @@ public sealed class ChordTemplateIntegrityTests
             Level.Chords.Add(chord);
             return chord;
         }
+
+        /// <summary>A bar far from every edit that keeps <paramref name="templateId" /> in use, so the edit does not strand it.</summary>
+        public void KeepInUse(int templateId) => Arrangement.Levels[0].HandShapes.Add(new HandShape
+        {
+            Position = new FractionalPosition(12),
+            EndPosition = new FractionalPosition(13),
+            TemplateId = templateId
+        });
     }
 }

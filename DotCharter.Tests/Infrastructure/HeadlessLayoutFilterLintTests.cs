@@ -56,6 +56,9 @@ public sealed class HeadlessLayoutFilterLintTests
         ["BendEditorSustainCurveUiPerfSmokeTests"] =
             "checks where the bend curve starts and ends against the plot's own edges; its one size check (> 1 x 1) " +
             "only says the editor laid out, and the graph's tick labels are fixed glyphs, not localized text",
+        ["ShapesDragMergeUiPerfSmokeTests"] =
+            "drives a drag over the Shapes list; its one size check is that the fixture list overflows a 330-px window " +
+            "(six cards in a few hundred pixels), which only precedes the scroll it measures, and text can only add height",
         ["EqPlotRenderAllocationUiPerfSmokeTests"] =
             "counts the EQ plot's render allocations; its one size check (> 100 x 50) only says the plot laid out " +
             "before the count, in a fixed window",

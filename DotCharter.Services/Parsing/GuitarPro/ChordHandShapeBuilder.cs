@@ -2,6 +2,7 @@
 using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 using ChartLevel = DotCharter.Core.Domain.Project.ChartLevel;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.Services.Parsing.GuitarPro;
 
@@ -186,7 +187,7 @@ public static class ChordHandShapeBuilder
             if (authoredChordNames != null && authoredChordNames.TryGet(chord.Position, out var authoredName))
                 template.Name = authoredName;
             else
-                template.Name = ChordNameSuggester.SuggestFirstChordName(arrangement, template.Frets);
+                template.Name = NewChordNames.For(arrangement, template.Frets);
 
             template.Id = _nextTemplateId++;
             minted.Add(template);

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using GuitarNote = DotCharter.Core.Domain.Guitar.GuitarNote;
+using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
 
 namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 
@@ -42,6 +43,12 @@ internal readonly record struct SelectedSoundMutationTargets(
     ///     never mints a template.
     /// </summary>
     public ChordLadderReach? Ladder { get; init; }
+
+    /// <summary>
+    ///     The hand shapes of the level the chords sit on, when a shape change must take the bar over the
+    ///     chord along (<c>AppConfig.SyncHandShapeToChordTemplate</c> on); null leaves every bar where it is.
+    /// </summary>
+    public ObservableCollection<HandShape>? SyncedHandShapes { get; init; }
 
     /// <summary>The chords the chord half of a verb writes: the ladder's, else the selection's,
     /// through the mask either way.</summary>

@@ -63,6 +63,7 @@ public sealed class SettingsModuleTests
         services.AddSingleton(SplitTabStubs.Recorder<DotCharter.Services.Editing.Catalog.IPhraseCatalogService>());
         services.AddSingleton(SplitTabStubs.Recorder<DotCharter.Services.Session.IProjectSessionService>());
         services.AddSingleton<DotCharter.Services.Plugins.IPackageFeatures>(DotCharter.Services.Plugins.PackageFeatures.All);
+        services.AddSingleton<DotCharter.Services.Audio.Lyrics.ILyricModelDownloadService>(new FakeLyricModelService());
         SettingsModule.Register(services);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
@@ -79,7 +80,7 @@ public sealed class SettingsModuleTests
 
         Assert.Equal(
             [SettingsTabKeys.Ai, SettingsTabKeys.Appearance, SettingsTabKeys.Audio, SettingsTabKeys.Editor, SettingsTabKeys.Files, SettingsTabKeys.General,
-                SettingsTabKeys.Graphics, SettingsTabKeys.Keybinds, SettingsTabKeys.Play, SettingsTabKeys.StemModels,
+                SettingsTabKeys.Graphics, SettingsTabKeys.Keybinds, SettingsTabKeys.LyricModels, SettingsTabKeys.Play, SettingsTabKeys.StemModels,
                 SettingsTabKeys.Tone3000, SettingsTabKeys.Updates],
             tabs.Select(t => t.Key).Order(StringComparer.Ordinal));
         Assert.Same(sp.GetRequiredService<IGeneralSettingsScreen>(), tabs.Single(t => t.Key == SettingsTabKeys.General));
@@ -93,6 +94,7 @@ public sealed class SettingsModuleTests
         Assert.Same(sp.GetRequiredService<IAiSettingsScreen>(), tabs.Single(t => t.Key == SettingsTabKeys.Ai));
         Assert.Same(sp.GetRequiredService<ITone3000SettingsScreen>(), tabs.Single(t => t.Key == SettingsTabKeys.Tone3000));
         Assert.Same(sp.GetRequiredService<IStemModelsSettingsScreen>(), tabs.Single(t => t.Key == SettingsTabKeys.StemModels));
+        Assert.Same(sp.GetRequiredService<ILyricModelsSettingsScreen>(), tabs.Single(t => t.Key == SettingsTabKeys.LyricModels));
         Assert.Equal(tabs.Cast<object>().OrderBy(t => t.GetHashCode()), sources.Cast<object>().OrderBy(s => s.GetHashCode()));
     }
 
@@ -107,11 +109,11 @@ public sealed class SettingsModuleTests
         Assert.Equal(
             [typeof(IGeneralSettingsScreen), typeof(IEditorSettingsScreen), typeof(IPlaySettingsScreen),
                 typeof(IAppearanceSettingsScreen), typeof(IGraphicsSettingsScreen), typeof(IAudioSettingsScreen), typeof(IFilesSettingsScreen),
-                typeof(IKeybindsSettingsScreen), typeof(IStemModelsSettingsScreen), typeof(ITone3000SettingsScreen),
+                typeof(IKeybindsSettingsScreen), typeof(ITone3000SettingsScreen),
                 typeof(IAiSettingsScreen), typeof(IUpdatesSettingsScreen)],
             shell.TabScreens);
         foreach (var tab in scope.ServiceProvider.GetServices<ISettingsTab>())
-            Assert.NotNull(SettingsRail.Find(tab.Key));
+            Assert.NotNull(SettingsRail.Find(SettingsRail.PageOf(tab.Key)));
         Assert.Same(provider.GetRequiredService<SettingsSession>(), scope.ServiceProvider.GetRequiredService<SettingsSession>());
     }
 

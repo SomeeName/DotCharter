@@ -198,7 +198,9 @@ public enum ChartSynthVoice
 /// <param name="NotesStarted">Note-ons since the last upload.</param>
 /// <param name="ActiveVoices">Notes sounding now.</param>
 /// <param name="IsClockBound">The song is bound as the clock.</param>
-/// <param name="IsClockPlaying">The song clock advanced in the last block.</param>
+/// <param name="IsClockPlaying">The song clock was playing in the last block the scheduler RAN. It runs only
+/// while the synth is on natively with a voice, so before an enable's push lands (or after an off) this keeps
+/// its last value — false at first — whatever the transport does.</param>
 /// <param name="IsVoiceLoaded">A voice exists — false once the synth is off and its voice (and sample pack) released.</param>
 /// <param name="IsSampled">The voice plays real recordings.</param>
 /// <param name="PackBytes">Sample-pack memory the voice holds.</param>

@@ -26,8 +26,15 @@ public sealed record LyricModel(string Id, string Directory, double OnsetBiasSec
 ///     model, because the ensemble's optimum differs from both solo values and for
 ///     English even changes sign.
 /// </param>
+/// <param name="VowelInitialOnsetBiasSeconds">
+///     Extra shift for syllables that open on a vowel, which CTC places late
+///     (<see cref="LyricAlignmentOptions.VowelInitialOnsetBiasSeconds" />). A
+///     property of the combination for the same reason as the bias above, and zero
+///     wherever it has not been measured.
+/// </param>
 public sealed record LyricModelSelection(
-    LyricModel Primary, LyricModel? Secondary, double PrimaryWeight, double OnsetBiasSeconds)
+    LyricModel Primary, LyricModel? Secondary, double PrimaryWeight, double OnsetBiasSeconds,
+    double VowelInitialOnsetBiasSeconds = 0.0)
 {
     public bool IsEnsemble => Secondary != null;
 
@@ -176,6 +183,16 @@ public static class LyricModelCatalog
     private const double EnsembleRomajiBias = 0.0;
 
     /// <summary>
+    ///     Vowel-initial syllables are the late ones on the multilingual head.
+    ///     Over the 2,036 hand-synced romaji syllables on a vocal stem they sit a
+    ///     median +62 ms from the reference (61% later than 50 ms) against −11 ms
+    ///     for the chart as a whole; shifting them by −50 ms moved their median to
+    ///     +12 ms and the chart's within-50 ms from 77.3% to 82.1%. Measured for the
+    ///     multilingual head only — the English head's vowel-initial error is not.
+    /// </summary>
+    public const double MultilingualVowelInitialBias = -0.050;
+
+    /// <summary>
     ///     Picks the model for a sheet: the English head only when the text is
     ///     clearly English AND that model is installed, otherwise the multilingual
     ///     one.
@@ -232,8 +249,8 @@ public static class LyricModelCatalog
         }
 
         if (allowEnsemble && multilingual.IsInstalled && english.IsInstalled)
-            return new LyricModelSelection(multilingual, english, RomajiBlendWeight, EnsembleRomajiBias);
+            return new LyricModelSelection(multilingual, english, RomajiBlendWeight, EnsembleRomajiBias, MultilingualVowelInitialBias);
 
-        return new LyricModelSelection(multilingual, null, 1.0, multilingual.OnsetBiasSeconds);
+        return new LyricModelSelection(multilingual, null, 1.0, multilingual.OnsetBiasSeconds, MultilingualVowelInitialBias);
     }
 }

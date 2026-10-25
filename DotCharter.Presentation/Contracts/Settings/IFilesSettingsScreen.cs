@@ -4,7 +4,7 @@ using System.Windows.Input;
 namespace DotCharter.Presentation.Contracts.Settings;
 
 /// <summary>
-///     Settings ▸ Files &amp; backups: the files a save writes next to the
+///     Settings ▸ Import &amp; export: the files a save writes next to the
 ///     project, the timed project backup, moving the whole setup to another
 ///     machine, and the decoded-audio cache that opening a Rocksmith archive
 ///     fills. The cache readout and the backup status are status, never
@@ -44,6 +44,27 @@ public interface IFilesSettingsScreen : INotifyPropertyChanged
 
     /// <summary>Open a .psarc with only its hardest difficulty level.</summary>
     bool PsarcOpenHardestLevelOnly { get; set; }
+
+    // ── Guitar Pro import ────────────────────────────────────────────────
+
+    bool GpImportTruncateShortNotes { get; set; }
+
+    bool GpImportTruncateShortChords { get; set; }
+
+    bool GpImportPreserveShortRests { get; set; }
+
+    bool OnlineLatinNameLookup { get; set; }
+
+    bool GpImportBeatTextTechniques { get; set; }
+
+    bool GpImportMarkersToSections { get; set; }
+
+    bool GpImportTimeSignatures { get; set; }
+
+    bool GpImportDropMidBeatTempoChanges { get; set; }
+
+    /// <summary>Frets below or above the target a slide-in starts from, 1 to 3.</summary>
+    int GpImportSlideInFretDistance { get; set; }
 
     // ── backups ──────────────────────────────────────────────────────────
 

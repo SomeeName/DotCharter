@@ -371,6 +371,27 @@ public class ProjectState : ObservableObject
         }
     }
 
+    /// <summary>Play Mode's String order (<see cref="UserSettingsState.PlayModeInvertStrings"/>).</summary>
+    public bool PlayModeInvertStrings
+    {
+        get => UserSettings.PlayModeInvertStrings;
+        set => SetStateProperty(UserSettings.PlayModeInvertStrings, value, v => UserSettings.PlayModeInvertStrings = v);
+    }
+
+    /// <summary>A Play Mode run is presenting (<see cref="UserSettingsState.GameplayPresentation"/>).</summary>
+    public bool GameplayPresentation
+    {
+        get => UserSettings.GameplayPresentation;
+        set => SetStateProperty(UserSettings.GameplayPresentation, value, v => UserSettings.GameplayPresentation = v);
+    }
+
+    /// <summary>Both String orders at once, as AppConfig stores them.</summary>
+    public void ApplyStringOrders(AppConfig config)
+    {
+        InvertStrings = config.InvertStrings;
+        PlayModeInvertStrings = config.PlayModeInvertStrings;
+    }
+
     public bool EnableFilmicTonemap
     {
         get => UserSettings.EnableFilmicTonemap;

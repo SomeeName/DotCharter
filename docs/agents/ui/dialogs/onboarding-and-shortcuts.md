@@ -57,13 +57,29 @@ every one of them linted by `UI/Onboarding/OnboardingReachabilityTests`:
   dialog, and first to answer Esc) is what puts it over this one — and re-reads its
   summary when that task completes, however the wizard closed; Profile is
   `IPlayerProfileService.Create` / `SwitchTo`.
+- **The Audio page asks WHICH OUTPUT PAIR.** `OnboardingOutputPair` binds
+  `Audio.OutputPairOptions` / `Audio.SelectedOutputPairIndex` — Settings' own rows —
+  on ASIO and WASAPI alike, because the engine opens the picked pair as an output
+  channel mask on both (`OutputChannelPairs.ChannelMask`); a row carries the
+  driver's name for the pair when the open device has one ("Out 3 + 4 ·
+  Headphones", `ChannelNames`), as the Input page's jack rows do. "Play test click"
+  saves the pick, re-applies the engine and plays the click through it; the result
+  line (and the Done summary's Output row) names device and pair. The page body is
+  named `OnboardingAudioStep` and listed in `DialogContainerView.NestedDialogBodyNames`
+  with `OnboardingInputStep`. Smoke: `DialogConstructionUiPerfSmokeTests
+  .OnboardingWizard_AudioPage_OffersTheOutputPair_OnEveryDriver`.
 - **The Input page asks WHICH JACK (2026-08-30).** It opened the device and lit
   a meter without asking which input the guitar is on, so a guitar on the
   second jack read as silence. `OnboardingInputJack` binds
   `Audio.InputJackOptions` / `Audio.SelectedInputJackIndex` — Settings' own
-  rows — and shows on `Audio.AreInputChannelIndexesUsed` (ASIO, the engine
-  driver). Smoke: `DialogConstructionUiPerfSmokeTests
-  .OnboardingWizard_InputPage_OffersTheGuitarJack_OnAsio`.
+  rows — on ASIO and WASAPI alike, because the engine opens the picked jack as
+  an input channel mask on both (`GuitarInputChannels.InputChannelMask`).
+  "Find my guitar" (`GuitarJackFinder`) works on either driver. A WASAPI device
+  reporting two inputs or fewer shows `OnboardingWasapiDevicesNote`
+  (`Audio.IsWasapiDevicesNoteShown`): some interfaces list one capture device per
+  input pair. Smokes: `DialogConstructionUiPerfSmokeTests
+  .OnboardingWizard_InputPage_OffersTheGuitarJack_OnAsio` and
+  `.OnboardingWizard_InputPage_OnAManyInputWasapiDevice_OffersEveryJack`.
 - **The latency wizard's judging step says which channel it listens on, and
   lets the player change it** (`LatencyListeningChannel`, one row per OPEN
   channel labelled by jack, default = the guitar's seat; locked while

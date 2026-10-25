@@ -84,9 +84,11 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
     /// ring delivered a quarter second; returns the seat's post-rig peak, what the capture
     /// ring carried and the engine's last status. The device paces the song in wall time,
     /// so what is awaited is the engine's own progress (notes started), never a window:
-    /// the 60 s cap is a deadlock detector that cannot fire on a passing run. When the
-    /// song runs out before the notes were counted (a starved read-ahead makes the clock
-    /// jump, and a jump skips the notes it passes), the song restarts from 0.</summary>
+    /// the 60 s cap is a deadlock detector that cannot fire on a passing run. The caller
+    /// must have waited for the synth's pushes: <c>IsClockPlaying</c> is written
+    /// only by a block the scheduler RAN, so before the enable lands it stays false
+    /// while the song plays to its end. When the song runs out before the notes were
+    /// counted, it restarts from 0.</summary>
     private static (float RigPeak, float RingPeak, long RingSamples, ChartSynthStatus Status) PlayAndListen(JuceAudioPlaybackService svc)
     {
         var ring = new float[8192];
@@ -159,6 +161,13 @@ public sealed class ChartSynthNullDeviceTests : IDisposable
         Assert.True(synth.TrySetChartSynthInstrument(lesPaul));
         synth.SetChartSynthEnabled(true);
         Assert.True(synth.UploadChartNotes(chart), "the engine refused a valid chart");
+        // SetChartSynthEnabled only QUEUES its push on the thread pool. A loaded
+        // gate starves the pool for seconds, the 8 s song plays out with the synth
+        // still off natively, and the scheduler never runs: 0 notes, the clock "not
+        // playing" (never written) although the transport played, and nothing to restart.
+        svc.WaitForChartSynthPushes();
+        Assert.True(synth.TryGetChartSynthStatus(out var armed) && armed.IsEnabled && armed.IsVoiceLoaded,
+            $"the enable never reached the engine: {armed}");
 
         var first = PlayAndListen(svc);
         Assert.True(first.Status.NotesStarted >= NotesToStart,

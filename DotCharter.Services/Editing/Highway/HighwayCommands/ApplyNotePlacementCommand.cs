@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using ChordNote = DotCharter.Core.Domain.Guitar.ChordNote;
 using GuitarNote = DotCharter.Core.Domain.Guitar.GuitarNote;
+using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
 
 namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 
@@ -24,6 +26,7 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
     private readonly ObservableCollection<GuitarNote> _placedNotes;
     private readonly int _previewFret;
     private readonly int _stringIndex;
+    private readonly ObservableCollection<HandShape>? _syncedHandShapes;
     private readonly FractionalPosition _targetPosition;
 
     public ApplyNotePlacementCommand(
@@ -34,8 +37,10 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
         FractionalPosition targetPosition,
         int stringIndex,
         int previewFret,
-        Action? onPostExecute)
+        Action? onPostExecute,
+        ObservableCollection<HandShape>? syncedHandShapes = null)
     {
+        _syncedHandShapes = syncedHandShapes;
         _placedNotes = placedNotes;
         _placedChords = placedChords;
         _collisionService = collisionService;
@@ -60,7 +65,8 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
     public bool Execute(IHistoryService history)
     {
         var action = BuildAction();
-        return action != null && history.Do(action);
+        // The chord's old template can be left with no user (a reshape, or the chord collapsing into a note).
+        return action != null && history.Do(StrandedShapes.Wrap(_arrangement, action));
     }
 
     private IChartAction? BuildAction()
@@ -165,7 +171,7 @@ internal sealed class ApplyNotePlacementCommand : IHighwayEditCommand
     ///     <c>fret</c> attribute). Both go through
     ///     <see cref="ChordReshapeAction" />.
     /// </summary>
-    private IChartAction BuildReshape(Chord target, Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, target, oldState, newState, _onPostExecute);
+    private IChartAction BuildReshape(Chord target, Chord oldState, Chord newState) => ChordReshapeAction.Build(_placedChords, _arrangement, target, oldState, newState, _onPostExecute, _syncedHandShapes);
 
     private void AddExistingNotePlacementActions(
         ICollection<IChartAction> actions,

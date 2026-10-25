@@ -487,6 +487,15 @@ public class JsonConfigurationService : IConfigurationService, IDisposable
             config.LivePlayCqtDefaultMigrated = true;
         }
 
+        // The editor and Play Mode each keep a String order. A config without the
+        // split carries only the editor's: copy it into Play Mode ONCE, so a tab
+        // reader's runs keep their layout.
+        if (!config.StringOrderSplitMigrated)
+        {
+            config.PlayModeInvertStrings = config.InvertStrings;
+            config.StringOrderSplitMigrated = true;
+        }
+
         // 0.69: technique judging split into one switch per technique. The 0.68 switch
         // was off by default, so `false` is a default, not a choice — the new defaults stand
         // (bends on). `true` was a choice to judge everything: all three stay on. Read once; the

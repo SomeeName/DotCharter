@@ -1067,7 +1067,8 @@ internal sealed class Preview3DRenderDriver
             _stagingSnapshot.EnableHitSparks = localEditor.UserSettings.EnableHitSparks;
             _stagingSnapshot.EnableFilmicTonemap = localEditor.UserSettings.EnableFilmicTonemap;
             _stagingSnapshot.LeftyFlip = localEditor.UserSettings.LeftyFlip;
-            _stagingSnapshot.InvertStrings = localEditor.UserSettings.InvertStrings;
+            // The editor's String order, or Play Mode's while a run is presenting.
+            _stagingSnapshot.InvertStrings = localEditor.UserSettings.HighwayInvertStrings;
 
             // Live Play verdicts: drain the judgement queue into this frame's
             // snapshot. The queue is drained even while inactive so stale

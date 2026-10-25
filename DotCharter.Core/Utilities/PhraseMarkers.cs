@@ -67,6 +67,105 @@ public static class PhraseMarkers
         return markers;
     }
 
+    /// <summary>A phrase list and the iterations that index into it, in time order.</summary>
+    public sealed record IterationSet(IReadOnlyList<string> Phrases, IReadOnlyList<PhraseIteration> Iterations);
+
+    /// <summary>
+    ///     The arrangement's phrase iterations from BOTH stores: what every per-iteration
+    ///     consumer reads (the RS-XML writer, the SNG mapper, the Phrases inspector and
+    ///     propagation), so two artifacts built from one chart cannot disagree.
+    ///     <list type="bullet">
+    ///         <item>Explicit <see cref="Arrangement.Phrases" /> and
+    ///         <see cref="Arrangement.PhraseIterations" />: kept as they are (the same
+    ///         objects), plus an iteration for every <see cref="EventPoint.Phrase" /> marker at
+    ///         a position no explicit iteration covers, minting a phrase name only when it is
+    ///         new. ADDITIVE, so an imported chart whose markers mirror its iterations is
+    ///         unchanged.</item>
+    ///         <item>Markers only (every chart placed in the editor or imported from EOF): one
+    ///         iteration per marker, phrase ids by first appearance. A marker's name does NOT
+    ///         have to be in <see cref="Arrangement.Phrases" />: nothing in the editor adds it
+    ///         there, and the SNG mapper dropped every such marker.</item>
+    ///         <item>Neither: the explicit lists as they are.</item>
+    ///     </list>
+    ///     <paramref name="endPosition" /> is for an EXPORT of a markers-only chart: COUNT is
+    ///     added at the start and END at that position when the chart has none. Nothing is
+    ///     padded when explicit iterations exist.
+    /// </summary>
+    public static IterationSet Iterations(Arrangement arrangement, Func<FractionalPosition>? endPosition = null)
+    {
+        ArgumentNullException.ThrowIfNull(arrangement);
+
+        var explicitPhrases = arrangement.Phrases.ToList();
+        var explicitIterations = arrangement.PhraseIterations.ToList();
+        if (explicitPhrases.Count > 0 && explicitIterations.Count > 0)
+            return MergeMarkers(arrangement, explicitPhrases, explicitIterations);
+
+        var markers = arrangement.EventPoints
+            .Where(ep => !string.IsNullOrWhiteSpace(ep.Phrase))
+            .OrderBy(ep => ep.Position)
+            .Select(ep => (ep.Position, Name: ep.Phrase.Trim()))
+            .ToList();
+        if (markers.Count == 0) return new IterationSet(explicitPhrases, explicitIterations);
+
+        if (endPosition != null)
+        {
+            if (!markers.Any(m => m.Name.Equals("COUNT", StringComparison.OrdinalIgnoreCase)))
+                markers.Insert(0, (FractionalPosition.Zero, "COUNT"));
+            if (!markers.Any(m => m.Name.Equals("END", StringComparison.OrdinalIgnoreCase)))
+                markers.Add((endPosition(), "END"));
+        }
+
+        markers = markers.OrderBy(m => m.Position).ThenBy(m => StructuralSortKey(m.Name)).ToList();
+
+        var phrases = new List<string>();
+        var ids = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (_, name) in markers)
+        {
+            if (ids.ContainsKey(name)) continue;
+            ids[name] = phrases.Count;
+            phrases.Add(name);
+        }
+
+        return new IterationSet(phrases, markers.Select(m => new PhraseIteration(m.Position, ids[m.Name])).ToList());
+    }
+
+    private static IterationSet MergeMarkers(Arrangement arrangement, List<string> phrases,
+        List<PhraseIteration> iterations)
+    {
+        var covered = new HashSet<FractionalPosition>(iterations.Select(i => i.Position));
+        var extra = arrangement.EventPoints
+            .Where(ep => !string.IsNullOrWhiteSpace(ep.Phrase) && !covered.Contains(ep.Position))
+            .OrderBy(ep => ep.Position)
+            .ToList();
+        if (extra.Count == 0) return new IterationSet(phrases, iterations);
+
+        var idByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < phrases.Count; i++) idByName.TryAdd(phrases[i], i);
+
+        foreach (var point in extra)
+        {
+            var name = point.Phrase.Trim();
+            if (!idByName.TryGetValue(name, out var id))
+            {
+                id = phrases.Count;
+                phrases.Add(name);
+                idByName[name] = id;
+            }
+
+            iterations.Add(new PhraseIteration(point.Position, id));
+        }
+
+        iterations.Sort((a, b) => a.Position.CompareTo(b.Position));
+        return new IterationSet(phrases, iterations);
+    }
+
+    private static int StructuralSortKey(string name)
+    {
+        if (name.Equals("COUNT", StringComparison.OrdinalIgnoreCase)) return 0;
+        if (name.Equals("END", StringComparison.OrdinalIgnoreCase)) return 2;
+        return 1;
+    }
+
     /// <summary>
     ///     Every phrase marker that represents PLAYING, i.e. excluding the
     ///     structural ones. COUNT, END and noguitar carry no sounds, so anything

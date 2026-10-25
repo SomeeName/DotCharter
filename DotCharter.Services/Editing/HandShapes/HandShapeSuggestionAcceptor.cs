@@ -1,5 +1,6 @@
 using DotCharter.Services.State;
 using HandShape = DotCharter.Core.Domain.Guitar.HandShape;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.Services.Editing.HandShapes;
 
@@ -88,7 +89,7 @@ public sealed class HandShapeSuggestionAcceptor(IHistoryService history, IAppLog
     {
         var name = suggestion.Existing is { Name.Length: > 0 } existing
             ? existing.Name
-            : ChordNameSuggester.SuggestFirstChordName(arrangement, suggestion.Frets);
+            : NewChordNames.For(arrangement, suggestion.Frets);
         if (string.IsNullOrEmpty(name))
         {
             var shape = new ChordTemplate();

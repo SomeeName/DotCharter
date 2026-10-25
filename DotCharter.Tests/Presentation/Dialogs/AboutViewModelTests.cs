@@ -17,7 +17,7 @@ public sealed class AboutViewModelTests
     public void About_and_home_show_the_public_release()
     {
         var vm = new AboutViewModel(new Docs("x"), new CapturingDialogs(), new FakeAppLogger(), FakeLocalization.English());
-        Assert.Equal("v1.2.0", vm.Version);
+        Assert.Equal("v1.3.0", vm.Version);
         Assert.Equal(vm.Version, DotCharter.UI.ViewModels.PlayMode.FrontDoorFacts.ResolveAppVersion());
     }
 

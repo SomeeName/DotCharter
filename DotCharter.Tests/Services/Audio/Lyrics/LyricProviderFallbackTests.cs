@@ -148,6 +148,34 @@ public sealed class LyricProviderFallbackTests : IDisposable
         Assert.Equal([(LyricModelCatalog.MultilingualId, OnnxExecutionProvider.Cpu)], rig.Opened);
     }
 
+    /// <summary>
+    ///     What Settings ▸ AI &amp; models shows: the provider each model last ran on,
+    ///     and its "Retry GPU", which forgets the fallback so the next sync asks
+    ///     for the GPU again.
+    /// </summary>
+    [Fact]
+    public async Task TheLastProviderIsRecorded_AndRetryGpuOpensTheGpuAgain()
+    {
+        var rig = new Rig();
+        rig.GpuBroken.Add(LyricModelCatalog.MultilingualId);
+        var memory = new LyricProviderMemory();
+        var service = Service(InstallModels(english: false), rig, memory);
+        Assert.Null(memory.LastProvider(LyricModelCatalog.MultilingualId));
+
+        await service.AlignAsync("a-b", Audio(), Options, cancellationToken: Ct);
+        Assert.Equal(OnnxExecutionProvider.Cpu, memory.LastProvider(LyricModelCatalog.MultilingualId));
+        Assert.True(memory.IsCpuOnly(LyricModelCatalog.MultilingualId));
+
+        rig.GpuBroken.Clear();
+        Assert.True(memory.ForgetCpu(LyricModelCatalog.MultilingualId));
+        rig.Opened.Clear();
+        await service.AlignAsync("a-b", Audio(), Options, cancellationToken: Ct);
+
+        Assert.Equal([(LyricModelCatalog.MultilingualId, OnnxExecutionProvider.DirectML)], rig.Opened);
+        Assert.Equal(OnnxExecutionProvider.DirectML, memory.LastProvider(LyricModelCatalog.MultilingualId));
+        Assert.False(memory.ForgetCpu(LyricModelCatalog.MultilingualId));
+    }
+
     [Fact]
     public async Task AFailureOnTheCpuIsReportedAndNotRetried()
     {

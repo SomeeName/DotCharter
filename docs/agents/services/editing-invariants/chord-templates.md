@@ -46,6 +46,46 @@ generators — hand shapes, anchors — as measured on the import path)
   .readTemplateId` returns its null `Integer`. Do NOT write it as `"null"` (that
   is what rscharter's own `marshal` emits, and its `Integer.valueOf` throws on
   it) or as `-1` (`HandShape.likeGenerator` would do `chordTemplates.get(-1)`).
+  **A chord and the hand shape over it stay on ONE template through every edit
+  path, unless `AppConfig.SyncHandShapeToChordTemplate` is off.**
+  `Editing/HandShapes/ChordHandShapeSync` is the one rule. A fret or string verb
+  (`SelectedNoteMutationCommand.AddChordMutation`), a placement or right-click
+  string edit (`ChordReshapeAction.Build`) and a drag-drop merge
+  (`CommitHighwayDragDropCommand`) put a `MutateHandShapesAction` in the SAME
+  undo node as the chord edit (the caller passes the level's hand shapes only
+  while the sync is on: `SelectedSoundMutationTargets.SyncedHandShapes`). A bar
+  follows only when it was in step (its template is the one the chord left) and
+  every templated chord under it ends on the same template; otherwise it stays.
+  The two hand-shape verbs go the other way: a split's tail
+  (`HandShapeSplitter.ResolveTemplateId`) and a wheel-resized bar that owns its
+  template (`TimelineWheelAdjuster.RebuildGrips`) take the template of the chord
+  whose frets they play (`ChordHandShapeSync.TemplateOfChordPlaying`) instead of a
+  private copy or the first equal-fret template. Pinned by
+  `ChordHandShapeSyncTests`, `HandShapeSplitSyncTests`, `HandShapeResizeSyncTests`.
+  **An edit that leaves a template with no user removes it in the SAME undo
+  node.** `Editing/ChordShapes/StrandedShapes.Wrap(arrangement, action)` is the one
+  rule: every action reports the chords and hand shapes it repoints, adds or
+  removes (`ITemplateUseReporter` into a `TemplateUseDelta`), and the templates that
+  go from some users to none are appended as a `RemoveStrandedShapesAction`, which
+  is `DeleteChordShapesAction` (survivors renumbered while ids are positions, every
+  chord, hand shape and notation-voice chord repointed, undo restores the exact list
+  and ids). A user is a chord, hand shape or notation-voice chord on ANY level; a
+  template nobody used before the edit stays, and so does one that still has a user
+  when the removal runs. Call `Wrap` on the FINISHED action at the commit site: the
+  fret and string verbs (`SelectedNoteMutationCommand`), placement and right-click
+  string edits (`ApplyNotePlacementCommand`, `EditChordStringCommand`), drag-drop
+  (`CommitHighwayDragDropCommand`, which hand shape split and paste go through),
+  `HighwayEditingService.RemoveHandShape`, `GlobalEditingCoordinator.DeleteSelected`
+  and `DeleteSelectedRelated`, the wheel resize (`TimelineWheelAdjuster.BuildResize`),
+  the chord panel (`ChordTemplateEditPlanner`, Create new), chord shape placement and
+  the apply-hand-shape-template command. The shape list's merge and delete build their
+  own `DeleteChordShapesAction`. **A new action that repoints, adds or removes chords
+  or hand shapes must implement `ITemplateUseReporter`, or the template it strands
+  stays.** The removal renumbers ids that later ticks would have captured, so a
+  wrapped edit never merges into a held-key or wheel run (the tick that strands a
+  template is a node of its own). Pinned by `StrandedShapesTests`,
+  `StrandedShapePathTests`, `StrandedShapeResizeTests`,
+  `ChordTemplateStrandedShapeTests`.
   **The find-or-create KEY is FRETS within one ARPEGGIO flavour** —
   `ChordTemplateResolver.Resolve` (editing), `ChordHandShapeBuilder`/
   `GpHandShapeBuilder` (import) and `RscpTemplateManager` (save) all use exactly
@@ -253,7 +293,16 @@ generators — hand shapes, anchors — as measured on the import path)
   they orphaned (#520)** — plus the PSARC open's own squash under "Hardest
   difficulty level only" (`Library/LibraryLevelImport`, #634), which applies
   the same rule with no undo node. Everything else keeps an unused template
-  (`RscpTemplateManager`, `ArrangementAutoFixService`, the Chord shapes merge).
+  (`RscpTemplateManager`, `ArrangementAutoFixService`). The Chord shapes list's Delete, Remove unused and merge
+  delete by their own undoable `DeleteChordShapesAction`. **Clean up shapes
+  (#272) is the same action once per undo node**: `ShapeCleanupPlanner` repoints
+  every copy's chords, hand shapes and notation-voice chords with ONE
+  `SwitchTemplateAction`, then removes every merged-away and unused shape with ONE
+  `DeleteChordShapesAction` — never one merge per copy, because the removal
+  renumbers positional ids and a later repoint planned before it would hold stale
+  ids. `ShapeCleanupFinder` decides what is a duplicate (same frets, fingers and
+  flags; two different names are never one group), what is unused, and what only
+  differs by a finger, a name or a flag (review, nothing happens until chosen).
   `Editing/Improvement/LevelTemplateOrphans` is the rule: `Capture` before the
   operation, `Find` after it; a template goes only when NOTHING uses it afterwards
   (a chord or hand shape on any level, or a notation-voice chord, resolved through
@@ -301,17 +350,25 @@ generators — hand shapes, anchors — as measured on the import path)
 - **The Chord shapes list's verbs are `Editing/ChordShapes/ChordShapeEdits`, each ONE
   undo node and none of them reshaping a template (#486).** `PlanMerge` repoints every
   chord and hand shape of every level onto another template through
-  `SwitchTemplateAction`, and is REFUSED unless both have the same frets in the same
-  `ArpeggioFlavour` (the resolver's own key) — the source stays declared, unused.
+  `SwitchTemplateAction` (notation-voice chords too), then takes the emptied source out
+  with `DeleteChordShapesAction` in the same node, so a merge leaves no duplicate and no
+  unused shape behind. It is REFUSED unless both have the same frets in the same
+  `ArpeggioFlavour` (the resolver's own key); the target keeps its own fingers and name.
   `PlanSplit` gives the selected uses a `Clone()` under a fresh id through
   `CreateAndSwitchTemplateAction` (refused when nothing selected uses it, or the
-  selection is every use). `PlanRename` is a `SetTemplateNameAction`. A use is the
+  selection is every use). `PlanRename` is a `SetTemplateNameAction`; `PlanSetName`
+  is the same action with the No name flag stated (the Shapes panel's name box and its
+  No name switch), and `PlanSuggestFingers` is a `SetTemplateFingersAction` of the
+  arrangement-aware suggestion, refused for a pinned template. A use is the
   template its id resolves to through `ChordTemplateResolver.IndexById`, so a twin
   sharing an earlier template's id counts nothing. `ChordShapeCatalog` is the pure row
   model (counts on the level on screen and on every level, duplicates, finger state:
   Missing = a fretted string with no finger, Suggested = exactly the suggester's).
-  Pinned by `Services/Editing/ChordShapes/ChordShapeEditsTests` and
-  `ChordShapeCatalogTests`.
+  `ChordShapeIssues` is the panel's pure verdict on top of it: the ONE issue a used shape
+  names (a copy of the same frets with more uses, else no fingering) and where a copy's
+  uses go (the other copy with the most uses, then list order). Pinned by
+  `Services/Editing/ChordShapes/ChordShapeIssuesTests`, `Services/Editing/ChordShapes/ChordShapeEditsTests`,
+  `ChordShapeMergeDuplicatesTests` and `ChordShapeCatalogTests`.
 
 - **Placing a whole shape is `Editing/ChordShapes/ChordShapePlacement` — ONE composite
   node, no find-or-create for a palette shape (#477).** At each position it does what a

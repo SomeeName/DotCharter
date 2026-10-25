@@ -1,5 +1,6 @@
 ﻿using DotCharter.Localization;
 using DotCharter.Services.Editing.Catalog;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.Editing.Selection.Patterns;
 using DotCharter.Services.Editing.Tracks;
 using DotCharter.Services.Editing.Fingering;
@@ -76,7 +77,7 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         _handShape = new HandShapeFromSelectionGenerator(
             fingeringService, highwayEditingService, selectionManager, logger);
         _handShapeSplitter = new HandShapeSplitter(
-            fingeringService, highwayEditingService, selectionManager, logger);
+            fingeringService, highwayEditingService, selectionManager, configService, logger);
         _suggestions = new HandShapeSuggestionAcceptor(historyManager, logger);
         _tempoScale = new TempoScaleCoordinator(
             beatScaleService, historyManager, projectState, selectionManager, logger, localization);
@@ -508,7 +509,12 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
         if (track == null) return;
 
         var actions = BuildDeleteActions(track, focusArea);
-        if (actions.Count > 0) _historyManager.Do(new CompositeAction(actions) { LabelKey = "History_Delete" });
+        if (actions.Count > 0)
+        {
+            _historyManager.Do(StrandedShapes.Wrap(track.Arrangement,
+                new CompositeAction(actions) { LabelKey = "History_Delete" }));
+        }
+
         _logger.Info(AppLogCategory.Editing,
             $"Delete selected requested in track '{track.Arrangement.Name}'. FocusArea={focusArea}, actions={actions.Count}.");
     }
@@ -631,7 +637,11 @@ public class GlobalEditingCoordinator : IGlobalEditingCoordinator
                 _highwayEditingService.GetLinkNextUpdater()));
         }
 
-        if (actions.Count > 0) _historyManager.Do(new CompositeAction(actions) { LabelKey = "History_DeleteRelated" });
+        if (actions.Count > 0)
+        {
+            _historyManager.Do(StrandedShapes.Wrap(track.Arrangement,
+                new CompositeAction(actions) { LabelKey = "History_DeleteRelated" }));
+        }
 
         _logger.Info(AppLogCategory.Editing,
             $"DeleteSelectedRelated committed {actions.Count} action(s) as ONE undo node in track '{track.Arrangement.Name}', removing {orphanedHandShapes.Count} orphaned handshape(s).");

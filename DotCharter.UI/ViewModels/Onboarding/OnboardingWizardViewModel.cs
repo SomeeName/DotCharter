@@ -46,7 +46,7 @@ public sealed record OnboardingToneChoice(DspTonePreset Preset, string Name, str
 ///         in the default gate.
 ///     </para>
 /// </summary>
-public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel, IFirstRunSetupPrompt
+public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel, IFirstRunSetupPrompt, IGuitarJackScanTarget
 {
     private const double MeterFloorDb = -60.0;
 
@@ -66,6 +66,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
 
     private CancellationTokenSource? _scanCts;
     private bool _audioPagesOpened;
+    private readonly ProjectState _state;
     private bool _syncingProfile;
 
     public OnboardingWizardViewModel(
@@ -80,6 +81,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         IAudioPlaybackService engine,
         IAppLogger logger,
         SystemCheckViewModel systemCheck,
+        ProjectState state,
         IPackageFeatures packageFeatures,
         Func<string>? appVersion = null,
         Func<PedalboardViewModel?>? pedalboard = null)
@@ -98,9 +100,12 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         _engine = engine;
         _logger = logger;
         _systemCheck = systemCheck;
+        _state = state;
         _appVersion = appVersion ?? CurrentAppVersion;
 
         LatencyWizard.CalibrationApplied += (_, _) => RefreshLatencySummary();
+        InputFinder = new GuitarJackFinder(this, localization);
+        _audio.PropertyChanged += OnAudioInputChanged;
         PrimaryCommand = new RelayCommand(() =>
         {
             if (_machine.IsLast) Finish();
@@ -189,6 +194,19 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
     }
 
     partial void OnIsCharterChanged(bool value) => OnPropertyChanged(nameof(IsPlayer));
+
+    /// <summary>The editor's String order, offered to a charter on the first page:
+    /// Tab puts the low string at the bottom of the timeline. <see cref="IsRocksmithStringOrder" />
+    /// is the other card; exactly one is true.</summary>
+    [ObservableProperty] private bool _isTabStringOrder;
+
+    public bool IsRocksmithStringOrder
+    {
+        get => !IsTabStringOrder;
+        set => IsTabStringOrder = !value;
+    }
+
+    partial void OnIsTabStringOrderChanged(bool value) => OnPropertyChanged(nameof(IsRocksmithStringOrder));
 
     public IReadOnlyList<LanguageOption> LanguageOptions => _localization.LanguageOptions;
 
@@ -335,6 +353,7 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         // LanguageIndexOf fell back to System".
         SelectedLanguageIndex = _seededLanguageIndex = LanguageIndexOf(config.LanguageCulture);
         UpdateCheckOnStartup = config.UpdateCheckOnStartup;
+        IsTabStringOrder = config.InvertStrings;
         LibraryPath = config.PsarcLibraryPath ?? string.Empty;
         LibrarySongCount = -1;
         LibraryStatus = string.Empty;
@@ -549,7 +568,10 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
             c.StartupScreen = StartupRouting.ScreenForRole(IsCharter);
             c.UpdateCheckOnStartup = UpdateCheckOnStartup;
             if (culture != null) c.LanguageCulture = culture;
+            c.InvertStrings = IsTabStringOrder;
         });
+        // The timeline turns now, not at the next launch.
+        _state.InvertStrings = IsTabStringOrder;
         if (culture != null) _localization.SetConfiguredCulture(culture);
     }
 
@@ -676,7 +698,10 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         var name = Audio.SelectedDriver == "ASIO"
             ? NameAt(Audio.AsioDevices, Audio.SelectedAsioOutputIndex)
             : NameAt(Audio.WasapiDevices, Audio.SelectedWasapiOutputIndex);
-        return name.Length == 0 ? Loc("Onboarding_DefaultDevice") : name;
+        var device = name.Length == 0 ? Loc("Onboarding_DefaultDevice") : name;
+        // The test click and the summary name the pair too: "which outputs" is half of where the sound goes.
+        var pair = Audio.SelectedOutputPairIndex;
+        return pair >= 0 && pair < Audio.OutputPairOptions.Count ? $"{device} · {Audio.OutputPairOptions[pair].Label}" : device;
     }
 
     private string InputDeviceLabel()
@@ -703,6 +728,41 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         InputStatus = _engine.InputSampleRate > 0
             ? LocF("Onboarding_Input_Applied", InputDeviceLabel())
             : Loc("Onboarding_Input_NoCapture");
+    }
+
+    /// <summary>"Find my guitar": tries each input in turn while the user strums.</summary>
+    public GuitarJackFinder InputFinder { get; }
+
+    /// <summary>
+    ///     A new jack (or Mono) on the Input page is applied at once, so the meter
+    ///     below follows the pick without a second click. Not while the finder
+    ///     drives the picker: it applies each input itself.
+    /// </summary>
+    private void OnAudioInputChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(AudioSettingsViewModel.InputJackOptions) or nameof(AudioSettingsViewModel.SelectedInputJackIndex))
+            InputFinder.Refresh();
+        if (!IsInput || InputFinder.IsRunning || !_audioPagesOpened) return;
+        if (e.PropertyName is nameof(AudioSettingsViewModel.SelectedInputJackIndex) or nameof(AudioSettingsViewModel.AsioInputMono))
+            ApplyInput();
+    }
+
+    IReadOnlyList<InputJackOption> IGuitarJackScanTarget.Jacks =>
+        _audio.EnableInput ? _audio.InputJackOptions : [];
+
+    int IGuitarJackScanTarget.CurrentJack => _audio.AsioInputChannelLeft;
+
+    void IGuitarJackScanTarget.ListenOn(int jack)
+    {
+        _audio.AsioInputMono = true;
+        _audio.AsioInputChannelLeft = jack;
+        ApplyInput();
+    }
+
+    double IGuitarJackScanTarget.ReadPeakDb()
+    {
+        PollInputMeter();
+        return InputLevelDb;
     }
 
     /// <summary>One meter sample: the latest captured window's peak, off the
@@ -931,6 +991,8 @@ public partial class OnboardingWizardViewModel : ViewModelBase, IDialogViewModel
         {
             Line("Onboarding_Summary_Role",
                 StartupRouting.BootsIntoPlayMode(config) ? Loc("Onboarding_Role_Player") : Loc("Onboarding_Role_Charter")),
+            Line("Settings_StringOrder",
+                config.InvertStrings ? Loc("Settings_StringOrder_Tab") : Loc("Settings_StringOrder_Rocksmith")),
             HasLibraryStep ? Line("Onboarding_Summary_Library",
                 skipped.Contains(OnboardingStep.Library) || string.IsNullOrWhiteSpace(config.PsarcLibraryPath)
                     ? Loc("Onboarding_Summary_NotSet")

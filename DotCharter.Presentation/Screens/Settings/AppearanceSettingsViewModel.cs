@@ -30,7 +30,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
     private const string ColorKeyPrefix = Prefix + "color.";
 
     /// <summary>The persisted values the footer counts. The colours are not among them: a colour edit is reverted, not counted.</summary>
-    private static readonly string[] Tracked = [nameof(SelectedStringPaletteIndex), nameof(UiScaleChoiceIndex)];
+    private static readonly string[] Tracked = [nameof(SelectedStringPaletteIndex), nameof(UiScaleChoiceIndex), nameof(AnimatedHomeHero)];
 
     private readonly IConfigurationService _config;
     private readonly ILocalizationService _localization;
@@ -46,6 +46,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
 
     [ObservableProperty] private int _selectedStringPaletteIndex;
     [ObservableProperty] private int _uiScaleChoiceIndex;
+    [ObservableProperty] private bool _animatedHomeHero;
 
     public AppearanceSettingsViewModel(
         IConfigurationService config,
@@ -105,7 +106,9 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
         [
             new(Prefix + "stringPalette", _localization["Settings_Appearance_StringColorsTitle"],
                 _localization["Settings_Appearance_StringColorsSubtitle"]),
-            new(Prefix + "uiScale", _localization["Settings_UiScale"], _localization["Settings_UiScaleSubtitle"])
+            new(Prefix + "uiScale", _localization["Settings_UiScale"], _localization["Settings_UiScaleSubtitle"]),
+            new(Prefix + "animatedHomeHero", _localization["Settings_Graphics_AnimatedHomeHero"],
+                _localization["Settings_Graphics_AnimatedHomeHero_Desc"])
         ]),
         new(_localization["Settings_Appearance_CustomizeTitle"], _localization["Settings_Appearance_CustomizeSubtitle"],
         [
@@ -124,6 +127,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
             SelectedStringPaletteIndex = PaletteIndexOf(config.StringColorPresetId);
             _scale.Restore(config.UiScaleAuto, config.UiScale);
             UiScaleChoiceIndex = _scale.IndexFor(config.UiScaleAuto, _scale.Clamp(config.UiScale));
+            AnimatedHomeHero = config.AnimatedHomeHero;
         }
         finally
         {
@@ -149,6 +153,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject,
         // again restores the user's own choice rather than the window's.
         config.UiScaleAuto = _scale.IsAuto(UiScaleChoiceIndex);
         if (_scale.FactorFor(UiScaleChoiceIndex) is { } manualFactor) config.UiScale = _scale.Clamp(manualFactor);
+        config.AnimatedHomeHero = AnimatedHomeHero;
         _config.SaveAppConfig(config);
         _logger?.Info(AppLogCategory.Settings, string.Create(CultureInfo.InvariantCulture,
             $"Appearance saved. stringColors={paletteId}, uiScale={config.UiScale:0.##} " +

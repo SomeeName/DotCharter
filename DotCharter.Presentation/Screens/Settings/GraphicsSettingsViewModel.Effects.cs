@@ -51,10 +51,9 @@ public sealed partial class GraphicsSettingsViewModel
     private static readonly string[] Tracked =
     [
         nameof(RenderScalePercent), nameof(SelectedMaxFps), nameof(IdleFps), nameof(SelectedPresentMode),
-        nameof(SelectedMsaa), nameof(AnimatedHomeHero), nameof(AnchorPreviewLeadMs), nameof(VisualLeadMs),
+        nameof(SelectedMsaa), nameof(AnchorPreviewLeadMs), nameof(VisualLeadMs),
         nameof(HighwayScrollSpeedOverrideEnabled), nameof(HighwayScrollSpeed), nameof(HighwayDrawDistanceZ),
-        nameof(CameraDistancePercent), nameof(Show3DFingering), nameof(Timeline2DPolish),
-        nameof(Timeline2DLaneTint), nameof(InvertStrings)
+        nameof(CameraDistancePercent), nameof(Show3DFingering)
     ];
 
     private void TrackSettings()
@@ -121,12 +120,11 @@ public sealed partial class GraphicsSettingsViewModel
 
     public IReadOnlyList<SettingsSearchGroup> SearchGroups =>
     [
-        Group("Display", "renderScale", "maxFps", "idleFps", "presentMode", "msaa", "animatedHomeHero"),
+        Group("Display", "renderScale", "maxFps", "idleFps", "presentMode", "msaa"),
         Group("AnchorPreview", "anchorPreview", "anchorSweep", "anchorLead"),
         Group("HighwayView", "scrollSpeedOverride", "scrollSpeed", "drawDistance", "cameraDistance",
-            "show3DFingering", "invertStrings"),
+            "show3DFingering"),
         Group("Timing", "visualLead"),
-        Group("Timeline2D", "timeline2DPolish", "timeline2DLaneTint"),
         Group("Highway", "highwayNearFade", "noteHitExplosions", "enhancedHitFeedback", "hitSparks", "beatPulse",
             "depthFog", "vignette", "highwayLighting", "bloom", "stringShimmer", "filmicTonemap"),
         Group("Showlights", "showlightBeams", "showlightFog"),
@@ -134,7 +132,7 @@ public sealed partial class GraphicsSettingsViewModel
     ];
 
     /// <summary>The last three groups sit behind the Advanced disclosure.</summary>
-    private const int FirstAdvancedGroup = 5;
+    private const int FirstAdvancedGroup = 4;
 
     public void ApplySearch(string query)
     {

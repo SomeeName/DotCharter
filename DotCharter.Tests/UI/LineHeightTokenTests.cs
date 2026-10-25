@@ -55,7 +55,10 @@ public sealed class LineHeightTokenTests
             // change. The settings rail's two-line tab description
             // (`SideTabDesc`, FireLineHeightXsTight) is gone; the description
             // is the rail row's tooltip now.
-            [14] = 1, [15] = 1,
+            // 2026-10-23: 14 px 1 -> 2, a NEW line box, not a changed one: the
+            // first-run String order cards' six-string preview
+            // (`TextBlock.OnboardingStringPreview`).
+            [14] = 2, [15] = 1,
             // 2026-09-16, W4: 8 -> 9. ONE new 16 px line box, and it is not a
             // visual change at all — `TextBlock.RigRoleBody` is the rig's BODY
             // type role, declared once in `Styles/Fire/FireRigRolesAndTones.axaml` over the

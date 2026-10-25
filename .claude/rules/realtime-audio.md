@@ -28,7 +28,7 @@ is safe:
 - unbounded loops, O(n) work in something the UI can grow, or anything
   whose cost depends on user data size
 - exceptions escaping: nothing may unwind out of the driver callback (see the
-  hard-rule index in `JuceSharp/AGENTS.md`)
+  hard-rule index (`JuceSharp/docs/agents/hard-rule-index.md`))
 
 Prefer preallocation, bounded work, lock-free or `LatestSnapshot`-style
 handoff, and one clear owner per piece of state (audio thread vs control

@@ -78,7 +78,7 @@ public sealed class SurfaceShowRewarmUiPerfSmokeTests(ITestOutputHelper output)
                 {
                     Assert.True(list.GetVisualDescendants().OfType<ListBoxItem>().Any(),
                         $"the '{list.Name ?? list.GetType().Name}' list realized no rows while hidden " +
-                        $"(tones {vm.Tones.Count}, sections {vm.Sections.Count}, phrases {vm.Phrases.Count})");
+                        $"(tones {vm.TonesPanel.Groups.Count}, sections {vm.SectionsPanel.Groups.Count})");
                 }
 
                 return TimeShow(tab, other, window);
@@ -102,15 +102,15 @@ public sealed class SurfaceShowRewarmUiPerfSmokeTests(ITestOutputHelper output)
             const int names = 200;
             WithSongTab((tab, state, window, other) =>
             {
-                state.ActiveProject = SongProject(phraseNames: names);
+                state.ActiveProject = SongProject(sectionNames: names);
                 Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
                 TimeShow(tab, other, window);
 
-                var phrases = tab.GetVisualDescendants().OfType<ListBox>()
-                    .Single(l => ReferenceEquals(l.ItemsSource, ((SongOverviewViewModel)tab.DataContext!).Phrases));
-                var rows = phrases.GetVisualDescendants().OfType<ListBoxItem>().Count(r => r.IsVisible);
+                var sections = tab.GetVisualDescendants().OfType<ListBox>()
+                    .Single(l => ReferenceEquals(l.ItemsSource, ((SongOverviewViewModel)tab.DataContext!).SectionsPanel.Groups));
+                var rows = sections.GetVisualDescendants().OfType<ListBoxItem>().Count(r => r.IsVisible);
                 Assert.True(rows is > 0 and < names,
-                    $"{rows} of {names} phrase rows were built — a long list must virtualize inside its 360 px " +
+                    $"{rows} of {names} section rows were built — a long list must virtualize inside its 360 px " +
                     "viewport (ItemsPanelConverters.StackedRowLimit), or the background rewarm builds hundreds of rows " +
                     "in one uninterruptible step");
                 return 0;
@@ -122,7 +122,8 @@ public sealed class SurfaceShowRewarmUiPerfSmokeTests(ITestOutputHelper output)
     {
         var logger = new FakeAppLogger();
         var state = new ProjectState();
-        var vm = new SongOverviewViewModel(state, new HistoryService(logger), logger, FakeLocalization.English());
+        var vm = new SongOverviewViewModel(state, new HistoryService(logger), logger, FakeLocalization.English(),
+            DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<IChartEditorSurface>().Proxy);
         var tab = new SongInspectorView { DataContext = vm, IsVisible = false };
         var other = new Border { Height = 300 };
         var window = new Window { Width = PaneWidth, Height = PaneHeight, Content = new Grid { Children = { other, tab } } };
@@ -140,17 +141,17 @@ public sealed class SurfaceShowRewarmUiPerfSmokeTests(ITestOutputHelper output)
         }
     }
 
-    /// <summary>A long chart's worth of names: 24 tones, 15 sections and 20 phrases
-    /// over two arrangements (the corpus song measured for #141 had 4 / 9 / 0).</summary>
-    private static ChartProject SongProject(int phraseNames = 20)
+    /// <summary>A long chart's worth of names: 24 tones and 15 sections over two
+    /// arrangements (the corpus song measured for #141 had 4 / 9).</summary>
+    private static ChartProject SongProject(int sectionNames = 15)
     {
         var project = new ChartProject();
         foreach (var name in new[] { "Lead", "Rhythm" })
         {
             var arrangement = new Arrangement { Name = name, StartingTone = "Tone 00" };
             for (var i = 0; i < 24; i++) arrangement.ToneChanges.Add(new ToneChange { ToneName = $"Tone {i:00}" });
-            for (var i = 0; i < Math.Max(40, phraseNames); i++)
-                arrangement.EventPoints.Add(new EventPoint { Section = $"section {i % 15:00}", Phrase = $"phrase {i % phraseNames:000}" });
+            for (var i = 0; i < Math.Max(40, sectionNames); i++)
+                arrangement.EventPoints.Add(new EventPoint { Section = $"section {i % sectionNames:000}" });
             project.Arrangements.Add(arrangement);
         }
 

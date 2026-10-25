@@ -2,10 +2,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DotCharter.Localization;
 using DotCharter.Presentation.Contracts.Settings;
 using DotCharter.Services.Infrastructure.Configuration;
+using DotCharter.Services.State;
 
 namespace DotCharter.Presentation.Screens.Settings;
 
-/// <summary>Settings ▸ Play: the count-in, the metronome, note claps and the rock meter for a Play Mode run.</summary>
+/// <summary>Settings ▸ Play: the count-in, the metronome, note claps, the rock meter and the String order of a Play Mode run.</summary>
 public sealed partial class PlaySettingsViewModel : ObservableObject,
     IPlaySettingsScreen, ISettingsTab, ISettingsChangeSource
 {
@@ -15,28 +16,32 @@ public sealed partial class PlaySettingsViewModel : ObservableObject,
             new("countIn", "Settings_GameplayCountIn_RowLabel", "Settings_Tip_GameplayCountIn"),
             new("metronome", "Settings_GameplayMetronome", "Settings_Tip_GameplayMetronome"),
             new("claps", "Settings_GameplayClaps", "Settings_Tip_GameplayClaps"),
-            new("rockMeter", "PlayMode_RockMeter_SettingLabel", "PlayMode_RockMeter_SettingDesc"))
+            new("rockMeter", "PlayMode_RockMeter_SettingLabel", "PlayMode_RockMeter_SettingDesc"),
+            new("stringOrder", "Settings_StringOrder", "Settings_Tip_PlayStringOrder"))
     ]);
 
     private static readonly string[] Tracked =
     [
         nameof(GameplayCountInIndex), nameof(GameplayMetronomeEnabled), nameof(GameplayClapsEnabled),
-        nameof(GameplayRockMeterEnabled)
+        nameof(GameplayRockMeterEnabled), nameof(StringOrderIndex)
     ];
 
     private readonly IConfigurationService _config;
     private readonly ILocalizationService _localization;
+    private readonly ProjectState _state;
     private readonly SettingsChangeSet _changes = new();
 
     [ObservableProperty] private int _gameplayCountInIndex;
     [ObservableProperty] private bool _gameplayMetronomeEnabled;
     [ObservableProperty] private bool _gameplayClapsEnabled;
     [ObservableProperty] private bool _gameplayRockMeterEnabled;
+    [ObservableProperty] private int _stringOrderIndex;
 
-    public PlaySettingsViewModel(IConfigurationService config, ILocalizationService localization)
+    public PlaySettingsViewModel(IConfigurationService config, ILocalizationService localization, ProjectState state)
     {
         _config = config;
         _localization = localization;
+        _state = state;
         _changes.TrackProperties(this, Rows.Prefix, Tracked, () => OnPropertyChanged(nameof(UnsavedSettings)));
         _changes.Rebaseline();
     }
@@ -61,6 +66,7 @@ public sealed partial class PlaySettingsViewModel : ObservableObject,
         GameplayMetronomeEnabled = config.GameplayMetronomeEnabled;
         GameplayClapsEnabled = config.GameplayClapsEnabled;
         GameplayRockMeterEnabled = config.GameplayRockMeterEnabled;
+        StringOrderIndex = config.PlayModeInvertStrings ? 1 : 0;
         Rebaseline();
     }
 
@@ -71,7 +77,9 @@ public sealed partial class PlaySettingsViewModel : ObservableObject,
         config.GameplayMetronomeEnabled = GameplayMetronomeEnabled;
         config.GameplayClapsEnabled = GameplayClapsEnabled;
         config.GameplayRockMeterEnabled = GameplayRockMeterEnabled;
+        config.PlayModeInvertStrings = StringOrderIndex == 1;
         _config.SaveAppConfig(config);
+        _state.PlayModeInvertStrings = config.PlayModeInvertStrings;
         Rebaseline();
     }
 

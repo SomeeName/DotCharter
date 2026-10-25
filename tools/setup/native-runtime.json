@@ -123,11 +123,27 @@
       }
     },
     {
-      "commit": "4c39e776508ad673316cba40661c08d690329412",
-      "abi": 48,
+      "commit": "a20b53625815451652ad178728bc889aa8f4815e",
+      "abi": 49,
       "files": {
-        "juce_sharp.dll": "85ced2361c293867b45aa595bc2b1e178356638f07dbf1864fd2a27c2c597ecd",
-        "juce_vst_host.exe": "65532650a8c27f170de26dfbc01102106cf431f319291dc5295697e106d97aa5"
+        "juce_sharp.dll": "119095efc0662a26e9b186f388bd1681b2fede2938e362019eb73863ce57c6ce",
+        "juce_vst_host.exe": "daa73fb0d4a5bb779a35f89c4b751da849551bdfbd838bf46c0c02882df16956"
+      }
+    },
+    {
+      "commit": "eb172421413a3d488ba21c6dd4ab86f194b6ac03",
+      "abi": 49,
+      "files": {
+        "juce_sharp.dll": "6d8862e5ecca7de56593a90df1d5102dfe3085f059a4183f594ee881daed5d26",
+        "juce_vst_host.exe": "8fe6e4411ed64154856e528e426e0a7495498b72d00ed485893c153100f89d23"
+      }
+    },
+    {
+      "commit": "979f31ce90c06e093cce23b4aa5eae897a50c521",
+      "abi": 49,
+      "files": {
+        "juce_sharp.dll": "6d8862e5ecca7de56593a90df1d5102dfe3085f059a4183f594ee881daed5d26",
+        "juce_vst_host.exe": "8fe6e4411ed64154856e528e426e0a7495498b72d00ed485893c153100f89d23"
       }
     }
   ]

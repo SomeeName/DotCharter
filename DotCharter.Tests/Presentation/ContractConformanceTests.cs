@@ -81,16 +81,26 @@ public sealed class ContractConformanceTests
         }
 
         Assert.Contains("IMessagePromptScreen", checkedContracts);
-        Assert.Contains("IChordShapesScreen", checkedContracts);
-        var dialogs = ScreenCatalog.Default.Entries.Where(e => e.Kind == ScreenKind.Dialog).Select(e => e.Contract.Name);
+        Assert.Contains("IShapePanelScreen", checkedContracts);
+        var dialogs = ScreenCatalog.Default.Entries.Where(e => e.Kind == ScreenKind.Dialog).Select(e => e.Contract.Name)
+            .Except(DesignOnlyDialogs);
         Assert.All(dialogs, name => Assert.Contains(name, checkedContracts));
+        Assert.All(DesignOnlyDialogs, name => Assert.DoesNotContain(name, checkedContracts));
     }
+
+    /// <summary>
+    ///     Catalog dialogs that are gallery designs on their fakes, awaiting the owner's approval
+    ///     before any view model exists. The list only shrinks: wiring one fails the check above
+    ///     until its entry is deleted here.
+    /// </summary>
+    private static readonly string[] DesignOnlyDialogs = [];
 
     /// <summary>What the dialog view models the module registers reach through, over a real 16-beat chart editor.</summary>
     private static void AddDialogDependencies(IServiceCollection services)
     {
         var chart = new Dialogs.ChartEditHarness();
         services.AddSingleton<DotCharter.Services.Editing.IChartEditorSurface>(chart.Editor);
+        services.AddSingleton<DotCharter.Services.Editing.ChordShapes.IChordUseMarks>(new DotCharter.UI.ViewModels.Editor.ChordUseMarks(chart.Editor));
         services.AddSingleton<DotCharter.Services.Audio.Coordination.IEditorTransport>(chart.Transport);
         services.AddSingleton<DotCharter.Services.Editing.Tempo.ITempoService>(chart.Tempo);
         services.AddSingleton<IHistoryService>(chart.History);

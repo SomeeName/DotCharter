@@ -55,6 +55,23 @@
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="BoxShadow" Value="{DynamicResource FireShadowScreen}" />
                 <Setter Property="Padding" Value="{StaticResource FirePadBody}" />
+                <!-- Centring the card is the grammar's job, not each dialog's. So is the
+                     CLAMP (2026-08-11): MaxWidth/MaxHeight follow the scrim's live bounds
+                     (a Width larger than MaxWidth loses — that is the min/max clamp), so
+                     an Xl card shrinks on a laptop instead of centring itself off both
+                     screen edges, and the body row is the one that scrolls. The height
+                     keeps its old 820 cap on top so a tall dialog does not become a tower
+                     on a 1440p window. Every card is the direct child of a `Grid.DialogScrim`
+                     or of a `Grid.DialogFrame` (the same centring box WITHOUT a backdrop, the
+                     root of a dialog hosted by `Views/Shell/DialogHost`), so the parent Grid
+                     is the box. This was a `Grid.DialogScrim > Border.DialogCard` RULE, which
+                     the dialog host attached to every Border (#263, the rule-frame ceiling). -->
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="MaxWidth"
+                        Value="{Binding $parent[Grid].Bounds, Converter={x:Static conv:DialogCardClampConverter.Instance}, ConverterParameter=Width}" />
+                <Setter Property="MaxHeight"
+                        Value="{Binding $parent[Grid].Bounds, Converter={x:Static conv:DialogCardClampConverter.Instance}, ConverterParameter=Height:820}" />
             </Style>
             <!-- The WIDTH LADDER (2026-08-11): four steps, worn as a second class on
                  the card (`Classes="DialogCard Md"`), replacing seventeen ad-hoc
@@ -172,24 +189,6 @@
 
 
 
-    <!-- Centring the card is the grammar's job, not each dialog's. So is the
-         CLAMP (2026-08-11): MaxWidth/MaxHeight follow the scrim's live bounds
-         (a Width larger than MaxWidth loses — that is the min/max clamp), so
-         an Xl card shrinks on a laptop instead of centring itself off both
-         screen edges, and the body row is the one that scrolls. The height
-         keeps its old 820 cap on top so a tall dialog does not become a tower
-         on a 1440p window.
-         `Grid.DialogFrame` is the same centring box WITHOUT a backdrop: the root
-         of a dialog hosted by `Views/Shell/DialogHost`, whose one shared scrim
-         sits under the top dialog instead. -->
-    <Style Selector="Grid.DialogScrim > Border.DialogCard, Grid.DialogFrame > Border.DialogCard">
-        <Setter Property="HorizontalAlignment" Value="Center" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="MaxWidth"
-                Value="{Binding $parent[Grid].Bounds, Converter={x:Static conv:DialogCardClampConverter.Instance}, ConverterParameter=Width}" />
-        <Setter Property="MaxHeight"
-                Value="{Binding $parent[Grid].Bounds, Converter={x:Static conv:DialogCardClampConverter.Instance}, ConverterParameter=Height:820}" />
-    </Style>
 
 
 

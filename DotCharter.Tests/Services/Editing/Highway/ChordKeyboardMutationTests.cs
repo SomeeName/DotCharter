@@ -186,6 +186,7 @@ public sealed class ChordKeyboardMutationTests
         h.AddTemplate(0, (0, 3), (1, 5));
         var destination = h.AddTemplate(1, (0, 4), (1, 6));
         var chord = h.AddChord(2, 0, (0, 3), (1, 5));
+        h.KeepInUse(0);
         h.Selection.SelectedChords.Add(chord);
 
         h.Service.MoveSelectedFretUp();
@@ -200,6 +201,7 @@ public sealed class ChordKeyboardMutationTests
         var h = new Harness();
         h.AddTemplate(0, (0, 3), (1, 5));
         var chord = h.AddChord(2, 0, (0, 3), (1, 5));
+        h.KeepInUse(0);
         h.Selection.SelectedChords.Add(chord);
 
         h.Service.MoveSelectedFretUp();
@@ -476,5 +478,13 @@ public sealed class ChordKeyboardMutationTests
             State.PlacedChords.Add(c);
             return c;
         }
+
+        /// <summary>A bar far from every edit that keeps <paramref name="templateId" /> in use, so the edit does not strand it.</summary>
+        public void KeepInUse(int templateId) => Arrangement.Levels[0].HandShapes.Add(new HandShape
+        {
+            Position = new FractionalPosition(12),
+            EndPosition = new FractionalPosition(13),
+            TemplateId = templateId
+        });
     }
 }

@@ -151,7 +151,7 @@ public partial class InspectorView : UserControl, IPrewarmableSurfaces
     internal static readonly string[] NestedPaneNames =
     [
         "MixerLevelsCard", "MixerStemsBody", "MixerPlaybackFxBody", "MixerEqBody", "MixerMidiBody",
-        "SongKeyBody", "SongTonesBody", "SongSectionsBody", "SongPhrasesBody",
+        "SongKeyBody", "SongTonesBody", "SongSectionsBody",
         "LyricsRawBody", "LyricsSyllableBody", "LyricsTransferBody"
     ];
 

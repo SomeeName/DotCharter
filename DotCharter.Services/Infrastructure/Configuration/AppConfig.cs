@@ -380,6 +380,11 @@ public class AppConfig : RigConfig
     ///         Off restores the pre-0.40 behaviour: only hand shapes the user
     ///         explicitly selected are repointed.
     ///     </para>
+    ///     <para>
+    ///         The same switch covers the highway and timeline edits that repoint a chord (fret and
+    ///         string verbs, string placement, a drag-drop merge) and the two hand-shape verbs that
+    ///         rebuild a bar's grip (split, wheel resize): see <c>ChordHandShapeSync</c>.
+    ///     </para>
     /// </summary>
     public bool SyncHandShapeToChordTemplate { get; set; } = true;
 
@@ -424,6 +429,14 @@ public class AppConfig : RigConfig
     ///     </para>
     /// </summary>
     public bool SuppressDoubleStopChordNames { get; set; } = true;
+
+    /// <summary>
+    ///     Name a chord template the editor makes (a new chord, a reshape, an accepted hand-shape
+    ///     suggestion, Generate fingerings, a Guitar Pro chord its file leaves unnamed) from the
+    ///     pitch-based suggester. Off leaves every new chord unnamed; a name a source carries is
+    ///     kept either way. On by default. Read through <c>NewChordNames</c>.
+    /// </summary>
+    public bool AutoNameNewChords { get; set; } = true;
 
     /// <summary>
     ///     Exempt root-and-fifth shapes from
@@ -646,13 +659,21 @@ public class AppConfig : RigConfig
     // Default OFF — regrades the whole picture.
     public bool EnableFilmicTonemap { get; set; }
 
-    /// <summary>Inverted string layout (tab convention): vertically flips the
-    /// string order in BOTH the 3D highway and the 2D timeline so a chart reads
-    /// like standard tab (low E at the bottom). A display preference, mirrored
-    /// into ProjectState/UserSettingsState like the graphics toggles above and
-    /// consumed by both renderers + 2D hit-testing. Default OFF — a strict
-    /// no-op that leaves every existing view byte-identical.</summary>
+    /// <summary>The editor's String order (Settings ▸ Editor): <c>true</c> is Tab (low string
+    /// at the bottom), <c>false</c> Rocksmith (low string on top). It drives the 2D timeline,
+    /// its hit-testing and string-move keys, and the editor's 3D preview. Mirrored into
+    /// ProjectState/UserSettingsState like the graphics toggles above. Default OFF.</summary>
     public bool InvertStrings { get; set; }
+
+    /// <summary>The String order of the highway during a Play Mode run (Settings ▸ Play):
+    /// <c>true</c> is Tab. Its own setting, so a charter who reads tab can still play in the
+    /// game's layout. Default OFF (Rocksmith).</summary>
+    public bool PlayModeInvertStrings { get; set; }
+
+    /// <summary>One-time migration latch: a config written while one String order served the
+    /// editor and Play Mode alike gets that choice copied into <see cref="PlayModeInvertStrings" />
+    /// once (JsonConfigurationService.NormalizeAppConfig), so nobody's run changes layout.</summary>
+    public bool StringOrderSplitMigrated { get; set; }
 
     // ------ 2D timeline visuals (0.14.3, Settings → Graphics) ------------------
     // Consumed by the OpenGL editor timeline via the Timeline2DVisuals static

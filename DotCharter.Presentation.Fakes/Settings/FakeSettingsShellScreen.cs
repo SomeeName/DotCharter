@@ -154,9 +154,8 @@ public sealed class FakeSettingsShellScreen : ObservableObject, ISettingsShellSc
         new FakeRailSection("Configuration",
         [
             new FakeRailItem("keybinds", "Keybinds", "Every editor shortcut", "IconKeyboard", selected == "keybinds", typeof(IKeybindsSettingsScreen)),
-            new FakeRailItem("stemModels", "Stem models", "Separation models and performance", "IconEqualizer", selected == "stemModels"),
             new FakeRailItem("tone3000", "TONE3000", "Sign in to browse captures", "IconAmp", selected == "tone3000"),
-            new FakeRailItem("ai", "AI", "Tone design and match providers", "IconSparkles", selected == "ai"),
+            new FakeRailItem("ai", "AI & models", "Tone design, stem separation and lyric sync models", "IconSparkles", selected == "ai"),
             new FakeRailItem("updates", "Updates", "Version checks and GitHub sign-in", "IconUpdate", selected == "updates", typeof(IUpdatesSettingsScreen))
         ])
     ];

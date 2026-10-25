@@ -29,7 +29,7 @@ public static class AudioSettingsCatalog
             Group("Settings_OutputRouting",
                 Row("driver", "Settings_AudioDriver", "Settings_Tip_AudioDriver"),
                 Row("device", "Settings_Device", "Settings_Tip_Device"),
-                Row("asioOutChannels", "Settings_AsioOutChannels", "Settings_Tip_AsioOutChannels")),
+                Row("outputChannels", "Settings_OutChannels", "Settings_Tip_OutChannels")),
             Group("Settings_InstrumentInput",
                 Row("enableInput", "Settings_EnableLiveInput_RowLabel", "Settings_Tip_EnableLiveInput"),
                 Row("inputDriver", "Settings_InputDriver", "Settings_Tip_InputDriver"),

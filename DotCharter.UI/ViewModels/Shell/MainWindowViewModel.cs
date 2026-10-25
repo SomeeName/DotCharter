@@ -337,6 +337,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable, IShortcut
     /// <summary>The named phrase catalog pane (EOF's fret catalog).</summary>
     public PhraseCatalogViewModel PhraseCatalog { get; }
 
+    public StringOrderToggle StringOrder => _stringOrder ??= new StringOrderToggle(ProjectState, _projectSession);
+
+    private StringOrderToggle? _stringOrder;
+
     // Seams for view code-behind that cannot take constructor injection
     // (views are created from XAML): timeline input glue and input logging
     // reach their services through here instead of the static container.

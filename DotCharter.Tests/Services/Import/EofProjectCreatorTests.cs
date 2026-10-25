@@ -95,6 +95,22 @@ public sealed class EofProjectCreatorTests : IDisposable
         Assert.Equal(chosen, h.Config.LoadAppConfig().LastProjectFolderDir);
     }
 
+    /// <summary>#232: the .eof's lyrics are in the project it creates.</summary>
+    [Fact]
+    public async Task The_imported_lyrics_are_in_the_created_project()
+    {
+        var h = new CreatorHarness();
+        var songDir = Path.Combine(_tempDir, "lyrics");
+        var path = WriteFixtureEofFile(songDir);
+        WriteCompanionAudio(songDir);
+        h.Storage.NextFolder = Directory.CreateDirectory(Path.Combine(_tempDir, "out-lyrics")).FullName;
+
+        await h.Creator.CreateAsync(Parse(path));
+
+        var vocals = Assert.Single(h.State.ActiveProject!.VocalTracks);
+        Assert.Equal(["Hel", "lo"], vocals.Phrases.SelectMany(p => p.Lyrics).Select(l => l.Text));
+    }
+
     /// <summary>The happy path still reports the plain success line, and the saved project is the one adopted.</summary>
     [Fact]
     public async Task When_the_audio_loads_it_reports_the_plain_success_line()

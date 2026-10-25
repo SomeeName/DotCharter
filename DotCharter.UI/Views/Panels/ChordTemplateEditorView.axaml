@@ -31,9 +31,16 @@
                       ItemsSource="{Binding AvailableTemplates}"
                       AutomationProperties.Name="{localization:Loc ChordTemplate_Template}"
                       SelectedItem="{Binding SelectedDropdownTemplate}">
+                <!-- An unnamed grip lists by its frets, as a placeholder: dimmed and italic. -->
+                <ComboBox.Styles>
+                    <Style Selector="TextBlock.Unnamed">
+                        <Setter Property="FontStyle" Value="Italic" />
+                        <Setter Property="Opacity" Value="0.6" />
+                    </Style>
+                </ComboBox.Styles>
                 <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="panels:TemplateListItem">
-                        <TextBlock Text="{Binding DisplayName}" />
+                        <TextBlock Text="{Binding DisplayName}" Classes.Unnamed="{Binding IsUnnamed}" />
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
@@ -43,21 +50,31 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{localization:Loc ChordTemplate_Name}" VerticalAlignment="Center"
                        Margin="{StaticResource GapRightMd}" Theme="{StaticResource LabelText}" Classes="Label" />
             <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" Margin="{StaticResource GapRightMd}"
+                      x:Name="ChordNameBox"
                       ItemsSource="{Binding Names.KnownChordNames}"
                       SelectedItem="{Binding ChordName}"
+                      IsEnabled="{Binding !IsUnnamed}"
                       IsTextSearchEnabled="True"
                       ToolTip.Tip="{localization:Loc ChordTemplate_NameTip}"
                       AutomationProperties.Name="{localization:Loc ChordTemplate_Name}" />
             <CheckBox Grid.Row="1" Grid.Column="2" Content="{localization:Loc ChordTemplate_Arpeggio}"
                       IsChecked="{Binding IsArpeggio}"
                       ToolTip.Tip="{localization:Loc ChordTemplate_ArpeggioTip}" />
-            <!-- Rocksmith's Nop chord flag (#489): it used to be reachable only by typing
-                 "-nop" into the name. A template field now; exporters spell the suffix. -->
-            <CheckBox x:Name="NopToggle" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
-                      Content="{localization:Loc ChordTemplate_Nop}"
-                      IsChecked="{Binding IsNop}"
-                      AutomationProperties.Name="{localization:Loc ChordTemplate_Nop}"
-                      ToolTip.Tip="{localization:Loc ChordTemplate_NopTip}" />
+            <!-- No name: the grip carries no name on purpose, and no automatic flow names it.
+                 Rocksmith's Nop chord flag is a template field; exporters spell the suffix. -->
+            <WrapPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal"
+                       ItemSpacing="{StaticResource SpaceMd}">
+                <CheckBox x:Name="NoNameToggle"
+                          Content="{localization:Loc ChordTemplate_NoName}"
+                          IsChecked="{Binding IsUnnamed}"
+                          AutomationProperties.Name="{localization:Loc ChordTemplate_NoName}"
+                          ToolTip.Tip="{localization:Loc ChordTemplate_NoNameTip}" />
+                <CheckBox x:Name="NopToggle"
+                          Content="{localization:Loc ChordTemplate_Nop}"
+                          IsChecked="{Binding IsNop}"
+                          AutomationProperties.Name="{localization:Loc ChordTemplate_Nop}"
+                          ToolTip.Tip="{localization:Loc ChordTemplate_NopTip}" />
+            </WrapPanel>
             <!-- The grip's pin (#795): authored, so no automatic flow replaces or re-fingers it.
                  A manual fret/finger edit sets it; this is where a chord's own grip is unpinned.
                  Locked while the grip holds ghost gems (always pinned) or is a display-only seed. -->

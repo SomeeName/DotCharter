@@ -21,9 +21,10 @@ public sealed class RsXmlImportLauncher(
     IAppLogger logger,
     ILocalizationService localization)
 {
-    public async Task PickAsync()
+    /// <summary>True when the file was merged into the open project.</summary>
+    public async Task<bool> PickAsync()
     {
-        if (RefuseWithoutProject("")) return;
+        if (RefuseWithoutProject("")) return false;
         var appConfig = config.LoadAppConfig();
         var filePath = await storage.OpenFilePickerAsync(localization["Picker_SelectRsXmlFile"],
             [new FilePickerFilter("Rocksmith XML", ["*.xml"]), FilePickerFilters.AllFiles],
@@ -31,18 +32,18 @@ public sealed class RsXmlImportLauncher(
         if (string.IsNullOrEmpty(filePath))
         {
             logger.Info(AppLogCategory.Import, "RS XML import file picker canceled.");
-            return;
+            return false;
         }
 
         config.RememberDirectory(filePath, (c, d) => c.LastRsXmlDir = d);
-        await OpenAsync(filePath);
+        return await OpenAsync(filePath);
     }
 
     /// <summary>Merges into the open project; the card reports every outcome itself.</summary>
-    public async Task OpenAsync(string filePath)
+    public async Task<bool> OpenAsync(string filePath)
     {
-        if (RefuseWithoutProject(filePath)) return;
-        await dialogs.ShowAsync(new RsXmlImportRequest(filePath));
+        if (RefuseWithoutProject(filePath)) return false;
+        return await dialogs.ShowAsync(new RsXmlImportRequest(filePath));
     }
 
     private bool RefuseWithoutProject(string filePath)

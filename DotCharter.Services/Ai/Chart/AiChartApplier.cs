@@ -176,7 +176,8 @@ public static class AiChartApplier
             var wanted = old.Clone();
             wanted.Fingers = new Dictionary<int, int>(change.Fingers);
             wanted.FollowedFingering = false; // a proposed fingering, not the follower's shift
-            wanted.Name = change.Name;
+            // A name the charter chose to leave out stays out.
+            wanted.Name = old.Unnamed ? old.Name : change.Name;
 
             var target = fingering.FindIdenticalTemplate(probe, wanted);
             if (target is null)

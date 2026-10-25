@@ -78,7 +78,7 @@ public sealed partial class SettingsShellViewModel
         foreach (var tab in _tabs) tab.ApplySearch(query);
 
         var hits = SettingsSearch.Hits(
-            _items.Select(i => new SettingsSearchSource(i.Tab.Key, i.Title, i.Tab.SearchGroups)), query);
+            _items.Select(i => new SettingsSearchSource(i.Tab.Key, i.Title, [.. PageTabs(i).SelectMany(t => t.SearchGroups)])), query);
 
         _results.Clear();
         _highlight = -1;

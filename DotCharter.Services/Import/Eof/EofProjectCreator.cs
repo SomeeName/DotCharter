@@ -205,6 +205,7 @@ public sealed class EofProjectCreator(
         var meta = result.Metadata;
         var project = new ChartProject();
         foreach (var arr in result.Arrangements) project.Arrangements.Add(arr);
+        foreach (var vocals in result.VocalTracks) project.VocalTracks.Add(vocals);
 
         if (meta.Beats.Count > 0)
         {

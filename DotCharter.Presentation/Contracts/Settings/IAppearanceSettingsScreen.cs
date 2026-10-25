@@ -24,6 +24,9 @@ public interface IAppearanceSettingsScreen : INotifyPropertyChanged
     /// <summary>The factor being applied now, formatted ("125 %"); under Auto, the one Auto chose.</summary>
     string UiScaleReadout { get; }
 
+    /// <summary>Home's hero image animates. Off, it is the same image, drawn once.</summary>
+    bool AnimatedHomeHero { get; set; }
+
     /// <summary>The customizable colours under their headings, in catalogue order.</summary>
     IReadOnlyList<IAppearanceColorGroup> ColorGroups { get; }
 

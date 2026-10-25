@@ -57,6 +57,7 @@ public sealed class SettingsConstructionUiPerfSmokeTests
         nameof(AppearanceSettingsView),
         nameof(KeybindsSettingsView),
         nameof(StemModelsSettingsView),
+        nameof(LyricModelsSettingsView),
         nameof(UpdatesSettingsView),
         nameof(Tone3000SettingsView),
         nameof(AiSettingsView)
@@ -75,6 +76,7 @@ public sealed class SettingsConstructionUiPerfSmokeTests
         nameof(AppearanceSettingsView) => new AppearanceSettingsView { DataContext = FakeAppearanceSettingsScreen.Full() },
         nameof(KeybindsSettingsView) => new KeybindsSettingsView { DataContext = FakeKeybindsSettingsScreen.Full() },
         nameof(StemModelsSettingsView) => new StemModelsSettingsView { DataContext = FakeStemModelsSettingsScreen.Full() },
+        nameof(LyricModelsSettingsView) => new LyricModelsSettingsView { DataContext = FakeLyricModelsSettingsScreen.Full() },
         nameof(UpdatesSettingsView) => new UpdatesSettingsView { DataContext = FakeUpdatesSettingsScreen.UpdateAvailable() },
         nameof(Tone3000SettingsView) => new Tone3000SettingsView { DataContext = FakeTone3000SettingsScreen.SignedIn() },
         nameof(AiSettingsView) => new AiSettingsView { DataContext = FakeAiSettingsScreen.OpenAiCompatible() },
@@ -639,6 +641,40 @@ public sealed class SettingsConstructionUiPerfSmokeTests
                     .Count(g => g.Classes.Contains("FormRow") && g.IsEffectivelyVisible);
                 Assert.True(nowVisible > openRows,
                     $"opening {tabName}'s Advanced section revealed no additional rows");
+            });
+        }, CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     String order is a reading preference: one picker on Editor (the 2D
+    ///     timeline + editor preview) and one on Play (the game's highway), each
+    ///     with both orders and sized, and none left on Graphics.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(EditorSettingsView), "EditorStringOrder")]
+    [InlineData(nameof(PlaySettingsView), "PlayStringOrder")]
+    public async Task TheStringOrderPicker_LaysOutOnItsTab(string tabName, string pickerName)
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var tab = CreateTab(tabName);
+            WithLaidOutTab(tab, () =>
+            {
+                var picker = tab.GetLogicalDescendants().OfType<ComboBox>().Single(c => c.Name == pickerName);
+                Assert.Equal(2, picker.ItemCount);
+                Assert.True(picker.IsEffectivelyVisible && picker.Bounds.Width > 1 && picker.Bounds.Height > 1,
+                    $"{pickerName} laid out {picker.Bounds}");
+                CaptureTab(tab, $"string-order-{tabName}");
+            });
+            var graphics = CreateTab(nameof(GraphicsSettingsView));
+            WithLaidOutTab(graphics, () =>
+            {
+                var titles = graphics.GetLogicalDescendants().OfType<TextBlock>()
+                    .Where(t => t.Classes.Contains("SettingTitle")).Select(t => t.Text ?? "").ToList();
+                Assert.NotEmpty(titles);
+                Assert.DoesNotContain(titles, t => t.Contains("Inverted", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("String order", StringComparison.OrdinalIgnoreCase));
+                CaptureTab(graphics, "string-order-GraphicsSettingsView");
             });
         }, CancellationToken.None);
     }

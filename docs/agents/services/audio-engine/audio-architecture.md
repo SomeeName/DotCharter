@@ -116,6 +116,43 @@ removed) ever asked for a second seat, and the run's exit hard-coded one. Three 
   `SetPlayerInputChannel` / `SetPlayerMonitorGain`) are GONE from
   `IPlayerInputRouting`: a caller that could set a count apart from its channels
   could leave seat 2 live on seat 1's jack.
+- **The OUTPUT PAIR is a mask on every driver, picked in two places.**
+  `Audio/Abstractions/OutputChannelPairs` is the shared reading, the output twin
+  of `GuitarInputChannels`: `ChannelMask(config, deviceOutputCount)` turns
+  `RigConfig.AsioOutputChannelLeft` / `Right` (the names are historical; both
+  drivers use them) into `JuceEngineConfig.OutputChannelMask` with NO driver
+  condition. JUCE's WASAPI device keeps a channel map from the enabled bits to the
+  endpoint's mix-format channels (`WASAPIDeviceBase::channelMaps`), clears bits
+  at or past the endpoint's maximum channel count and writes the n-th enabled bit's
+  buffer to the n-th mapped channel, so shared mode reaches outputs 3 and 4 as
+  ASIO does; both devices hand the callback the enabled outputs PACKED, which is
+  why the master bus is 2 wide whichever pair is picked. A pair with a channel
+  at or past the device's count (`GetOutputDeviceChannelCount`, off the live
+  enumeration) falls back to mask 0, the first pair, with a WARN
+  (`PairPastDevice`); an unknown count (0) leaves the mask alone, and the default
+  pair (outputs 1 and 2, `IsDefaultPair`) on a one-output device opens that output
+  as mask 1 with no WARN, because nobody chose it. The mask is
+  part of `JuceEngineConfig`, so a device change, the NAM 48 kHz request and the
+  watchdog rebuild replay it with the rest. `PairOptions` lists the device's
+  outputs two at a time ("Out 1 + 2", "Out 3 + 4"), a last odd output or a
+  one-output device as a mono row ("Out 5 (mono)"), and always the pair the
+  config names. Each row carries the driver's own name for the pair when it has
+  one ("Out 3 + 4 · Headphones"): `GetOutputChannelNames` reads them off the OPEN
+  device (`dca_engine_get_channel_names`, ABI v49; another device gets none, so its
+  rows stay numbered) and `Audio/Abstractions/ChannelNames` drops a name that only
+  repeats the number (JUCE's WASAPI "Output channel N", "Out 3", "Ch 5"). The input
+  jacks get the same treatment ("Input 2 · Hi-Z", `GetInputChannelNames`) in
+  Settings, the wizard and the rig footer. A mono row opens one output channel and
+  the NATIVE engine folds the stereo bus into it: with one active output it renders
+  a two-wide bus into preallocated buffers and writes (L + R) / 2
+  (`renderFoldedToMono`, pinned by `RtMonoOutputFoldsLAndRWithoutAllocating`).
+  Settings ▸ Audio (`AudioSettingsViewModel
+  .OutputPairOptions`) and the onboarding wizard's Audio page
+  (`OnboardingOutputPair`, whose test click plays through the picked pair) bind
+  the same rows. Guards: `Services/Audio/OutputChannelPairsTests`,
+  `Services/Audio/ChannelNamesTests`, `UI/ChannelNamePickerTests`,
+  `UI/AudioSettingsOutputPairPickerTests`, `UI/Onboarding/OnboardingOutputPairTests`,
+  `EngineDeviceWiringTests.TheEngineConfig_TakesTheOutputMask_OnEveryDriver`.
 - **The guitar's JACK is picked in four places and written by ONE helper
   (2026-08-30).** The owner's guitar sits on the interface's SECOND input, and
   until then the only way to say so was a pair of unlabeled index boxes in

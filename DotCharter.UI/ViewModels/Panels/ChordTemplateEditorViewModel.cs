@@ -8,6 +8,7 @@ using DotCharter.Tone.UI.ViewModels.Shell;
 using DotCharter.UI.Controls;
 using DotCharter.UI.Input;
 using DotCharter.UI.ViewModels.Editor;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.UI.ViewModels.Panels;
 
@@ -54,6 +55,12 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     /// <summary>Rocksmith's double-stop panel flag, <see cref="ChordTemplate.NopInRs" />:
     /// a named toggle rather than a "-nop" typed into the name.</summary>
     [ObservableProperty] private bool _isNop;
+
+    /// <summary>The No name box, <see cref="ChordTemplate.Unnamed" />: checked clears the name and
+    /// keeps every automatic namer off it; unchecked puts back the name it cleared, else suggests one.</summary>
+    [ObservableProperty] private bool _isUnnamed;
+
+    private string _nameBeforeUnnamed = string.Empty;
 
     /// <summary>EOF's Fingerless flag, <see cref="ChordTemplate.Fingerless" />: the grip has no
     /// fingering on purpose. Turning it on clears the fingers; a finger set later turns it off.</summary>
@@ -158,6 +165,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         Ladder = new ChordApplyLadder(localization);
         Preview = new ChordApplyPreview(editor, Ladder.Localization);
         Names = new ChordTemplateNameOffers(editor, configService);
+        ShapeEditor = new ChordShapeEditOpener(editor, () => Template, () => ThisSounds().Chords.FirstOrDefault());
 
         _historyService.HistoryChanged += OnHistoryChanged;
 
@@ -284,6 +292,9 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
 
     /// <summary>The bulk-edit preview on the timeline and the song map.</summary>
     public ChordApplyPreview Preview { get; }
+
+    /// <summary>Opens the Edit shape dialog on the shown shape.</summary>
+    public ChordShapeEditOpener ShapeEditor { get; }
 
     private ChordApplyScope? CurrentScope() =>
         Template == null ? null : _edits.ResolveReach(Template, ThisSounds(), SelectedSounds());
@@ -451,7 +462,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         if (equiv != null) return equiv;
 
         ArrangementFingeringStyle.SetSuggestedFingers(arr, seed, arr.StringCount);
-        seed.Name = ChordNameSuggester.SuggestFirstChordName(arr, seed.Frets);
+        seed.Name = NewChordNames.For(arr, seed.Frets);
         return seed;
     }
 
@@ -530,7 +541,8 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     {
         AvailableTemplates.Clear();
         if (_editor.ActiveArrangement == null) return;
-        foreach (var t in _editor.ActiveArrangement.ChordTemplates) AvailableTemplates.Add(new TemplateListItem(t));
+        var strings = _editor.ActiveArrangement.StringCount;
+        foreach (var t in _editor.ActiveArrangement.ChordTemplates) AvailableTemplates.Add(new TemplateListItem(t, strings));
     }
 
     public void LoadTemplate(ChordTemplate template, int stringCount)
@@ -566,6 +578,7 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         // arpeggio, which spells it ForceArpeggioInRs.
         IsArpeggio = template.IsArpeggio;
         IsNop = template.NopInRs;
+        IsUnnamed = template.Unnamed;
         IsFingerless = template.Fingerless;
         IsPinned = template.IsPinned;
         CanTogglePin = template.GhostMask == 0 &&
@@ -660,10 +673,11 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
             return nhs;
         }).ToList();
 
-        _historyService.Do(new CreateAndSwitchTemplateAction(
-            _editor.ActiveArrangement.ChordTemplates,
-            newTemplate, selectedChords, newChords, selectedHandShapes,
-            newHandShapes, _editor));
+        _historyService.Do(StrandedShapes.Wrap(_editor.ActiveArrangement,
+            new CreateAndSwitchTemplateAction(
+                _editor.ActiveArrangement.ChordTemplates,
+                newTemplate, selectedChords, newChords, selectedHandShapes,
+                newHandShapes, _editor), _editor.RequestRedraw));
 
         _isUpdatingUi = true;
         UpdateAvailableTemplates();
@@ -1074,6 +1088,10 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
     /// somebody else's work (the anchoring rule the keyboard pen uses).</summary>
     private int _fretRunNodeId = -1;
 
+    /// <summary>The shape the open fret-typing run started from, so a continuation digit extends
+    /// THAT shape rather than the one the previous digit landed on.</summary>
+    private ChordTemplate? _fretRunOrigin;
+
     /// <summary>
     ///     Hover-typed fret. ONE typing run is ONE history node: a continuation
     ///     digit undoes the run's own node before committing the extended value,
@@ -1091,6 +1109,11 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
             _historyService.CanUndo)
         {
             _historyService.Undo();
+            ReloadFretRunOrigin();
+        }
+        else
+        {
+            _fretRunOrigin = Template;
         }
 
         var newState = Template.Clone();
@@ -1105,6 +1128,24 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         // A REFUSED digit pushed nothing: the current node is somebody else's
         // work, and anchoring the run on it let the next digit undo it.
         _fretRunNodeId = _historyService.CurrentNodeId != before ? _historyService.CurrentNodeId : -1;
+    }
+
+    /// <summary>
+    ///     Puts the shape the run started from back on screen after the run's own node is undone.
+    ///     A first digit that matched an existing shape joined it, and the undo leaves that shape
+    ///     loaded while the chord is back on its old one: the ladder then drops the chord from the
+    ///     edit (it does not carry the shown shape) and the next digit is refused.
+    /// </summary>
+    private void ReloadFretRunOrigin()
+    {
+        if (_fretRunOrigin is not { } origin || _editor.ActiveArrangement is not { } arrangement) return;
+        if (!ChordTemplateCollectionOps.ContainsInstance(arrangement.ChordTemplates, origin)) return;
+
+        var wasUpdatingUi = _isUpdatingUi;
+        _isUpdatingUi = true;
+        LoadTemplate(origin, StringInputs.Count);
+        SelectedDropdownTemplate = AvailableTemplates.FirstOrDefault(t => t.Template.Id == origin.Id);
+        _isUpdatingUi = wasUpdatingUi;
     }
 
     /// <summary>
@@ -1199,6 +1240,23 @@ public partial class ChordTemplateEditorViewModel : ViewModelBase
         var newState = Template.Clone();
         newState.NopInRs = value;
         ApplyTemplateEdit(newState);
+    }
+
+    partial void OnIsUnnamedChanged(bool value)
+    {
+        if (Template == null || _isUpdatingUi || Template.Unnamed == value) return;
+        var arr = _editor.ActiveArrangement;
+        var newState = Template.Clone();
+        newState.Unnamed = value;
+        if (value) _nameBeforeUnnamed = Template.Name;
+        newState.Name = value ? string.Empty
+            : _nameBeforeUnnamed.Length > 0 ? _nameBeforeUnnamed
+            : arr == null ? string.Empty : ChordNameSuggester.SuggestFirstChordName(arr, Template.Frets);
+        ApplyTemplateEdit(newState, ChordTemplateEditKind.Name);
+        if (Template == null || Template.Unnamed == value) return;
+        _isUpdatingUi = true;
+        IsUnnamed = Template.Unnamed;
+        _isUpdatingUi = false;
     }
 
     /// <summary>A template edit on the ladder's rung, as one undo node; a refused one puts the toggle back.</summary>

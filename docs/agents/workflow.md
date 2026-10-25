@@ -145,3 +145,59 @@ The decisions are pinned by `Infrastructure/MergeTrainModuleTests`.
   - run the live updater test.
 - Release notes are plain language for players and charters; never claim more
   than the code does.
+
+
+## GitHub workflow: issues, branches, pull requests (full text, moved from the root AGENTS.md)
+
+The owner manages this project from GitHub's web UI, so every piece of work must
+show up there properly. Use `gh`. The repo is `SomeeName/DotCharter`, the
+private dev repo (the `DotCharter` name is kept for the public project); every
+assignee is `SomeeName`.
+
+1. **An issue first** for every bug, feature or plan. Small chores and doc
+   fixes may go straight to a PR. Each issue gets:
+   - one type label: `bug`, `enhancement`, `refactor`, `perf`, `chore`,
+     `documentation` or `epic`;
+   - one or more `area: *` labels: `audio`, `native`, `midi-preview`,
+     `library`, `editor`, `play-mode`, `rig`, `ui`, `tests`, `ci`;
+   - a milestone: the next release (the lowest open `v0.x.0` milestone —
+     `gh api repos/SomeeName/DotCharter/milestones`) or a feature milestone.
+
+   A plan with several parts is an `epic` with **sub-issues**
+   (`gh api -X POST repos/SomeeName/DotCharter/issues/<parent>/sub_issues -F sub_issue_id=<child's numeric id>`).
+   The body says what happens, the cause with file paths, and the fix and test.
+2. **One branch per piece of work, cut from `origin/main`** (fetch first; a
+   local `main` can lag). Link it to its issue before pushing, so it shows in
+   the issue's Development box:
+   `gh issue develop <n> --name <branch> --base main`. Agent work goes in a
+   worktree (`dotcharter-worktree` skill).
+3. **One pull request per branch.** Create it with
+   `gh pr create --base main --assignee SomeeName --label "<type>,area: <x>" --milestone "<m>"`.
+   - The body: what, how, evidence (gate and headless numbers, non-vacuity
+     proofs), known limits. It is the report, never a dated file in the repo.
+   - Put `Fixes #n` / `Closes #n` on their own lines (`Refs #n` for partial
+     work), so merging closes the issue.
+   - **Push once, when the work is verified.** On the private dev repo no
+     push starts CI (see Validation); the PR body carries the local gate and
+     headless numbers.
+4. **Before merging,** check the branch contains current `main`
+   (`git merge-base --is-ancestor origin/main <branch>`); a stale branch goes
+   back to be rebased, OR goes in a merge train (`tools/agent/Merge-Train.ps1`:
+   the PRs merged onto main in order and gated ONCE, then merged in that order).
+   Merge in dependency order (a JuceSharp PR before the DotCharter PR whose
+   submodule pointer needs it). Then delete the worktree and branch (see the
+   gotchas below).
+5. **JuceSharp:** app-driven native work keeps its ONE issue here; the JuceSharp
+   PR body says `Fixes SomeeName/DotCharter#n` (or `Refs`) so the issue's timeline
+   shows it. Native-only work (RT gate, a flaky native test, ABI or toolchain
+   cleanup, a submodule doc) gets its issue in `SomeeName/JuceSharp`.
+6. **Public → dev sync (#77).** A commit merged on a PUBLIC repo is imported
+   into dev before the next release: `tools/release/Import-PublicCommit.ps1
+   -Repo DotCharter|JuceSharp -Commit <sha> | -Pr <n>` makes the dev branch and
+   PR with a `Public-Commit: <Repo>@<sha>` trailer. `Export-PublicSnapshot.ps1`
+   REFUSES while a public commit since the last snapshot has no such trailer and
+   prints the import command, and `New-Release.ps1`'s preflight runs the same check
+   (`Find-UnimportedPublicCommits.ps1 -FailOnMissing`). The scheduled
+   `public-sync-watch.yml` does NOT run: Actions is off on the dev repos. To skip one
+   on purpose, commit an empty dev commit with the trailer saying why. Never edit
+   the guard to get past it.

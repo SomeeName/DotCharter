@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using DotCharter.Analysis.Lyrics;
 using DotCharter.Services.Audio.Lyrics;
 using DotCharter.Services.Export.Lyrics;
 
@@ -139,7 +140,7 @@ public sealed class LyricSyncCommand
 
         if (!result.Ran) return await FailRun(result.Error!).ConfigureAwait(false);
 
-        var syllables = SpanEnds(result.Syllables, arguments.SpanWordGap);
+        var syllables = SpanEnds(result.Syllables, arguments.SpanWordGap, result.Envelope);
         var outputBase = arguments.OutputBase ?? DefaultOutputBase(arguments.AudioPath);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputBase))!);
 
@@ -240,15 +241,15 @@ public sealed class LyricSyncCommand
     ///     Turns the CTC end — which is a FLOOR, the last frame the model could
     ///     still hear the syllable — into a sung length.
     ///     <para>
-    ///         <b>This is the seconds-only cousin of
-    ///         <c>LyricAutoSyncService.BuildPhrases</c>, and it is deliberately
-    ///         simpler.</b> The app spans to the next onset minus the chart's own
-    ///         note-spacing minimum, which is a fraction of a MEASURE and therefore
-    ///         needs a beat grid. With no grid the gap is a fixed
-    ///         <see cref="MinGapSeconds" />. Same rule otherwise: within a word it
-    ///         always spans, across a word boundary only when asked, never across a
-    ///         phrase break, never shortening what was heard, never past
-    ///         <see cref="MaxSyllableSeconds" />.
+    ///         The ends come from <see cref="LyricSyllableEnds" />, as the app's
+    ///         (<c>LyricAutoSyncService.BuildPhrases</c>) do, so a stem's voice
+    ///         decides them here too (<see cref="VocalEndRefiner" />). Two inputs
+    ///         differ: the app spans to the next onset minus the chart's own
+    ///         note-spacing minimum, a fraction of a MEASURE that needs a beat grid,
+    ///         and with no grid the gap is a fixed <see cref="MinGapSeconds" />; and
+    ///         the CLI never spans a phrase break. Within a word it always spans,
+    ///         across a word boundary only when asked, never shortening what was
+    ///         heard, never past <see cref="MaxSyllableSeconds" />.
     ///     </para>
     /// </summary>
     internal const double MinGapSeconds = 0.030;
@@ -258,32 +259,16 @@ public sealed class LyricSyncCommand
 
     /// <inheritdoc cref="MinGapSeconds" />
     internal static List<LyricSyncSyllable> SpanEnds(
-        IReadOnlyList<LyricSyncSyllable> syllables, bool spanWordGap)
+        IReadOnlyList<LyricSyncSyllable> syllables, bool spanWordGap, VocalEnvelope? envelope = null)
     {
         ArgumentNullException.ThrowIfNull(syllables);
 
-        var spanned = new List<LyricSyncSyllable>(syllables.Count);
-        for (var i = 0; i < syllables.Count; i++)
-        {
-            var s = syllables[i];
-            var end = s.EndSeconds;
-
-            if (i + 1 < syllables.Count)
-            {
-                var next = syllables[i + 1].StartSeconds;
-                end = Math.Min(end, next);
-
-                var maySpan = s.ContinuesWord || (spanWordGap && !s.EndsLine);
-                if (maySpan) end = Math.Max(end, next - MinGapSeconds);
-            }
-
-            end = Math.Min(end, s.StartSeconds + MaxSyllableSeconds);
-            if (end < s.StartSeconds) end = s.StartSeconds;
-
-            spanned.Add(s with { EndSeconds = end });
-        }
-
-        return spanned;
+        var ends = LyricSyllableEnds.Compute(
+            [.. syllables.Select(s => new LyricEndSyllable(
+                s.StartSeconds, s.EndSeconds, s.LineIndex, s.ContinuesWord || (spanWordGap && !s.EndsLine)))],
+            (_, nextStart) => nextStart - MinGapSeconds,
+            MaxSyllableSeconds, envelope, VocalEndOptions.Default);
+        return [.. syllables.Select((s, i) => s with { EndSeconds = ends[i] })];
     }
 
     /// <summary>Beside the audio, so a chart folder stays self-contained.</summary>

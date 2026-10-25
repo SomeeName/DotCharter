@@ -113,6 +113,15 @@ public static class TuningNameResolver
         Add(table, Bass4Std, "Drop B", -5, -3, -3, -3);
         Add(table, Bass4Std, "Drop A", -7, -5, -5, -5);
 
+        // ---- 5/6-string bass, 7/8/9-string guitar: every standard and drop ----------
+        // Generated (ExtendedRangeTunings), so the name a tuning shows is the one the
+        // arrangement dialog stores. TryAdd: a hand-written entry above keeps its name.
+        foreach (var tuning in ExtendedRangeTunings.All)
+        {
+            var reference = TuningUtilities.GetStandardMidiPitches(tuning.StringCount);
+            table.TryAdd(Key(reference.Select((pitch, i) => Mod12(pitch + tuning.Offsets[i])).ToArray()), tuning.Name);
+        }
+
         return table;
     }
 
@@ -172,14 +181,13 @@ public static class TuningNameResolver
         return Resolve(noteSummary.Split((char[]?)null, System.StringSplitOptions.RemoveEmptyEntries));
     }
 
-    /// <summary>Canonical name from rscharter-style per-string semitone OFFSETS
-    /// (relative to standard), low→high, for a 6-string guitar or 4-string bass.
+    /// <summary>Canonical name from per-string semitone OFFSETS against
+    /// <see cref="TuningUtilities.GetStandardMidiPitches" />, low→high, for 4 to 9 strings.
     /// Other string counts, or a length mismatch, are unknown (<c>null</c>).</summary>
     public static string? ResolveFromOffsets(int stringCount, IReadOnlyList<int>? offsets)
     {
-        if (offsets is null || offsets.Count != stringCount) return null;
-        var std = stringCount switch { 6 => Guitar6Std, 4 => Bass4Std, _ => null };
-        if (std is null) return null;
+        if (offsets is null || offsets.Count != stringCount || stringCount is < 4 or > 9) return null;
+        var std = TuningUtilities.GetStandardMidiPitches(stringCount);
 
         var pcs = new int[stringCount];
         for (var i = 0; i < stringCount; i++) pcs[i] = Mod12(std[i] + offsets[i]);
@@ -188,7 +196,7 @@ public static class TuningNameResolver
 
     /// <summary>
     ///     The canonical name of an ARRANGEMENT's tuning, or <c>null</c> when it has
-    ///     none: its per-string offsets first (4 or 6 of them — the array's own
+    ///     none: its per-string offsets first (4 to 9 of them — the array's own
     ///     length is the string count, and offsets are the spelling-proof form),
     ///     then its note letters. A bass PART on a guitar path
     /// (<see cref="ArrangementInstrument.IsBassPart(Arrangement)" />) whose
@@ -207,7 +215,7 @@ public static class TuningNameResolver
         var offsets = new int[pitches.Count];
         for (var i = 0; i < offsets.Length; i++) offsets[i] = pitches[i].Step;
 
-        var name = offsets.Length is 4 or 6 ? ResolveFromOffsets(offsets.Length, offsets) : null;
+        var name = ResolveFromOffsets(offsets.Length, offsets);
         name ??= Resolve(arrangement.Tuning);
         if (name is null && offsets.Length == 6 && arrangement.ArrangementType != ArrangementType.Bass &&
             ArrangementInstrument.IsBassPart(arrangement))

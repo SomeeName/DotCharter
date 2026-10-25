@@ -29,6 +29,8 @@ public sealed class RscpTuningRoundTripTests : IDisposable
 
     public void Dispose() => BestEffortDelete.Directory(_dir);
 
+    private string ReadProjectXml() => File.ReadAllText(ProjectPath);
+
     private ChartProject SaveAndReload(ChartProject project)
     {
         new RscpChartSerializer().Save(ProjectPath, project);
@@ -73,6 +75,24 @@ public sealed class RscpTuningRoundTripTests : IDisposable
         var reloaded = SaveAndReload(WithTuning(offsets, "E_STANDARD"));
 
         Assert.Equal(offsets, reloaded.Arrangements[0].TuningPitches.Select(t => t.Step).ToArray());
+    }
+
+    /// <summary>A bass or extended-range name is written as CUSTOM + offsets (rscharter cannot read
+    ///     it) and comes back from the offsets on load.</summary>
+    [Theory]
+    [InlineData("7_STRING_DROP_A", new[] { -2, 0, 0, 0, 0, 0, 0 })]
+    [InlineData("5_STRING_BASS_STANDARD", new[] { -5, -5, -5, -5, -4 })]
+    [InlineData("6_STRING_BASS_DROP_A", new[] { -7, -5, -5, -5, -4, -4 })]
+    [InlineData("8_STRING_DROP_E", new[] { -2, 0, 0, 0, 0, 0, 0, 0 })]
+    public void AnExtendedRangeName_IsCustomInTheFile_AndComesBackOnLoad(string typeName, int[] offsets)
+    {
+        var project = WithTuning(offsets, typeName, offsets.Length);
+        new RscpChartSerializer().Save(ProjectPath, project);
+
+        Assert.Contains("type=\"CUSTOM\"", ReadProjectXml());
+        var reloaded = new RscpChartSerializer().Load(ProjectPath).Arrangements[0];
+        Assert.Equal(typeName, reloaded.TuningType);
+        Assert.Equal(offsets, reloaded.TuningPitches.Select(t => t.Step).ToArray());
     }
 
     [Fact]

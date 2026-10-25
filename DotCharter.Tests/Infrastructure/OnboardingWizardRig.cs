@@ -34,6 +34,9 @@ internal sealed class OnboardingWizardRig
     public SystemCheckViewModel SystemCheck { get; }
     public OnboardingWizardViewModel Vm { get; }
 
+    /// <summary>What the wizard turns the timeline with (the String order on its first page).</summary>
+    public ProjectState State { get; } = new();
+
     public OnboardingWizardRig(string appVersion = "9.9.9", Func<PedalboardViewModel?>? pedalboard = null,
         FakeNativeEngineProbe? engineProbe = null, FakeGpuRenderProbe? gpuProbe = null, IUiDispatcher? systemCheckUi = null,
         IPackageFeatures? packageFeatures = null)
@@ -57,7 +60,7 @@ internal sealed class OnboardingWizardRig
         SystemCheck = new SystemCheckViewModel(EngineProbe, GpuProbe, LocalizationService.Instance, systemCheckUi ?? Ui, Logger);
         Vm = new OnboardingWizardViewModel(
             Config, AudioSettings, Latency, Profiles, Presets, Library, Storage,
-            LocalizationService.Instance, Engine, Logger, SystemCheck, packageFeatures ?? PackageFeatures.All,
+            LocalizationService.Instance, Engine, Logger, SystemCheck, State, packageFeatures ?? PackageFeatures.All,
             () => appVersion, pedalboard);
     }
 
@@ -80,7 +83,13 @@ internal sealed class OnboardingWizardRig
     ///         Input page.
     ///     </para>
     /// </summary>
-    public void SettleAudioProbe() => AudioSettings.DeviceProbe.GetAwaiter().GetResult();
+    public void SettleAudioProbe()
+    {
+        AudioSettings.DeviceProbe.GetAwaiter().GetResult();
+        // The device probe's post starts the output-pair read on the pool as well, and that read
+        // rebuilds the pair rows: a view bound before it lands races the rebuild.
+        AudioSettings.OutputCountProbe.GetAwaiter().GetResult();
+    }
 
     /// <summary>The rig's stand-in UI thread. Read collections the audio probe
     /// rebuilds through <see cref="InlineDispatcher.Read{T}" />.</summary>

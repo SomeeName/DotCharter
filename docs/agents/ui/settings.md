@@ -33,6 +33,13 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
 - **Flow:** `MasonryPanel.SettingsFlow` is `VerticalAlignment=Top`. The masonry
   returns less height than it is given, and a Stretch child that does so is
   CENTRED, so a short tab floated mid-page until this was set.
+- **Hosted tabs:** a tab in `SettingsRail.Hosted` (Stem separation and Lyric
+  models, both hosted by AI & models) keeps its own view model, load/save and
+  search rows but has no rail row: `SettingsShellViewModel` folds it into its
+  host's page (`PageOf`, `PageTabs`), and the host view places it with a
+  `Views/Shell/ScreenSlot`, which unwraps the hosted view's own `ScrollViewer`
+  so the page scrolls as one
+  (`SettingsShellUiPerfSmokeTests.TheAiPage_HostsTheStemAndLyricSections`).
 - **Save block:** Cancel reverts and leaves, so with nothing to revert its
   caption is Close (`SettingsShellUiPerfSmokeTests.ARebind_MovesTheFooterCounter_AndResetSectionClearsIt`).
 - **Appearance's colour list** is grouped by `ThemeTokenInfo.Category` under
@@ -199,8 +206,9 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
     config field and no orchestrator and was overwritten on the next load. The
     dead pair is deleted; do not restore a second one. Its exemption list
     carries a ROUTE per entry (the input-jack ComboBox mirrors
-    `AsioInputChannelLeft`; the mixer inspector's `Transport.MidiOffsetMs`
-    persists `MidiDelayMs`) and only ever shrinks.
+    `AsioInputChannelLeft`; the output-pair ComboBox mirrors
+    `AsioOutputChannelLeft` / `Right`; the mixer inspector's `Transport.MidiOffsetMs`
+    persists `MidiDelayMs`) and should shrink.
   - **A STATUS field on an EXCLUSION-list type is counted as a setting until
     somebody names it, and both of them shipped.** `BackupStatusText`
     ("Exported 412 file(s) to …") and `AsioControlPanelError` were
@@ -367,12 +375,11 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
     | General | 3 | yes — the Advanced (logging) body is the second column's |
     | Editor | 4 | yes |
     | Play | 1 | **no** — one group, so a plain `StackPanel` like TONE3000 |
-    | Files & backups | 3 | yes |
+    | Import & export | 5 | yes |
     | Graphics | 6 | yes — `GraphicsSettingsView` |
-    | Stem Models | 6 | yes |
     | Audio | 5 | yes |
     | Updates | 2 | yes |
-    | AI | 2 | yes — the provider card and the match-model card |
+    | AI & models | 2 + 2 hosted | yes — the provider card and the match-model card; Stem separation and Lyric models follow below the masonry as `ScreenSlot` sections |
     | Keybinds | 7 | **no** — its 140 rows are ALREADY two-up in a `UniformGrid Columns="2"` on the `*,184` grammar; splitting again gives four chord columns of ~230 px and the capture pill truncates |
     | Appearance | 2 | **no** — the colour list is one WIDE control that flows its own 320 px columns |
     | TONE3000 | 1 | **no** — two columns of one card is a column and an empty gutter. A one-group screen uses a plain `StackPanel`, not `MasonryPanel Classes="SettingsFlow"` |
@@ -441,16 +448,17 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
   and cannot find (0.44.3).** Audio's "Input channels" row was gated on
   `SelectedInputDriver == 'ASIO'`, so on WASAPI there was NO way to open a second
   input at all — while the (since removed) co-op HUD's Shared-input tooltip said to "open the
-  interface's second input in Settings". Only half of that row is ASIO-only: the
+  interface's second input in Settings". None of that row is ASIO-only: the
   channel COUNT is `Mono ? 1 : 2` on every driver
-  (`JuceAudioPlaybackService.ApplyAudioConfigurationCore`), and only the channel
-  INDEXES need the mask, which is built for ASIO alone. The row is now shown on
-  both drivers; `AreInputChannelIndexesUsed` hides just the two boxes, and it
-  keys on **`SelectedDriver`** — the ENGINE driver, `AppConfig.AudioDriver`,
-  because ASIO is single-driver-exclusive and the input is forced onto the
-  output's driver, so the boxes did nothing for an output-WASAPI/input-ASIO user
-  either. The WASAPI note beside them says what the driver cannot do rather than
-  promising it can. **Since 2026-08-30 the LEFT box is a `ComboBox` over
+  (`JuceAudioPlaybackService.ApplyAudioConfigurationCore`), and the channel
+  INDEXES reach the engine as an input channel mask on ASIO and WASAPI alike
+  (`GuitarInputChannels.InputChannelMask`; JUCE's WASAPI device maps
+  the masked channels out of the endpoint's mix format, so shared mode works).
+  The row and both boxes show on both drivers. The WASAPI note
+  (`IsWasapiDevicesNoteShown`: the ENGINE driver `SelectedDriver` is WASAPI and
+  the device reports two inputs or fewer) says some interfaces list one capture
+  device per input pair, so the guitar's device is picked first. The jack list
+  stops at `GuitarInputChannels.MaxJacks` (32, the mask width). **Since 2026-08-30 the LEFT box is a `ComboBox` over
   `AudioSettingsViewModel.InputJackOptions`** ("Input 1", "Input 2", … from
   `GuitarInputChannels.JackOptions`, the device's `MaxInputChannels` when the
   probe knows it, a generic eight before it does), mirroring
@@ -458,7 +466,23 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
   picking the right box's jack swaps the two. The same rows are what the
   onboarding wizard's Input page and the rig footer's picker show — see
   `docs/agents/services/audio-engine.md` § the live seat count. Guard:
-  `UI/AudioSettingsJackPickerTests`.
+  `UI/AudioSettingsJackPickerTests`. The rows, the selection and the device
+  probe live in `InputJackPicker` (the output pair's in `OutputPairPicker`);
+  the view model forwards them under the names the screens bind.
+- **The "Output channels" row is a PICK on every driver.** It was two raw
+  number boxes shown on ASIO only. The `AudioOutputPair` ComboBox binds
+  `AudioSettingsViewModel.OutputPairOptions` / `SelectedOutputPairIndex`
+  ("Out 1 + 2", "Out 3 + 4", … from `OutputChannelPairs.PairOptions`, sized by the
+  selected playback device's `GetOutputDeviceChannelCount`, a generic eight before
+  the probe lands, each row followed by the driver's name for the pair when the
+  device is open and names it, "Out 3 + 4 · Headphones"; the jack rows likewise read
+  "Input 2 · Hi-Z"), mirroring `AsioOutputChannelLeft` / `Right` both ways so Save
+  writes the fields it always wrote. Choosing another playback device, or another
+  driver, re-probes the count off the UI thread (a stale probe is dropped). The
+  engine reads the pair as an output mask on ASIO and WASAPI alike — see
+  `docs/agents/services/audio-engine/audio-architecture.md`. Guards:
+  `UI/AudioSettingsOutputPairPickerTests`,
+  `Perf/AudioOutputPairUiPerfSmokeTests`.
 - **`AudioSettingsViewModel.Save` must never write a device the DROPDOWN did not
   offer (2026-09-04).** Every device index and device NAME it persists — WASAPI
   and ASIO output, both inputs, the streaming mirror, the MIDI output — is
@@ -567,13 +591,16 @@ the bullets describe the 0.49 card grammar, which Graphite replaced.
     collapsed Advanced disclosure, Logging (13 rows: the two old checkbox rows
     became four switches, console and file each with their dependent rows).
   - **Editor** (`editor`, Workspace) — Chart editing (10) · Copy & paste (one
-    full-width row of six checkboxes) · New project (4) · Guitar Pro import (9).
+    full-width row of six checkboxes) · New project (4); the Timeline view group
+    leads with String order and the 2D timeline's polish and lane tint (moved
+    from Graphics). Guitar Pro import (9) moved to Import & export.
     The millisecond row and the denominator row enable by the spacing mode
     (`IsMinNoteDistanceInMilliseconds`).
   - **Play** (`play`, Workspace) — Gameplay (count-in, metronome, claps, rock
     meter). The count-in map is `GameplayCountInRows`, shared with Play Mode's
     modal.
-  - **Files & backups** (`files`, System) — Save companions (7) · Backups
+  - **Import & export** (`files`, System) — Guitar Pro import (9) · PSARC
+    open · Save companions (7) · Backups
     (automatic backup, its interval, export / import through
     `BackupMigrateViewModel`) · Decoded song audio.
   The lint exists because a REGROUP is the change most likely to lose a row
@@ -635,7 +662,7 @@ localized strings, in `Perf/SettingsShellUiPerfSmokeTests.EveryTab_IsSearchable_
   `ILocalizationService` on every read, so a language change needs no rebuild.
 - **Every tab declares its rows in its view model and filters by flipping
   contract booleans.** Keybinds' rows and Appearance's colours are items with `IsVisible` (one template
-  draws them); Updates, AI and Stem models have few rows and carry
+  draws them); Updates, AI, Stem models and Lyric models have few rows and carry
   `Is…RowVisible` / `Is…GroupVisible` flags on their contracts. **Stem models
   splits its flags across four PARTS** — `IStemBackendPart`, `IGpuRuntimePart`,
   `IStemCachePart` and the screen itself — because its six groups have

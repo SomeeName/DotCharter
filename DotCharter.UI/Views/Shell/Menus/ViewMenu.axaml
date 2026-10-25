@@ -63,6 +63,8 @@
               IsChecked="{Binding IsMinimapVisible, Mode=TwoWay}" />
     <MenuItem Header="{localization:Loc Menu_ShowSuggestedHandShapes}" ToggleType="CheckBox"
               IsChecked="{Binding ProjectState.ShowSuggestedHandShapes, Mode=TwoWay}" />
+    <MenuItem Header="{localization:Loc Menu_TabStringOrder}" ToggleType="CheckBox"
+              IsChecked="{Binding StringOrder.IsTab, Mode=TwoWay}" />
     <Separator />
     <MenuItem Header="{localization:Loc Menu_ZoomIn}" Command="{Binding ZoomInCommand}"
               InputGesture="{Binding ProjectState.Keybinds.ZoomIn, Converter={x:Static converters:KeyChordToGestureConverter.Instance}}" />

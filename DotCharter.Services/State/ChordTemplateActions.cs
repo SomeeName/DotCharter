@@ -83,6 +83,7 @@ public sealed class EditTemplateGlobalAction : IMergeableAction, ILinkPolicyActi
         _template.Fingerless = _newTemplate.Fingerless;
         _template.GhostMask = _newTemplate.GhostMask;
         _template.Pinned = _newTemplate.Pinned;
+        _template.Unnamed = _newTemplate.Unnamed;
         _template.Frets = new Dictionary<int, int>(_newTemplate.Frets);
         _template.Fingers = new Dictionary<int, int>(_newTemplate.Fingers);
         for (var i = 0; i < _targetChords.Count; i++)
@@ -104,6 +105,7 @@ public sealed class EditTemplateGlobalAction : IMergeableAction, ILinkPolicyActi
         _template.Fingerless = _oldTemplate.Fingerless;
         _template.GhostMask = _oldTemplate.GhostMask;
         _template.Pinned = _oldTemplate.Pinned;
+        _template.Unnamed = _oldTemplate.Unnamed;
         _template.Frets = new Dictionary<int, int>(_oldTemplate.Frets);
         _template.Fingers = new Dictionary<int, int>(_oldTemplate.Fingers);
         for (var i = 0; i < _targetChords.Count; i++)
@@ -121,7 +123,7 @@ public sealed class EditTemplateGlobalAction : IMergeableAction, ILinkPolicyActi
 /// on a batch of selected items to point at a different existing template,
 /// and refreshes their <see cref="Chord.ChordNotes"/> to match.
 /// </summary>
-public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction
+public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction, ITemplateUseReporter
 {
     /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
     public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
@@ -146,6 +148,12 @@ public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction
         _oldHandShapes = targetHandShapes.Select(h => h.Clone()).ToList();
         _newHandShapes = newHandShapes;
         _editor = editor;
+    }
+
+    public void ReportTemplateUses(TemplateUseDelta delta)
+    {
+        delta.Moved(_targetChords, _oldChords, _newChords);
+        delta.Moved(_targetHandShapes, _oldHandShapes, _newHandShapes);
     }
 
     public void Execute()
@@ -206,7 +214,7 @@ public sealed class SwitchTemplateAction : IChartAction, ILinkPolicyAction
 ///         they adopt its shape.
 ///     </para>
 /// </remarks>
-public sealed class CreateAndSwitchTemplateAction : IChartAction, ILinkPolicyAction
+public sealed class CreateAndSwitchTemplateAction : IChartAction, ILinkPolicyAction, ITemplateUseReporter
 {
     /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
     public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
@@ -237,6 +245,12 @@ public sealed class CreateAndSwitchTemplateAction : IChartAction, ILinkPolicyAct
         _oldHandShapes = targetHandShapes.Select(h => h.Clone()).ToList();
         _newHandShapes = newHandShapes;
         _editor = editor;
+    }
+
+    public void ReportTemplateUses(TemplateUseDelta delta)
+    {
+        delta.Moved(_targetChords, _oldChords, _newChords);
+        delta.Moved(_targetHandShapes, _oldHandShapes, _newHandShapes);
     }
 
     public void Execute()
@@ -345,7 +359,9 @@ public sealed class SetTemplateFingersAction : IChartAction, ILinkPolicyAction
 /// <summary>
 /// Lightweight undoable swap of just a template's <see cref="ChordTemplate.Name" />
 /// — used by the auto-fill generator to fill EMPTY names from the pitch-based
-/// suggester (a user-authored name is never overwritten there).
+/// suggester (a user-authored name is never overwritten there). A non-empty name
+/// clears <see cref="ChordTemplate.Unnamed" />; <c>unnamed</c> sets it outright (the
+/// "Apply to" ladder carrying the No name box to other grips).
 /// </summary>
 public sealed class SetTemplateNameAction : IChartAction, ILinkPolicyAction
 {
@@ -356,27 +372,33 @@ public sealed class SetTemplateNameAction : IChartAction, ILinkPolicyAction
     private readonly string _newName;
     private readonly string _oldName;
     private readonly ChordTemplate _template;
+    private readonly bool _oldUnnamed;
+    private readonly bool _newUnnamed;
 
     public SetTemplateNameAction(ChordTemplate template, string oldName, string newName,
-        IChartEditorSurface editor)
+        IChartEditorSurface editor, bool? unnamed = null)
     {
         _template = template;
         _oldName = oldName;
         _newName = newName;
         _editor = editor;
+        _oldUnnamed = template.Unnamed;
+        _newUnnamed = unnamed ?? (newName.Length == 0 && template.Unnamed);
     }
 
-    public bool HasEffect => !string.Equals(_oldName, _newName, StringComparison.Ordinal);
+    public bool HasEffect => !string.Equals(_oldName, _newName, StringComparison.Ordinal) || _oldUnnamed != _newUnnamed;
 
     public void Execute()
     {
         _template.Name = _newName;
+        _template.Unnamed = _newUnnamed;
         _editor.RequestRedraw();
     }
 
     public void Undo()
     {
         _template.Name = _oldName;
+        _template.Unnamed = _oldUnnamed;
         _editor.RequestRedraw();
     }
 }

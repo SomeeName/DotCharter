@@ -1,5 +1,6 @@
 ﻿using Arrangement = DotCharter.Core.Domain.Project.Arrangement;
 using ChartLevel = DotCharter.Core.Domain.Project.ChartLevel;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.Services.Parsing.GuitarPro;
 
@@ -335,7 +336,7 @@ internal static class GpHandShapeBuilder
         // hand-aware fallback fingering, tuning-aware name). The human can
         // still override both.
         ChordTemplateFingerSetter.SetSuggestedFingers(template, arrangement.StringCount);
-        template.Name = ChordNameSuggester.SuggestFirstChordName(arrangement, template.Frets);
+        template.Name = NewChordNames.For(arrangement, template.Frets);
 
         // ...unless a GP6-8 chord DIAGRAM of the track is fretted exactly like
         // the run (an arpeggiated chord): then its name and fingering are

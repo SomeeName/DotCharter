@@ -186,6 +186,7 @@ $guardLine = if ($juceParent -or $dcParent) { 'public sync guard: every public c
 
 # --- 1. JuceSharp -----------------------------------------------------------------------
 $juceTree = New-PublicTree -Repo $juceRepo -SourceTree "$devJuce^{tree}"
+$juceVersionProblem = Get-JuceSharpVersionProblem -Repo $juceRepo -Tree $juceTree -Parent $juceParent -Version $juceVersion
 $juce = New-SnapshotCommit -Repo $juceRepo -Tree $juceTree -Parent $juceParent `
     -Message (Get-SnapshotMessage -Product 'JuceSharp' -Version $juceVersion -Parent $juceParent) `
     -Name $name -Email $email -Date $devJuceDate -Tag "v$juceVersion"
@@ -315,6 +316,7 @@ $pushBlockers = [System.Collections.Generic.List[string]]::new()
 if ($findings.Count -gt 0) { $pushBlockers.Add("the leak check has $($findings.Count) finding(s)") }
 if (-not $gitleaks) { $pushBlockers.Add('gitleaks is not installed, so key material is unchecked') }
 elseif ($gitleaksExit -ne 0) { $pushBlockers.Add("gitleaks reported findings (exit $gitleaksExit), see $(Join-Path $ScratchRoot 'gitleaks.txt')") }
+if ($juceVersionProblem) { $pushBlockers.Add($juceVersionProblem) }
 if (-not $pins) { $pushBlockers.Add('the native pin of the public JuceSharp commit is PENDING: re-export with -NativeDir <the pair built from that tree>') }
 foreach ($problem in $identityProblems) { $pushBlockers.Add("identity: $problem (the snapshot identity is $($snapshotIdentity.Identity); set git user.email to it)") }
 foreach ($problem in $preflightProblems) { $pushBlockers.Add("preflight: $problem") }

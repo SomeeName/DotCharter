@@ -9,12 +9,16 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
     [ObservableProperty] private bool _useFastChartingInput;
     [ObservableProperty] private bool _syncHandShapeToChordTemplate = true;
     [ObservableProperty] private bool _syncAnchorToChordFingering;
+    [ObservableProperty] private bool _autoNameNewChords = true;
     [ObservableProperty] private bool _suppressDoubleStopChordNames = true;
     [ObservableProperty] private bool _keepPowerChordNames;
     [ObservableProperty] private bool _musicalChordNames;
     [ObservableProperty] private int _tappedHarmonicFretOffset = 12;
     [ObservableProperty] private bool _lyricSpanWordGap = true;
     [ObservableProperty] private bool _lyricSpanPhraseGap;
+    [ObservableProperty] private int _stringOrderIndex;
+    [ObservableProperty] private bool _timeline2DPolish = true;
+    [ObservableProperty] private bool _timeline2DLaneTint;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsMinNoteDistanceInMilliseconds))]
@@ -32,15 +36,6 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
     [ObservableProperty] private bool _padSilenceOnNewProject = true;
     [ObservableProperty] private double _leadingSilenceSeconds = 10;
     [ObservableProperty] private double _trailingSilenceSeconds = 2;
-    [ObservableProperty] private bool _gpImportTruncateShortNotes = true;
-    [ObservableProperty] private bool _gpImportTruncateShortChords;
-    [ObservableProperty] private bool _gpImportPreserveShortRests = true;
-    [ObservableProperty] private bool _onlineLatinNameLookup = true;
-    [ObservableProperty] private bool _gpImportBeatTextTechniques = true;
-    [ObservableProperty] private bool _gpImportMarkersToSections;
-    [ObservableProperty] private bool _gpImportTimeSignatures = true;
-    [ObservableProperty] private bool _gpImportDropMidBeatTempoChanges;
-    [ObservableProperty] private int _gpImportSlideInFretDistance = 2;
 
     private FakeEditorSettingsScreen()
     {
@@ -71,11 +66,7 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
         PasteIncludeEvents = false,
         PasteIncludeTones = false,
         PadSilenceOnNewProject = false,
-        GpImportTruncateShortNotes = false,
-        GpImportPreserveShortRests = false,
-        OnlineLatinNameLookup = false,
-        GpImportBeatTextTechniques = false,
-        GpImportTimeSignatures = false
+        Timeline2DPolish = false
     };
 
     public static FakeEditorSettingsScreen LongText() => new()
@@ -94,9 +85,8 @@ public sealed partial class FakeEditorSettingsScreen : ObservableObject, IEditor
         SyncAnchorToChordFingering = true,
         KeepPowerChordNames = true,
         LyricSpanPhraseGap = true,
-        GpImportTruncateShortChords = true,
-        GpImportMarkersToSections = true,
-        GpImportDropMidBeatTempoChanges = true,
+        StringOrderIndex = 1,
+        Timeline2DLaneTint = true,
         DefaultCharterName = "Alex"
     };
 

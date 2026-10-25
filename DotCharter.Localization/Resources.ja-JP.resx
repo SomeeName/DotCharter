@@ -130,7 +130,17 @@
     <data name="Inspector_Phrases_PropagatedFmt" xml:space="preserve"><value>{0}箇所の繰り返しを上書きしました。元に戻すで復元できます。</value></data>
     <data name="Inspector_Phrases_PropagatedOne" xml:space="preserve"><value>{0}箇所の繰り返しを上書きしました。元に戻すで復元できます。</value></data>
     <data name="Inspector_Phrases_Empty" xml:space="preserve"><value>このアレンジメントにはフレーズの繰り返しがありません。</value></data>
-    <data name="Inspector_Phrases_Refresh" xml:space="preserve"><value>更新</value></data>
+    <data name="Inspector_Phrases_Refresh" xml:space="preserve"><value>更新</value></data>
+    <data name="Inspector_Phrases_DeleteTipOne" xml:space="preserve"><value>「{1}」を削除：{0} 回の繰り返しを削除します。Ctrl+Z で元に戻せます。</value></data>
+    <data name="Inspector_Phrases_DeleteTipFmt" xml:space="preserve"><value>「{1}」を削除：{0} 回の繰り返しをすべて削除します。Ctrl+Z で元に戻せます。</value></data>
+    <data name="Inspector_Phrases_DeletedOne" xml:space="preserve"><value>「{1}」を削除しました（{0} 回の繰り返し）。Ctrl+Z で戻せます。</value></data>
+    <data name="Inspector_Phrases_DeletedFmt" xml:space="preserve"><value>「{1}」を削除しました（{0} 回の繰り返し）。Ctrl+Z で戻せます。</value></data>
+    <data name="Inspector_Phrases_Renamed" xml:space="preserve"><value>「{0}」を「{1}」に名前変更しました。</value></data>
+    <data name="Inspector_Phrases_RenameTip" xml:space="preserve"><value>このフレーズの名前をアレンジメント全体で変更します。Enter で適用、Esc で取り消し。</value></data>
+    <data name="Inspector_Phrases_ShowIterations" xml:space="preserve"><value>繰り返しの表示／非表示</value></data>
+    <data name="Inspector_Phrases_ExportAddsCountEnd" xml:space="preserve"><value>エクスポート時：先頭に COUNT、最後のノートの後に END が追加されます。</value></data>
+    <data name="Inspector_Phrases_ExportAddsCount" xml:space="preserve"><value>エクスポート時：先頭に COUNT が追加されます。</value></data>
+    <data name="Inspector_Phrases_ExportAddsEnd" xml:space="preserve"><value>エクスポート時：最後のノートの後に END が追加されます。</value></data>
     <data name="Inspector_AudioLint_Title" xml:space="preserve"><value>オーディオリント</value></data>
     <data name="Inspector_AudioLint_Run" xml:space="preserve"><value>オーディオと照合</value></data>
     <data name="Inspector_AudioLint_RunTip" xml:space="preserve"><value>曲のオーディオをオフライン解析し、譜面の各ピッチが実際にその時間で鳴っているかを確認します。参考情報であり、エラーではありません。</value></data>
@@ -146,6 +156,8 @@
     <data name="Dialog_Fhp_Title" xml:space="preserve"><value>ハンドアンカーの設定</value></data>
     <data name="Dialog_EofImport_Subtitle" xml:space="preserve"><value>取り込むトラックを選択してください。新しいプロジェクトフォルダーはオーディオの隣に作成されます。</value></data>
     <data name="Dialog_EofImport_Busy" xml:space="preserve"><value>Editor on Fireの譜面を読み込み中…</value></data>
+    <data name="Dialog_EofImport_VocalTrack_One" xml:space="preserve"><value>{1}（歌詞 {0} 件）</value></data>
+    <data name="Dialog_EofImport_VocalTrack_Many" xml:space="preserve"><value>{1}（歌詞 {0} 件）</value></data>
     <data name="Dialog_RsXmlImport_Title" xml:space="preserve"><value>Rocksmith XMLのインポート</value></data>
     <data name="Dialog_RsXmlImport_Subtitle" xml:space="preserve"><value>ドキュメントは開いているプロジェクトに統合されます。</value></data>
     <data name="Dialog_RsXmlImport_Busy" xml:space="preserve"><value>Rocksmith XMLドキュメントを読み込み中…</value></data>
@@ -212,6 +224,8 @@
     <data name="Dialog_SongBrowser_Title" xml:space="preserve"><value>ライブラリ</value></data>
     <data name="Dialog_HalfStepsOffset" xml:space="preserve"><value>半音オフセット</value></data>
     <data name="Dialog_TuningStringName" xml:space="preserve"><value>{0}弦（{1}）、半音</value></data>
+    <data name="Dialog_TuningPreset_Custom" xml:space="preserve"><value>カスタム</value></data>
+    <data name="Dialog_TuningPreset_WithNotes" xml:space="preserve"><value>{0}（{1}）</value></data>
     <data name="Dialog_LyricColor" xml:space="preserve"><value>歌詞の色</value></data>
     <data name="Dialog_LyricColor_Desc" xml:space="preserve"><value>タイムライン上でこのトラックの歌詞を表示する色です。</value></data>
     <data name="Dialog_LyricColor_Custom" xml:space="preserve"><value>カスタム色</value></data>
@@ -352,11 +366,26 @@
     <data name="Inspector_Minor" xml:space="preserve"><value>マイナー</value></data>
     <data name="Inspector_Tones" xml:space="preserve"><value>トーン</value></data>
     <data name="Inspector_Tones_None" xml:space="preserve"><value>このプロジェクトにはトーンがありません。</value></data>
+    <data name="Inspector_Markers_OccurrenceFmt" xml:space="preserve"><value>#{0} · {1}小節 · {2}</value></data>
+    <data name="Inspector_Markers_OccurrenceNoBarFmt" xml:space="preserve"><value>#{0} · {1}</value></data>
+    <data name="Inspector_Markers_RenameTip" xml:space="preserve"><value>新しい名前を入力：Enterで使用箇所すべての名前を変更、Escで元の名前に戻します。</value></data>
+    <data name="Inspector_Markers_ShowPlaces" xml:space="preserve"><value>使用箇所を表示</value></data>
+    <data name="Inspector_Markers_Renamed" xml:space="preserve"><value>「{0}」を「{1}」に名前変更しました。</value></data>
+    <data name="Inspector_Markers_Deleted" xml:space="preserve"><value>「{0}」を削除しました。Ctrl+Zで元に戻せます。</value></data>
+    <data name="Inspector_Sections_PlacesOne" xml:space="preserve"><value>{0}か所</value></data>
+    <data name="Inspector_Sections_PlacesFmt" xml:space="preserve"><value>{0}か所</value></data>
+    <data name="Inspector_Sections_DeleteTipOne" xml:space="preserve"><value>「{1}」を削除：{0}か所を削除します。Ctrl+Zで元に戻せます。</value></data>
+    <data name="Inspector_Sections_DeleteTipFmt" xml:space="preserve"><value>「{1}」を削除：{0}か所すべてを削除します。Ctrl+Zで元に戻せます。</value></data>
+    <data name="Inspector_Tones_UsesOne" xml:space="preserve"><value>{0}回使用</value></data>
+    <data name="Inspector_Tones_UsesFmt" xml:space="preserve"><value>{0}回使用</value></data>
+    <data name="Inspector_Tones_DeleteTipOne" xml:space="preserve"><value>「{1}」を削除：{0}回の使用と定義を削除します。Ctrl+Zで元に戻せます。</value></data>
+    <data name="Inspector_Tones_DeleteTipFmt" xml:space="preserve"><value>「{1}」を削除：{0}回の使用すべてと定義を削除します。Ctrl+Zで元に戻せます。</value></data>
+    <data name="Inspector_Tones_DeleteTipUnplaced" xml:space="preserve"><value>「{0}」を削除：定義を削除します。Ctrl+Zで元に戻せます。</value></data>
+    <data name="Inspector_Tones_StartOccurrence" xml:space="preserve"><value>開始トーン</value></data>
     <data name="Inspector_Tones_NotDefined" xml:space="preserve"><value>定義なし：ゲームの既定のトーンで再生されます。</value></data>
     <data name="Inspector_Tones_NotDefinedTip" xml:space="preserve"><value>トーンデザイナーでこのトーンを作成するか、作成済みのトーンをこのキーに名前変更してください。</value></data>
     <data name="Inspector_Tones_RenameTaken" xml:space="preserve"><value>「{0}」という名前のトーンは既に存在します。トーンが統合されることはありません。別の名前を選ぶか、先にそのトーンを削除してください。</value></data>
     <data name="Inspector_Sections" xml:space="preserve"><value>セクション</value></data>
-    <data name="Inspector_Phrases" xml:space="preserve"><value>フレーズ</value></data>
     <data name="Action_Apply" xml:space="preserve"><value>適用</value></data>
     <data name="Action_Delete" xml:space="preserve"><value>削除</value></data>
     <data name="Picker_AudioFiles" xml:space="preserve"><value>オーディオファイル</value></data>
@@ -585,6 +614,7 @@
     <data name="Menu_AcceptSuggestedHandShapes_Tip" xml:space="preserve"><value>選択したノート上の破線の提案ハンドシェイプを、1 回の元に戻す操作で実際のハンドシェイプにします。</value></data>
     <data name="Menu_AcceptSuggestedArpeggios_Tip" xml:space="preserve"><value>選択したノート上の破線の提案ハンドシェイプを、1 回の元に戻す操作でアルペジオのハンドシェイプにします。</value></data>
     <data name="Menu_ShowSuggestedHandShapes" xml:space="preserve"><value>提案ハンドシェイプを表示</value></data>
+    <data name="Menu_TabStringOrder" xml:space="preserve"><value>TAB譜の弦の並び（低音弦が下）</value></data>
     <data name="Menu_InsertBeatAtPlayhead" xml:space="preserve"><value>再生ヘッド位置にビートを挿入</value></data>
     <data name="Menu_RemoveBeatAtPlayhead" xml:space="preserve"><value>再生ヘッド位置のビートを削除</value></data>
     <data name="Menu_InsertVocalAtPlayhead" xml:space="preserve"><value>再生ヘッド位置に仮ボーカルを挿入</value></data>
@@ -878,22 +908,23 @@
     <data name="Settings_Graphics_BackgroundSubtitle" xml:space="preserve"><value>ハイウェイの背後で動く背景です。</value></data>
     <data name="Settings_Graphics_CrowdBackground" xml:space="preserve"><value>観客連動の背景</value></data>
     <data name="Settings_Graphics_CrowdBackground_Desc" xml:space="preserve"><value>ライブプレイ中の演奏に応じて明るくなる背景グラデーションです。</value></data>
-    <data name="Settings_Graphics_Timeline2DTitle" xml:space="preserve"><value>2Dタイムライン</value></data>
-    <data name="Settings_Graphics_Timeline2DSubtitle" xml:space="preserve"><value>エディターのタイムラインの見た目です。</value></data>
     <data name="Settings_Graphics_Timeline2DPolish" xml:space="preserve"><value>タイムラインの装飾</value></data>
     <data name="Settings_Graphics_Timeline2DPolish_Desc" xml:space="preserve"><value>ノートの質感、波形のグラデーション、ビートグリッドの奥行き、再生位置の光、セクションチップの影を強化します。オフでフラットな表示に戻ります。</value></data>
     <data name="Settings_Graphics_Timeline2DLaneTint" xml:space="preserve"><value>弦レーンの色付け</value></data>
     <data name="Settings_Graphics_Timeline2DLaneTint_Desc" xml:space="preserve"><value>各レーンの背景に弦の色をうっすら敷き、グリッド線を増やさずにレーンを追えるようにします。</value></data>
-    <data name="Settings_Graphics_InvertStrings" xml:space="preserve"><value>弦の順序を反転（タブ譜配置）</value></data>
-    <data name="Settings_Graphics_InvertStrings_Desc" xml:space="preserve"><value>3Dハイウェイと2Dタイムラインの弦の並びを上下反転し、一般的なタブ譜と同じ（低音Eが下）に表示します。編集と再生には影響しません。</value></data>
+    <data name="Settings_StringOrder" xml:space="preserve"><value>弦の並び順</value></data>
+    <data name="Settings_StringOrder_Rocksmith" xml:space="preserve"><value>Rocksmith（低音弦が上）</value></data>
+    <data name="Settings_StringOrder_Tab" xml:space="preserve"><value>TAB譜（低音弦が下）</value></data>
+    <data name="Settings_Tip_StringOrder" xml:space="preserve"><value>2Dタイムラインとエディターの3Dプレビューでの弦の並び。TAB譜ではTAB譜の書き方どおり低音弦が下になり、弦移動キーもこれに従います。</value></data>
+    <data name="Settings_Tip_PlayStringOrder" xml:space="preserve"><value>プレイモード中のハイウェイでの弦の並び。エディターとは別の設定なので、TAB譜の順で譜面を作り、ゲームの順でプレイできます。</value></data>
+    <data name="Settings_TimelineView_Title" xml:space="preserve"><value>タイムライン表示</value></data>
+    <data name="Settings_TimelineView_Subtitle" xml:space="preserve"><value>エディターでの譜面の見え方。</value></data>
     <data name="Settings_InChannels" xml:space="preserve"><value>入力チャンネル（L/R）</value></data>
     <data name="Settings_AsioInChannelRight" xml:space="preserve"><value>入力チャンネル（右）</value></data>
-    <data name="Settings_InChannels_WasapiNote" xml:space="preserve"><value>WASAPIは選択した録音デバイスの先頭のチャンネルを開き、どのチャンネルかを指定できません。入力が1つしかないデバイスでは、2本のギターが同じ信号になります。チャンネルを指定するには、オーディオドライバーにASIOを選んでください。</value></data>
+    <data name="Settings_InChannels_WasapiNote" xml:space="preserve"><value>WASAPIでは、入力ペアごとに別の録音デバイス（「Analogue 3 + 4」など）として表示されるインターフェースがあります。ギターの入力が一覧にない場合は、先にその入力を含む録音デバイスを選んでください。</value></data>
     <data name="Settings_InputTwoGuitars" xml:space="preserve"><value>2本のギターを各チャンネルに1本ずつ</value></data>
     <data name="Settings_InputTwoGuitars_Tip" xml:space="preserve"><value>2つのチャンネルに別々の楽器が入っている場合にオンにします。各楽器が専用のアンプを持ち中央に定位するため、プレイヤーが左右の耳に分かれることがありません。2つのチャンネルが1つの楽器の左右であるステレオピックアップの場合は、オフのままにしてください。</value></data>
-    <data name="Settings_AsioOutChannels" xml:space="preserve"><value>ASIO出力チャンネル（L/R）</value></data>
-    <data name="Settings_AsioOutChannelRight" xml:space="preserve"><value>ASIO出力チャンネル（右）</value></data>
-    <data name="Settings_AsioOutChannelLeft" xml:space="preserve"><value>ASIO出力チャンネル（左）</value></data>
+    <data name="Settings_OutChannels" xml:space="preserve"><value>出力チャンネル</value></data>
     <data name="Settings_AutoBackups" xml:space="preserve"><value>自動バックアップ</value></data>
     <data name="Settings_BackupDescription" xml:space="preserve"><value>バックアップはプロジェクトファイルの隣のbackupsフォルダーにZIPファイルとして保存されます。</value></data>
     <data name="Settings_BackupMigrate_Title" xml:space="preserve"><value>バックアップと移行</value></data>
@@ -1407,11 +1438,11 @@
     <data name="Settings_Tip_Language" xml:space="preserve"><value>アプリ全体の表示言語です。languagesフォルダーに置いたコミュニティ言語パックもここに表示されます。</value></data>
     <data name="Settings_Tip_AudioDriver" xml:space="preserve"><value>オーディオ出力APIです。WASAPIが安全な既定です。インターフェイスにASIOドライバーが付属していれば、ASIOが最も低いレイテンシーになります。</value></data>
     <data name="Settings_Tip_Device" xml:space="preserve"><value>エンジンが再生に使う出力デバイスです。</value></data>
-    <data name="Settings_Tip_AsioOutChannels" xml:space="preserve"><value>マスターミックスを出力するASIO出力チャンネルのペアです。インターフェイスは多数のチャンネルを備えています。</value></data>
+    <data name="Settings_Tip_OutChannels" xml:space="preserve"><value>マスターミックスを出力する再生デバイスの出力ペアです。ヘッドホンやモニターをつないでいる出力を選んでください。ASIOとWASAPIの両方で有効です。</value></data>
     <data name="Settings_Tip_EnableLiveInput" xml:space="preserve"><value>楽器の入力をエンジンに通します。ライブプレイ、チューナー、トーンリグに必要です。</value></data>
     <data name="Settings_Tip_InputDriver" xml:space="preserve"><value>楽器信号の入力APIです。演奏に耐えるレイテンシーにはASIOを強く推奨します。</value></data>
     <data name="Settings_Tip_InputDevice" xml:space="preserve"><value>楽器を接続しているキャプチャデバイスです。</value></data>
-    <data name="Settings_Tip_AsioInChannels" xml:space="preserve"><value>楽器の信号が通る入力チャンネルです。モノラルでは1チャンネルのみ開きます。チャンネル番号はASIOでのみ有効です。</value></data>
+    <data name="Settings_Tip_AsioInChannels" xml:space="preserve"><value>楽器の信号が通る入力チャンネルです。モノラルでは1チャンネルのみ開きます。</value></data>
     <data name="Settings_Tip_SampleRate" xml:space="preserve"><value>エンジンのサンプルレートです。48 kHzを推奨します。ニューラルアンプキャプチャー（NAM/AIDA-X）は48 kHzネイティブで、他のレートでは確実にバイパスされます。</value></data>
     <data name="Settings_Tip_BufferSize" xml:space="preserve"><value>オーディオブロックあたりのフレーム数です。小さいほどレイテンシーは下がりますが余裕がなくなり、大きいほど安全です。128フレームは48 kHzで約2.7 msです。</value></data>
     <data name="Settings_Tip_StreamingMirrorDevice" xml:space="preserve"><value>ミラーしたミックスを受け取るデバイスです。</value></data>
@@ -1504,7 +1535,6 @@
     <data name="Settings_GpDropMidBeatTempo" xml:space="preserve"><value>ビート途中のテンポ</value></data>
     <data name="Settings_Tip_GpDropMidBeatTempo" xml:space="preserve"><value>ビート上にないテンポ変更を、ビートマップ作成時に破棄します。</value></data>
     <data name="Settings_AppearanceTab" xml:space="preserve"><value>外観</value></data>
-    <data name="Settings_StemModelsTab" xml:space="preserve"><value>ステムモデル</value></data>
     <data name="Settings_ChartEditingSubtitle" xml:space="preserve"><value>ノートとコードの編集時に使われるルールです。</value></data>
     <data name="Settings_OutputRouting_Subtitle" xml:space="preserve"><value>オーディオ再生に使うドライバーとデバイスを選択します。</value></data>
     <data name="Settings_InstrumentInput_Subtitle" xml:space="preserve"><value>ライブ楽器入力（ギター、ベース、MIDI）を有効にしてルーティングします。</value></data>
@@ -1879,7 +1909,6 @@
     <data name="Tuner_SeatNotLive_Short" xml:space="preserve"><value>入力オフ</value></data>
     <data name="Tuner_Listening_Short" xml:space="preserve"><value>弦を弾く</value></data>
     <data name="Rig_Input_Unavailable_Off_Short" xml:space="preserve"><value>入力オフ</value></data>
-    <data name="Rig_Input_Unavailable_Wasapi_Short" xml:space="preserve"><value>ASIOのみ</value></data>
     <data name="Tuner_NoArrangement" xml:space="preserve"><value>ギターまたはベースのアレンジメントが有効ではありません。まず開いてください</value></data>
     <data name="Tuner_Listening" xml:space="preserve"><value>弦を弾いてください…</value></data>
     <data name="Tuner_SeatNotLive" xml:space="preserve"><value>このプレイヤーの入力はオフです。設定 ▸ オーディオで「2本のギターを各チャンネルに1本ずつ」をオンにしてください。</value></data>
@@ -2008,7 +2037,9 @@
     <data name="Menu_AutoFixChart" xml:space="preserve"><value>アレンジメントの自動修正</value></data>
     <data name="Menu_AutoFixChart_Tip" xml:space="preserve"><value>壊れた箇所をすべてのアレンジメントで修正します（Log Charter 相当）：並べ替え、重複の整理、ノート長、スライド、カポフレット、フレーズ開始のアンカー。「譜面を改善」はすでに有効な譜面を仕上げます。</value></data>
     <data name="Settings_SuppressDoubleStopNames" xml:space="preserve"><value>ダブルストップにコードネームを付けない</value></data>
-    <data name="Settings_Tip_SuppressDoubleStopNames" xml:space="preserve"><value>2弦のシェイプには名前を付けず、残っている名前はエクスポート時に削除します。2音ではコードを確定できないため、検出された名前は推測にすぎません。ダブルストップにはインスペクターで手動で名前を付けられます。</value></data>
+    <data name="Settings_Tip_SuppressDoubleStopNames" xml:space="preserve"><value>2弦のシェイプには名前を付けず、残っている名前はエクスポート時に削除します。2音ではコードを確定できないため、検出された名前は推測にすぎません。ダブルストップにはインスペクターで手動で名前を付けられます。</value></data>
+    <data name="Settings_AutoNameNewChords" xml:space="preserve"><value>新しいコードに自動で名前を付ける</value></data>
+    <data name="Settings_Tip_AutoNameNewChords" xml:space="preserve"><value>エディターが作成するすべてのコードフォーム（新しいコード、形の変更、採用したハンドシェイプ候補、運指の生成、名前のない Guitar Pro のコード）に候補の名前を付けます。オフにすると新しいコードは名前なしのままになります。ファイルにある名前はどちらの場合も保持されます。</value></data>
     <data name="Settings_KeepPowerChordNames" xml:space="preserve"><value>…ただしパワーコードの名前は残す</value></data>
     <data name="Settings_Tip_KeepPowerChordNames" xml:space="preserve"><value>ルートと5度のシェイプを対象外にし、G5 は名前を保持したまま、あいまいな2音シェイプの名前だけを削除します。オフにすると、パワーコードも抑制する Editor on Fire と同じ動作になります。</value></data>
     <data name="Settings_MusicalChordNames" xml:space="preserve"><value>音楽的なコード名</value></data>
@@ -2093,11 +2124,18 @@
     <data name="LatencyWizard_Judging_Measure" xml:space="preserve"><value>測定</value></data>
     <data name="LatencyWizard_Judging_Stop" xml:space="preserve"><value>停止</value></data>
     <data name="InputJack_LabelFmt" xml:space="preserve"><value>入力 {0}</value></data>
+    <data name="OutputPair_LabelFmt" xml:space="preserve"><value>出力 {0} + {1}</value></data>
+    <data name="OutputPair_MonoLabelFmt" xml:space="preserve"><value>出力 {0}（モノラル）</value></data>
+    <data name="ChannelLabel_NamedFmt" xml:space="preserve"><value>{0} · {1}</value></data>
     <data name="Settings_InputJack" xml:space="preserve"><value>ギター入力ジャック</value></data>
     <data name="Onboarding_Input_JackDesc" xml:space="preserve"><value>ギターをインターフェースのどの入力に接続しているか。下のメーターはこのジャックを読みます。</value></data>
+    <data name="Onboarding_Input_Find" xml:space="preserve"><value>ギターを探す</value></data>
+    <data name="Onboarding_Input_FindDesc" xml:space="preserve"><value>弾き続けてください。入力を1つずつ開き、ギターでメーターが動いた入力をギターのジャックにします。</value></data>
+    <data name="Onboarding_Input_FindListeningFmt" xml:space="preserve"><value>弾き続けてください… {0} を確認中（{1}/{2}）。</value></data>
+    <data name="Onboarding_Input_FoundFmt" xml:space="preserve"><value>ギターは {0} に見つかりました。下のメーターはこの入力を読みます。</value></data>
+    <data name="Onboarding_Input_NotFound" xml:space="preserve"><value>どの入力でもギターが聞こえませんでした。ケーブル、ギターのボリュームノブ、インターフェースのゲインを確認して、もう一度お試しください。</value></data>
     <data name="Rig_Input" xml:space="preserve"><value>入力</value></data>
     <data name="Rig_Input_Tip" xml:space="preserve"><value>このリグのギターをオーディオインターフェースのどのジャックに接続しているか。すぐに適用されます。設定 ▸ オーディオ ▸ 入力チャンネルと同じ設定です。</value></data>
-    <data name="Rig_Input_Unavailable_Wasapi" xml:space="preserve"><value>入力ジャックを選ぶには、設定 ▸ オーディオでオーディオドライバーにASIOを選んでください。WASAPIはデバイスの先頭のチャンネルを順に開きます。</value></data>
     <data name="Rig_Input_Unavailable_Off" xml:space="preserve"><value>ライブ入力がオフです。設定 ▸ オーディオで有効にしてください。</value></data>
     <data name="LatencyWizard_Judging_ListenOn" xml:space="preserve"><value>リッスン先</value></data>
     <data name="LatencyWizard_Judging_ListeningOnFmt" xml:space="preserve"><value>{0} をリッスン中。</value></data>
@@ -2931,7 +2969,11 @@
     <data name="History_RemoveAnchors" xml:space="preserve"><value>アンカーを削除</value></data>
     <data name="History_RemoveAnnotation" xml:space="preserve"><value>注釈を削除</value></data>
     <data name="History_RemoveChords" xml:space="preserve"><value>コードを削除</value></data>
-    <data name="History_RemoveChordTemplates" xml:space="preserve"><value>コードテンプレートを削除</value></data>
+    <data name="History_RemoveChordTemplates" xml:space="preserve"><value>コードテンプレートを削除</value></data>
+    <data name="History_EditPhrases" xml:space="preserve"><value>フレーズを編集</value></data>
+    <data name="History_Phrases_Rename" xml:space="preserve"><value>フレーズの名前を変更</value></data>
+    <data name="History_Phrases_Delete" xml:space="preserve"><value>フレーズを削除</value></data>
+    <data name="History_DeleteChordShapes" xml:space="preserve"><value>コードフォームを削除</value></data>
     <data name="History_RemoveElements" xml:space="preserve"><value>項目を削除</value></data>
     <data name="History_RemoveEventPoints" xml:space="preserve"><value>イベントを削除</value></data>
     <data name="History_RemoveHandShapes" xml:space="preserve"><value>ハンドシェイプを削除</value></data>
@@ -3672,7 +3714,9 @@
     <data name="ChordTemplate_Name" xml:space="preserve"><value>コードネーム</value></data>
     <data name="ChordTemplate_ArpeggioTip" xml:space="preserve"><value>シェイプをアルペジオとして扱います。テンプレートの識別情報の一部で、エクスポート結果が変わります（ハンドシェイプのバーではなく紫の括弧になります）。</value></data>
     <data name="ChordTemplate_Nop" xml:space="preserve"><value>ダブルストップ表示 (RS -nop)</value></data>
-    <data name="ChordTemplate_NopTip" xml:space="preserve"><value>Rocksmith の Nop コードフラグです。エクスポート時は表示名の末尾に「-nop」として書き出されます。Rocksmith2014.NET はダブルストップ用パネルと説明しており、Rocksmith 2014 の公式チャートでは 121 個のシェイプに設定されています（ほぼすべてが名前のない 2～3 弦のダブルストップ）。ゲーム内での正確な見た目はここでは未検証です。テンプレートに保存されるため、コード名を変えても変わりません。</value></data>
+    <data name="ChordTemplate_NopTip" xml:space="preserve"><value>Rocksmith の Nop コードフラグです。エクスポート時は表示名の末尾に「-nop」として書き出されます。Rocksmith2014.NET はダブルストップ用パネルと説明しており、Rocksmith 2014 の公式チャートでは 121 個のシェイプに設定されています（ほぼすべてが名前のない 2～3 弦のダブルストップ）。ゲーム内での正確な見た目はここでは未検証です。テンプレートに保存されるため、コード名を変えても変わりません。</value></data>
+    <data name="ChordTemplate_NoName" xml:space="preserve"><value>名前なし</value></data>
+    <data name="ChordTemplate_NoNameTip" xml:space="preserve"><value>このコードには意図的に名前がありません。一覧にはフレットが表示され、エクスポートでは空の名前が書き出され、自動で名前が付けられることはありません。チェックを外すと以前の名前に戻るか、候補の名前が付きます。</value></data>
     <data name="ChordTemplate_Fingerless" xml:space="preserve"><value>運指なし</value></data>
     <data name="ChordTemplate_FingerlessTip" xml:space="preserve"><value>運指なし：このコードには意図的に運指がありません（EOF のフラグ）。すべての指は -1 としてエクスポートされ、運指チェックの対象外となり、自動入力でも変更されません。オンにすると指がクリアされ、指を設定するとオフになります。テンプレートに保存されるため、「適用先」に表示される範囲に反映されます。</value></data>
     <data name="ChordTemplate_FingerlessStripTip" xml:space="preserve"><value>運指なし：このコードには意図的に運指がありません。運指を付けるには「運指なし」をオフにするか、コードボックスで指を入力して保存してください。</value></data>
@@ -4277,8 +4321,8 @@
     <data name="Settings_EditorTab_Desc" xml:space="preserve"><value>編集ルール、貼り付け、インポート</value></data>
     <data name="Settings_PlayTab" xml:space="preserve"><value>プレイ</value></data>
     <data name="Settings_PlayTab_Desc" xml:space="preserve"><value>カウントイン、メトロノーム、メーター</value></data>
-    <data name="Settings_FilesTab" xml:space="preserve"><value>ファイルとバックアップ</value></data>
-    <data name="Settings_FilesTab_Desc" xml:space="preserve"><value>付随ファイル、バックアップ、オーディオキャッシュ</value></data>
+    <data name="Settings_FilesTab" xml:space="preserve"><value>インポートとエクスポート</value></data>
+    <data name="Settings_FilesTab_Desc" xml:space="preserve"><value>Guitar Pro インポート、PSARC、バックアップ、オーディオキャッシュ</value></data>
     <data name="Settings_General_AdvancedSubtitle" xml:space="preserve"><value>ログ（トラブルシューティング用）</value></data>
     <data name="Settings_Tip_ConsoleOutput" xml:space="preserve"><value>ログ行をコンソールウィンドウに書き出します。</value></data>
     <data name="Settings_Tip_ColoredLevels" xml:space="preserve"><value>コンソールの各行を重要度で色分けします。</value></data>
@@ -4291,7 +4335,6 @@
     <data name="Settings_GraphicsTab_Desc" xml:space="preserve"><value>レンダラー、フレーム上限、品質</value></data>
     <data name="Settings_AudioTab_Desc" xml:space="preserve"><value>デバイス、バッファ、モニタリング</value></data>
     <data name="Settings_KeybindsTab_Desc" xml:space="preserve"><value>ショートカットとキー操作</value></data>
-    <data name="Settings_StemModelsTab_Desc" xml:space="preserve"><value>分離品質</value></data>
     <data name="Settings_UpdatesTab_Desc" xml:space="preserve"><value>チャンネルと履歴</value></data>
     <data name="Settings_UnsavedOne" xml:space="preserve"><value>未保存の変更{0}件</value></data>
     <data name="Settings_Unsaved" xml:space="preserve"><value>未保存の変更{0}件</value></data>
@@ -4357,7 +4400,8 @@
     <data name="Onboarding_Audio_Title" xml:space="preserve"><value>オーディオ出力</value></data>
     <data name="Onboarding_Audio_Body" xml:space="preserve"><value>スピーカーやヘッドホンをつないだデバイスを選んでください。インターフェースにドライバーがあればASIOが最も低遅延です。</value></data>
     <data name="Onboarding_Audio_OutputDevice" xml:space="preserve"><value>出力デバイス</value></data>
-    <data name="Onboarding_Audio_TestDesc" xml:space="preserve"><value>選択を適用し、短いクリック音を再生します。</value></data>
+    <data name="Onboarding_Audio_PairDesc" xml:space="preserve"><value>ヘッドホンやモニターをつないだデバイスの出力です。テストクリックはこのペアから再生されます。</value></data>
+    <data name="Onboarding_Audio_TestDesc" xml:space="preserve"><value>選択を適用し、選んだ出力ペアから短いクリック音を再生します。</value></data>
     <data name="Onboarding_Audio_Test" xml:space="preserve"><value>テストクリックを再生</value></data>
     <data name="Onboarding_Audio_TestPlayed" xml:space="preserve"><value>{0}（{1} Hz）でクリック音を再生しました。聞こえましたか？</value></data>
     <data name="Onboarding_Audio_TestNoEngine" xml:space="preserve"><value>オーディオエンジンが動作していません。ドライバーとデバイスを確認して再試行してください。</value></data>
@@ -4632,8 +4676,24 @@
   <data name="ToneDesign_Manual_CopyFailed" xml:space="preserve"><value>プロンプトをクリップボードにコピーできませんでした。もう一度お試しください。</value></data>
   <data name="ToneDesign_Manual_InvalidReply" xml:space="preserve"><value>この回答には、このリグで使えるトーンがありません。JSON ブロックを含めて、ChatGPT の回答をまるごと貼り付けてください。</value></data>
   <data name="ToneDesign_Manual_Meta" xml:space="preserve"><value>ChatGPT から（コピー＆ペースト）</value></data>
-  <data name="Settings_AiTab" xml:space="preserve"><value>AI</value></data>
-  <data name="Settings_AiTab_Desc" xml:space="preserve"><value>トーン設計のプロバイダー、モデル、キー</value></data>
+  <data name="Settings_AiTab" xml:space="preserve"><value>AIとモデル</value></data>
+  <data name="Settings_AiTab_Desc" xml:space="preserve"><value>トーン設計、ステム分離、歌詞同期モデル</value></data>
+  <data name="Settings_LyricModels_Title" xml:space="preserve"><value>歌詞の自動同期</value></data>
+  <data name="Settings_LyricModels_Subtitle" xml:space="preserve"><value>貼り付けた歌詞を歌声に合わせるモデル。それぞれ一度だけダウンロードします。</value></data>
+  <data name="Settings_LyricModels_Multilingual" xml:space="preserve"><value>多言語モデル</value></data>
+  <data name="Settings_LyricModels_Multilingual_Desc" xml:space="preserve"><value>必須。ローマ字化した歌詞を1,100以上の言語で合わせます。ローマ字で作譜した日本語も含みます。</value></data>
+  <data name="Settings_LyricModels_English" xml:space="preserve"><value>英語モデル</value></data>
+  <data name="Settings_LyricModels_English_Desc" xml:space="preserve"><value>任意。英語の歌詞のタイミングがより正確になります。多言語モデルと一緒に動きます。</value></data>
+  <data name="Settings_LyricModels_Installed" xml:space="preserve"><value>インストール済み</value></data>
+  <data name="Settings_LyricModels_Missing" xml:space="preserve"><value>未インストール · {0} MBのダウンロード</value></data>
+  <data name="Settings_LyricModels_RunsOnGpu" xml:space="preserve"><value>GPUで実行（{0}）。</value></data>
+  <data name="Settings_LyricModels_RunsOnCpu" xml:space="preserve"><value>CPUで実行：使えるGPUプロバイダーがありません。</value></data>
+  <data name="Settings_LyricModels_CpuFallback" xml:space="preserve"><value>CPUで実行：このセッションでGPUでの実行に失敗しました。</value></data>
+  <data name="Settings_LyricModels_NotRunYet" xml:space="preserve"><value>GPUがあればGPUを使います。このセッションではまだ実行していません。</value></data>
+  <data name="Settings_LyricModels_Download" xml:space="preserve"><value>ダウンロード</value></data>
+  <data name="Settings_LyricModels_Repair" xml:space="preserve"><value>修復</value></data>
+  <data name="Settings_LyricModels_RetryGpu" xml:space="preserve"><value>GPUを再試行</value></data>
+  <data name="Settings_LyricModels_Failed" xml:space="preserve"><value>ダウンロードに失敗しました。理由はログにあります。</value></data>
   <data name="Ai_Title" xml:space="preserve"><value>AIトーン設計</value></data>
   <data name="Ai_Subtitle" xml:space="preserve"><value>リグの「トーンを設計」に応答するモデルです。</value></data>
   <data name="Ai_Unavailable" xml:space="preserve"><value>このビルドにはAIプロバイダーのサポートが含まれていません。</value></data>
@@ -5041,12 +5101,7 @@
   <data name="Inspector_Tab_More" xml:space="preserve"><value>その他</value></data>
   <data name="Inspector_Tab_More_Tip" xml:space="preserve"><value>この幅ではタブバーに収まらないタブ。ペインを広げると戻ります。</value></data>
   <data name="Menu_PanelChordShapes" xml:space="preserve"><value>コードフォーム</value></data>
-  <data name="ChordShapes_Finger_Complete" xml:space="preserve"><value>運指あり</value></data>
-  <data name="ChordShapes_Finger_Suggested" xml:space="preserve"><value>提案された運指</value></data>
-  <data name="ChordShapes_Finger_Missing" xml:space="preserve"><value>運指なし</value></data>
   <data name="ChordShapes_Unused" xml:space="preserve"><value>未使用</value></data>
-  <data name="ChordShapes_LevelUses" xml:space="preserve"><value>このレベル：{0}</value></data>
-  <data name="ChordShapes_AllUses" xml:space="preserve"><value>全レベル：{0}</value></data>
   <data name="ChordShapes_UsesPair" xml:space="preserve"><value>{0} · {1}</value></data>
   <data name="ChordShapes_ChordsOne" xml:space="preserve"><value>コード{0}個</value></data>
   <data name="ChordShapes_Chords" xml:space="preserve"><value>コード{0}個</value></data>
@@ -5054,23 +5109,10 @@
   <data name="ChordShapes_HandShapes" xml:space="preserve"><value>ハンドシェイプ{0}個</value></data>
   <data name="ChordShapes_UseCountOne" xml:space="preserve"><value>{0}箇所で使用</value></data>
   <data name="ChordShapes_UseCount" xml:space="preserve"><value>{0}箇所で使用</value></data>
-  <data name="ChordShapes_DuplicateOne" xml:space="preserve"><value>{0}個の他のフォームと同じフレット</value></data>
-  <data name="ChordShapes_Duplicate" xml:space="preserve"><value>{0}個の他のフォームと同じフレット</value></data>
-  <data name="ChordShapes_MergeTarget" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
-  <data name="ChordShapes_Summary" xml:space="preserve"><value>{0} · {1} · {2}</value></data>
   <data name="ChordShapes_ShapeCountOne" xml:space="preserve"><value>{0}個のフォーム</value></data>
   <data name="ChordShapes_ShapeCount" xml:space="preserve"><value>{0}個のフォーム</value></data>
-  <data name="ChordShapes_DuplicateCountOne" xml:space="preserve"><value>重複{0}個</value></data>
-  <data name="ChordShapes_DuplicateCount" xml:space="preserve"><value>重複{0}個</value></data>
-  <data name="ChordShapes_MissingCountOne" xml:space="preserve"><value>運指なし{0}個</value></data>
-  <data name="ChordShapes_MissingCount" xml:space="preserve"><value>運指なし{0}個</value></data>
-  <data name="ChordShapes_Filter_All" xml:space="preserve"><value>すべて {0}</value></data>
-  <data name="ChordShapes_Filter_Duplicates" xml:space="preserve"><value>重複 {0}</value></data>
-  <data name="ChordShapes_Filter_Duplicates_Tip" xml:space="preserve"><value>同じ種類(通常またはアルペジオ)の別のフォームとフレットが同じフォーム。</value></data>
-  <data name="ChordShapes_Filter_Missing" xml:space="preserve"><value>運指なし {0}</value></data>
   <data name="ChordShapes_Empty_NoArrangement" xml:space="preserve"><value>譜面を開くとコードフォームが表示されます。</value></data>
   <data name="ChordShapes_Empty_NoTemplates" xml:space="preserve"><value>このアレンジメントにはまだコードフォームがありません。コードを置くとここに表示されます。</value></data>
-  <data name="ChordShapes_Empty_NoMatch" xml:space="preserve"><value>このフィルターに一致するコードフォームはありません。</value></data>
   <data name="ChordShapes_Status_NoUseOnLevel" xml:space="preserve"><value>このレベルにはこのフォームを使うコードもハンドシェイプもありません。</value></data>
   <data name="ChordShapes_Status_Selected" xml:space="preserve"><value>このレベルで{0}を選択しました。</value></data>
   <data name="ChordShapes_Status_SelectedElsewhere" xml:space="preserve"><value>このレベルで{0}を選択しました。他のレベル：{1}。</value></data>
@@ -5086,22 +5128,25 @@
   <data name="ChordShapes_Refused_SelectionIsEveryUse" xml:space="preserve"><value>選択がこのフォームのすべての使用箇所です。代わりにフォームの名前を変更してください。</value></data>
   <data name="ChordShapes_Refused_NotInArrangement" xml:space="preserve"><value>このフォームはもうアレンジメントにありません。</value></data>
   <data name="ChordShapes_NameBox" xml:space="preserve"><value>コード名</value></data>
-  <data name="ChordShapes_RenameApply" xml:space="preserve"><value>適用</value></data>
-  <data name="ChordShapes_RenameCancel" xml:space="preserve"><value>キャンセル</value></data>
   <data name="ChordShapes_SelectUses" xml:space="preserve"><value>使用箇所を選択</value></data>
   <data name="ChordShapes_SelectUses_Tip" xml:space="preserve"><value>このレベルでこのフォームを使うすべてのコードとハンドシェイプを選択します。</value></data>
   <data name="ChordShapes_NextUse" xml:space="preserve"><value>次の使用箇所</value></data>
   <data name="ChordShapes_NextUse_Tip" xml:space="preserve"><value>このレベルでこのフォームを使う次のコードまたはハンドシェイプへ移動します。</value></data>
-  <data name="ChordShapes_Rename" xml:space="preserve"><value>名前を変更</value></data>
-  <data name="ChordShapes_MergeInto" xml:space="preserve"><value>統合先…</value></data>
-  <data name="ChordShapes_MergeInto_Tip" xml:space="preserve"><value>このフォームを使うすべてのコードとハンドシェイプを、同じフレットの別のフォームに移します。元に戻すは1回です。</value></data>
   <data name="ChordShapes_Split" xml:space="preserve"><value>選択を分離</value></data>
   <data name="ChordShapes_Split_Tip" xml:space="preserve"><value>選択したコードとハンドシェイプにこのフォームの独自のコピーを与え、名前や運指を個別に変更できるようにします。元に戻すは1回です。</value></data>
+  <data name="ChordShapes_Delete" xml:space="preserve"><value>削除</value></data>
+  <data name="ChordShapes_Delete_Tip" xml:space="preserve"><value>このフォームを削除します。どのレベルでも使われていません。元に戻すは1回です。</value></data>
+  <data name="ChordShapes_Refused_InUse" xml:space="preserve"><value>このフォームはまだ使われています。先に別のフォームに統合してから削除してください。</value></data>
+  <data name="ChordShapes_Refused_NothingUnused" xml:space="preserve"><value>すべてのフォームが使われているため、削除するものはありません。</value></data>
+  <data name="ChordShapes_Status_Deleted" xml:space="preserve"><value>{0}を削除しました。</value></data>
+  <data name="ChordShapes_Status_RemovedUnusedOne" xml:space="preserve"><value>未使用のフォームを{0}個削除しました。</value></data>
+  <data name="ChordShapes_Status_RemovedUnused" xml:space="preserve"><value>未使用のフォームを{0}個削除しました。</value></data>
+  <data name="History_ChordShapes_Delete" xml:space="preserve"><value>コードフォームを削除</value></data>
+  <data name="History_ChordShapes_RemoveUnused" xml:space="preserve"><value>未使用のコードフォームを削除</value></data>
+  <data name="History_RemoveStrandedShapes" xml:space="preserve"><value>未使用のコードフォームを削除</value></data>
   <data name="History_ChordShapes_Merge" xml:space="preserve"><value>コードフォームを統合</value></data>
   <data name="History_ChordShapes_Split" xml:space="preserve"><value>コードフォームを分離</value></data>
   <data name="History_ChordShapes_Rename" xml:space="preserve"><value>コードフォームの名前を変更</value></data>
-  <data name="ChordShapes_PlaceHint" xml:space="preserve"><value>コードボックスをクリックすると、そのコードを再生位置に配置します。サウンドを選択している場合は、それらをこのフォームに変更します。</value></data>
-  <data name="ChordShapes_Recent" xml:space="preserve"><value>最近配置したフォーム</value></data>
   <data name="ChordShapes_Place" xml:space="preserve"><value>配置</value></data>
   <data name="ChordShapes_Place_Tip" xml:space="preserve"><value>このコード全体を名前と運指付きで再生位置に配置します。サウンドを選択している場合は、それぞれをこのフォームに変更します。元に戻すは1回です。</value></data>
   <data name="ChordShapes_RepeatPrevious_Tip" xml:space="preserve"><value>再生位置より前の最も近いコードのフォームを、同じテンプレートで再生位置に配置します。元に戻すは1回です。</value></data>
@@ -5561,4 +5606,131 @@
   <data name="Status_LinkSuggestionsLinked" xml:space="preserve"><value>小節グループを {0} 件リンクしました。元に戻す1回ですべて解除できます。</value></data>
   <data name="Status_LinkSuggestionsNone" xml:space="preserve"><value>これらの小節はリンクできなくなりました。変更されたか、すでにリンクされています。</value></data>
   <data name="History_LinkSuggestions" xml:space="preserve"><value>候補の小節をリンク</value></data>
+  <data name="ShapeEdit_Title" xml:space="preserve"><value>フォームを編集</value></data>
+  <data name="ChordTemplate_EditShape" xml:space="preserve"><value>フォームを編集…</value></data>
+  <data name="ChordTemplate_EditShapeTip" xml:space="preserve"><value>先に適用範囲(このコード、選択範囲、すべての使用箇所)を選んでこのフォームを変更します。</value></data>
+  <data name="ShapeEdit_ScopeSection" xml:space="preserve"><value>変更する範囲</value></data>
+  <data name="ShapeEdit_StripLabel" xml:space="preserve"><value>曲の中での使用箇所</value></data>
+  <data name="ShapeEdit_GripSection" xml:space="preserve"><value>押さえ方</value></data>
+  <data name="ShapeEdit_Before" xml:space="preserve"><value>現在</value></data>
+  <data name="ShapeEdit_After" xml:space="preserve"><value>変更後</value></data>
+  <data name="ShapeEdit_String" xml:space="preserve"><value>弦</value></data>
+  <data name="ShapeEdit_Fret" xml:space="preserve"><value>フレット</value></data>
+  <data name="ShapeEdit_Finger" xml:space="preserve"><value>指</value></data>
+  <data name="ShapeEdit_Name" xml:space="preserve"><value>名前</value></data>
+  <data name="ShapeEdit_NameDesc" xml:space="preserve"><value>ゲーム内でコードの上に表示されます。</value></data>
+  <data name="ShapeEdit_NoName" xml:space="preserve"><value>名前なし</value></data>
+  <data name="ShapeEdit_NoNameDesc" xml:space="preserve"><value>ゲームではこのフォームに名前を表示しません。</value></data>
+  <data name="ShapeEdit_UseSuggested" xml:space="preserve"><value>候補の名前を使う</value></data>
+  <data name="ShapeEdit_HandShapes" xml:space="preserve"><value>ハンドシェイプを同期する</value></data>
+  <data name="ShapeEdit_UseMatch" xml:space="preserve"><value>そのフォームを使う</value></data>
+  <data name="ShapeEdit_Scope_This" xml:space="preserve"><value>このコード</value></data>
+  <data name="ShapeEdit_Scope_Selection" xml:space="preserve"><value>選択範囲</value></data>
+  <data name="ShapeEdit_Scope_Every" xml:space="preserve"><value>すべての使用箇所</value></data>
+  <data name="ShapeEdit_OpenedFromList" xml:space="preserve"><value>コードフォーム一覧から</value></data>
+  <data name="ShapeEdit_OpenedFromChord" xml:space="preserve"><value>{0}小節目のコード</value></data>
+  <data name="ShapeEdit_OpenedFromChordNoBar" xml:space="preserve"><value>開いた元のコード</value></data>
+  <data name="ShapeEdit_Detail_None" xml:space="preserve"><value>対象なし</value></data>
+  <data name="ShapeEdit_Detail_Levels" xml:space="preserve"><value>{1}レベルの{0}</value></data>
+  <data name="ShapeEdit_Detail_AtBar" xml:space="preserve"><value>{0} · {1}小節目</value></data>
+  <data name="ShapeEdit_Preview_None" xml:space="preserve"><value>対象のコードはありません。</value></data>
+  <data name="ShapeEdit_Preview_All" xml:space="preserve"><value>{0}が変わります</value></data>
+  <data name="ShapeEdit_Preview_Rest" xml:space="preserve"><value>{0}が変わります · {1}件は「{2}」のまま</value></data>
+  <data name="ShapeEdit_Result_Changes" xml:space="preserve"><value>「{0}」自体が変わるため、すべての使用箇所が新しい押さえ方になります。</value></data>
+  <data name="ShapeEdit_Result_NewOne" xml:space="preserve"><value>このコード用に新しいフォームを作ります。残りの{0}件は「{1}」のままです。</value></data>
+  <data name="ShapeEdit_Result_NewMany" xml:space="preserve"><value>この{0}件のコード用に新しいフォームを作ります。残りの{1}件は「{2}」のままです。</value></data>
+  <data name="ShapeEdit_Result_Join" xml:space="preserve"><value>{0}を「{1}」に移します。新しいフォームは作りません。</value></data>
+  <data name="ShapeEdit_Result_None" xml:space="preserve"><value>まだ変更はありません。フレット、指、または名前を編集してください。</value></data>
+  <data name="ShapeEdit_Apply_Every" xml:space="preserve"><value>すべての使用箇所に適用 ({0})</value></data>
+  <data name="ShapeEdit_Apply_This" xml:space="preserve"><value>このコードに適用</value></data>
+  <data name="ShapeEdit_Apply_Many" xml:space="preserve"><value>{0}件のコードに適用</value></data>
+  <data name="ShapeEdit_Hands_None" xml:space="preserve"><value>これらのコードを覆うハンドシェイプはありません。</value></data>
+  <data name="ShapeEdit_Hands_FollowOne" xml:space="preserve"><value>これらのコード上のハンドシェイプ{0}件が新しい押さえ方に従います。</value></data>
+  <data name="ShapeEdit_Hands_Follow" xml:space="preserve"><value>これらのコード上のハンドシェイプ{0}件が新しい押さえ方に従います。</value></data>
+  <data name="ShapeEdit_Hands_KeepOne" xml:space="preserve"><value>ハンドシェイプ{0}件は古い押さえ方のままで、コードと一致しなくなります。</value></data>
+  <data name="ShapeEdit_Hands_Keep" xml:space="preserve"><value>ハンドシェイプ{0}件は古い押さえ方のままで、コードと一致しなくなります。</value></data>
+  <data name="ShapeEdit_MatchOne" xml:space="preserve"><value>このフレットと指はすでに「{0}」です (1件)。</value></data>
+  <data name="ShapeEdit_Match" xml:space="preserve"><value>このフレットと指はすでに「{0}」です ({1}件)。</value></data>
+  <data name="History_ChordShapes_Edit" xml:space="preserve"><value>コードフォームを編集</value></data>
+  <data name="Shapes_Search" xml:space="preserve"><value>フォームを検索</value></data>
+  <data name="Shapes_Edit" xml:space="preserve"><value>編集</value></data>
+  <data name="Shapes_Edit_Tip" xml:space="preserve"><value>フレット・指・名前を変更し、先に変更の範囲を選びます</value></data>
+  <data name="Shapes_Merge" xml:space="preserve"><value>統合…</value></data>
+  <data name="Shapes_Merge_Tip" xml:space="preserve"><value>このフォームを選び、統合先のフォームを選ぶか、その上にドラッグします</value></data>
+  <data name="Shapes_MergeHere" xml:space="preserve"><value>ここに統合</value></data>
+  <data name="ShapeCleanup_Title" xml:space="preserve"><value>フォームを整理</value></data>
+  <data name="ShapeCleanup_Subtitle" xml:space="preserve"><value>チェックした変更は1回の取り消し単位として適用されます。</value></data>
+  <data name="ShapeCleanup_DuplicatesDesc" xml:space="preserve"><value>フレット・指・フラグが同じです。各グループは名前を残すフォームにまとめられます。</value></data>
+  <data name="ShapeCleanup_UnusedDesc" xml:space="preserve"><value>どの難易度のコードやハンドシェイプにも使われていません。</value></data>
+  <data name="ShapeCleanup_ReviewDesc" xml:space="preserve"><value>ほぼ同じです。選ぶまで何も変わりません。</value></data>
+  <data name="ShapeCleanup_Tidy" xml:space="preserve"><value>このアレンジのフォームは整理されています。</value></data>
+  <data name="ShapeCleanup_DuplicatesHeader" xml:space="preserve"><value>重複 ({0})</value></data>
+  <data name="ShapeCleanup_UnusedHeader" xml:space="preserve"><value>未使用 ({0})</value></data>
+  <data name="ShapeCleanup_ReviewHeader" xml:space="preserve"><value>確認 ({0})</value></data>
+  <data name="ShapeCleanup_SummaryDuplicatesOne" xml:space="preserve"><value>重複グループ{0}件</value></data>
+  <data name="ShapeCleanup_SummaryDuplicates" xml:space="preserve"><value>重複グループ{0}件</value></data>
+  <data name="ShapeCleanup_SummaryUnused" xml:space="preserve"><value>未使用{0}件</value></data>
+  <data name="ShapeCleanup_SummaryReview" xml:space="preserve"><value>要確認{0}件</value></data>
+  <data name="ShapeCleanup_ApplyOne" xml:space="preserve"><value>{0}件の変更を適用</value></data>
+  <data name="ShapeCleanup_Apply" xml:space="preserve"><value>{0}件の変更を適用</value></data>
+  <data name="ShapeCleanup_MergeTitle" xml:space="preserve"><value>{0} ×{1}</value></data>
+  <data name="ShapeCleanup_MergeNamed" xml:space="preserve"><value>「{0}」を残し、{1}が移ります</value></data>
+  <data name="ShapeCleanup_MergeUnnamed" xml:space="preserve"><value>名前のない{0}個のコピーが1つになり、{1}が移ります</value></data>
+  <data name="ShapeCleanup_NearLabel" xml:space="preserve"><value>{0} · {1}</value></data>
+  <data name="ShapeCleanup_NearFingersOne" xml:space="preserve"><value>フレットは同じで、{0}弦の指が異なります</value></data>
+  <data name="ShapeCleanup_NearFingers" xml:space="preserve"><value>フレットは同じで、{0}弦の指が異なります</value></data>
+  <data name="ShapeCleanup_NearName" xml:space="preserve"><value>フレットと指は同じで、名前が2つあります：「{0}」と「{1}」</value></data>
+  <data name="ShapeCleanup_NearFlags" xml:space="preserve"><value>フレットと指は同じで、フラグが異なります</value></data>
+  <data name="ShapeCleanup_Choice_Both" xml:space="preserve"><value>両方残す</value></data>
+  <data name="ShapeCleanup_Choice_Left" xml:space="preserve"><value>左を使う</value></data>
+  <data name="ShapeCleanup_Choice_Right" xml:space="preserve"><value>右を使う</value></data>
+  <data name="ShapeCleanup_Status_AppliedOne" xml:space="preserve"><value>フォームを整理しました：{0}個削除しました。</value></data>
+  <data name="ShapeCleanup_Status_Applied" xml:space="preserve"><value>フォームを整理しました：{0}個削除しました。</value></data>
+  <data name="History_ChordShapes_CleanUp" xml:space="preserve"><value>コードフォームを整理</value></data>
+  <data name="Shapes_CleanUp" xml:space="preserve"><value>整理 ({0})</value></data>
+  <data name="Shapes_CleanUp_Tip" xml:space="preserve"><value>同じコピーのマージ、未使用フォームの削除、ほぼ同じフォームの確認を行います。取り消しは1回で戻せます。</value></data>
+  <data name="Shapes_EditSelected" xml:space="preserve"><value>まとめて編集</value></data>
+  <data name="Shapes_EditSelected_Tip" xml:space="preserve"><value>チェックしたすべてのフォームのフレットや運指を一度に設定します。同一になったコピーは1つにまとめられます</value></data>
+  <data name="Shapes_MergeSelected" xml:space="preserve"><value>1つに統合</value></data>
+  <data name="Shapes_ClearSelection" xml:space="preserve"><value>選択を解除</value></data>
+  <data name="Shapes_Select" xml:space="preserve"><value>一括編集用に選択</value></data>
+  <data name="Shapes_Issue_SameFrets" xml:space="preserve"><value>「{0}」と同じフレット</value></data>
+  <data name="Shapes_Issue_NoFingering" xml:space="preserve"><value>運指なし</value></data>
+  <data name="Shapes_Fix_Merge" xml:space="preserve"><value>統合</value></data>
+  <data name="Shapes_Fix_Finger" xml:space="preserve"><value>運指を設定</value></data>
+  <data name="Shapes_Summary" xml:space="preserve"><value>{0} · 要確認：{1}</value></data>
+  <data name="Shapes_SummaryTidy" xml:space="preserve"><value>{0} · 要確認なし</value></data>
+  <data name="Shapes_Filter_Attention" xml:space="preserve"><value>要確認 ({0})</value></data>
+  <data name="Shapes_Filter_Attention_Tip" xml:space="preserve"><value>確認が必要なシェイプだけを表示します。重複、コードと合っていないハンドシェイプ、運指なしが対象です。</value></data>
+  <data name="Shapes_Empty_NoMatch" xml:space="preserve"><value>検索に一致するフォームはありません。</value></data>
+  <data name="Shapes_MergeHint" xml:space="preserve"><value>「{0}」の統合先を選んでください。同じフレットのフォームだけが選べます。</value></data>
+  <data name="Shapes_DragHint" xml:space="preserve"><value>「{0}」を統合先のフォームにドロップしてください。同じフレットのフォームにだけ統合できます。</value></data>
+  <data name="Shapes_Pending_Merge" xml:space="preserve"><value>「{0}」を「{1}」に統合します。「{1}」に移るもの：{2}。「{0}」は削除され、「{1}」は自身の指と名前を保ちます。元に戻す操作は1回です。</value></data>
+  <data name="Shapes_Pending_Delete" xml:space="preserve"><value>「{0}」はまだ{1}で使われています。削除すると、それらは「{2}」（同じフレット）に移り、ノートは残ります。元に戻す操作は1回です。</value></data>
+  <data name="Shapes_Pending_MergeConfirm" xml:space="preserve"><value>統合</value></data>
+  <data name="Shapes_Pending_DeleteConfirm" xml:space="preserve"><value>削除して{0}を移す</value></data>
+  <data name="Shapes_Status_NoName" xml:space="preserve"><value>「{0}」の名前をなしにしました。</value></data>
+  <data name="Shapes_Status_NameFree" xml:space="preserve"><value>「{0}」に再び名前を付けられます。</value></data>
+  <data name="Shapes_Status_Fingered" xml:space="preserve"><value>{0}に運指を設定しました。</value></data>
+  <data name="Shapes_Status_DeletedMoved" xml:space="preserve"><value>{0}を削除し、{1}を{2}に移しました。</value></data>
+  <data name="Shapes_Refused_Pinned" xml:space="preserve"><value>このフォームは固定されているため、指はそのままです。</value></data>
+  <data name="Shapes_Refused_NoSuggestion" xml:space="preserve"><value>このフォームには提案できる運指がありません。</value></data>
+  <data name="ShapeEdit_Scope_ThisShape" xml:space="preserve"><value>このフォーム</value></data>
+  <data name="ShapeEdit_Scope_Together" xml:space="preserve"><value>選択した{0}個のフォーム</value></data>
+  <data name="ShapeEdit_OpenedFromTicked" xml:space="preserve"><value>フォームパネルでチェックした{0}個のフォームから開きました</value></data>
+  <data name="ShapeEdit_Result_Together" xml:space="preserve"><value>{0}個のフォームは同じ押さえ方になるため1つのフォームにまとまり、空になった{1}個のコピーは同じ元に戻す操作で削除されます。</value></data>
+  <data name="ShapeEdit_Result_TogetherOne" xml:space="preserve"><value>{0}個のフォームは同じ押さえ方になるため1つのフォームにまとまり、空になった{1}個のコピーは同じ元に戻す操作で削除されます。</value></data>
+  <data name="ShapeEdit_Result_TogetherJoin" xml:space="preserve"><value>{0}個のフォームを、すでにこの押さえ方を持つ「{1}」に移します。その後どこからも使われないコピーは同じ元に戻す操作で削除されます。</value></data>
+  <data name="ShapeEdit_Result_TogetherKept" xml:space="preserve"><value>すべてのコードが同じ押さえ方になります。ハンドシェイプがまだ使っているため、コピーは残ります。</value></data>
+  <data name="ShapeEdit_Apply_Together" xml:space="preserve"><value>{0}個のフォームに適用（{1}件のコード）</value></data>
+  <data name="Shapes_Selection" xml:space="preserve"><value>{0}を選択中 · {1}</value></data>
+  <data name="Shapes_Pending_MergeMany" xml:space="preserve"><value>{0}個のフォームを「{1}」（{2}）に統合します。移るもの：{3}。{4}個のコピーは削除されます。指と名前は残すフォームのものになります。元に戻す操作は1回です。</value></data>
+  <data name="Shapes_Pending_MergeManyOne" xml:space="preserve"><value>{0}個のフォームを「{1}」（{2}）に統合します。移るもの：{3}。{4}個のコピーは削除されます。指と名前は残すフォームのものになります。元に戻す操作は1回です。</value></data>
+  <data name="Shapes_Pending_DeleteMany" xml:space="preserve"><value>{0}個のフォームを削除しますか？使用箇所は同じフレットの最も近いフォームに移ります：{1}。ノートは残ります。元に戻す操作は1回です。</value></data>
+  <data name="Shapes_Pending_DeleteManyConfirm" xml:space="preserve"><value>{0}個のフォームを削除</value></data>
+  <data name="Shapes_Status_DeletedMany" xml:space="preserve"><value>{0}個のフォームを削除し、{1}を同じフレットのフォームに移しました。</value></data>
+  <data name="Shapes_Refused_NeedTwo" xml:space="preserve"><value>統合するには2つ以上のフォームにチェックを付けてください。</value></data>
+  <data name="Shapes_Refused_BulkFrets" xml:space="preserve"><value>統合しませんでした：チェックしたフォームのフレットが同じではありません。同じ押さえ方のコピーにチェックするか、「まとめて編集」を使ってください。</value></data>
+  <data name="Shapes_Refused_NoTarget" xml:space="preserve"><value>削除しませんでした：チェックしたフォームがまだ使われていて、その使用箇所を引き受けられる同じフレットのフォームがありません。チェックを外すか、先に別のフォームへ統合してください。</value></data>
+  <data name="History_ChordShapes_Finger" xml:space="preserve"><value>コードフォームに運指を設定</value></data>
 </root>

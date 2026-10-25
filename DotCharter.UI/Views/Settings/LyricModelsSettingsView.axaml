@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
+             xmlns:settings="using:DotCharter.UI.Views.Settings"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             x:Class="DotCharter.UI.Views.Settings.LyricModelsSettingsView"
+             x:DataType="contracts:ILyricModelsSettingsScreen"
+             x:CompileBindings="True">
+
+    <!--
+        Settings > AI & models > Lyric auto-sync: one row per acoustic model, its
+        state on the left (installed or the download size, and what it ran on in
+        this session), its verbs on the right. Drawn as a section of the AI & models
+        page through a ScreenSlot, which lifts the body out of this scroller.
+    -->
+
+    <UserControl.Styles>
+        <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
+    </UserControl.Styles>
+
+    <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
+        <ctl:MasonryPanel Classes="SettingsFlow" Margin="0,0,0,72">
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" x:Name="LyricModelsGroup"
+                    IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=lyricModels.group.0}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_LyricModels_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_LyricModels_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <ItemsControl x:Name="LyricModelRows" ItemsSource="{Binding Models}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="contracts:ILyricModelRow">
+                                <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                                      AutomationProperties.AutomationId="{Binding Key}"
+                                      IsVisible="{Binding IsShown}">
+                                    <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                        <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{Binding Name}" />
+                                        <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{Binding Description}" />
+                                        <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{Binding ProviderText}" />
+                                        <ProgressBar Margin="0,8,0,0" Height="4" IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+                                        <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{Binding ProgressText}"
+                                                   IsVisible="{Binding ProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                    <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="10">
+                                        <SelectableTextBlock Classes="ValueText" Text="{Binding StatusText}" />
+                                        <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+                                            <Button Classes="RowAction" Command="{Binding DownloadCommand}"
+                                                    IsVisible="{Binding !IsInstalled}">
+                                                <TextBlock Text="{localization:Loc Settings_LyricModels_Download}" />
+                                            </Button>
+                                            <Button Classes="RowAction" Command="{Binding RepairCommand}"
+                                                    IsVisible="{Binding IsInstalled}">
+                                                <TextBlock Text="{localization:Loc Settings_LyricModels_Repair}" />
+                                            </Button>
+                                            <Button Classes="RowAction" Command="{Binding RetryGpuCommand}"
+                                                    IsVisible="{Binding IsCpuFallback}">
+                                                <TextBlock Text="{localization:Loc Settings_LyricModels_RetryGpu}" />
+                                            </Button>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </ctl:MasonryPanel>
+    </ScrollViewer>
+</UserControl>

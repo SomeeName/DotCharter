@@ -25,8 +25,8 @@ namespace DotCharter.Services.Editing;
 public readonly struct StringEditMask : IEquatable<StringEditMask>
 {
     /// <summary>Highest string index the mask can address. Nine because the
-    /// keyboard binding is <c>Ctrl+1..9</c>; the model itself allows 0..7
-    /// (<c>Arrangement.StringCount</c> tops out at 8).</summary>
+    /// keyboard binding is <c>Ctrl+1..9</c>; the model itself allows 0..8
+    /// (<c>Arrangement.StringCount</c> tops out at 9).</summary>
     public const int MaxStrings = 9;
 
     private StringEditMask(int bits) => Bits = bits;

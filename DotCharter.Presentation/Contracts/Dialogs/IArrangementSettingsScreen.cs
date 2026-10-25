@@ -35,10 +35,12 @@ public interface IArrangementSettingsScreen : IDialogScreen<bool>
     /// <summary>Changing it adds or drops rows in <see cref="TuningOffsets" />.</summary>
     int Strings { get; set; }
 
-    /// <summary>Picking a named preset rewrites the offsets; Custom leaves them as typed.</summary>
+    /// <summary>The picked preset's KEY (<see cref="ITuningPresetOption.Key" />). Picking a named
+    ///     preset rewrites the offsets; Custom leaves them as typed.</summary>
     string TuningPreset { get; set; }
 
-    IReadOnlyList<string> TuningPresets { get; }
+    /// <summary>The presets, labelled for the current string count.</summary>
+    IReadOnlyList<ITuningPresetOption> TuningPresets { get; }
 
     /// <summary>One half-step offset per string, low string first; the list follows <see cref="Strings" />.</summary>
     IReadOnlyList<ITuningStep> TuningOffsets { get; }
@@ -70,6 +72,15 @@ public interface IArrangementSettingsScreen : IDialogScreen<bool>
     ICommand SaveCommand { get; }
 
     ICommand CancelCommand { get; }
+}
+
+/// <summary>One tuning preset: a stable key and a label that follows the string count
+///     ("Drop A (A E A D G B E)" on a 7-string).</summary>
+public interface ITuningPresetOption : INotifyPropertyChanged
+{
+    string Key { get; }
+
+    string Label { get; }
 }
 
 public interface ITuningStep : INotifyPropertyChanged

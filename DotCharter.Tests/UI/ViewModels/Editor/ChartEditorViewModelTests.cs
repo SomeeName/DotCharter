@@ -91,6 +91,20 @@ public sealed class ChartEditorViewModelTests
         Assert.True(fired);
     }
 
+    /// <summary>Every String order writer (Settings, View menu, first-run setup) re-renders the timeline.</summary>
+    [Fact]
+    public void ChangingTheStringOrder_RedrawsTheTimeline()
+    {
+        var h = new Harness();
+        var redraws = 0;
+        h.Editor.ChartDataChanged += () => redraws++;
+
+        h.State.InvertStrings = true;
+        h.State.PlayModeInvertStrings = true;
+
+        Assert.Equal(1, redraws);
+    }
+
     [Fact]
     public void UndoCommand_DelegatesToHistoryService()
     {

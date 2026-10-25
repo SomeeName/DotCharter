@@ -103,6 +103,13 @@ public sealed class ExportBytePinTests
     ///     without one gets an id derived from its bytes. Everything else must still
     ///     match the pre-optimisation writer byte for byte; the id itself is pinned
     ///     by <c>RscpProjectIdTests</c>.
+    ///     <para>
+    ///         The <c>&lt;dcWriterVersion&gt;</c> stamp is put back to the
+    ///         <see cref="PinnedWriterVersion" /> the pins were captured with. It is
+    ///         the app's release version, so without this every release bump moved
+    ///         every pin here; the stamp itself is pinned by
+    ///         <c>RscpForwardCompatibilityTests</c>.
+    ///     </para>
     /// </summary>
     private static byte[] WrittenWithoutTheProjectId(string path)
     {
@@ -111,8 +118,20 @@ public sealed class ExportBytePinTests
         var start = text.IndexOf("  <dcProjectId>", StringComparison.Ordinal);
         Assert.True(start >= 0, "the writer no longer writes <dcProjectId> — RscpProjectIdTests should say why");
         var end = text.IndexOf('\n', start);
-        return System.Text.Encoding.UTF8.GetBytes(text.Remove(start, end - start + 1));
+        text = text.Remove(start, end - start + 1);
+
+        const string open = "<" + RscpFormatContract.WriterVersionElement + ">";
+        const string close = "</" + RscpFormatContract.WriterVersionElement + ">";
+        var stampStart = text.IndexOf(open, StringComparison.Ordinal);
+        Assert.True(stampStart >= 0, "the writer no longer stamps <dcWriterVersion> — RscpForwardCompatibilityTests should say why");
+        var valueStart = stampStart + open.Length;
+        var valueEnd = text.IndexOf(close, valueStart, StringComparison.Ordinal);
+        text = text[..valueStart] + PinnedWriterVersion + text[valueEnd..];
+        return System.Text.Encoding.UTF8.GetBytes(text);
     }
+
+    /// <summary>The <c>&lt;dcWriterVersion&gt;</c> the .rscp pins were captured with.</summary>
+    private const string PinnedWriterVersion = "1.0.0";
 
     // ── .rscp load → save round trip ─────────────────────────────────────
     // Hashes the re-serialized project, so any field RscpHeaderParser stopped
@@ -156,38 +175,56 @@ public sealed class ExportBytePinTests
     // at the END of the list, so no other chord id moved — and
     // UnpackedSng_WithTheSplitOnlyTemplatesPutBack_IsTheHashBefore621 proves the
     // new bytes plus those templates ARE the old bytes.
+    //
+    // Ten were re-captured again, for two deliberate export changes, each found by
+    // bisecting and each proven to be ALL that moved: with both undone, every one of
+    // the ten hashes back to its previous pin exactly.
+    //   * "closing noguitar": the SNG mapper adds Editor on Fire's closing
+    //     noguitar section after the last note when a chart has none
+    //     (EndNoGuitarSection). UnpackedSng_WithoutTheClosingNoGuitarSection_IsTheHashBeforeIt
+    //     takes it back out of the arrangements nothing else moved in.
+    //   * "accent rule": a whole-chord accent or ignore no longer counts as a
+    //     per-string one, so those strums now ship as compact repeats
+    //     (RsChordDensity.CompactRepeatVerdict). Checked by reverting that rule.
+    //
+    // Then twelve (every one with more than two phrases) re-captured for #241, the
+    // one phrase reader for both stores (PhraseMarkers.Iterations): a chart that keeps
+    // its phrases as markers now numbers them by first appearance instead of by
+    // Arrangement.Phrases. The iterations are the same (same times, same names, all
+    // fourteen arrangements); with the ids mapped back to Arrangement.Phrases order
+    // every SNG pin, put-back and noguitar case hashed to its previous value exactly.
 
     [Theory]
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 0,
-        "43176f9b55f3e1c1d783f420d2b32665")] // #621: 4 split-only templates out
+        "c47d0ff42801871dd09f931e5592deba")] // #621: 4 split-only templates out; accent rule
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 1,
-        "f67fda906940f4372c63185a0b890777")]
+        "653513c3d7e43f188c81a67437dcfbea")] // closing noguitar
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 2,
-        "462d0e05e38990f872f799beef7b8747")] // #621: 4 split-only templates out
+        "85042bf10f4de0ac6ebaebea33c32065")] // #621: 4 split-only templates out; closing noguitar
     // The 1,071-chord / 199-hand-shape arrangement — the worst case for the
     // quadratic scans the binary search replaced.
     [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 3,
-        "8846d01084dbfb47a0d15ef88286e175")] // #621: 1 split-only template out
+        "689db23e64b4aefaebdd8e57cbf7215a")] // #621: 1 split-only template out; closing noguitar, accent rule
     [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 0,
-        "a6fc112b9bc945b600b386b30e1288e5")] // #621: 2 split-only templates out
+        "b0103dd5a30eef6bdc868a28af0388ae")] // #621: 2 split-only templates out; closing noguitar, accent rule
     [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 1,
-        "a6fc112b9bc945b600b386b30e1288e5")] // #621: 2 split-only templates out
+        "b0103dd5a30eef6bdc868a28af0388ae")] // #621: 2 split-only templates out; closing noguitar, accent rule
     [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 2,
-        "307aff275559ddb725b7d27ca0a750a9")]
+        "1e5dcc860baac20b7dc530a159e237d3")] // closing noguitar, accent rule
     [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 0,
-        "acb1f5ccbe38742d8b0a123507425ce7")]
+        "9cd633e90755460d8a0f652f95c7ba8d")] // closing noguitar
     [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1,
-        "1b1b2e7f889992784558177bf82db667")] // #621: 3 split-only templates out
+        "2559eae43199839cfded4e2e5494e251")] // #621: 3 split-only templates out; closing noguitar
     [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 2,
-        "2b674a4fe4283f4593a673ac1ed583c1")]
+        "eec81ee5ed2fedfe3d88b1dcb0eb9677")] // closing noguitar, accent rule
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 0,
-        "11038b09572f89a474f314c8e8a40bd3")]
+        "8e6f924559e3cb5f0fb4e660920581dd")]
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 1,
-        "8322096cf9170535a1d8bdf920cf5760")]
+        "2c327c0b4bb4d67949894e10eec8fe87")]
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 2,
         "ecbd57227cd40f2abe99958edfba5bc5")]
     [InlineData(@"RsCharter\Atarayo - Natsu ga Kuru Tabi\project.rscp", 3,
-        "39ee6b2973beafb86f0004f2fe13cac6")]
+        "920a93a71a72ffc56a3ff17b799cf125")]
     public void UnpackedSng_IsByteIdenticalToThePreOptimisationBuilder(
         string relative, int arrangementIndex, string expected)
     {
@@ -211,19 +248,70 @@ public sealed class ExportBytePinTests
     }
 
     /// <summary>
+    ///     The SNGs whose only change since their previous pin is EOF's closing
+    ///     noguitar section: taken back out, they write the previous pin's bytes
+    ///     exactly. So the section is all the mapper added (its notes, phrases and
+    ///     every other section are untouched), and it went in where
+    ///     <c>EndNoGuitarSection</c> says it does. The hashes are the previous pins
+    ///     with #241's first-appearance phrase numbering, the only thing that moved
+    ///     them (see the pins above).
+    /// </summary>
+    [Theory]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 1, "db86cd6596086ea94087752cafe90bfc")]
+    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 0, "4b6850c83ff0a8e7194e87b302700b02")]
+    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1, "e4ba5a16dcfb96584a12adc7e77341f0")]
+    public void UnpackedSng_WithoutTheClosingNoGuitarSection_IsTheHashBeforeIt(
+        string relative, int arrangementIndex, string before)
+    {
+        var path = Resolve(relative);
+        Assert.SkipWhen(path == null, NoCorpus);
+
+        var sng = BuildSng(path!, arrangementIndex, unsplit: false);
+        var added = sng.Sections.FindIndex(s => s.Name == EndNoGuitarSection.Name);
+        Assert.True(added >= 0, "no closing noguitar section: EndNoGuitarSection no longer adds one here");
+        RemoveClosingNoGuitarSection(sng, added);
+
+        Assert.Equal(before, Sha(RocksmithSngWriter.WriteUnpacked(sng)));
+    }
+
+    /// <summary>
+    ///     Takes the added section out and gives back what adding it changed: the
+    ///     section before it ran on to its end, and a leading one (the chart's
+    ///     sections all start after the last note) held the notes' string mask.
+    /// </summary>
+    private static void RemoveClosingNoGuitarSection(RocksmithSng sng, int index)
+    {
+        var removed = sng.Sections[index];
+        sng.Sections.RemoveAt(index);
+        if (index == 0)
+        {
+            sng.Sections[0] = sng.Sections[0] with { StringMask = removed.StringMask };
+            return;
+        }
+
+        sng.Sections[index - 1] = sng.Sections[index - 1] with
+        {
+            EndTime = removed.EndTime,
+            EndPhraseIterationId = removed.EndPhraseIterationId
+        };
+    }
+
+    /// <summary>
     ///     The six SNG pins #621 re-captured, with the split-only templates put back:
     ///     the SNG built now, plus the templates a "Split notes"-free build of the same
     ///     arrangement appends after them, writes the pre-#621 bytes exactly. So the
     ///     ONLY thing #621 changed in those SNGs is the dropped templates — no chord id,
-    ///     no repeat decision, nothing else.
+    ///     no repeat decision, nothing else. The hashes were re-captured for the
+    ///     closing noguitar section, the whole-chord accent rule and #241's phrase
+    ///     numbering (see the pins above); the put-back still has to land on them.
     /// </summary>
     [Theory]
-    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 0, 4, "de82ea613c5ab959d3b9f663db76c1f2")]
-    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 2, 4, "63ead152c21c9c9f186ce233435f5ead")]
-    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 3, 1, "77163995b5de4b5556aec93b4142b880")]
-    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 0, 2, "6751161f55893725e6837501081e6a8b")]
-    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 1, 2, "6751161f55893725e6837501081e6a8b")]
-    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1, 3, "14da87f243ba26b27bebe600ee51de5c")]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 0, 4, "8500346d5b6eb8c6da7806d430fc6657")]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 2, 4, "88b97934946ffea9035b174380c753bf")]
+    [InlineData(@"RsCharter\Yorushika - Odorouze\project.rscp", 3, 1, "b87b9554ab5d81bba9ffad43a6dbc037")]
+    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 0, 2, "8da0a7e1c23edcd20e699407e8294352")]
+    [InlineData(@"RsCharter\Ave Mujica - DIVINE\project.rscp", 1, 2, "8da0a7e1c23edcd20e699407e8294352")]
+    [InlineData(@"RsCharter\Yorushika - Replicant\project.rscp", 1, 3, "ea72aec2c2e63b678c4d12bd03332b83")]
     public void UnpackedSng_WithTheSplitOnlyTemplatesPutBack_IsTheHashBefore621(
         string relative, int arrangementIndex, int dropped, string before)
     {
@@ -342,10 +430,19 @@ public sealed class ExportBytePinTests
     // the bytes hash to the old pins exactly; Parade mints none and is unchanged.
     // Parade RE-CAPTURED for #799: it opens on open strings, so the FHP pass now puts
     // its first anchor at the first note instead of the first fretted one.
+    //
+    // Fireworks and TABS.gp5 RE-CAPTURED for the Guitar Pro import fixes (first
+    // moved by the ".gpx, slide-ins, x/8 placement, round-trip fidelity" merge,
+    // found by bisecting). Diffed against the import before it, the .rscp differ
+    // ONLY in what those fixes change on purpose: a grace hammer-on becomes its own
+    // note before the target, a hammer-on or pull-off flag moves to the destination
+    // note, accents are read, a slide-in no longer imports as a slide out of the
+    // note, and one chord template's fingering. Musica Caelestis
+    // and Parade are unchanged.
 
     [Theory]
     [InlineData(@"EOF\Yorushika - Fireworks Beneath My Shoes\Yorushika - Firworks Beneath My Shoes.gp",
-        "2072f8fd0469dbe1636ff774dffb96d1")]
+        "b0580ffeaeee835d361b81ef0006503f")] // Guitar Pro import fixes
     [InlineData(@"EOF\Ave Mujica - Musica Caelestis\Ave Mujica - Musica Caelestis.gp",
         "8e5c3dff3d9b58aefdd2043444188c76")]
     [InlineData(@"EOF\Yorushika - Parade\Yorushika - Parade.gp",
@@ -353,7 +450,7 @@ public sealed class ExportBytePinTests
     // The GP3-5 BINARY reader, which shares none of the gpif property code —
     // here so a change to one importer that silently moves the other is caught.
     [InlineData("TABS.gp5",
-        "1b3d053bf17a9f82f8958f41333016d8")]
+        "e7816cb6ba2ea21ed529b844d4541931")] // Guitar Pro import fixes
     public void GuitarProImport_IsByteIdenticalToThePreOptimisationParser(string relative, string expected)
     {
         var path = Resolve(relative);

@@ -164,10 +164,16 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     /// in front of the Mix popover's meter without an audio device.</summary>
     public float[] InputCaptureWindow { get; set; } = [];
 
+    /// <summary>When set, the window a read returns for the LAST applied
+    /// configuration: what a guitar on one jack sounds like as the configured
+    /// input moves from jack to jack.</summary>
+    public Func<RigConfig?, float[]>? InputCaptureFor { get; set; }
+
     public int ReadInputCaptureWindow(float[] destination)
     {
-        var n = Math.Min(destination.Length, InputCaptureWindow.Length);
-        Array.Copy(InputCaptureWindow, destination, n);
+        var window = InputCaptureFor?.Invoke(AppliedConfigs.Count > 0 ? AppliedConfigs[^1] : null) ?? InputCaptureWindow;
+        var n = Math.Min(destination.Length, window.Length);
+        Array.Copy(window, destination, n);
         return n;
     }
     public virtual int ReadInputCapture(float[] destination, out ulong streamPosition)
@@ -205,7 +211,10 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     {
     }
 
-    public List<string> GetWasapiOutputDevices() => [];
+    /// <summary>The WASAPI playback devices the fake machine lists.</summary>
+    public List<string> WasapiOutputDevices { get; set; } = [];
+
+    public List<string> GetWasapiOutputDevices() => [.. WasapiOutputDevices];
 
     /// <summary>The ASIO drivers installed on the fake machine. Like the real
     /// engine, they are only listed once the engine has been opened FOR ASIO —
@@ -215,8 +224,12 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
     public List<string> GetAsioDevices() =>
         AppliedConfigs.Count > 0 && AppliedConfigs[^1].AudioDriver == "ASIO" ? [.. AsioDevicesInstalled] : [];
 
-    public List<string> GetWasapiInputDevices() => [];
-    public List<string> GetAsioInputDevices() => [];
+    public List<string> WasapiInputDevices { get; set; } = [];
+
+    public List<string> AsioInputDevicesInstalled { get; set; } = [];
+
+    public List<string> GetWasapiInputDevices() => [.. WasapiInputDevices];
+    public List<string> GetAsioInputDevices() => [.. AsioInputDevicesInstalled];
 
     /// <summary>What <see cref="GetMidiOutputDevices" /> answers; winmm's shape, the mapper first.</summary>
     public IReadOnlyList<DotCharter.Tone.Audio.Midi.MidiOutputDeviceInfo> MidiOutputs { get; set; } =
@@ -245,6 +258,29 @@ internal class FakeAudioPlaybackService : IAudioPlaybackService
         InputChannelCountProbes.Enqueue((driver, deviceName));
         return InputDeviceChannelCount;
     }
+
+    /// <summary>The output count <see cref="GetOutputDeviceChannelCount" /> reports; 0 = unknown.</summary>
+    public int OutputDeviceChannelCount { get; set; }
+
+    /// <summary>Every (driver, device) the output pair picker asked the engine about.</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<(string Driver, string Device)> OutputChannelCountProbes
+    { get; } = new();
+
+    public int GetOutputDeviceChannelCount(string driver, string deviceName)
+    {
+        OutputChannelCountProbes.Enqueue((driver, deviceName));
+        return OutputDeviceChannelCount;
+    }
+
+    /// <summary>The names <see cref="GetOutputChannelNames" /> reports; empty = the driver gives none.</summary>
+    public IReadOnlyList<string> OutputChannelNames { get; set; } = [];
+
+    /// <summary>The names <see cref="GetInputChannelNames" /> reports; empty = the driver gives none.</summary>
+    public IReadOnlyList<string> InputChannelNames { get; set; } = [];
+
+    public IReadOnlyList<string> GetOutputChannelNames(string driver, string deviceName) => OutputChannelNames;
+
+    public IReadOnlyList<string> GetInputChannelNames(string driver, string deviceName) => InputChannelNames;
 
     /// <summary>
     ///     When set, <see cref="LoadAudioAsync" /> fails with it — a real audio

@@ -62,11 +62,11 @@ buttons, and value controls.
     title instead. A READ-ONLY readout is not exempt either: the chart-diff
     dialog's compared-file box takes the `Dialog_Section_Source` key its caption
     already uses.
-  - Seven rows had no label of ANY kind and got new keys in all three resx
+  - Rows that had no label of ANY kind got new keys in all three resx
     files: `CommandPalette_ResultList`, a Songsterr result list (deleted with the import, #820),
-    `Recovery_SessionList`, `Lan_SongBoard_List`, `Settings_AsioOutChannelLeft`,
-    `Settings_AsioOutChannelRight`, `Settings_AsioInChannelRight` — the last
-    three because two boxes sharing one row label would announce identically.
+    `Recovery_SessionList`, `Lan_SongBoard_List`, `Settings_AsioInChannelRight` — the
+    last because two boxes sharing one row label would announce identically.
+    (The output channel boxes it also named are now one pair picker.)
   - **This was `Views/Settings` only until then, and the rest was a BACKLOG IN
     PROSE — which is how it reached 125 controls.** That is the number
     re-measured on 2026-08-15 (this file said 136 on 2026-08-11 and several had

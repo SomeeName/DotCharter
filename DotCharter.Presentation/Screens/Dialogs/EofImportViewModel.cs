@@ -69,12 +69,15 @@ public sealed class EofImportViewModel : DialogViewModel<EofImportSelection?>, I
 
     public ICommand CancelCommand { get; }
 
-    /// <summary>Only tracks with notes are offered — EOF saves stub Pro Guitar tracks that would import empty.</summary>
+    /// <summary>Only tracks with notes are offered — EOF saves stub Pro Guitar tracks that would import empty.
+    /// The vocal track counts lyrics, not notes.</summary>
     public void Configure(EofImportRequest request)
     {
         _filePath = request.FilePath;
         AvailableTracks = request.Tracks.Where(t => t.NoteCount > 0)
-            .Select(IEofTrackOption (t) => new TrackOption(t.Id, $"{t.Name} ({t.NoteCount} notes)"))
+            .Select(IEofTrackOption (t) => new TrackOption(t.Id, t.IsVocals
+                ? _localization.Plural("Dialog_EofImport_VocalTrack_One", "Dialog_EofImport_VocalTrack_Many", t.NoteCount, t.Name)
+                : $"{t.Name} ({t.NoteCount} notes)"))
             .ToList();
         _logger.Info(AppLogCategory.Import,
             $"Editor on Fire track list loaded from '{_filePath}'. Tracks={AvailableTracks.Count}: " +

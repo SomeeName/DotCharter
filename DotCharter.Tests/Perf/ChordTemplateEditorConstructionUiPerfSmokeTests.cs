@@ -112,6 +112,40 @@ public sealed class ChordTemplateEditorConstructionUiPerfSmokeTests
         }, CancellationToken.None);
     }
 
+    /// <summary>The No name box lays out with its accessible name; ticking it clears the grip's
+    /// name and locks the name box.</summary>
+    [Fact]
+    public async Task TheNoNameToggle_LaysOut_AndTickingItClearsAndLocksTheName()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            var (vm, selection, chord) = ScopeFixture();
+            var view = new ChordTemplateEditorView { DataContext = vm };
+            AttachAndLayout(view, () =>
+            {
+                selection.SelectedChords.Add(chord);
+                Dispatcher.UIThread.RunJobs();
+                Relayout(view);
+
+                var toggle = view.GetVisualDescendants().OfType<CheckBox>().Single(c => c.Name == "NoNameToggle");
+                AssertMeasured(toggle);
+                var label = LocalizationService.Instance["ChordTemplate_NoName"];
+                Assert.Equal(label, Avalonia.Automation.AutomationProperties.GetName(toggle));
+                Assert.Equal(label, toggle.Content as string);
+                Assert.Equal(LocalizationService.Instance["ChordTemplate_NoNameTip"], ToolTip.GetTip(toggle) as string);
+                var nameBox = view.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "ChordNameBox");
+                Assert.True(nameBox.IsEnabled);
+
+                toggle.IsChecked = true;
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(vm.Template!.Unnamed);
+                Assert.Equal("", vm.Template.Name);
+                Assert.False(nameBox.IsEnabled);
+            });
+        }, CancellationToken.None);
+    }
+
     /// <summary>
     ///     The finger strip is DRESSED and takes a checked state.
     ///     <para>
@@ -270,6 +304,16 @@ public sealed class ChordTemplateEditorConstructionUiPerfSmokeTests
                 Assert.True(reach.IsVisible, "the lit rung's reach is not printed");
                 AssertMeasured(reach);
                 Assert.Equal(rows[1].Detail, reach.Text);
+                // The sentence for the next shape edit is on screen before the edit is made, beside the
+                // door to the Edit shape dialog.
+                var result = InScopeBar<TextBlock>(view, "ApplyToResult");
+                Assert.True(result.IsVisible, "the next edit's result is not stated");
+                AssertMeasured(result);
+                Assert.Equal(vm.Ladder.ResultText, result.Text);
+                Assert.NotEmpty(result.Text!);
+                var editShape = InScopeBar<Button>(view, "EditShapeButton");
+                AssertMeasured(editShape);
+                Assert.False(string.IsNullOrWhiteSpace(Avalonia.Automation.AutomationProperties.GetName(editShape)));
                 Assert.False(rungs[2].IsChecked);
                 Assert.False(rungs[3].IsEffectivelyEnabled, "no other template holds this grip");
 

@@ -53,7 +53,7 @@ public sealed class ProjectMenuViewModelTests
         var logger = new FakeAppLogger();
         var localization = FakeLocalization.English();
         var (maintenance, _) = RecordingProxy.Create<IChartMaintenanceService>();
-        return new ProjectMenuViewModel(session, state, new ImportMenuViewModel(logger, ImportMenuViewModelTests.Offer(state, logger)),
+        return new ProjectMenuViewModel(session, state, new ImportMenuViewModel(logger, ImportMenuViewModelTests.Offer(state, logger), ImportMenuViewModelTests.CleanupOffer()),
             maintenance, dialogs, new TestUiDispatcher(), logger, localization,
             DotCharter.Services.Plugins.PackageFeatures.All, new FakeFileStorageService(),
             exportFiles: writer);

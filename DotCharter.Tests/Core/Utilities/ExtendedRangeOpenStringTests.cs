@@ -19,6 +19,7 @@ public sealed class ExtendedRangeOpenStringTests
 {
     private static readonly int[] SevenStandard = [35, 40, 45, 50, 55, 59, 64];
     private static readonly int[] EightStandard = [30, 35, 40, 45, 50, 55, 59, 64];
+    private static readonly int[] NineStandard = [25, 30, 35, 40, 45, 50, 55, 59, 64];
 
     private static Arrangement Instrument(ArrangementType type, int stringCount, params int[] steps)
     {
@@ -48,6 +49,8 @@ public sealed class ExtendedRangeOpenStringTests
         Assert.Equal([0, 5, 10, 15, 19, 24], StandardOpenStrings.SemitonesAboveLowE(6));
         Assert.Equal([-5, 0, 5, 10, 15, 19, 24], StandardOpenStrings.SemitonesAboveLowE(7));
         Assert.Equal([-10, -5, 0, 5, 10, 15, 19, 24], StandardOpenStrings.SemitonesAboveLowE(8));
+        Assert.Equal([-15, -10, -5, 0, 5, 10, 15, 19, 24], StandardOpenStrings.SemitonesAboveLowE(9));
+        Assert.Equal(9, StandardOpenStrings.MaxStringCount);
 
         // A string index past a <=6-string instrument keeps climbing the six-string
         // neck exactly as the old copies answered (19, 24, 29, then fourths).
@@ -64,7 +67,8 @@ public sealed class ExtendedRangeOpenStringTests
         Assert.Equal([40, 45, 50, 55, 59, 64], TuningUtilities.GetStandardMidiPitches(6));
         Assert.Equal(SevenStandard, TuningUtilities.GetStandardMidiPitches(7));
         Assert.Equal(EightStandard, TuningUtilities.GetStandardMidiPitches(8));
-        Assert.Equal([30, 35, 40, 45, 50, 55, 59, 64, 64], TuningUtilities.GetStandardMidiPitches(9));
+        Assert.Equal(NineStandard, TuningUtilities.GetStandardMidiPitches(9));
+        Assert.Equal([25, 30, 35, 40, 45, 50, 55, 59, 64, 64], TuningUtilities.GetStandardMidiPitches(10));
         Assert.Equal([40, 45, 50], TuningUtilities.GetStandardMidiPitches(3));
         Assert.Empty(TuningUtilities.GetStandardMidiPitches(0));
     }
@@ -106,6 +110,18 @@ public sealed class ExtendedRangeOpenStringTests
         Assert.Equal(["F#", "B", "E", "A", "D", "G", "B", "E"], TimelineGutterControl.StringNamesFor(eight, 8));
         Assert.Equal(EightStandard, TuningCheckTargets.Build(eight).Select(t => t.Midi));
         Assert.Equal("F#1", TuningCheckTargets.Build(eight)[0].NoteName);
+    }
+
+    [Fact]
+    public void NineString_GutterAndTunerRead_CSharp1ToE4()
+    {
+        var nine = Guitar(9);
+
+        Assert.Equal(["C#", "F#", "B", "E", "A", "D", "G", "B", "E"], TimelineGutterControl.StringNamesFor(nine, 9));
+        Assert.Equal(NineStandard, TuningCheckTargets.Build(nine).Select(t => t.Midi));
+        Assert.Equal("C#1", TuningCheckTargets.Build(nine)[0].NoteName);
+        Assert.Equal(NineStandard, Enumerable.Range(0, 9).Select(s => LivePitchAcceptance.SoundingMidi(nine, s, 0) ?? -1));
+        Assert.Equal(NineStandard, Enumerable.Range(0, 9).Select(s => SoundingPitch.MidiFor(nine, s, 0) ?? -1));
     }
 
     // ---- live judging -------------------------------------------------------
@@ -177,6 +193,7 @@ public sealed class ExtendedRangeOpenStringTests
     {
         Assert.Equal([64, 59, 55, 50, 45, 40, 35], GpExporter.BuildTuningHighToLow(Guitar(7)));
         Assert.Equal([64, 59, 55, 50, 45, 40, 35, 30], GpExporter.BuildTuningHighToLow(Guitar(8)));
+        Assert.Equal([64, 59, 55, 50, 45, 40, 35, 30, 25], GpExporter.BuildTuningHighToLow(Guitar(9)));
         Assert.Equal([64, 59, 55, 50, 45, 40], GpExporter.BuildTuningHighToLow(Guitar(6)));
     }
 }

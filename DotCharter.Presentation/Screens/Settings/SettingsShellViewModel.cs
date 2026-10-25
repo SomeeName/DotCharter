@@ -65,7 +65,7 @@ public sealed partial class SettingsShellViewModel : ObservableObject, ISettings
         _logger = logger;
 
         BuildRail();
-        TabScreens = [.. _tabs.Where(t => t.Screen is not null).Select(t => t.Screen!)];
+        TabScreens = [.. _tabs.Where(t => t.Screen is not null && !SettingsRail.Hosted.ContainsKey(t.Key)).Select(t => t.Screen!)];
 
         _resetSection = new AsyncRelayCommand(ResetSectionAsync, () => SelectedTabUnsavedCount > 0);
         _save = new RelayCommand(Save, () => HasUnsavedChanges);
@@ -107,12 +107,17 @@ public sealed partial class SettingsShellViewModel : ObservableObject, ISettings
     public ICommand SaveCommand => _save;
 
     private int SelectedTabUnsavedCount =>
-        (_selected?.Tab as ISettingsChangeSource)?.UnsavedSettings.Count ?? 0;
+        _selected is null ? 0 : PageTabs(_selected).Sum(t => (t as ISettingsChangeSource)?.UnsavedSettings.Count ?? 0);
 
     public void Select(string key)
     {
-        if (_items.FirstOrDefault(i => i.Tab.Key == key) is { } item) Select(item);
+        var page = SettingsRail.PageOf(key);
+        if (_items.FirstOrDefault(i => i.Tab.Key == page) is { } item) Select(item);
     }
+
+    /// <summary>The tabs one rail row shows: its own, then the ones it hosts (<see cref="SettingsRail.Hosted" />).</summary>
+    private IEnumerable<ISettingsTab> PageTabs(SettingsRailItemViewModel item) =>
+        _tabs.Where(t => SettingsRail.PageOf(t.Key) == item.Tab.Key);
 
     /// <summary>Re-reads every tab and takes the unsaved baseline — the page and the disk agree.</summary>
     public void LoadAll()
@@ -164,12 +169,12 @@ public sealed partial class SettingsShellViewModel : ObservableObject, ISettings
         if (_selected is { } previous && !ReferenceEquals(previous, item))
         {
             previous.IsSelected = false;
-            (previous.Tab as IScreenLifecycle)?.OnHidden();
+            foreach (var tab in PageTabs(previous)) (tab as IScreenLifecycle)?.OnHidden();
         }
 
         _selected = item;
         item.IsSelected = true;
-        (item.Tab as IScreenLifecycle)?.OnShown();
+        foreach (var tab in PageTabs(item)) (tab as IScreenLifecycle)?.OnShown();
         OnPropertyChanged(nameof(CurrentScreen));
         _resetSection.NotifyCanExecuteChanged();
     }
@@ -201,7 +206,7 @@ public sealed partial class SettingsShellViewModel : ObservableObject, ISettings
             isConfirmation: true);
         if (!confirmed || !ReferenceEquals(item, _selected)) return;
 
-        item.Tab.Reset();
+        foreach (var tab in PageTabs(item)) tab.Reset();
         Recount();
     }
 

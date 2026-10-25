@@ -49,6 +49,7 @@ public class AlphaTexTuningTests
     [InlineData(6, "\\tuning e4 b3 g3 d3 a2 e2")]
     [InlineData(7, "\\tuning e4 b3 g3 d3 a2 e2 b1")]
     [InlineData(8, "\\tuning e4 b3 g3 d3 a2 e2 b1 f#1")]
+    [InlineData(9, "\\tuning e4 b3 g3 d3 a2 e2 b1 f#1 c#1")]
     public void StandardTuning_MatchesTheStringCountsInstrument(int strings, string expected) => Assert.Equal(expected, Header(strings));
 
     /// <summary>

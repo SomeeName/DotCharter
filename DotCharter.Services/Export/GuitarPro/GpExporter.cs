@@ -159,8 +159,8 @@ public static class GpExporter
 
     internal static List<double> BuildTuningHighToLow(Arrangement arrangement)
     {
-        // 7 and 8 strings extend DOWN (B1, then F#1) — the one table every importer
-        // measures offsets against. An 8-string must not fall to the six-string
+        // 7, 8 and 9 strings extend DOWN (B1, F#1, then C#1) — the one table every importer
+        // measures offsets against. A 9-string must not fall to the six-string
         // row, which would climb a fourth per extra string, writing A4 and D5 for its two low
         // strings.
         var standard = arrangement.StringCount switch
@@ -168,7 +168,7 @@ public static class GpExporter
             4 => [28, 33, 38, 43],
             // 5 is E A D G B, an octave down for a bass: the importers subtract the same row.
             5 => TuningUtilities.GetStandardMidiPitchesFor(5, arrangement.ArrangementType),
-            7 or 8 => TuningUtilities.GetStandardMidiPitches(arrangement.StringCount),
+            7 or 8 or 9 => TuningUtilities.GetStandardMidiPitches(arrangement.StringCount),
             _ => [40, 45, 50, 55, 59, 64]
         };
 

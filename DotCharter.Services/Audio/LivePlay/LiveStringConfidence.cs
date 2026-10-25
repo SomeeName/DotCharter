@@ -63,8 +63,8 @@ public readonly record struct LiveStringConfidenceReading(int StringIndex, int S
 /// </summary>
 public sealed class LiveStringConfidenceTracker
 {
-    /// <summary>Strings tracked: an 8-string arrangement is the widest the app charts.</summary>
-    public const int MaxStrings = 8;
+    /// <summary>Strings tracked: a 9-string arrangement is the widest the app charts.</summary>
+    public const int MaxStrings = StandardOpenStrings.MaxStringCount;
 
     /// <summary>Judgments kept per string — enough to steady the mean, few enough to follow a
     /// change of tone or position within a phrase.</summary>

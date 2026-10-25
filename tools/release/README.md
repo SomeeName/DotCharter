@@ -32,7 +32,9 @@ Prerequisites:
 - The release-signing key (see "Release signing" below). Without it the script
   stops in preflight.
 
-The script builds the **5 release assets** into `artifacts/release/v<ver>/`,
+The script builds the **5 release assets** into `artifacts/release/v<ver>-public/`
+(`v<ver>-full/` with `-WithPlugins`; a folder holding the other mode's pack, or an
+unmarked pack, is refused — the mode is in its `.release-mode` file),
 writes a changelog stub (`notes-v<ver>.md`, grouped from `git log` since the
 last tag), and **prints** the exact `gh release create` command. It never runs
 `gh` itself — review the notes before you paste the command. Starting the packed
@@ -80,7 +82,7 @@ failing the pack by default:
 |---|---|---|
 | **Clean Release build** (`Clear-ReleaseBuildOutputs`) | before the publishes | deletes `bin/Release` + `obj/Release` of every project in the ProjectReference closure of `DotCharter.UI` and `DotCharter.RigLab`, so every shipped byte is compiled by this run. `obj/project.assets.json` stays. A locked output fails here, by name |
 | **Binary check** (`CheckPayloadBinaries.cs` over `DotCharter.Services/Update/ReleasePayloadIntegrity`) | each staged payload (UI after the tools are bundled, RigLab) BEFORE hashing/zipping, and again on the extracted zip | every `.dll`/`.exe` must start with `MZ`, have PE headers that parse and — if managed — metadata that reads; no file of any kind may be non-empty and all zeros. Prints each offender with its fault (`AllZeros`, `NotPortableExecutable`, `BadPeHeaders`, `BadMetadata`, `Empty`). Rules pinned by `ReleasePayloadIntegrityTests` in the default gate. The same tool then runs `NativeImportAudit` (#176): every native DLL/exe may import only Windows system DLLs or files in its own folder (the VC++ runtime is never "system", and there is no exception list: ONNX Runtime passes because `New-Release.ps1` copies the four x64 VC++ runtime DLLs it imports beside it from the Visual Studio redistributable, verified against `vcredist.json`, see `VcRedist.psm1`); rules pinned by `NativeImportAuditTests`. ~5 s on a real payload |
-| **Launch smoke** (`Invoke-PackSmoke`) | after the UI zip validates | extracts the ZIP to `artifacts/release/v<ver>/smoke`, points `DOTCHARTER_DATA_ROOT` at a folder inside that copy and writes `appconfig.json` there and beside the exe (config, profiles, logs and caches stay in the copy — your `%APPDATA%\DotCharter` and `%LOCALAPPDATA%\DotCharter` are never read or written; audio opens WASAPI, never ASIO), starts the TOP `DotCharter.exe` (the launcher) **on a hidden Win32 desktop** (`HiddenDesktop.psm1`, below), finds `app\DotCharter.exe` as its child, and requires that app's `StartupPhases:` log line within `-SmokeTimeoutSeconds` (120) and the app alive `-SmokeSettleSeconds` (5) later. FAILS if DotCharter ever owns the foreground window; prints the foreground window before/after. Kills the process tree and releases the desktop after. On failure it prints the exit code, stderr and the log tail, and DELETES the UI zip so the printed upload command cannot ship it. Warns if the line lacks `r2r=yes`. A real pack takes ~20 s |
+| **Launch smoke** (`Invoke-PackSmoke`) | after the UI zip validates | extracts the ZIP to `artifacts/release/v<ver>-<mode>/smoke`, points `DOTCHARTER_DATA_ROOT` at a folder inside that copy and writes `appconfig.json` there and beside the exe (config, profiles, logs and caches stay in the copy — your `%APPDATA%\DotCharter` and `%LOCALAPPDATA%\DotCharter` are never read or written; audio opens WASAPI, never ASIO), starts the TOP `DotCharter.exe` (the launcher) **on a hidden Win32 desktop** (`HiddenDesktop.psm1`, below), finds `app\DotCharter.exe` as its child, and requires that app's `StartupPhases:` log line within `-SmokeTimeoutSeconds` (120) and the app alive `-SmokeSettleSeconds` (5) later. FAILS if DotCharter ever owns the foreground window; prints the foreground window before/after. Kills the process tree and releases the desktop after. On failure it prints the exit code, stderr and the log tail, and DELETES the UI zip so the printed upload command cannot ship it. Warns if the line lacks `r2r=yes`. A real pack takes ~20 s |
 
 `-SmokeOnly <zip|folder>` runs the binary check and the launch smoke on an
 existing pack (copied/extracted first; the input is never modified) — use it to
@@ -129,7 +131,7 @@ What you see when you run it:
   publishes start.
 - **Red**: the test NAMES, the first lines of each message, and the first stack
   frame in repo source — not the tens of thousands of lines of xunit output,
-  which go to `artifacts/release/v<ver>/tests/headless-ui-run1.log` alongside
+  which go to `artifacts/release/v<ver>-<mode>/tests/headless-ui-run1.log` alongside
   the `.trx`. The script then throws and no asset is built.
 - **A case that dies inside the Avalonia session itself** never reached its own
   assertions, so its class is re-run in a fresh process. Only REAL failures
@@ -624,13 +626,17 @@ pwsh -NoProfile -File tools/release/Test-PublicLeaks.ps1 -Path <folder>         
   its git dir): its refs are cleared and it is updated like a checkout (`update-index
   --refresh`, `reset --hard`, `read-tree --reset -u`), so unchanged files keep their
   timestamps and `bin/`, `obj/` and `artifacts/` stay, and the public build is incremental.
-  `-Clean` drops the kept tree too.
+  `-Clean` drops the kept tree too. The fetch of the previous public `main` never recurses
+  into submodules (`-c fetch.recurseSubmodules=false --no-recurse-submodules`): the kept
+  tree's `JuceSharp/` is a plain checkout, and an on-demand recursion into it failed the
+  fetch with "Could not access submodule 'JuceSharp'".
 - **The scans read the tracked tree only.** Before the leak check and gitleaks, every
   git-ignored path of the kept tree (build outputs, the copied native pair) is moved to
   `<scratch>\build-cache` (`Move-SnapshotBuildOutputs`), stray untracked files are cleaned,
   and `Assert-SnapshotTracksEverything` refuses to scan while `git ls-files --others` lists
   anything. After both scans the outputs move back (`Restore-SnapshotBuildOutputs`; a run
-  that died in between leaves them parked, and the next run restores them).
+  that died in between leaves them parked, and the next run restores them). A path that
+  moved with a parent another view listed is skipped, not moved twice.
 - **`export-origin.json`** beside the scratch tree names the dev checkout, commit and tree
   and the snapshot tree. `New-Release.ps1` run inside the export reads it (only beside the
   export marker) for the signing key's default and the dev tree's headless record. The
@@ -691,7 +697,11 @@ dev tree, so it would overwrite that change. The sync guard stops that:
 - **Release preflight:** `New-Release.ps1` runs `Find-UnimportedPublicCommits.ps1 -DevRef HEAD
   -FailOnMissing` and stops while a public commit is missing (`-SkipPublicSyncCheck` when
   offline). Locally the check also reads the dev JuceSharp history at the gitlink, as the
-  export does.
+  export does. It then runs `Test-JuceSharpVersionBump.ps1`, which stops BEFORE anything is
+  built while the JuceSharp tree at the gitlink, rewritten as the export rewrites it,
+  differs from the public JuceSharp `main` but `Directory.Build.props` still carries the
+  public snapshot's `<Version>` (`Get-JuceSharpVersionProblem`; the export's `-Push`
+  refuses on the same check).
 - **Watch:** `.github/workflows/public-sync-watch.yml` would run `Find-UnimportedPublicCommits.ps1
   -OpenIssues` daily on ubuntu-latest and open one dev issue per missing commit
   (deduplicated by its `Import public commit <Repo>@<sha12>` title prefix), but **Actions is

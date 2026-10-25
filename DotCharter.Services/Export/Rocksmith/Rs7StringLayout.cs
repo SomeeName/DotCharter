@@ -64,7 +64,9 @@ internal static class Rs7StringLayout
     /// <summary>
     ///     Why this arrangement is NOT exported, or null when it is: an 8-string guitar
     ///     (RS7X v1 spells it, but the mod plays 7 strings and such a package may crash
-    ///     the game).
+    ///     the game) or a guitar with more strings than any layout spells (a 9-string:
+    ///     <see cref="MaxStrings" /> is eight, and folding the ninth string's notes onto the last
+    ///     one would change the song).
     /// </summary>
     public static string? ExportRefusal(Arrangement arrangement)
     {

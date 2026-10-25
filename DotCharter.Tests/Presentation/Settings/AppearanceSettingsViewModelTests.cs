@@ -78,6 +78,21 @@ public sealed class AppearanceSettingsViewModelTests
         Assert.Equal(FakeScale.AutoDerived.ToString("P0", CultureInfo.CurrentCulture), r.Vm.UiScaleReadout);
     }
 
+    /// <summary>Home's moving hero moved here from Graphics: opt-in, off on a fresh config, saved when switched on.</summary>
+    [Fact]
+    public void TheAnimatedHomeHero_IsOffByDefault_AndSaves()
+    {
+        var r = NewRig();
+        Assert.False(r.Vm.AnimatedHomeHero);
+
+        r.Vm.AnimatedHomeHero = true;
+        Assert.Contains("appearance.AnimatedHomeHero", r.Vm.UnsavedSettings);
+        r.Vm.Save();
+
+        Assert.True(r.Config.AppConfig.AnimatedHomeHero);
+        Assert.Empty(r.Vm.UnsavedSettings);
+    }
+
     [Fact]
     public void AnUnknownPalette_ReadsAsTheDefault() =>
         Assert.Equal(0, NewRig(c => c.StringColorPresetId = "gone").Vm.SelectedStringPaletteIndex);

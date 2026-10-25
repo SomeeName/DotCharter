@@ -12,6 +12,7 @@ public static class SettingsTabKeys
     public const string Files = "files";
     public const string Keybinds = "keybinds";
     public const string StemModels = "stemModels";
+    public const string LyricModels = "lyricModels";
     public const string Tone3000 = "tone3000";
     public const string Ai = "ai";
     public const string Updates = "updates";
@@ -57,8 +58,6 @@ public static class SettingsRail
             "Settings_FilesTab", "Settings_FilesTab_Desc", "IconFolder"),
         new(SettingsTabKeys.Keybinds, SettingsRailSection.Configuration,
             "Settings_KeybindsTab", "Settings_KeybindsTab_Desc", "IconKeyboard"),
-        new(SettingsTabKeys.StemModels, SettingsRailSection.Configuration,
-            "Settings_StemModelsTab", "Settings_StemModelsTab_Desc", "IconEqualizer"),
         new(SettingsTabKeys.Tone3000, SettingsRailSection.Configuration,
             "Tone3000_Title", "Tone3000_Subtitle", "IconAmp"),
         new(SettingsTabKeys.Ai, SettingsRailSection.Configuration,
@@ -74,21 +73,41 @@ public static class SettingsRail
         _ => "Settings_Section_Configuration"
     };
 
+    /// <summary>
+    ///     Tabs drawn as a section of another tab's page, keyed by the hosted tab:
+    ///     no rail row of their own, but still loaded, saved, reverted and counted
+    ///     on their own. Their view sits in the host's view, and a search hit on
+    ///     one of their rows lands on the host's page.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Hosted { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [SettingsTabKeys.StemModels] = SettingsTabKeys.Ai,
+        [SettingsTabKeys.LyricModels] = SettingsTabKeys.Ai
+    };
+
     public static SettingsRailEntry? Find(string key) =>
         Entries.FirstOrDefault(e => string.Equals(e.Key, key, StringComparison.Ordinal));
 
-    /// <summary>The tabs in rail order. Throws for a tab with no rail row — that is a missing line, not a hidden tab.</summary>
+    /// <summary>The rail row a tab is shown under: its own, or its host's.</summary>
+    public static string PageOf(string key) => Hosted.GetValueOrDefault(key, key);
+
+    /// <summary>The tabs in rail order, each hosted tab after its host. Throws for a tab with no rail
+    /// row and no host — that is a missing line, not a hidden tab.</summary>
     public static List<ISettingsTab> Order(IEnumerable<ISettingsTab> tabs)
     {
         var byKey = new Dictionary<string, ISettingsTab>(StringComparer.Ordinal);
         foreach (var tab in tabs)
         {
-            if (Find(tab.Key) is null)
+            if (Find(PageOf(tab.Key)) is null)
                 throw new InvalidOperationException($"Settings tab '{tab.Key}' has no row in SettingsRail.");
             if (!byKey.TryAdd(tab.Key, tab))
                 throw new InvalidOperationException($"Settings tab '{tab.Key}' is registered twice.");
         }
 
-        return [.. Entries.Where(e => byKey.ContainsKey(e.Key)).Select(e => byKey[e.Key])];
+        return
+        [
+            .. Entries.SelectMany(e => Hosted.Where(h => h.Value == e.Key).Select(h => h.Key).Prepend(e.Key))
+                .Where(byKey.ContainsKey).Select(k => byKey[k])
+        ];
     }
 }

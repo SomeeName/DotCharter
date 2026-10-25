@@ -1,4 +1,5 @@
 using DotCharter.UI.ViewModels.Editor;
+using DotCharter.Services.Editing.ChordShapes;
 
 namespace DotCharter.UI.ViewModels.Panels;
 
@@ -92,20 +93,22 @@ internal static class ChordTemplateFingeringBackfill
                 editor));
         }
 
-        // Step 3 (v0.26): fill EMPTY names from the pitch-based suggester in
-        // the same pass — one click leaves every template fingered AND named.
-        // A user-authored name is never overwritten; templates created in
-        // step 1 aren't in the arrangement yet, so they are named directly.
+        // Step 3: fill EMPTY names from the pitch-based suggester in the same
+        // pass — one click leaves every template fingered AND named. A
+        // user-authored name is never overwritten, a name the charter chose to
+        // leave out is never filled (NewChordNames.MayFill), and with "Name new
+        // chords automatically" off nothing is named. Templates created in step 1
+        // aren't in the arrangement yet, so they are named directly.
         foreach (var template in arrangement.ChordTemplates)
         {
-            if (!string.IsNullOrEmpty(template.Name) || template.Frets.Count == 0 || template.IsPinned) continue;
+            if (!NewChordNames.MayFill(template) || template.Frets.Count == 0 || template.IsPinned) continue;
             var name = ChordNameSuggester.SuggestFirstChordName(arrangement, template.Frets, naming: naming);
             if (string.IsNullOrEmpty(name)) continue;
             actions.Add(new SetTemplateNameAction(template, template.Name, name, editor));
         }
 
         foreach (var template in newTemplates.Where(t => string.IsNullOrEmpty(t.Name) && t.Frets.Count > 0))
-            template.Name = ChordNameSuggester.SuggestFirstChordName(arrangement, template.Frets, naming: naming);
+            template.Name = NewChordNames.For(arrangement, template.Frets, naming);
 
         return actions;
     }

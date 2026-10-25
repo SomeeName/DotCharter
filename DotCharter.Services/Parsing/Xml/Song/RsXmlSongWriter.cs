@@ -316,109 +316,15 @@ internal sealed class RsXmlSongWriter
         return string.Empty;
     }
 
+    /// <summary>
+    ///     Both phrase stores through <see cref="PhraseMarkers.Iterations" />, the reader the SNG
+    ///     mapper shares, padded with COUNT / END for a markers-only chart.
+    /// </summary>
     private static PhraseExportData BuildPhraseExportData(Arrangement arr, IList<BeatMarker> beats,
         IReadOnlyList<ChartLevel> levels)
     {
-        var explicitPhrases = arr.Phrases.ToList();
-        var explicitIterations = arr.PhraseIterations.ToList();
-        if (explicitPhrases.Count > 0 && explicitIterations.Count > 0)
-        {
-            // Both phrase stores are live at once — the rscp reader fills
-            // Phrases/PhraseIterations while the timeline and song-overview editors
-            // author phrases as EventPoint.Phrase. Returning the explicit lists
-            // unchanged silently discarded every phrase added in the editor: it
-            // never occurred in the exported song at all.
-            var (mergedPhrases, mergedIterations) =
-                MergeEditorPhraseMarkers(arr, explicitPhrases, explicitIterations);
-            return new PhraseExportData(mergedPhrases, mergedIterations,
-                BuildPhraseInfoMap(arr, levels, mergedPhrases, mergedIterations));
-        }
-
-        var markers = arr.EventPoints
-            .Where(ep => !string.IsNullOrWhiteSpace(ep.Phrase))
-            .OrderBy(ep => ep.Position)
-            .Select(ep => (ep.Position, ep.Phrase.Trim()))
-            .ToList();
-
-        if (markers.Count == 0)
-            return new PhraseExportData(explicitPhrases, explicitIterations, BuildPhraseInfoMap(arr, levels, explicitPhrases, explicitIterations));
-
-        if (!markers.Any(m => string.Equals(m.Item2, "COUNT", StringComparison.OrdinalIgnoreCase)))
-            markers.Insert(0, (FractionalPosition.Zero, "COUNT"));
-
-        if (!markers.Any(m => string.Equals(m.Item2, "END", StringComparison.OrdinalIgnoreCase)))
-            markers.Add((FindEndPhrasePosition(arr, beats), "END"));
-
-        markers = markers
-            .OrderBy(m => m.Position)
-            .ThenBy(m => PhraseSortKey(m.Item2))
-            .ToList();
-
-        var phrases = new List<string>();
-        var phraseIds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var marker in markers)
-        {
-            if (phraseIds.ContainsKey(marker.Item2)) continue;
-            phraseIds[marker.Item2] = phrases.Count;
-            phrases.Add(marker.Item2);
-        }
-
-        var iterations = markers
-            .Select(marker => new PhraseIteration(marker.Position, phraseIds[marker.Item2]))
-            .ToList();
-
+        var (phrases, iterations) = PhraseMarkers.Iterations(arr, () => FindEndPhrasePosition(arr, beats));
         return new PhraseExportData(phrases, iterations, BuildPhraseInfoMap(arr, levels, phrases, iterations));
-    }
-
-    /// <summary>
-    ///     Adds an iteration for every <see cref="EventPoint.Phrase" /> marker that no
-    ///     explicit iteration already covers, minting a phrase name only when it is new.
-    ///     <para>
-    ///         Deliberately ADDITIVE rather than a rebuild: when a chart came from
-    ///         RS-XML both stores describe the same phrases, every marker matches an
-    ///         existing iteration by position and this is a no-op — so an imported
-    ///         chart round-trips byte-identically. Only a marker the explicit list does
-    ///         not account for, i.e. one the user authored in the editor, adds anything.
-    ///     </para>
-    /// </summary>
-    private static (List<string> Phrases, List<PhraseIteration> Iterations) MergeEditorPhraseMarkers(
-        Arrangement arr, List<string> phrases, List<PhraseIteration> iterations)
-    {
-        var covered = new HashSet<FractionalPosition>(iterations.Select(i => i.Position));
-        var extra = arr.EventPoints
-            .Where(ep => !string.IsNullOrWhiteSpace(ep.Phrase) && !covered.Contains(ep.Position))
-            .OrderBy(ep => ep.Position)
-            .ToList();
-
-        if (extra.Count == 0) return (phrases, iterations);
-
-        var mergedPhrases = new List<string>(phrases);
-        var idByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < mergedPhrases.Count; i++) idByName.TryAdd(mergedPhrases[i], i);
-
-        var mergedIterations = new List<PhraseIteration>(iterations);
-        foreach (var point in extra)
-        {
-            var name = point.Phrase.Trim();
-            if (!idByName.TryGetValue(name, out var id))
-            {
-                id = mergedPhrases.Count;
-                mergedPhrases.Add(name);
-                idByName[name] = id;
-            }
-
-            mergedIterations.Add(new PhraseIteration(point.Position, id));
-        }
-
-        mergedIterations.Sort((a, b) => a.Position.CompareTo(b.Position));
-        return (mergedPhrases, mergedIterations);
-    }
-
-    private static int PhraseSortKey(string phraseName)
-    {
-        if (string.Equals(phraseName, "COUNT", StringComparison.OrdinalIgnoreCase)) return 0;
-        if (string.Equals(phraseName, "END", StringComparison.OrdinalIgnoreCase)) return 2;
-        return 1;
     }
 
     private static FractionalPosition FindEndPhrasePosition(Arrangement arr,
@@ -493,8 +399,8 @@ internal sealed class RsXmlSongWriter
     }
 
     private sealed record PhraseExportData(
-        List<string> Phrases,
-        List<PhraseIteration> Iterations,
+        IReadOnlyList<string> Phrases,
+        IReadOnlyList<PhraseIteration> Iterations,
         Dictionary<string, PhraseInfo> PhraseInfos);
 
     private static XElement WriteTuning(Arrangement arr)

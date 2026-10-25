@@ -79,6 +79,29 @@ public interface IAudioDeviceControl
     int GetInputDeviceChannelCount(string driver, string deviceName);
 
     /// <summary>
+    ///     How many OUTPUT channels the named playback device exposes
+    ///     (<c>MaxOutputChannels</c> from the live enumeration), or 0 when the
+    ///     engine is down or the device is not found. Feeds the output-pair
+    ///     pickers (<see cref="OutputChannelPairs.PairOptions" />) and the engine
+    ///     config's past-the-device fallback; a 0 makes the picker fall back to a
+    ///     generic list and leaves the mask alone.
+    /// </summary>
+    int GetOutputDeviceChannelCount(string driver, string deviceName);
+
+    /// <summary>
+    ///     The driver's names for the named playback device's outputs, entry i
+    ///     naming output i, or an empty list when that device is not the OPEN one
+    ///     (only an open device can be asked without opening it), the engine is
+    ///     down or the driver gives none. A message-thread round trip, so call it
+    ///     off the UI thread. Labels the output-pair rows (<see cref="ChannelNames" />).
+    /// </summary>
+    IReadOnlyList<string> GetOutputChannelNames(string driver, string deviceName);
+
+    /// <summary>The input twin of <see cref="GetOutputChannelNames" />: the names
+    /// of the capture device's jacks, for the guitar-input pickers.</summary>
+    IReadOnlyList<string> GetInputChannelNames(string driver, string deviceName);
+
+    /// <summary>
     ///     The MIDI output ports, row 0 the MIDI Mapper at device index -1. A live
     ///     winmm enumeration, so call it off the UI thread; on the seam so a test
     ///     never round-trips the machine's real MIDI drivers.

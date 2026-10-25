@@ -87,15 +87,8 @@ public partial class App : Application
         // every ffmpeg/yt-dlp/demucs the app will ever start.
         global::DotCharter.Services.Infrastructure.Process.ChildProcessJob.EnsureCurrentProcessIsContained(
             Services.GetService<IAppLogger>());
-        // AppCommand is a plain data holder built from a catalogue rather than by
-        // DI, so the tracker reaches it through this one assignment. Set before
-        // any catalogue is built; null in tests, where nothing is counted.
-        ViewModels.CommandPalette.AppCommand.Tracker = Services.GetService<IUsageTracker>();
-        // ONE class handler counts every menu item and button in the app. The menu
-        // binds 95 commands straight to view-model RelayCommands without going
-        // through the palette, so without this the tools reached from the menu
-        // read as completely unused.
-        Diagnostics.UsageInstrumentation.Install(Services.GetService<IUsageTracker>());
+        // Process-wide statics reached from the services: before any catalogue is built.
+        AppStatics.Wire(Services);
         var diBuiltMs = bootStopwatch.ElapsedMilliseconds;
 
         var configService = Services.GetRequiredService<IConfigurationService>();
@@ -165,7 +158,7 @@ public partial class App : Application
         projectState.EnableStringShimmer = appConfig.EnableStringShimmer;
         projectState.EnableHitSparks = appConfig.EnableHitSparks;
         projectState.EnableFilmicTonemap = appConfig.EnableFilmicTonemap;
-        projectState.InvertStrings = appConfig.InvertStrings;
+        projectState.ApplyStringOrders(appConfig);
         // v0.34 lefty flip: PROFILE-level, not AppConfig — lefties are lefty on
         // every machine they play (the flag rides profile.json, incl. the
         // roaming/export bundle). Mirrored here at startup and re-staged on

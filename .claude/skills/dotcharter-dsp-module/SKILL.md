@@ -127,6 +127,6 @@ did something. Run it with the `dotcharter-rt-gate` skill.
 ## 7. Docs, in the same change
 
 Update `JuceSharp/docs/guides/gear-<category>.md` and the catalogue-count
-prose. The measured count lives in `JuceSharp/AGENTS.md`'s sub-project table
+prose. The measured count lives in `JuceSharp/docs/agents/layout.md`'s sub-project table
 and in `dsp-tone-rig.md`. Re-count rather than incrementing the stated
 number, because those figures have drifted before.

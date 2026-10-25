@@ -82,6 +82,25 @@ public sealed class LyricModelInstallerTests : IDisposable
         Assert.Equal("MINE", File.ReadAllText(Path.Combine(_root, Model.Id, "model.onnx")));
     }
 
+    /// <summary>Settings' "Repair": a damaged install is removed, so the next ensure fetches it afresh.</summary>
+    [Fact]
+    public async Task Remove_ThenEnsure_ReplacesADamagedInstall()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, Model.Id));
+        File.WriteAllText(Path.Combine(_root, Model.Id, "model.onnx"), "DAMAGED");
+        File.WriteAllText(Path.Combine(_root, Model.Id, "vocab.json"), "DAMAGED");
+        var fetches = 0;
+        var installer = Installer((_, _) => { fetches++; return Task.FromResult(Archive()); });
+
+        installer.Remove(Model.Id);
+        Assert.False(installer.IsInstalled(Model.Id));
+        installer.Remove(Model.Id);
+        Assert.True(await installer.EnsureInstalledAsync(Model, ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, fetches);
+        Assert.NotEqual("DAMAGED", File.ReadAllText(Path.Combine(_root, Model.Id, "model.onnx")));
+    }
+
     [Fact]
     public async Task CallingItTwiceDownloadsOnce()
     {

@@ -204,6 +204,9 @@ public class RscpArrangementParser
             var parts = tValues.Split(',');
             for (var i = 0; i < stc; i++)
                 arr.TuningPitches.Add(new TuningOffset(i < parts.Length && int.TryParse(parts[i], CultureInfo.InvariantCulture, out var v) ? v : 0));
+            // The writer spells a bass or extended-range name (7_STRING_DROP_A) as CUSTOM for
+            // rscharter; the name is a function of the offsets, so it comes back from them.
+            arr.TuningType = ExtendedRangeTunings.TypeNameFor([.. arr.TuningPitches.Select(t => t.Step)]) ?? tType;
         }
         else if (TuningUtilities.TryGetOffsetsForTuningType(tType, stc, out var offsets))
         {
@@ -355,7 +358,9 @@ public class RscpArrangementParser
                     Fingerless = ctNode.Attribute("fingerless")?.Value == "T",
                     // absent (every older project) reads as no ghost gems and no pin.
                     GhostMask = RscpGhostStrings.Parse(ctNode.Attribute("ghost")?.Value),
-                    Pinned = ctNode.Attribute("pinned")?.Value == "T"
+                    Pinned = ctNode.Attribute("pinned")?.Value == "T",
+                    // absent (every older project) reads as a name automatic flows may fill.
+                    Unnamed = ctNode.Attribute("unnamed")?.Value == "T"
                 };
 
                 var fretsAttr = ctNode.Attribute("frets")?.Value ?? "";

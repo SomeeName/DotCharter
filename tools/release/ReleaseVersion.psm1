@@ -33,4 +33,28 @@ function Assert-ReleaseVersionSelfTest {
     }
 }
 
-Export-ModuleMember -Function Get-ReleaseIdentity, Assert-ReleaseVersionSelfTest
+# A public and a plugin build of one version get their own folders, so building one after
+# the other cannot overwrite the first pack.
+function Get-ReleaseOutputDir([string]$RepoRoot, [string]$Version, [switch]$WithPlugins) {
+    $mode = if ($WithPlugins) { 'full' } else { 'public' }
+    return Join-Path $RepoRoot "artifacts/release/v$Version-$mode"
+}
+
+# Marks $OutputDir with the build mode (.release-mode) and refuses a folder that holds the
+# other mode's pack, or a pack it never marked: an explicit -OutputDir is checked as well.
+function Set-ReleaseOutputMode([string]$OutputDir, [switch]$WithPlugins) {
+    $mode = if ($WithPlugins) { 'full' } else { 'public' }
+    $marker = Join-Path $OutputDir '.release-mode'
+    if (Test-Path -LiteralPath $marker) {
+        $existing = (Get-Content -LiteralPath $marker -Raw).Trim()
+        if ($existing -cne $mode) {
+            throw "$OutputDir holds a $existing pack; refusing to write a $mode pack over it. Pass another -OutputDir, or delete the folder."
+        }
+    }
+    elseif (Get-ChildItem -LiteralPath $OutputDir -Filter 'DotCharter-v*.zip' -File -ErrorAction SilentlyContinue) {
+        throw "$OutputDir holds a pack with no .release-mode marker, so its mode is unknown; refusing to write a $mode pack over it. Pass another -OutputDir, or delete the folder."
+    }
+    Set-Content -LiteralPath $marker -Value $mode -Encoding utf8NoBOM
+}
+
+Export-ModuleMember -Function Get-ReleaseIdentity, Assert-ReleaseVersionSelfTest, Get-ReleaseOutputDir, Set-ReleaseOutputMode

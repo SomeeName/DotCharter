@@ -445,6 +445,19 @@ invariants are in [timeline-and-project.md](timeline-and-project.md).
   `TemplatePinTests`) and lints every product file that calls an automatic
   fingering/grip verb: it asks `IsPinned` or is listed with why it never rewrites
   an existing template.
+- **A new chord's name comes from `NewChordNames`; a No-name grip is never filled.**
+  Every path that MAKES a template (`ChordTemplateResolver.Resolve`'s mint, the
+  hand-shape suggestion preview, a minted reshape in `ChordTemplateEditPlanner`, the
+  chord panel's display seed and Generate fingerings, the Guitar Pro builders for a
+  chord the file leaves unnamed) names it through `NewChordNames.For`, which is empty
+  while Settings ▸ Editor "Name new chords automatically" (`AppConfig.AutoNameNewChords`)
+  is off. A name a source carries is the caller's and never asks. `ChordTemplate.Unnamed`
+  (the chord panel's `NoNameToggle`, `.dcproj` attribute `unnamed`) marks an empty name
+  as chosen: Generate fingerings (`NewChordNames.MayFill`), `AiChartApplier` and
+  arrangement sync keep it empty, and any non-empty name clears it
+  (`SetTemplateNameAction`). The switch is process-wide, wired once by `AppStatics.Wire`;
+  `UI/ViewModels/Panels/ChordAutoNamingTests` (serialized collection) and
+  `ChordNoNameTests` pin it.
 - **The two Rocksmith marker vocabularies are CLOSED and live in
   `Utilities/RsSectionCatalog` + `Utilities/RsEventCatalog`** — both ported
   verbatim from Editor on Fire (`eof_rs_predefined_sections[]` at

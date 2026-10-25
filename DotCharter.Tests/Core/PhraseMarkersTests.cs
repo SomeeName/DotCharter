@@ -98,4 +98,68 @@ public sealed class PhraseMarkersTests
 
     [Fact]
     public void AnArrangementWithNoPhrasesAtAllYieldsNothing() => Assert.Empty(PhraseMarkers.All(new Arrangement()));
+
+    // ── Iterations: the per-iteration view of both stores ───────────────────
+
+    private static string[] Named(PhraseMarkers.IterationSet set) =>
+        set.Iterations.Select(i => set.Phrases[i.PhraseId]).ToArray();
+
+    [Fact]
+    public void Iterations_FromMarkersOnly_MintPhrasesByFirstAppearance()
+    {
+        var set = PhraseMarkers.Iterations(WithEventPoints((8, "chorus"), (0, "verse"), (16, "verse")));
+
+        Assert.Equal(["verse", "chorus"], set.Phrases);
+        Assert.Equal(["verse", "chorus", "verse"], Named(set));
+        Assert.Equal([0, 8, 16], set.Iterations.Select(i => i.Position.BeatId).ToArray());
+    }
+
+    [Fact]
+    public void Iterations_FromExplicitOnly_AreTheSameObjects()
+    {
+        var arr = WithIterations(["intro", "riff"], (0, 0), (4, 1));
+
+        var set = PhraseMarkers.Iterations(arr);
+
+        Assert.Equal(arr.PhraseIterations, set.Iterations);
+        Assert.Same(arr.PhraseIterations[1], set.Iterations[1]);
+    }
+
+    /// <summary>An imported chart whose markers mirror its iterations is unchanged…</summary>
+    [Fact]
+    public void Iterations_WithOverlappingStores_AddNothing()
+    {
+        var arr = WithIterations(["intro", "riff"], (0, 0), (4, 1));
+        arr.EventPoints.Add(new EventPoint { Position = new FractionalPosition(4), Phrase = "riff" });
+
+        var set = PhraseMarkers.Iterations(arr);
+
+        Assert.Equal(["intro", "riff"], Named(set));
+    }
+
+    /// <summary>…and a marker the user added joins in time order, minting its name once.</summary>
+    [Fact]
+    public void Iterations_WithDisjointStores_MergeInTimeOrder()
+    {
+        var arr = WithIterations(["intro", "riff"], (0, 0), (8, 1));
+        arr.EventPoints.Add(new EventPoint { Position = new FractionalPosition(4), Phrase = "bridge" });
+        arr.EventPoints.Add(new EventPoint { Position = new FractionalPosition(12), Phrase = "riff" });
+
+        var set = PhraseMarkers.Iterations(arr);
+
+        Assert.Equal(["intro", "riff", "bridge"], set.Phrases);
+        Assert.Equal(["intro", "bridge", "riff", "riff"], Named(set));
+    }
+
+    /// <summary>An export pads a markers-only chart with COUNT and END; nothing else does.</summary>
+    [Fact]
+    public void Iterations_PadCountAndEnd_OnlyWhenAskedAndMissing()
+    {
+        var arr = WithEventPoints((2, "verse"));
+
+        Assert.Equal(["verse"], Named(PhraseMarkers.Iterations(arr)));
+        var padded = PhraseMarkers.Iterations(arr, () => new FractionalPosition(20));
+        Assert.Equal(["COUNT", "verse", "END"], Named(padded));
+        Assert.Equal(20, padded.Iterations[^1].Position.BeatId);
+    }
 }

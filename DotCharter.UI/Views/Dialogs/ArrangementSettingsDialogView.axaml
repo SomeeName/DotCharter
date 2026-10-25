@@ -93,19 +93,23 @@
                         <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
                             <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
                                        Text="{localization:Loc Dialog_StringCount}" />
-                            <!-- `*,*` like the Type row above, so the two paired rows
-                                 split at one x. -->
-                            <Grid VerticalAlignment="Center" Grid.Column="1" ColumnDefinitions="*,*"
-                                  ColumnSpacing="{DynamicResource FireSpaceSm}">
-                                <NumericUpDown Grid.Column="0" Value="{Binding Strings}"
-                                               AutomationProperties.Name="{localization:Loc Dialog_StringCount}"
-                                               Minimum="1" Maximum="10" />
-                                <ComboBox Grid.Column="1" SelectedItem="{Binding TuningPreset}"
-                                          HorizontalAlignment="Stretch"
-                                          ToolTip.Tip="{localization:Loc Dialog_TuningPreset}"
-                                          AutomationProperties.Name="{localization:Loc Dialog_TuningPreset}"
-                                          ItemsSource="{Binding TuningPresets}" />
-                            </Grid>
+                            <NumericUpDown VerticalAlignment="Center" Grid.Column="1" Value="{Binding Strings}"
+                                           AutomationProperties.Name="{localization:Loc Dialog_StringCount}"
+                                           Minimum="1" Maximum="9" />
+                        </Grid>
+                        <!-- Its own row, the whole control column wide: a label carries the
+                             resolved notes ("Drop A (A E A D G B E)" on a 7-string). -->
+                        <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
+                            <TextBlock VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Grid.Column="0" Classes="DlgLabel"
+                                       Text="{localization:Loc Dialog_TuningPreset}" />
+                            <!-- The value is the preset KEY; the label follows the string count. -->
+                            <ComboBox Grid.Column="1" x:Name="TuningPresetPicker" VerticalAlignment="Center"
+                                      SelectedValue="{Binding TuningPreset}"
+                                      SelectedValueBinding="{Binding Key, DataType=contracts:ITuningPresetOption}"
+                                      DisplayMemberBinding="{Binding Label, DataType=contracts:ITuningPresetOption}"
+                                      HorizontalAlignment="Stretch"
+                                      AutomationProperties.Name="{localization:Loc Dialog_TuningPreset}"
+                                      ItemsSource="{Binding TuningPresets}" />
                         </Grid>
                         <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow" ColumnDefinitions="*,300">
                             <StackPanel Grid.Column="0" VerticalAlignment="Top">

@@ -11,7 +11,8 @@ namespace DotCharter.Core.Utilities;
 ///         8-string alike. Slots 0–5 are the six standard strings (low E red, A yellow,
 ///         D blue, G orange, B green, high E purple); slot 6 is the 7th string (low B,
 ///         light grey, the rs7string mod's <c>string6_color</c>) and slot 7 the 8th
-///         (low F#, a darker grey). Extra strings extend DOWN, as in
+///         (low F#, a darker grey); a 9th string (low C#) shares the 8th's slot, since the palette
+///         has no ninth colour. Extra strings extend DOWN, as in
 ///         <see cref="StandardOpenStrings" />, so on a 7-string string index 0 is the low B.
 ///     </para>
 ///     <para>
@@ -47,7 +48,7 @@ public static class StringColorSlots
         var extra = Math.Max(0, stringCount - StandardStrings);
         if (stringIndex < extra)
         {
-            // The string just below the low E is the 7th; the one below that the 8th.
+            // The string just below the low E is the 7th; the ones below that the 8th (and 9th).
             var below = extra - 1 - stringIndex;
             return below == 0 ? SeventhStringSlot : EighthStringSlot;
         }

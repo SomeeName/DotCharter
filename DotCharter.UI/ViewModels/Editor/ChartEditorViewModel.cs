@@ -54,7 +54,13 @@ public partial class ChartEditorViewModel : ViewModelBase, IChartEditorSurface
                 OnPropertyChanged(nameof(FlipStrings));
             }
 
-            if (e.PropertyName == nameof(ProjectState.ShowSuggestedHandShapes)) RequestRedraw();
+            // The String order has three writers (Settings, View menu, first-run
+            // setup); redrawing here keeps the timeline right for all of them.
+            if (e.PropertyName is nameof(ProjectState.ShowSuggestedHandShapes)
+                or nameof(ProjectState.InvertStrings))
+            {
+                RequestRedraw();
+            }
 
             if (e.PropertyName is nameof(ProjectState.PlacedNotes) or nameof(ProjectState.PlacedChords)
                 or nameof(ProjectState.HandShapes) or nameof(ProjectState.Anchors)

@@ -18,7 +18,6 @@ using DotCharter.Services.Audio.Coordination;
 using DotCharter.Services.Infrastructure.Input;
 using DotCharter.Services.Infrastructure.Shell;
 using DotCharter.Tone.Online.Tone3000;
-using ChordTemplateEditorViewModel = DotCharter.UI.ViewModels.Panels.ChordTemplateEditorViewModel;
 using SongBrowserViewModel = DotCharter.UI.ViewModels.Panels.SongBrowserViewModel;
 
 namespace DotCharter.UI;
@@ -158,7 +157,7 @@ public partial class App
         services.AddSingleton<DotCharter.UI.ViewModels.Editor.Linking.LinkedMeasuresViewModel>();
         services.AddSingleton<SheetMusicPaneViewModel>();
         services.AddSingleton<MultiTrackOverlayViewModel>();
-        services.AddSingleton<ChordTemplateEditorViewModel>();
+        ViewModels.Panels.ChordShapeEditingModule.Register(services);
         services.AddSingleton<ViewModels.Editor.Inspector.AnnotationsInspectorViewModel>();
         services.AddSingleton<ViewModels.Editor.Inspector.ExportReadinessViewModel>();
         services.AddSingleton<ViewModels.Editor.Inspector.InspectorIssuesViewModel>();

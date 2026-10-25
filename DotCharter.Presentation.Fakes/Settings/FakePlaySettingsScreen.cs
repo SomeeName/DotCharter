@@ -10,6 +10,7 @@ public sealed partial class FakePlaySettingsScreen : ObservableObject, IPlaySett
     [ObservableProperty] private bool _gameplayMetronomeEnabled;
     [ObservableProperty] private bool _gameplayClapsEnabled;
     [ObservableProperty] private bool _gameplayRockMeterEnabled;
+    [ObservableProperty] private int _stringOrderIndex;
 
     private FakePlaySettingsScreen()
     {
@@ -37,7 +38,8 @@ public sealed partial class FakePlaySettingsScreen : ObservableObject, IPlaySett
         GameplayCountInIndex = 3,
         GameplayMetronomeEnabled = true,
         GameplayClapsEnabled = true,
-        GameplayRockMeterEnabled = true
+        GameplayRockMeterEnabled = true,
+        StringOrderIndex = 1
     };
 
     public IReadOnlySet<string> HiddenKeys { get; } = new HashSet<string>();

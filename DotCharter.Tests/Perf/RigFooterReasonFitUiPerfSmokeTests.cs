@@ -25,7 +25,6 @@ public sealed class RigFooterReasonFitUiPerfSmokeTests
         ("Tuner_SeatNotLive_Short", 86),
         ("Tuner_Listening_Short", 86),
         ("Rig_Input_Unavailable_Off_Short", 80),
-        ("Rig_Input_Unavailable_Wasapi_Short", 80),
     ];
 
     [Fact]

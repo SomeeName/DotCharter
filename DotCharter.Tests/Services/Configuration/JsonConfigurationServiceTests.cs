@@ -762,6 +762,31 @@ public class JsonConfigurationServiceTests : IDisposable
         Assert.False(NewService().LoadAppConfig().LivePlayUseCqtVerifier);
     }
 
+    /// <summary>#229 split one String order into the editor's and Play Mode's: an older config keeps its choice in both.</summary>
+    [Fact]
+    public void LoadAppConfig_AStringOrderFromBeforeTheSplit_GoesToBothSurfaces()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "appconfig.json"), """{"InvertStrings":true}""");
+
+        var loaded = NewService().LoadAppConfig();
+
+        Assert.True(loaded.InvertStrings);
+        Assert.True(loaded.PlayModeInvertStrings);
+        Assert.True(loaded.StringOrderSplitMigrated);
+    }
+
+    [Fact]
+    public void LoadAppConfig_AStringOrderAfterTheSplit_StaysPerSurface()
+    {
+        File.WriteAllText(Path.Combine(_tempDir, "appconfig.json"),
+            """{"InvertStrings":true,"PlayModeInvertStrings":false,"StringOrderSplitMigrated":true}""");
+
+        var loaded = NewService().LoadAppConfig();
+
+        Assert.True(loaded.InvertStrings);
+        Assert.False(loaded.PlayModeInvertStrings);
+    }
+
     [Fact]
     public void AFreshConfig_JudgesWithTheCqtVerifier()
     {

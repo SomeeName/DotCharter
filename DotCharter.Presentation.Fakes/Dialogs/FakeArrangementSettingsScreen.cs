@@ -28,6 +28,7 @@ public sealed class FakeArrangementSettingsScreen : FakeDialog<bool>, IArrangeme
         Capo = capo;
         Strings = steps.Length;
         TuningPreset = preset;
+        TuningPresets = PresetsFor(steps.Length, type == ArrangementType.Bass);
         var labels = TuningUtilities.GetStringLabels(steps.Length);
         TuningOffsets = [.. steps.Select((s, i) => new TuningRow(s, labels[i],
             TuningUtilities.GetResultingNote(steps.Length, i, s), $"String {steps.Length - i} ({labels[i]}), half steps"))];
@@ -68,9 +69,10 @@ public sealed class FakeArrangementSettingsScreen : FakeDialog<bool>, IArrangeme
                 "Offene Akkorde", "Nicht-Standard-Akkorde", "Doppelgriffe", "Quinten und Oktaven"
             ], authoredLabels: ["Fingerpicking", "Zwei-Finger-Anschlag", "Anschlagsrichtung", "Synkopierung"]);
 
-    /// <summary>A seven-string custom tuning, a scroll speed set, the derived flags pinned.</summary>
+    /// <summary>A seven-string in Drop A (the picker names it for seven strings), a scroll speed
+    ///     set, the derived flags pinned.</summary>
     public static FakeArrangementSettingsScreen Full() =>
-        new("Rhythm", ArrangementType.Rhythm, 5, [-5, -2, -2, -2, -2, -2, -2], "Custom",
+        new("Rhythm", ArrangementType.Rhythm, 5, [-2, 0, 0, 0, 0, 0, 0], "Drop D",
             hasScrollSpeed: true, overrideDerived: true, setFlags: 14);
 
     public string Name { get; set; }
@@ -92,8 +94,7 @@ public sealed class FakeArrangementSettingsScreen : FakeDialog<bool>, IArrangeme
 
     public string TuningPreset { get; set; }
 
-    public IReadOnlyList<string> TuningPresets { get; } =
-        ["E Standard", "Drop D", "Eb Standard", "D Standard", "Drop C", "Custom"];
+    public IReadOnlyList<ITuningPresetOption> TuningPresets { get; }
 
     public IReadOnlyList<ITuningStep> TuningOffsets { get; }
 
@@ -131,6 +132,32 @@ public sealed class FakeArrangementSettingsScreen : FakeDialog<bool>, IArrangeme
     }
 
     private sealed record Path(string Label) : IArrangementPathOption;
+
+    private sealed class PresetOption(string key, string label) : ObservableObject, ITuningPresetOption
+    {
+        public string Key { get; } = key;
+
+        public string Label { get; } = label;
+    }
+
+    /// <summary>The picker's labels for <paramref name="strings" />, as the real screen names them:
+    ///     the instrument's name for the tuning and the notes beside it.</summary>
+    private static ITuningPresetOption[] PresetsFor(int strings, bool bass)
+    {
+        (string Key, int Shift, int Drop)[] rules =
+        [
+            ("E Standard", 0, 0), ("Drop D", 0, -2), ("Eb Standard", -1, 0), ("D Standard", -2, 0), ("Drop C", -2, -2)
+        ];
+        var options = rules.Select(rule =>
+        {
+            var offsets = ExtendedRangeTunings.StandardOffsets(strings, bass).Select(step => step + rule.Shift).ToArray();
+            offsets[0] += rule.Drop;
+            var notes = string.Join(" ", TuningUtilities.GetTuningNames(strings, offsets));
+            var name = TuningNameResolver.ResolveFromOffsets(strings, offsets);
+            return (ITuningPresetOption)new PresetOption(rule.Key, name is null ? notes : $"{name} ({notes})");
+        });
+        return [.. options, new PresetOption("Custom", "Custom")];
+    }
 
     private sealed class Flag(string label, bool isSet) : ObservableObject, IArrangementFlag
     {

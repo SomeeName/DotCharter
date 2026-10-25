@@ -16,6 +16,14 @@ public sealed partial class PublicSnapshotExportTests
             => Export_IsOneCommitOnThePreviousSnapshot_WithoutTrailers_AndPointsAtThePublicJuceSharp();
     }
 
+    /// <summary>A JuceSharp tree changed since its public snapshot needs a new version before a release.</summary>
+    public sealed class JuceSharpVersionGuard
+    {
+        [Fact]
+        public void ReleasePreflight_RefusesAnUnbumpedJuceSharp()
+            => ReleasePreflight_RefusesAChangedJuceSharpUnderItsPublicVersion();
+    }
+
     /// <summary>The kept work tree, with its build outputs parked while the scans run.</summary>
     public sealed class KeptWorkTree
     {

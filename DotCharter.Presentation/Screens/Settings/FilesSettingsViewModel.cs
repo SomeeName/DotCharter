@@ -26,6 +26,18 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
 {
     private static readonly SettingsTabRows Rows = new("files.",
     [
+        new("Settings_Import_Title", "Settings_Import_Subtitle",
+            new("gpShortNotes", "Settings_GpTruncateShortNotes", "Settings_Tip_GpTruncateShortNotes"),
+            new("gpShortChords", "Settings_GpTruncateShortChords", "Settings_Tip_GpTruncateShortChords"),
+            new("gpShortRests", "Settings_GpPreserveShortRests", "Settings_Tip_GpPreserveShortRests"),
+            new("latinLookup", "Settings_OnlineLatinNameLookup", "Settings_Tip_OnlineLatinNameLookup"),
+            new("gpBeatText", "Settings_GpBeatTextTechniques", "Settings_Tip_GpBeatTextTechniques"),
+            new("gpMarkers", "Settings_GpMarkersToSections", "Settings_Tip_GpMarkersToSections"),
+            new("gpTimeSignatures", "Settings_GpImportTimeSignatures", "Settings_Tip_GpImportTimeSignatures"),
+            new("gpMidBeatTempo", "Settings_GpDropMidBeatTempo", "Settings_Tip_GpDropMidBeatTempo"),
+            new("gpSlideIn", "Settings_GpSlideInDistance", "Settings_Tip_GpSlideInDistance")),
+        new("Settings_PsarcOpen_Title", "Settings_PsarcOpen_Subtitle",
+            new SettingsRowSpec("psarcHardestOnly", "Settings_PsarcOpenHardestOnly", "Settings_Tip_PsarcOpenHardestOnly")),
         new("Settings_SaveCompanions", "Settings_SaveCompanions_Subtitle",
             new("eof", "Settings_SaveCompanionEof_RowLabel", "Settings_Tip_SaveCompanionEof"),
             new("eofAudio", "Settings_SaveCompanionEofAudio", "Settings_Tip_SaveCompanionEofAudio"),
@@ -43,16 +55,14 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
             new("backupKeep", "Settings_BackupKeep", "Settings_Tip_BackupKeep"),
             new("backupMigrate", "Settings_BackupMigrate_Title", "Settings_BackupMigrate_Subtitle")),
         new("Settings_PsarcAudioCache_Title", "Settings_PsarcAudioCache_Subtitle",
-            new SettingsRowSpec("psarcCache", "Settings_PsarcAudioCache_UsageLabel", "Settings_PsarcAudioCache_ClearTooltip")),
-        new("Settings_PsarcOpen_Title", "Settings_PsarcOpen_Subtitle",
-            new SettingsRowSpec("psarcHardestOnly", "Settings_PsarcOpenHardestOnly", "Settings_Tip_PsarcOpenHardestOnly"))
+            new SettingsRowSpec("psarcCache", "Settings_PsarcAudioCache_UsageLabel", "Settings_PsarcAudioCache_ClearTooltip"))
     ]);
 
     /// <summary>The groups that only concern reading game packages: ABSENT, not greyed,
     /// when <see cref="IPackageFeatures.ReadsGamePackages" /> is off — the decoded-audio cache
     /// (its text is about Rocksmith archives) and how a library package opens in the editor.
     /// Indices into <see cref="Rows" />; the companion <c>.psarc</c> rows are the WRITER and stay.</summary>
-    public static readonly IReadOnlyList<int> PackageReaderGroups = [2, 3];
+    public static readonly IReadOnlyList<int> PackageReaderGroups = [1, 4];
 
     private static readonly string[] Tracked =
     [
@@ -60,7 +70,10 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
         nameof(SaveCompanionPsarcCodecIndex), nameof(SaveCompanionRs2Dlc), nameof(RsXmlSixStringProjection), nameof(RsXmlMoverPhrases),
         nameof(ExportGenerateDynamicDifficulty), nameof(ExportDdUseMlModel), nameof(ExportApplyDlcBuilderFixes),
         nameof(AutoBackupEnabled), nameof(AutoBackupIntervalMinutes),
-        nameof(AutoBackupKeepCount), nameof(PsarcOpenHardestLevelOnly)
+        nameof(AutoBackupKeepCount), nameof(PsarcOpenHardestLevelOnly), nameof(GpImportTruncateShortNotes),
+        nameof(GpImportTruncateShortChords), nameof(GpImportPreserveShortRests), nameof(OnlineLatinNameLookup),
+        nameof(GpImportBeatTextTechniques), nameof(GpImportMarkersToSections), nameof(GpImportTimeSignatures),
+        nameof(GpImportDropMidBeatTempoChanges), nameof(GpImportSlideInFretDistance)
     ];
 
     private readonly IConfigurationService _config;
@@ -89,6 +102,15 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
     [ObservableProperty] private int _autoBackupIntervalMinutes = 5;
     [ObservableProperty] private int _autoBackupKeepCount = 50;
     [ObservableProperty] private bool _psarcOpenHardestLevelOnly;
+    [ObservableProperty] private bool _gpImportTruncateShortNotes = true;
+    [ObservableProperty] private bool _gpImportTruncateShortChords;
+    [ObservableProperty] private bool _gpImportPreserveShortRests = true;
+    [ObservableProperty] private bool _onlineLatinNameLookup = true;
+    [ObservableProperty] private bool _gpImportBeatTextTechniques = true;
+    [ObservableProperty] private bool _gpImportMarkersToSections;
+    [ObservableProperty] private bool _gpImportTimeSignatures = true;
+    [ObservableProperty] private bool _gpImportDropMidBeatTempoChanges;
+    [ObservableProperty] private int _gpImportSlideInFretDistance = 2;
 
     public FilesSettingsViewModel(
         IConfigurationService config,
@@ -181,6 +203,15 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
         AutoBackupIntervalMinutes = config.AutoBackupIntervalMinutes > 0 ? config.AutoBackupIntervalMinutes : 5;
         AutoBackupKeepCount = Math.Max(0, config.AutoBackupKeepCount);
         PsarcOpenHardestLevelOnly = config.PsarcOpenHardestLevelOnly;
+        GpImportTruncateShortNotes = config.GpImportTruncateShortNotes;
+        GpImportTruncateShortChords = config.GpImportTruncateShortChords;
+        GpImportPreserveShortRests = config.GpImportPreserveShortRests;
+        OnlineLatinNameLookup = config.OnlineLatinNameLookup;
+        GpImportBeatTextTechniques = config.GpImportBeatTextTechniques;
+        GpImportMarkersToSections = config.GpImportMarkersToSections;
+        GpImportTimeSignatures = config.GpImportTimeSignatures;
+        GpImportDropMidBeatTempoChanges = config.GpImportDropMidBeatTempoChanges;
+        GpImportSlideInFretDistance = config.GpImportSlideInFretDistance;
         Rebaseline();
         _ = RefreshLibraryAudioCacheAsync();
     }
@@ -202,6 +233,15 @@ public sealed partial class FilesSettingsViewModel : ObservableObject,
         config.AutoBackupIntervalMinutes = Math.Max(1, AutoBackupIntervalMinutes);
         config.AutoBackupKeepCount = Math.Max(0, AutoBackupKeepCount);
         config.PsarcOpenHardestLevelOnly = PsarcOpenHardestLevelOnly;
+        config.GpImportTruncateShortNotes = GpImportTruncateShortNotes;
+        config.GpImportTruncateShortChords = GpImportTruncateShortChords;
+        config.GpImportPreserveShortRests = GpImportPreserveShortRests;
+        config.OnlineLatinNameLookup = OnlineLatinNameLookup;
+        config.GpImportBeatTextTechniques = GpImportBeatTextTechniques;
+        config.GpImportMarkersToSections = GpImportMarkersToSections;
+        config.GpImportTimeSignatures = GpImportTimeSignatures;
+        config.GpImportDropMidBeatTempoChanges = GpImportDropMidBeatTempoChanges;
+        config.GpImportSlideInFretDistance = Math.Clamp(GpImportSlideInFretDistance, 1, 3);
         _config.SaveAppConfig(config);
         _logger?.Info(AppLogCategory.Settings,
             $"Files settings saved. AutoBackup enabled={config.AutoBackupEnabled}, " +

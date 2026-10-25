@@ -96,3 +96,30 @@ table at the bottom, under [`rendering-perf/`](rendering-perf/).
 | you are adding a tooltip, a hover popup or anything that can create a popup on pointer-enter | [rendering-perf/tooltips-and-popups.md](rendering-perf/tooltips-and-popups.md) |
 | you are measuring a view/tab/screen switch or a cold start — the ≤150 ms budget, the measured A/B per surface, the **measured per-phase cold-start table** (`r2r=yes`, and what `bind=` is), and the `r2r=` rule that decides whether a number is a product measurement at all | [rendering-perf/responsiveness-budget.md](rendering-perf/responsiveness-budget.md) |
 | you are touching what an EDIT costs on a big chart — a bulk delete and its undo, a technique verb over thousands of selected sounds, the spacing post-pass that runs after every committed edit, arrow-key seek, the inspector's chip fold; the measured before/after table and what was deliberately left | [rendering-perf/editor-latency.md](rendering-perf/editor-latency.md) |
+
+
+## UI responsiveness budget (moved verbatim from the root AGENTS.md)
+
+**Switching a view, tab, screen or dialog must complete in ≤150 ms, and should
+be under 20 ms.** The cost is almost never construction — it is the FIRST layout
+of a hidden subtree (`IsVisible=false` skips measure, so styles, templates and
+text layout all land on the first switch). Three mechanisms keep it inside the
+budget and **all of them must stay**: `Views/Shell/MainWindowPrewarm`
+(`PrewarmTopLevelViews`), `Views/Shell/HiddenSubtreePrewarmer` +
+`IPrewarmableSurfaces`, and `Views/Shell/MenuFlyoutPrewarmer` + `PrewarmableFlyout`.
+
+- **A new hidden surface must be exposed through `IPrewarmableSurfaces`.**
+  Realize it by measuring its VISIBLE children — never by writing `IsVisible`.
+  Prewarm work is always `DispatcherPriority.Background` and AFTER first paint.
+- **Never realize a popover while it is DETACHED.** A detached subtree has no
+  style scope, so every `DynamicResource` caches its FALLBACK and the popover
+  comes back unstyled. A close takes the popup out of the logical tree;
+  `PrewarmableFlyout.OnClosed` puts it back into its target's live scope FIRST
+  and only then re-realizes it (#176: repeat opens 25-90 ms → ~5 ms).
+  `Perf/PopoverRestyleUiPerfSmokeTests` compares brushes across a close;
+  `Perf/PopoverReopenUiPerfSmokeTests` pins the re-parent.
+- **Never read a cold-start number without checking `r2r=`.** `PublishReadyToRun`
+  only applies to `dotnet publish -r win-x64`, so the dev build JIT-compiles its
+  whole startup path (over half its cold start). The `StartupPhases:` log line
+  ends with `r2r=yes|no|?` (`Diagnostics/ReadyToRunProbe`); a number from an
+  `r2r=no` run is a JIT measurement. `Window.Show()` IS the initial layout pass.

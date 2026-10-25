@@ -84,6 +84,7 @@ public sealed class PlacementTemplateRepointTests
         var h = new Harness();
         h.AddTemplate(0, (0, 5), (1, 7));
         var chord = h.AddChord(2, 0, (0, 5), (1, 7));
+        h.KeepInUse(0);
         h.State.PreviewNoteFret = 7;
 
         h.Service.ApplyPlacement(new FractionalPosition(2), 2);
@@ -144,5 +145,13 @@ public sealed class PlacementTemplateRepointTests
             State.PlacedChords.Add(c);
             return c;
         }
+
+        /// <summary>A bar far from every edit that keeps <paramref name="templateId" /> in use, so the edit does not strand it.</summary>
+        public void KeepInUse(int templateId) => Arrangement.Levels[0].HandShapes.Add(new HandShape
+        {
+            Position = new FractionalPosition(12),
+            EndPosition = new FractionalPosition(13),
+            TemplateId = templateId
+        });
     }
 }

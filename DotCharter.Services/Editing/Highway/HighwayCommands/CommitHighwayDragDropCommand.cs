@@ -1,3 +1,6 @@
+using System.Collections.ObjectModel;
+using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using ChordNote = DotCharter.Core.Domain.Guitar.ChordNote;
@@ -63,6 +66,13 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
         RequestedNewChords = _newChords.Select(c => c.Clone()).ToList();
     }
 
+    /// <summary>
+    ///     The level's hand shapes while the chord / hand shape sync is on: a drop that merges notes into a
+    ///     chord changes that chord's shape, and the bar over it follows onto the new template. Null leaves
+    ///     every bar where it is.
+    /// </summary>
+    public ObservableCollection<HandShape>? SyncedHandShapes { get; init; }
+
     public IReadOnlyList<GuitarNote> TargetNotes => _targetNotes;
     public IReadOnlyList<GuitarNote> RequestedNewNotes { get; }
     public IReadOnlyList<GuitarNote> NewNotes => _newNotes;
@@ -119,6 +129,7 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
         AddSoundCollisionActions(actions, normalizedSounds);
         AddAnchorCollisionActions(actions);
         AddNewElementActions(actions);
+        AddHandShapeFollowActions(actions, normalizedSounds);
 
         if (_extraActions.Count > 0) actions.AddRange(_extraActions);
 
@@ -131,7 +142,12 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
         RemovedNotesCount = _targetNotes.Count + normalizedSounds.NotesToRemove.Count;
         RemovedChordsCount = _targetChords.Count + normalizedSounds.ChordsToRemove.Count;
 
-        return actions.Count == 0 ? null : new CompositeAction(actions) { LabelKey = "History_MoveNotes" };
+        if (actions.Count == 0) return null;
+
+        // A template the drop leaves with no chord or hand shape (a replaced bar, a chord run over,
+        // a merged chord's old shape) leaves in the same node.
+        return StrandedShapes.Wrap(_scope.Arrangement,
+            new CompositeAction(actions) { LabelKey = "History_MoveNotes" });
     }
 
     private void AddTargetRemovalActions(ICollection<IChartAction> actions)
@@ -296,6 +312,22 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
     }
 
     /// <summary>
+    ///     A chord that a drop merged notes into sits on a new template; the hand shapes that were in step
+    ///     with it move there too. A bar the same drop replaces is the caller's own, and is left to it.
+    /// </summary>
+    private void AddHandShapeFollowActions(ICollection<IChartAction> actions, DropSoundNormalization normalizedSounds)
+    {
+        if (SyncedHandShapes is not { } handShapes || normalizedSounds.TemplateMoves.Count == 0) return;
+
+        var removed = _targetChords.ToHashSet();
+        var bars = handShapes.Where(h => !_targetHandShapes.Contains(h)).ToList();
+        var follow = ChordHandShapeSync.BuildAction(handShapes,
+            ChordHandShapeSync.Follow(bars, _scope.Chords.Where(c => !removed.Contains(c)), normalizedSounds.TemplateMoves),
+            _onPostExecute);
+        if (follow != null) actions.Add(follow);
+    }
+
+    /// <summary>
     ///     Repoints incoming chords / hand shapes at a template of the TARGET
     ///     arrangement with the same shape, minting one when it has none.
     ///     <para>
@@ -426,11 +458,7 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
             // chord on that template still drew (and exported) the old one.
             // Resolve-or-create for the shape it now plays; an untemplated chord
             // stays untemplated, it has nothing to disagree with.
-            if (mergedChord.TemplateId >= 0 && _scope.Arrangement is { } arrangement)
-            {
-                mergedChord.TemplateId =
-                    ChordTemplateResolver.ResolveForChord(arrangement, mergedChord, _createdTemplates).Id;
-            }
+            ResolveMergedTemplate(mergedChord, existingChords, result);
 
             result.NewChords.Add(mergedChord);
             _logger.Info(AppLogCategory.Editing,
@@ -440,6 +468,20 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
         result.NotesToRemove = result.NotesToRemove.Distinct().ToList();
         result.ChordsToRemove = result.ChordsToRemove.Distinct().ToList();
         return result;
+    }
+
+    /// <summary>
+    ///     Repoints the merged chord at a template of the shape it now plays, and notes which chord it replaced
+    ///     so the hand shape over that chord can follow (<see cref="AddHandShapeFollowActions" />).
+    /// </summary>
+    private void ResolveMergedTemplate(Chord mergedChord, List<Chord> existingChords, DropSoundNormalization result)
+    {
+        if (mergedChord.TemplateId < 0 || _scope.Arrangement is not { } arrangement) return;
+
+        mergedChord.TemplateId = ChordTemplateResolver.ResolveForChord(arrangement, mergedChord, _createdTemplates).Id;
+        if (existingChords.FirstOrDefault(c => c.TemplateId >= 0) is not { } replaced) return;
+
+        result.TemplateMoves.Add(new ChordHandShapeSync.ChordMove(replaced, replaced.TemplateId, mergedChord.TemplateId));
     }
 
     /// <summary>One converter for all three note-to-chord-note sites - this one
@@ -464,5 +506,8 @@ internal sealed class CommitHighwayDragDropCommand : IHighwayEditCommand
         public List<Chord> NewChords { get; } = [];
         public List<GuitarNote> NotesToRemove { get; set; } = [];
         public List<Chord> ChordsToRemove { get; set; } = [];
+
+        /// <summary>The chords a merge replaced, with the template each one's replacement sits on.</summary>
+        public List<ChordHandShapeSync.ChordMove> TemplateMoves { get; } = [];
     }
 }

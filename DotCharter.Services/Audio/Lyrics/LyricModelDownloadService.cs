@@ -1,5 +1,6 @@
 using DotCharter.Analysis.Lyrics;
 using DotCharter.Localization;
+using JuceSharp.StemSeparation.Onnx;
 
 namespace DotCharter.Services.Audio.Lyrics;
 
@@ -18,7 +19,38 @@ public interface ILyricModelDownloadService
     /// </summary>
     Task<bool> EnsureModelsForAsync(
         LyricSheet sheet, IProgress<string>? progress = null, CancellationToken ct = default);
+
+    /// <summary>Every model auto-sync can use, as Settings ▸ AI &amp; models lists them.</summary>
+    IReadOnlyList<LyricModelStatus> Models { get; }
+
+    /// <summary>
+    ///     Downloads one model, or with <paramref name="repair" /> deletes the
+    ///     installed copy first and downloads it again. True when it is installed afterwards.
+    /// </summary>
+    Task<bool> InstallAsync(string id, bool repair, IProgress<string>? progress = null, CancellationToken ct = default);
+
+    /// <summary>Forgets that <paramref name="id" /> fell back to the CPU, so its next run asks for the GPU again.</summary>
+    bool RetryGpu(string id);
 }
+
+/// <summary>Where a lyric model ran last.</summary>
+public enum LyricModelRunner
+{
+    /// <summary>No auto-sync has used it in this session.</summary>
+    NotRunYet,
+
+    /// <summary>On a GPU provider (<see cref="LyricModelStatus.ProviderName" /> says which).</summary>
+    Gpu,
+
+    /// <summary>On the CPU, because no GPU provider was available.</summary>
+    Cpu,
+
+    /// <summary>On the CPU after failing on the GPU; it stays there until a retry.</summary>
+    CpuFallback
+}
+
+/// <summary>One lyric model for Settings: installed or not, its download size and what it ran on.</summary>
+public sealed record LyricModelStatus(string Id, bool IsInstalled, int Megabytes, LyricModelRunner Runner, string? ProviderName);
 
 /// <summary>
 ///     Ties <see cref="LyricModelAssetFetcher" /> to <see cref="LyricModelInstaller" />.
@@ -36,9 +68,47 @@ public sealed class LyricModelDownloadService(
     LyricModelAssetFetcher fetcher,
     ILocalizationService localization,
     IAppLogger? logger = null,
-    IReadOnlyList<string>? modelRoots = null) : ILyricModelDownloadService, IDisposable
+    IReadOnlyList<string>? modelRoots = null,
+    LyricProviderMemory? providerMemory = null) : ILyricModelDownloadService, IDisposable
 {
+    private static readonly LyricModelDownload[] Downloads =
+        [LyricModelCatalog.MultilingualDownload, LyricModelCatalog.EnglishDownload];
+
     private readonly LyricModelInstaller _installer = new(fetcher.FetchAsync, localization, logger, modelRoots);
+    private readonly LyricProviderMemory _memory = providerMemory ?? LyricProviderMemory.Process;
+
+    public IReadOnlyList<LyricModelStatus> Models =>
+        [.. Downloads.Select(d => new LyricModelStatus(
+            d.Id, _installer.IsInstalled(d.Id), (int)(d.ApproximateBytes / (1024 * 1024)), RunnerOf(d.Id),
+            _memory.LastProvider(d.Id) is { } p && p != OnnxExecutionProvider.Cpu ? ProviderName(p) : null))];
+
+    public async Task<bool> InstallAsync(string id, bool repair, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var download = Downloads.FirstOrDefault(d => string.Equals(d.Id, id, StringComparison.Ordinal))
+                       ?? throw new ArgumentException($"No lyric model '{id}'.", nameof(id));
+        if (repair) await Task.Run(() => _installer.Remove(id), ct).ConfigureAwait(false);
+        return await _installer.EnsureInstalledAsync(download, progress, ct).ConfigureAwait(false);
+    }
+
+    public bool RetryGpu(string id) => _memory.ForgetCpu(id);
+
+    private LyricModelRunner RunnerOf(string id)
+    {
+        if (_memory.IsCpuOnly(id)) return LyricModelRunner.CpuFallback;
+        return _memory.LastProvider(id) switch
+        {
+            null => LyricModelRunner.NotRunYet,
+            OnnxExecutionProvider.Cpu => LyricModelRunner.Cpu,
+            _ => LyricModelRunner.Gpu
+        };
+    }
+
+    private static string ProviderName(OnnxExecutionProvider provider) => provider switch
+    {
+        OnnxExecutionProvider.DirectML => "DirectML",
+        OnnxExecutionProvider.Cuda => "CUDA",
+        _ => provider.ToString()
+    };
 
     public bool IsRequiredModelInstalled =>
         _installer.IsInstalled(LyricModelCatalog.MultilingualId);

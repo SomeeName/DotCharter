@@ -217,6 +217,43 @@ public sealed class SettingsShellUiPerfSmokeTests
         }, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    ///     AI &amp; models over the real graph: stem separation and the lyric models
+    ///     have no rail rows, and their views sit on the AI page as sections, bound
+    ///     to the same tab instances the shell loads and saves, measured, and
+    ///     scrolling with the page rather than in a scroller of their own.
+    /// </summary>
+    [Fact]
+    public async Task TheAiPage_HostsTheStemAndLyricSections()
+    {
+        await HeadlessSessionFixture.Dispatch(() =>
+        {
+            using var s = new Surface();
+            var keys = s.Rail.Cast<SettingsRailItemViewModel>().Select(i => i.Tab.Key).ToList();
+            Assert.DoesNotContain(SettingsTabKeys.StemModels, keys);
+            Assert.DoesNotContain(SettingsTabKeys.LyricModels, keys);
+
+            s.Shell.Select(SettingsTabKeys.StemModels);
+            s.Settle();
+            var page = Assert.Single(s.VisibleBodies());
+            Assert.IsType<AiSettingsView>(page);
+
+            var stems = page.GetVisualDescendants().OfType<StemModelsSettingsView>().Single();
+            var lyrics = page.GetVisualDescendants().OfType<LyricModelsSettingsView>().Single();
+            var tabs = s.Shell.TabScreens;
+            Assert.DoesNotContain(typeof(IStemModelsSettingsScreen), tabs);
+            foreach (var (view, contract) in new (UserControl, Type)[]
+                     { (stems, typeof(IStemModelsSettingsScreen)), (lyrics, typeof(ILyricModelsSettingsScreen)) })
+            {
+                Assert.True(view.IsEffectivelyVisible && view.Bounds is { Width: > 1, Height: > 1 }, $"{view.GetType().Name} laid out {view.Bounds}");
+                Assert.IsNotType<ScrollViewer>(view.Content);
+                Assert.Same(s.Host.Services.GetRequiredService(contract), view.DataContext);
+            }
+
+            Assert.True(lyrics.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "LyricModelRows").ItemCount > 0, "no lyric model rows");
+        }, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task ThePrewarm_RealizesEveryHiddenTab_OldAndNew()
     {

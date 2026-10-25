@@ -3,6 +3,7 @@
 // launcher that is not registered is logged rather than silently doing nothing.
 using CommunityToolkit.Mvvm.Input;
 using DotCharter.Presentation.Screens.Dialogs;
+using DotCharter.Presentation.Screens.Editor;
 using DotCharter.Tone.UI.ViewModels.Shell;
 
 namespace DotCharter.UI.ViewModels.Shell;
@@ -18,11 +19,13 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
     private readonly YoutubeAudioLauncher? _youtubeAudio;
     private readonly PackageConversionLauncher? _packageConversion;
     private readonly AlignToRecordingOffer _alignOffer;
+    private readonly ShapeCleanupOffer _cleanupOffer;
     private readonly GpLinkSuggestionOffer? _linkOffer;
 
     public ImportMenuViewModel(
         IAppLogger logger,
         AlignToRecordingOffer alignOffer,
+        ShapeCleanupOffer cleanupOffer,
         NewProjectLauncher? newProject = null,
         EofImportLauncher? eofImport = null,
         RsXmlImportLauncher? rsXmlImport = null,
@@ -34,6 +37,7 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
     {
         _logger = logger;
         _alignOffer = alignOffer;
+        _cleanupOffer = cleanupOffer;
         _newProject = newProject;
         _eofImport = eofImport;
         _rsXmlImport = rsXmlImport;
@@ -50,11 +54,13 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
 
     /// <summary>File ▸ Import ▸ Editor on Fire: the picker, then the dialog.</summary>
     [RelayCommand]
-    private void ImportEof() => LaunchImport(_eofImport, l => l.PickAsync(), "Editor on Fire import");
+    private void ImportEof() =>
+        LaunchImport(_eofImport, async l => await OfferCleanupAsync(await l.PickAsync(), "Editor on Fire import"), "Editor on Fire import");
 
     /// <summary>File ▸ Import ▸ Rocksmith XML: the picker, then the progress card.</summary>
     [RelayCommand]
-    private void ImportRsXml() => LaunchImport(_rsXmlImport, l => l.PickAsync(), "Rocksmith XML import");
+    private void ImportRsXml() =>
+        LaunchImport(_rsXmlImport, async l => await OfferCleanupAsync(await l.PickAsync(), "Rocksmith XML import"), "Rocksmith XML import");
 
     /// <summary>File ▸ Import ▸ MIDI: the picker, then the dialog.</summary>
     [RelayCommand]
@@ -66,24 +72,33 @@ public sealed partial class ImportMenuViewModel : ViewModelBase
         LaunchImport(_gpImport, async l => await AfterGpImportAsync(await l.PickAsync()), "Guitar Pro import");
 
     /// <summary>A dropped or recent .eof, straight to its track list.</summary>
-    internal void OpenEofImport(string filePath) => LaunchImport(_eofImport, l => l.OpenAsync(filePath), "Editor on Fire import");
+    internal void OpenEofImport(string filePath) =>
+        LaunchImport(_eofImport, async l => await OfferCleanupAsync(await l.OpenAsync(filePath), "Editor on Fire import"), "Editor on Fire import");
 
     /// <summary>A dropped or recent .mid; the launcher refuses when no project is open.</summary>
     internal void OpenMidiImport(string filePath) =>
         LaunchImport(_midiImport, async l => OfferAlignment(await l.OpenAsync(filePath), "MIDI import"), "MIDI import");
 
     /// <summary>A dropped or recent RS XML, merged into the open project.</summary>
-    internal void OpenRsXmlImport(string filePath) => LaunchImport(_rsXmlImport, l => l.OpenAsync(filePath), "Rocksmith XML import");
+    internal void OpenRsXmlImport(string filePath) =>
+        LaunchImport(_rsXmlImport, async l => await OfferCleanupAsync(await l.OpenAsync(filePath), "Rocksmith XML import"), "Rocksmith XML import");
 
     /// <summary>A dropped Guitar Pro score, straight to its track list — no picker.</summary>
     internal void OpenGpImport(string filePath) =>
         LaunchImport(_gpImport, async l => await AfterGpImportAsync(await l.OpenAsync(filePath)), "Guitar Pro import");
 
-    /// <summary>A Guitar Pro import: first what can be linked, then Align to recording on the status rail.</summary>
+    /// <summary>A Guitar Pro import: first what can be linked, then the shapes to tidy, then Align to recording on the status rail.</summary>
     private async Task AfterGpImportAsync(bool imported)
     {
         if (imported && _linkOffer != null) await _linkOffer.OfferAsync();
+        await OfferCleanupAsync(imported, "Guitar Pro import");
         OfferAlignment(imported, "Guitar Pro import");
+    }
+
+    /// <summary>An import that brought in shapes: Clean up shapes opens when it finds anything, and stays away from a tidy chart.</summary>
+    private async Task OfferCleanupAsync(bool imported, string what)
+    {
+        if (imported) await _cleanupOffer.OfferAsync(what);
     }
 
     /// <summary>A tab import lands on the WRITTEN tempo: offer Align to recording next.</summary>

@@ -57,6 +57,13 @@ public sealed class PluralStringTests
         // ORDINARY case, not an edge — and each read "1 Iterationen",
         // "1 Klänge darin", "1 Durchläufe" in German until now.
         ("Inspector_Phrases_IterationsOne", "Inspector_Phrases_IterationsFmt"),
+        // #246: the Song tab's sections and tones, in the Phrases panel's shape.
+        ("Inspector_Sections_PlacesOne", "Inspector_Sections_PlacesFmt"),
+        ("Inspector_Sections_DeleteTipOne", "Inspector_Sections_DeleteTipFmt"),
+        ("Inspector_Tones_UsesOne", "Inspector_Tones_UsesFmt"),
+        ("Inspector_Tones_DeleteTipOne", "Inspector_Tones_DeleteTipFmt"),
+        ("Inspector_Phrases_DeleteTipOne", "Inspector_Phrases_DeleteTipFmt"),
+        ("Inspector_Phrases_DeletedOne", "Inspector_Phrases_DeletedFmt"),
         ("Inspector_Scope_SoundsOne", "Inspector_Scope_Sounds"),
         ("Inspector_Issue_FindingsOne", "Inspector_Issue_Findings"),
         // #601: the Sound tab's next task with nothing selected.
@@ -182,6 +189,8 @@ public sealed class PluralStringTests
         ("AiChartReview_FailedOne", "AiChartReview_Failed"),
         // #560: the AI chat's reply to an instruction ("I propose changes in 2 sections:").
         ("AiChat_Proposed_One", "AiChat_Proposed_Many"),
+        // #232: the EOF import dialog's vocal track row ("PART VOCALS (42 lyrics)").
+        ("Dialog_EofImport_VocalTrack_One", "Dialog_EofImport_VocalTrack_Many"),
         // #561: the chat's reply to a sections & phrases instruction, and the changes the checks refused.
         ("AiChat_StructureProposed_One", "AiChat_StructureProposed_Many"),
         ("AiStructure_FailedOne", "AiStructure_Failed"),
@@ -214,7 +223,11 @@ public sealed class PluralStringTests
         // Linked measures: the import summary, the manager's suggestion rows and the Link all status.
         ("LinkSuggest_GroupsOne", "LinkSuggest_Groups"),
         ("LinkGroups_MeasuresOne", "LinkGroups_Measures"),
-        ("Status_LinkSuggestionsLinkedOne", "Status_LinkSuggestionsLinked")
+        ("Status_LinkSuggestionsLinkedOne", "Status_LinkSuggestionsLinked"),
+        // Clean up shapes: the dialog's summary, its Apply caption and the status after Apply.
+        ("ShapeCleanup_SummaryDuplicatesOne", "ShapeCleanup_SummaryDuplicates"),
+        ("ShapeCleanup_ApplyOne", "ShapeCleanup_Apply"),
+        ("ShapeCleanup_Status_AppliedOne", "ShapeCleanup_Status_Applied")
     ];
 
     public static TheoryData<string, string> Pairs

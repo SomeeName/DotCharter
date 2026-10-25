@@ -46,9 +46,10 @@ number came from — the two disagree by 24 points.
   **90% of onsets within 100 ms, 76% within 50 ms**, median |error| 28 ms, median
   signed −13 ms (slightly early — the direction listeners forgive; they tolerate
   ~0.33 s early vs ~0.22 s late, so ALWAYS report this signed). Harness:
-  `LocalOnly_LyricAlignmentProbe`.
+  `LyricCorpusProbeTests` (corpus-skipping; the corpus and its current tables are
+  in `docs/agents/services/lyric-autosync.md` § Probes).
   Since 2026-07-28 there is also a 40-song ENGLISH set drawn from official
-  Rocksmith vocal arrangements (14,272 syllables, `LocalOnly_LyricAlignmentPsarcProbe`):
+  Rocksmith vocal arrangements (14,272 syllables; now exported by the add-on's lyric-truth exporter (its `Local/` probes) into the same `LyricCorpusProbeTests` corpus):
   **66% within 100 ms, 42% within 50 ms** on the mix, **75% / 47% on a separated
   vocal stem**. The romaji figure shipped for several releases as THE accuracy
   claim; it is the optimistic end of the range, because those four charts have
@@ -148,3 +149,25 @@ number came from — the two disagree by 24 points.
   position. And some songs are simply unreadable: `AFI - Totalimmortal` scores
   0.0% within 100 ms on ALL THREE models — a free decode of its shouted vocal
   returns vowel mush, which is a limit of speech-trained models, not a search bug.
+- **Which syllables start late: vowel-initial ones, not unvoiced-consonant ones —
+  measured, and the owner's hypothesis was the opposite.** Romaji corpus on a vocal
+  stem (2,036 syllables, signed onset error, pred − hand-synced), by the syllable's
+  first sound: vowel n=258 **median +62 ms, 61% later than 50 ms**; voiced
+  consonant n=1,023 −11 ms; unvoiced consonant n=643 **−24 ms** (ts −6, ch −23,
+  sh +20 — only `sh` is late). CTC fires on the confident vowel; a vowel after a
+  vowel (`a-i`, +70 ms, n=133) or a breath has no consonant to anchor the frame.
+  The fix is a flat **−50 ms on vowel-initial syllables** (`SyllableOnsetClassifier`,
+  `LyricAlignmentOptions.VowelInitialOnsetBiasSeconds`, multilingual head only,
+  clamped so a start never passes its predecessor's): vowel median +62 → +12 ms,
+  late > 50 ms 61% → 20%, whole chart within 50 ms **77.3% → 82.1%**, within 100 ms
+  **91.9% → 93.7%**, p90 85 → 73 ms (mix: 75.1% → 79.7%, 89.4% → 91.1%). Sweep:
+  −20 ms 79.9/93.1, −30 81.0/93.5, −40 81.9/93.5, −50 82.1/93.7, −60 82.6/93.6,
+  −70 82.5/93.6 (within 50 / within 100) — −50 chosen to stay short of the optimum,
+  because early is the forgiven direction and the English head is unmeasured (it
+  carries 0). **Falsified, do not re-try:** snapping each start to the first clear rise
+  of the stem's RMS envelope within 60-100 ms BACK (and 0-20 ms forward) of the CTC
+  start. For unvoiced syllables it never helps (within 50 ms 77.3% -> 76.5-77.2%;
+  the class is already early, and a sung consonant's energy rise is not reliably
+  before the vowel's); for vowel syllables it helps a little alone (77.3% -> 78.2%,
+  vowel median +62 -> +52 ms) and HURTS once the -50 ms shift is in (82.1% -> 79.0-81.9%
+  for every window and rise ratio tried). The flat per-class shift does the work.

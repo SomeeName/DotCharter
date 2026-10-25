@@ -295,6 +295,13 @@ internal static class RichProjectFactory
             Frets = new Dictionary<int, int> { [3] = 12, [4] = 14, [5] = 12 },
             Fingers = new Dictionary<int, int> { [3] = 1, [4] = 3, [5] = 1 }
         });
+        // No name on purpose.
+        arr.ChordTemplates.Add(new ChordTemplate
+        {
+            Id = 2, Name = "", Unnamed = true,
+            Frets = new Dictionary<int, int> { [0] = 3, [1] = 5 },
+            Fingers = new Dictionary<int, int> { [0] = 1, [1] = 3 }
+        });
         arr.FretHandMuteTemplates.Add(new ChordTemplate
         // Fingerless (#609) on the one template that has no fingers anyway.
         { Id = 0, Name = "mute", Fingerless = true, Frets = new Dictionary<int, int> { [0] = 5, [1] = 5 } });

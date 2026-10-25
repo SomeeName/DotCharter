@@ -219,8 +219,8 @@ public sealed class AppServiceGraphTests
     // build (#889); a public build registers the .dcsong source alone.
     private static readonly string[] KnownMultiRegistrations =
     [
-        "DotCharter.Presentation.Screens.Settings.ISettingsChangeSource x12",
-        "DotCharter.Presentation.Screens.Settings.ISettingsTab x12",
+        "DotCharter.Presentation.Screens.Settings.ISettingsChangeSource x13",
+        "DotCharter.Presentation.Screens.Settings.ISettingsTab x13",
         "DotCharter.Services.Editing.Validation.IArrangementRule x16",
         .. DotCharter.Services.Plugins.PluginLoader.Declared(typeof(DotCharter.UI.App).Assembly).Count == 0
             ? Array.Empty<string>()

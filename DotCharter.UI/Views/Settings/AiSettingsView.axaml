@@ -3,349 +3,361 @@
              xmlns:contracts="using:DotCharter.Presentation.Contracts.Settings"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              xmlns:ctl="using:DotCharter.Tone.UI.Controls"
+             xmlns:shell="using:DotCharter.UI.Views.Shell"
              x:Class="DotCharter.UI.Views.Settings.AiSettingsView"
              x:DataType="contracts:IAiSettingsScreen"
              x:CompileBindings="True">
 
     <!--
-        Settings > AI: which model answers "Design a tone", then the local model
-        and tone library "Match from audio" uses as a prior. Every row's
+        Settings > AI & models: which model answers "Design a tone", then the local model
+        and tone library "Match from audio" uses as a prior, then stem separation and
+        the lyric auto-sync models. Every row's
         IsVisible is the contract's — it already folds in both the search and
         whether the chosen provider wants the row, so nothing is decided here.
     -->
 
     <UserControl.Styles>
         <StyleInclude Source="avares://DotCharter/Views/Settings/SettingsStyles.axaml" />
-        <Style Selector="TextBlock.aiStatus">
-            <Setter Property="TextWrapping" Value="Wrap" />
-            <Setter Property="Margin" Value="0,4,0,12" />
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
-        </Style>
-        <Style Selector="TextBlock.aiStatus.error">
-            <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
-        </Style>
         <Style Selector="SelectableTextBlock.error">
             <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
         </Style>
     </UserControl.Styles>
 
     <ScrollViewer Padding="0,8,14,8" VerticalScrollBarVisibility="Auto">
-        <ctl:MasonryPanel Classes="SettingsFlow" Margin="0,0,0,72">
+        <StackPanel Margin="0,0,0,72">
+            <ctl:MasonryPanel Classes="SettingsFlow">
 
-            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" x:Name="AiProviderGroup"
-                    IsVisible="{Binding IsProviderGroupVisible}">
-                <StackPanel>
-                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
-                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
-                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSparkles}" />
-                        </Border>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Tone}" />
-                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Ai_Title}" />
-                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Ai_Subtitle}" />
-                        </StackPanel>
-                    </Grid>
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup First" x:Name="AiProviderGroup"
+                        IsVisible="{Binding IsProviderGroupVisible}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSparkles}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Tone}" />
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Ai_Title}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Ai_Subtitle}" />
+                            </StackPanel>
+                        </Grid>
 
-                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiUnavailableNote"
-                               TextWrapping="Wrap"
-                               Text="{localization:Loc Ai_Unavailable}"
-                               IsVisible="{Binding IsUnavailableNoteVisible}" />
+                        <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiUnavailableNote"
+                                   TextWrapping="Wrap"
+                                   Text="{localization:Loc Ai_Unavailable}"
+                                   IsVisible="{Binding IsUnavailableNoteVisible}" />
 
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsProviderRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_ProviderLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_ProviderDesc}" />
-                        </StackPanel>
-                        <ComboBox VerticalAlignment="Top" Grid.Column="1" x:Name="AiProviderPicker"
-                                  HorizontalAlignment="Stretch"
-                                  ItemsSource="{Binding Providers}"
-                                  SelectedItem="{Binding SelectedProvider, Mode=TwoWay}"
-                                  IsEnabled="{Binding IsAvailable}"
-                                  AutomationProperties.Name="{localization:Loc Ai_ProviderLabel}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="contracts:IAiProviderOption">
-                                    <TextBlock Text="{Binding Label}" IsEnabled="{Binding IsAvailable}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                    </Grid>
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsProviderRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_ProviderLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_ProviderDesc}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Top" Grid.Column="1" x:Name="AiProviderPicker"
+                                      HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding Providers}"
+                                      SelectedItem="{Binding SelectedProvider, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsAvailable}"
+                                      AutomationProperties.Name="{localization:Loc Ai_ProviderLabel}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IAiProviderOption">
+                                        <TextBlock Text="{Binding Label}" IsEnabled="{Binding IsAvailable}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
 
-                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiClaudeCliNote"
-                               TextWrapping="Wrap"
-                               Text="{localization:Loc Ai_ClaudeCli_Note}"
-                               IsVisible="{Binding IsClaudeCliNoteVisible}" />
+                        <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiClaudeCliNote"
+                                   TextWrapping="Wrap"
+                                   Text="{localization:Loc Ai_ClaudeCli_Note}"
+                                   IsVisible="{Binding IsClaudeCliNoteVisible}" />
 
-                    <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiCodexCliNote"
-                               TextWrapping="Wrap"
-                               Text="{localization:Loc Ai_CodexCli_Note}"
-                               IsVisible="{Binding IsCodexCliNoteVisible}" />
+                        <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiCodexCliNote"
+                                   TextWrapping="Wrap"
+                                   Text="{localization:Loc Ai_CodexCli_Note}"
+                                   IsVisible="{Binding IsCodexCliNoteVisible}" />
 
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsModelRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_ModelLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{Binding ModelDesc}" />
-                        </StackPanel>
-                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
-                            <TextBox x:Name="AiModelBox"
-                                     Text="{Binding ModelId, Mode=TwoWay}"
-                                     IsEnabled="{Binding IsAvailable}"
-                                     PlaceholderText="{localization:Loc Ai_ModelPlaceholder}"
-                                     AutomationProperties.Name="{localization:Loc Ai_ModelLabel}" />
-                            <!-- Content-sized and wrapping: two equal columns
-                                 would size to the shorter name and slice the
-                                 other one in German. -->
-                            <WrapPanel x:Name="AiClaudePresets"
-                                       ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right"
-                                       IsVisible="{Binding AreClaudeModelPresetsVisible}">
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_Preset_ClaudeHaiku}"
-                                        Command="{Binding UseClaudeHaikuCommand}" />
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_Preset_ClaudeOpus}"
-                                        Command="{Binding UseClaudeOpusCommand}" />
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_Preset_ClaudeSonnet}"
-                                        Command="{Binding UseClaudeSonnetCommand}" />
-                            </WrapPanel>
-                            <WrapPanel x:Name="AiCodexPresets"
-                                       ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right"
-                                       IsVisible="{Binding AreCodexModelPresetsVisible}">
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_Preset_CodexSol}"
-                                        Command="{Binding UseCodexSolCommand}" />
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_Preset_CodexLuna}"
-                                        Command="{Binding UseCodexLunaCommand}" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Grid>
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsModelRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_ModelLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{Binding ModelDesc}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                                <TextBox x:Name="AiModelBox"
+                                         Text="{Binding ModelId, Mode=TwoWay}"
+                                         IsEnabled="{Binding IsAvailable}"
+                                         PlaceholderText="{localization:Loc Ai_ModelPlaceholder}"
+                                         AutomationProperties.Name="{localization:Loc Ai_ModelLabel}" />
+                                <!-- Content-sized and wrapping: two equal columns
+                                     would size to the shorter name and slice the
+                                     other one in German. -->
+                                <WrapPanel x:Name="AiClaudePresets"
+                                           ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right"
+                                           IsVisible="{Binding AreClaudeModelPresetsVisible}">
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_Preset_ClaudeHaiku}"
+                                            Command="{Binding UseClaudeHaikuCommand}" />
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_Preset_ClaudeOpus}"
+                                            Command="{Binding UseClaudeOpusCommand}" />
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_Preset_ClaudeSonnet}"
+                                            Command="{Binding UseClaudeSonnetCommand}" />
+                                </WrapPanel>
+                                <WrapPanel x:Name="AiCodexPresets"
+                                           ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right"
+                                           IsVisible="{Binding AreCodexModelPresetsVisible}">
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_Preset_CodexSol}"
+                                            Command="{Binding UseCodexSolCommand}" />
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_Preset_CodexLuna}"
+                                            Command="{Binding UseCodexLunaCommand}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Grid>
 
-                    <!-- Reasoning (#603), beside the model it is sent with. Where this provider or
-                         model cannot take a level, the picker is disabled and the description
-                         says why; the description itself stays readable, so it is not disabled. -->
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
-                          x:Name="AiEffortRow"
-                          IsVisible="{Binding IsEffortRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_EffortLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="AiEffortDesc"
-                                       Text="{Binding Reasoning.Description}" />
-                        </StackPanel>
-                        <ComboBox VerticalAlignment="Top" Grid.Column="1" x:Name="AiEffortPicker"
-                                  HorizontalAlignment="Stretch"
-                                  ItemsSource="{Binding Reasoning.Levels}"
-                                  SelectedItem="{Binding Reasoning.Selected, Mode=TwoWay}"
-                                  AutomationProperties.Name="{localization:Loc Ai_EffortLabel}">
-                            <ComboBox.IsEnabled>
-                                <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                    <Binding Path="IsAvailable" />
-                                    <Binding Path="Reasoning.IsSupported" />
-                                </MultiBinding>
-                            </ComboBox.IsEnabled>
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="contracts:IAiEffortOption">
-                                    <TextBlock Text="{Binding Label}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                    </Grid>
+                        <!-- Reasoning (#603), beside the model it is sent with. Where this provider or
+                             model cannot take a level, the picker is disabled and the description
+                             says why; the description itself stays readable, so it is not disabled. -->
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              x:Name="AiEffortRow"
+                              IsVisible="{Binding IsEffortRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_EffortLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="AiEffortDesc"
+                                           Text="{Binding Reasoning.Description}" />
+                            </StackPanel>
+                            <ComboBox VerticalAlignment="Top" Grid.Column="1" x:Name="AiEffortPicker"
+                                      HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding Reasoning.Levels}"
+                                      SelectedItem="{Binding Reasoning.Selected, Mode=TwoWay}"
+                                      AutomationProperties.Name="{localization:Loc Ai_EffortLabel}">
+                                <ComboBox.IsEnabled>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="IsAvailable" />
+                                        <Binding Path="Reasoning.IsSupported" />
+                                    </MultiBinding>
+                                </ComboBox.IsEnabled>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="contracts:IAiEffortOption">
+                                        <TextBlock Text="{Binding Label}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
 
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsCliPathRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{Binding CliPathLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{Binding CliPathDesc}" />
-                        </StackPanel>
-                        <TextBox VerticalAlignment="Top" Grid.Column="1" x:Name="AiCliPathBox"
-                                 Text="{Binding BaseUrl, Mode=TwoWay}"
-                                 IsEnabled="{Binding IsAvailable}"
-                                 PlaceholderText="{localization:Loc Ai_CliPathPlaceholder}"
-                                 AutomationProperties.Name="{Binding CliPathLabel}" />
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsBaseUrlRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_BaseUrlLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_BaseUrlDesc}" />
-                        </StackPanel>
-                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
-                            <TextBox x:Name="AiBaseUrlBox"
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsCliPathRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{Binding CliPathLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{Binding CliPathDesc}" />
+                            </StackPanel>
+                            <TextBox VerticalAlignment="Top" Grid.Column="1" x:Name="AiCliPathBox"
                                      Text="{Binding BaseUrl, Mode=TwoWay}"
                                      IsEnabled="{Binding IsAvailable}"
-                                     AutomationProperties.Name="{localization:Loc Ai_BaseUrlLabel}" />
-                            <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_Preset_LmStudio}"
-                                        Command="{Binding UseLmStudioCommand}" />
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_Preset_Ollama}"
-                                        Command="{Binding UseOllamaCommand}" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Grid>
+                                     PlaceholderText="{localization:Loc Ai_CliPathPlaceholder}"
+                                     AutomationProperties.Name="{Binding CliPathLabel}" />
+                        </Grid>
 
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsApiKeyRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_ApiKeyLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_ApiKeyDesc}" />
-                        </StackPanel>
-                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
-                            <TextBox x:Name="AiApiKeyBox" PasswordChar="●"
-                                     Text="{Binding ApiKeyEntry, Mode=TwoWay}"
-                                     IsEnabled="{Binding IsAvailable}"
-                                     AutomationProperties.Name="{localization:Loc Ai_ApiKeyLabel}" />
-                            <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiKeySessionNote"
-                                       TextWrapping="Wrap"
-                                       Text="{localization:Loc Ai_KeySessionOnly}"
-                                       IsVisible="{Binding IsKeySessionOnlyNoteVisible}" />
-                            <StackPanel Orientation="Horizontal" Spacing="10"
-                                        HorizontalAlignment="Right">
-                                <TextBlock Theme="{StaticResource SettingsValueText}" Classes="ValueText" x:Name="AiKeyState"
-                                           VerticalAlignment="Center"
-                                           Text="{Binding KeyStateText}" />
-                                <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
-                                        Content="{localization:Loc Ai_ClearKey}"
-                                        Command="{Binding ClearKeyCommand}"
-                                        IsVisible="{Binding HasStoredKey}" />
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsBaseUrlRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_BaseUrlLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_BaseUrlDesc}" />
                             </StackPanel>
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsUseLibraryTonesRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_UseLibraryTonesLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_UseLibraryTonesDesc}" />
-                        </StackPanel>
-                        <CheckBox Grid.Column="1" x:Name="AiUseLibraryTones"
-                                  VerticalAlignment="Center"
-                                  Content="{localization:Loc Ai_UseLibraryTonesCheck}"
-                                  IsChecked="{Binding UseLibraryTones, Mode=TwoWay}"
-                                  IsEnabled="{Binding IsAvailable}"
-                                  AutomationProperties.Name="{localization:Loc Ai_UseLibraryTonesLabel}" />
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsWebResearchRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_WebResearchLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_WebResearchDesc}" />
-                        </StackPanel>
-                        <CheckBox Grid.Column="1" x:Name="AiWebResearch"
-                                  VerticalAlignment="Center"
-                                  Content="{localization:Loc Ai_WebResearchCheck}"
-                                  IsChecked="{Binding WebResearch, Mode=TwoWay}"
-                                  IsEnabled="{Binding IsAvailable}"
-                                  AutomationProperties.Name="{localization:Loc Ai_WebResearchLabel}" />
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
-                          IsVisible="{Binding IsTestRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_TestLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_TestDesc}" />
-                        </StackPanel>
-                        <Button VerticalAlignment="Top" Grid.Column="1" Theme="{StaticResource PrimaryButton}" Classes="Primary" x:Name="AiTestButton"
-                                HorizontalAlignment="Right"
-                                Content="{localization:Loc Ai_TestConnection}"
-                                Command="{Binding TestConnectionCommand}" />
-                    </Grid>
-
-                    <TextBlock Classes="aiStatus" x:Name="AiStatus"
-                               Classes.error="{Binding IsStatusError}"
-                               Text="{Binding StatusText}"
-                               IsVisible="{Binding HasStatus}" />
-                </StackPanel>
-            </Border>
-
-            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" x:Name="AiMatchModelGroup"
-                    IsVisible="{Binding Match.IsGroupVisible}">
-                <StackPanel>
-                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
-                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
-                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSparkles}" />
-                        </Border>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Tone}" />
-                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle"
-                                       Text="{localization:Loc Settings_Ai_MatchModel_Title}" />
-                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle"
-                                       Text="{localization:Loc Settings_Ai_MatchModel_Subtitle}" />
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Each file is a ROW: what it is and any progress on the left,
-                         its state then its actions in the control column. The
-                         bars are indeterminate on purpose: the release-asset
-                         fetcher reports STEPS, not a fraction. -->
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
-                          IsVisible="{Binding Match.IsModelRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"
-                                       Text="{localization:Loc Settings_Ai_MatchModel_StatusLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="AiMatchModelDetail"
-                                       Text="{Binding Match.ModelDetail}"
-                                       IsVisible="{Binding Match.HasModelDetail}" />
-                            <ProgressBar Margin="0,8,0,0" Height="4" IsIndeterminate="True"
-                                         IsVisible="{Binding Match.IsModelDownloading}" />
-                        </StackPanel>
-                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="10">
-                            <SelectableTextBlock x:Name="AiMatchModelStatus" Classes="ValueText"
-                                                 Classes.error="{Binding Match.ModelIsError}"
-                                                 Text="{Binding Match.ModelStatus}" />
-                            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
-                                <Button Classes="RowAction" x:Name="AiMatchModelDownload"
-                                        Content="{localization:Loc Settings_Ai_MatchModel_Download}"
-                                        Command="{Binding Match.DownloadModelCommand}"
-                                        IsVisible="{Binding Match.CanDownloadModel}" />
-                                <Button Classes="RowAction" x:Name="AiMatchModelCancel"
-                                        Content="{localization:Loc Action_Cancel}"
-                                        Command="{Binding Match.CancelModelDownloadCommand}"
-                                        IsVisible="{Binding Match.IsModelDownloading}" />
-                                <Button Classes="RowAction" x:Name="AiMatchModelOpenFolder"
-                                        Content="{localization:Loc Settings_Ai_MatchModel_OpenFolder}"
-                                        ToolTip.Tip="{Binding Match.ModelDirectory}"
-                                        Command="{Binding Match.OpenFolderCommand}" />
-                                <Button Classes="RowAction" x:Name="AiMatchModelRefresh"
-                                        Content="{localization:Loc Settings_StemModels_RefreshStatus}"
-                                        Command="{Binding Match.RefreshCommand}" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
-                          IsVisible="{Binding Match.IsLibraryRowVisible}">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"
-                                       Text="{localization:Loc Settings_Ai_MatchLibrary_StatusLabel}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="AiMatchLibraryDetail"
-                                       Text="{Binding Match.LibraryDetail}"
-                                       IsVisible="{Binding Match.HasLibraryDetail}" />
-                            <ProgressBar Margin="0,8,0,0" Height="4" IsIndeterminate="True"
-                                         IsVisible="{Binding Match.IsLibraryDownloading}" />
-                        </StackPanel>
-                        <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="10">
-                            <SelectableTextBlock x:Name="AiMatchLibraryStatus" Classes="ValueText"
-                                                 Classes.error="{Binding Match.LibraryIsError}"
-                                                 Text="{Binding Match.LibraryStatus}" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Classes="RowAction" x:Name="AiMatchLibraryDownload"
-                                        Content="{localization:Loc Settings_Ai_MatchLibrary_Download}"
-                                        Command="{Binding Match.DownloadLibraryCommand}"
-                                        IsVisible="{Binding Match.CanDownloadLibrary}" />
-                                <Button Classes="RowAction" x:Name="AiMatchLibraryCancel"
-                                        Content="{localization:Loc Action_Cancel}"
-                                        Command="{Binding Match.CancelLibraryDownloadCommand}"
-                                        IsVisible="{Binding Match.IsLibraryDownloading}" />
+                            <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                                <TextBox x:Name="AiBaseUrlBox"
+                                         Text="{Binding BaseUrl, Mode=TwoWay}"
+                                         IsEnabled="{Binding IsAvailable}"
+                                         AutomationProperties.Name="{localization:Loc Ai_BaseUrlLabel}" />
+                                <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_Preset_LmStudio}"
+                                            Command="{Binding UseLmStudioCommand}" />
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_Preset_Ollama}"
+                                            Command="{Binding UseOllamaCommand}" />
+                                </WrapPanel>
                             </StackPanel>
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Border>
-        </ctl:MasonryPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsApiKeyRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_ApiKeyLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_ApiKeyDesc}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
+                                <TextBox x:Name="AiApiKeyBox" PasswordChar="●"
+                                         Text="{Binding ApiKeyEntry, Mode=TwoWay}"
+                                         IsEnabled="{Binding IsAvailable}"
+                                         AutomationProperties.Name="{localization:Loc Ai_ApiKeyLabel}" />
+                                <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" x:Name="AiKeySessionNote"
+                                           TextWrapping="Wrap"
+                                           Text="{localization:Loc Ai_KeySessionOnly}"
+                                           IsVisible="{Binding IsKeySessionOnlyNoteVisible}" />
+                                <StackPanel Orientation="Horizontal" Spacing="10"
+                                            HorizontalAlignment="Right">
+                                    <TextBlock Theme="{StaticResource SettingsValueText}" Classes="ValueText" x:Name="AiKeyState"
+                                               VerticalAlignment="Center"
+                                               Text="{Binding KeyStateText}" />
+                                    <Button Theme="{StaticResource SubtleButton}" Classes="Subtle"
+                                            Content="{localization:Loc Ai_ClearKey}"
+                                            Command="{Binding ClearKeyCommand}"
+                                            IsVisible="{Binding HasStoredKey}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsUseLibraryTonesRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_UseLibraryTonesLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_UseLibraryTonesDesc}" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" x:Name="AiUseLibraryTones"
+                                      VerticalAlignment="Center"
+                                      Content="{localization:Loc Ai_UseLibraryTonesCheck}"
+                                      IsChecked="{Binding UseLibraryTones, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsAvailable}"
+                                      AutomationProperties.Name="{localization:Loc Ai_UseLibraryTonesLabel}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsWebResearchRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_WebResearchLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_WebResearchDesc}" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" x:Name="AiWebResearch"
+                                      VerticalAlignment="Center"
+                                      Content="{localization:Loc Ai_WebResearchCheck}"
+                                      IsChecked="{Binding WebResearch, Mode=TwoWay}"
+                                      IsEnabled="{Binding IsAvailable}"
+                                      AutomationProperties.Name="{localization:Loc Ai_WebResearchLabel}" />
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                              IsVisible="{Binding IsTestRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Ai_TestLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Ai_TestDesc}" />
+                            </StackPanel>
+                            <Button VerticalAlignment="Top" Grid.Column="1" Theme="{StaticResource PrimaryButton}" Classes="Primary" x:Name="AiTestButton"
+                                    HorizontalAlignment="Right"
+                                    Content="{localization:Loc Ai_TestConnection}"
+                                    Command="{Binding TestConnectionCommand}" />
+                        </Grid>
+
+                        <!-- its rules sit on the line itself: as page-level rules they
+                             attached to every TextBlock of the hosted sections too -->
+                        <TextBlock Classes="aiStatus" x:Name="AiStatus"
+                                   TextWrapping="Wrap" Margin="0,4,0,12"
+                                   Classes.error="{Binding IsStatusError}"
+                                   Text="{Binding StatusText}"
+                                   IsVisible="{Binding HasStatus}">
+                            <TextBlock.Styles>
+                                <Style Selector="TextBlock.aiStatus">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+                                </Style>
+                                <Style Selector="TextBlock.aiStatus.error">
+                                    <Setter Property="Foreground" Value="{DynamicResource DangerColor}" />
+                                </Style>
+                            </TextBlock.Styles>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" x:Name="AiMatchModelGroup"
+                        IsVisible="{Binding Match.IsGroupVisible}">
+                    <StackPanel>
+                        <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                            <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
+                                <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSparkles}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Tone}" />
+                                <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle"
+                                           Text="{localization:Loc Settings_Ai_MatchModel_Title}" />
+                                <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle"
+                                           Text="{localization:Loc Settings_Ai_MatchModel_Subtitle}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Each file is a ROW: what it is and any progress on the left,
+                             its state then its actions in the control column. The
+                             bars are indeterminate on purpose: the release-asset
+                             fetcher reports STEPS, not a fraction. -->
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                              IsVisible="{Binding Match.IsModelRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"
+                                           Text="{localization:Loc Settings_Ai_MatchModel_StatusLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="AiMatchModelDetail"
+                                           Text="{Binding Match.ModelDetail}"
+                                           IsVisible="{Binding Match.HasModelDetail}" />
+                                <ProgressBar Margin="0,8,0,0" Height="4" IsIndeterminate="True"
+                                             IsVisible="{Binding Match.IsModelDownloading}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="10">
+                                <SelectableTextBlock x:Name="AiMatchModelStatus" Classes="ValueText"
+                                                     Classes.error="{Binding Match.ModelIsError}"
+                                                     Text="{Binding Match.ModelStatus}" />
+                                <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+                                    <Button Classes="RowAction" x:Name="AiMatchModelDownload"
+                                            Content="{localization:Loc Settings_Ai_MatchModel_Download}"
+                                            Command="{Binding Match.DownloadModelCommand}"
+                                            IsVisible="{Binding Match.CanDownloadModel}" />
+                                    <Button Classes="RowAction" x:Name="AiMatchModelCancel"
+                                            Content="{localization:Loc Action_Cancel}"
+                                            Command="{Binding Match.CancelModelDownloadCommand}"
+                                            IsVisible="{Binding Match.IsModelDownloading}" />
+                                    <Button Classes="RowAction" x:Name="AiMatchModelOpenFolder"
+                                            Content="{localization:Loc Settings_Ai_MatchModel_OpenFolder}"
+                                            ToolTip.Tip="{Binding Match.ModelDirectory}"
+                                            Command="{Binding Match.OpenFolderCommand}" />
+                                    <Button Classes="RowAction" x:Name="AiMatchModelRefresh"
+                                            Content="{localization:Loc Settings_StemModels_RefreshStatus}"
+                                            Command="{Binding Match.RefreshCommand}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow" ColumnDefinitions="*,300"
+                              IsVisible="{Binding Match.IsLibraryRowVisible}">
+                            <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                                <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle"
+                                           Text="{localization:Loc Settings_Ai_MatchLibrary_StatusLabel}" />
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" x:Name="AiMatchLibraryDetail"
+                                           Text="{Binding Match.LibraryDetail}"
+                                           IsVisible="{Binding Match.HasLibraryDetail}" />
+                                <ProgressBar Margin="0,8,0,0" Height="4" IsIndeterminate="True"
+                                             IsVisible="{Binding Match.IsLibraryDownloading}" />
+                            </StackPanel>
+                            <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="10">
+                                <SelectableTextBlock x:Name="AiMatchLibraryStatus" Classes="ValueText"
+                                                     Classes.error="{Binding Match.LibraryIsError}"
+                                                     Text="{Binding Match.LibraryStatus}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="RowAction" x:Name="AiMatchLibraryDownload"
+                                            Content="{localization:Loc Settings_Ai_MatchLibrary_Download}"
+                                            Command="{Binding Match.DownloadLibraryCommand}"
+                                            IsVisible="{Binding Match.CanDownloadLibrary}" />
+                                    <Button Classes="RowAction" x:Name="AiMatchLibraryCancel"
+                                            Content="{localization:Loc Action_Cancel}"
+                                            Command="{Binding Match.CancelLibraryDownloadCommand}"
+                                            IsVisible="{Binding Match.IsLibraryDownloading}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </ctl:MasonryPanel>
+            <!-- Stem separation and the lyric models are tabs of their own (their own
+                 load, save and search) drawn here as sections: SettingsRail.Hosted. -->
+            <shell:ScreenSlot x:Name="AiStemModelsSection" Screen="{x:Type contracts:IStemModelsSettingsScreen}" />
+            <shell:ScreenSlot x:Name="AiLyricModelsSection" Screen="{x:Type contracts:ILyricModelsSettingsScreen}" />
+        </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -5,6 +5,7 @@ using DotCharter.Presentation.Contracts.Settings;
 using DotCharter.Services.Editing;
 using DotCharter.Services.Editing.Collisions;
 using DotCharter.Services.Infrastructure.Configuration;
+using DotCharter.Services.Infrastructure.Graphics;
 using DotCharter.Tone.Infrastructure.Configuration;
 using DotCharter.Tone.Logging;
 using DotCharter.Services.State;
@@ -12,20 +13,26 @@ using DotCharter.Services.State;
 namespace DotCharter.Presentation.Screens.Settings;
 
 /// <summary>
-///     Settings ▸ Editor: editing rules, the paste filter, new-project defaults
-///     and Guitar Pro import. Saving re-applies the minimum note distance to
-///     the open project and redraws the chart, because that rule is enforced on
-///     the chart itself rather than read at the next edit.
+///     Settings ▸ Editor: how the timeline reads (String order, the 2D timeline's
+///     look), editing rules, the paste filter and new-project defaults. Saving
+///     re-applies the minimum note distance to the open project and redraws the
+///     chart, because that rule is enforced on the chart itself rather than read
+///     at the next edit.
 /// </summary>
 public sealed partial class EditorSettingsViewModel : ObservableObject,
     IEditorSettingsScreen, ISettingsTab, ISettingsChangeSource
 {
     private static readonly SettingsTabRows Rows = new("editor.",
     [
+        new("Settings_TimelineView_Title", "Settings_TimelineView_Subtitle",
+            new("stringOrder", "Settings_StringOrder", "Settings_Tip_StringOrder"),
+            new("timeline2DPolish", "Settings_Graphics_Timeline2DPolish", "Settings_Graphics_Timeline2DPolish_Desc"),
+            new("timeline2DLaneTint", "Settings_Graphics_Timeline2DLaneTint", "Settings_Graphics_Timeline2DLaneTint_Desc")),
         new("Settings_ChartEditing", "Settings_ChartEditingSubtitle",
             new("fastInput", "Settings_FastChartingInput", "Settings_Tip_FastChartingInput"),
             new("syncHandShape", "Settings_SyncHandShapeToChord", "Settings_Tip_SyncHandShapeToChord"),
             new("syncAnchor", "Settings_SyncAnchorToFingering", "Settings_Tip_SyncAnchorToFingering"),
+            new("autoNameChords", "Settings_AutoNameNewChords", "Settings_Tip_AutoNameNewChords"),
             new("suppressDoubleStop", "Settings_SuppressDoubleStopNames", "Settings_Tip_SuppressDoubleStopNames"),
             new("keepPowerChords", "Settings_KeepPowerChordNames", "Settings_Tip_KeepPowerChordNames"),
             new("musicalChordNames", "Settings_MusicalChordNames", "Settings_Tip_MusicalChordNames"),
@@ -41,46 +48,36 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
             new("charterName", "Settings_DefaultCharterName", "Settings_Tip_DefaultCharterName"),
             new("silencePadding", "Settings_SilencePadding", "Settings_Tip_SilencePadding"),
             new("leadingSilence", "Settings_LeadingSilence", "Settings_Tip_LeadingSilence"),
-            new("trailingSilence", "Settings_TrailingSilence", "Settings_Tip_TrailingSilence")),
-        new("Settings_Import_Title", "Settings_Import_Subtitle",
-            new("gpShortNotes", "Settings_GpTruncateShortNotes", "Settings_Tip_GpTruncateShortNotes"),
-            new("gpShortChords", "Settings_GpTruncateShortChords", "Settings_Tip_GpTruncateShortChords"),
-            new("gpShortRests", "Settings_GpPreserveShortRests", "Settings_Tip_GpPreserveShortRests"),
-            new("latinLookup", "Settings_OnlineLatinNameLookup", "Settings_Tip_OnlineLatinNameLookup"),
-            new("gpBeatText", "Settings_GpBeatTextTechniques", "Settings_Tip_GpBeatTextTechniques"),
-            new("gpMarkers", "Settings_GpMarkersToSections", "Settings_Tip_GpMarkersToSections"),
-            new("gpTimeSignatures", "Settings_GpImportTimeSignatures", "Settings_Tip_GpImportTimeSignatures"),
-            new("gpMidBeatTempo", "Settings_GpDropMidBeatTempo", "Settings_Tip_GpDropMidBeatTempo"),
-            new("gpSlideIn", "Settings_GpSlideInDistance", "Settings_Tip_GpSlideInDistance"))
+            new("trailingSilence", "Settings_TrailingSilence", "Settings_Tip_TrailingSilence"))
     ]);
 
     /// <summary>The persisted values the footer counts: every settable contract property.</summary>
     private static readonly string[] Tracked =
     [
         nameof(UseFastChartingInput), nameof(SyncHandShapeToChordTemplate), nameof(SyncAnchorToChordFingering),
-        nameof(SuppressDoubleStopChordNames), nameof(KeepPowerChordNames), nameof(MusicalChordNames),
-        nameof(TappedHarmonicFretOffset),
+        nameof(AutoNameNewChords), nameof(SuppressDoubleStopChordNames), nameof(KeepPowerChordNames),
+        nameof(MusicalChordNames), nameof(TappedHarmonicFretOffset),
         nameof(LyricSpanWordGap),
         nameof(LyricSpanPhraseGap), nameof(MinNoteDistanceModeIndex), nameof(MinNoteDistanceMs),
         nameof(MinNoteDistanceDivisor), nameof(PasteIncludeNotes), nameof(PasteIncludeChords),
         nameof(PasteIncludeHandShapes), nameof(PasteIncludeFretAnchors), nameof(PasteIncludeEvents),
         nameof(PasteIncludeTones), nameof(DefaultCharterName), nameof(PadSilenceOnNewProject),
-        nameof(LeadingSilenceSeconds), nameof(TrailingSilenceSeconds), nameof(GpImportTruncateShortNotes),
-        nameof(GpImportTruncateShortChords), nameof(GpImportPreserveShortRests), nameof(OnlineLatinNameLookup),
-        nameof(GpImportBeatTextTechniques), nameof(GpImportMarkersToSections), nameof(GpImportTimeSignatures),
-        nameof(GpImportDropMidBeatTempoChanges), nameof(GpImportSlideInFretDistance)
+        nameof(LeadingSilenceSeconds), nameof(TrailingSilenceSeconds), nameof(StringOrderIndex),
+        nameof(Timeline2DPolish), nameof(Timeline2DLaneTint)
     ];
 
     private readonly IConfigurationService _config;
     private readonly ILocalizationService _localization;
     private readonly ProjectState _state;
     private readonly IChartEditorSurface _editor;
+    private readonly IGraphicsDeviceSettings _device;
     private readonly IAppLogger? _logger;
     private readonly SettingsChangeSet _changes = new();
 
     [ObservableProperty] private bool _useFastChartingInput;
     [ObservableProperty] private bool _syncHandShapeToChordTemplate = true;
     [ObservableProperty] private bool _syncAnchorToChordFingering;
+    [ObservableProperty] private bool _autoNameNewChords = true;
     [ObservableProperty] private bool _suppressDoubleStopChordNames = true;
     [ObservableProperty] private bool _keepPowerChordNames;
     [ObservableProperty] private bool _musicalChordNames;
@@ -104,27 +101,23 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
     [ObservableProperty] private bool _padSilenceOnNewProject = true;
     [ObservableProperty] private double _leadingSilenceSeconds = 10.0;
     [ObservableProperty] private double _trailingSilenceSeconds = 2.0;
-    [ObservableProperty] private bool _gpImportTruncateShortNotes = true;
-    [ObservableProperty] private bool _gpImportTruncateShortChords;
-    [ObservableProperty] private bool _gpImportPreserveShortRests = true;
-    [ObservableProperty] private bool _onlineLatinNameLookup = true;
-    [ObservableProperty] private bool _gpImportBeatTextTechniques = true;
-    [ObservableProperty] private bool _gpImportMarkersToSections;
-    [ObservableProperty] private bool _gpImportTimeSignatures = true;
-    [ObservableProperty] private bool _gpImportDropMidBeatTempoChanges;
-    [ObservableProperty] private int _gpImportSlideInFretDistance = 2;
+    [ObservableProperty] private int _stringOrderIndex;
+    [ObservableProperty] private bool _timeline2DPolish = true;
+    [ObservableProperty] private bool _timeline2DLaneTint;
 
     public EditorSettingsViewModel(
         IConfigurationService config,
         ILocalizationService localization,
         ProjectState state,
         IChartEditorSurface editor,
+        IGraphicsDeviceSettings device,
         IAppLogger? logger = null)
     {
         _config = config;
         _localization = localization;
         _state = state;
         _editor = editor;
+        _device = device;
         _logger = logger;
         _changes.TrackProperties(this, Rows.Prefix, Tracked, () => OnPropertyChanged(nameof(UnsavedSettings)));
         _changes.Rebaseline();
@@ -151,6 +144,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         UseFastChartingInput = config.UseFastChartingInput;
         SyncHandShapeToChordTemplate = config.SyncHandShapeToChordTemplate;
         SyncAnchorToChordFingering = config.SyncAnchorToChordFingering;
+        AutoNameNewChords = config.AutoNameNewChords;
         SuppressDoubleStopChordNames = config.SuppressDoubleStopChordNames;
         KeepPowerChordNames = config.KeepPowerChordNames;
         MusicalChordNames = config.ChordNamingStyle == ChordNamingStyle.Musical;
@@ -178,15 +172,9 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         LeadingSilenceSeconds = Math.Max(0, config.LeadingSilenceSeconds);
         TrailingSilenceSeconds = Math.Max(0, config.TrailingSilenceSeconds);
 
-        GpImportTruncateShortNotes = config.GpImportTruncateShortNotes;
-        GpImportTruncateShortChords = config.GpImportTruncateShortChords;
-        GpImportPreserveShortRests = config.GpImportPreserveShortRests;
-        OnlineLatinNameLookup = config.OnlineLatinNameLookup;
-        GpImportBeatTextTechniques = config.GpImportBeatTextTechniques;
-        GpImportMarkersToSections = config.GpImportMarkersToSections;
-        GpImportTimeSignatures = config.GpImportTimeSignatures;
-        GpImportDropMidBeatTempoChanges = config.GpImportDropMidBeatTempoChanges;
-        GpImportSlideInFretDistance = config.GpImportSlideInFretDistance;
+        StringOrderIndex = config.InvertStrings ? 1 : 0;
+        Timeline2DPolish = config.Timeline2DPolishEnabled;
+        Timeline2DLaneTint = config.Timeline2DLaneTint;
         Rebaseline();
     }
 
@@ -196,6 +184,7 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         config.UseFastChartingInput = UseFastChartingInput;
         config.SyncHandShapeToChordTemplate = SyncHandShapeToChordTemplate;
         config.SyncAnchorToChordFingering = SyncAnchorToChordFingering;
+        config.AutoNameNewChords = AutoNameNewChords;
         config.SuppressDoubleStopChordNames = SuppressDoubleStopChordNames;
         config.KeepPowerChordNames = KeepPowerChordNames;
         config.ChordNamingStyle = MusicalChordNames ? ChordNamingStyle.Musical : ChordNamingStyle.Eof;
@@ -223,15 +212,9 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
         config.LeadingSilenceSeconds = Math.Max(0, LeadingSilenceSeconds);
         config.TrailingSilenceSeconds = Math.Max(0, TrailingSilenceSeconds);
 
-        config.GpImportTruncateShortNotes = GpImportTruncateShortNotes;
-        config.GpImportTruncateShortChords = GpImportTruncateShortChords;
-        config.GpImportPreserveShortRests = GpImportPreserveShortRests;
-        config.OnlineLatinNameLookup = OnlineLatinNameLookup;
-        config.GpImportBeatTextTechniques = GpImportBeatTextTechniques;
-        config.GpImportMarkersToSections = GpImportMarkersToSections;
-        config.GpImportTimeSignatures = GpImportTimeSignatures;
-        config.GpImportDropMidBeatTempoChanges = GpImportDropMidBeatTempoChanges;
-        config.GpImportSlideInFretDistance = Math.Clamp(GpImportSlideInFretDistance, 1, 3);
+        config.InvertStrings = StringOrderIndex == 1;
+        config.Timeline2DPolishEnabled = Timeline2DPolish;
+        config.Timeline2DLaneTint = Timeline2DLaneTint;
 
         _config.SaveAppConfig(config);
         ChartSpacingEnforcer.EnforceProject(_state.ActiveProject, config);
@@ -241,6 +224,24 @@ public sealed partial class EditorSettingsViewModel : ObservableObject,
             $"Editor settings saved. Min note distance mode={config.MinNoteDistanceMode}, " +
             $"divisor={config.MinNoteDistanceDivisor}, ms={config.MinNoteDistanceMs:0.###}.");
         Rebaseline();
+    }
+
+    /// <summary>The timeline turns as the order is picked; Revert puts the saved one back.</summary>
+    partial void OnTimeline2DPolishChanged(bool value) => ApplyTimelineVisuals();
+
+    partial void OnTimeline2DLaneTintChanged(bool value) => ApplyTimelineVisuals();
+
+    /// <summary>Live, like the String order: the timeline shows a flip at once, and Revert puts it back.</summary>
+    private void ApplyTimelineVisuals()
+    {
+        _device.SetTimelineVisuals(Timeline2DPolish, Timeline2DLaneTint);
+        _editor.RequestRedraw();
+    }
+
+    partial void OnStringOrderIndexChanged(int value)
+    {
+        _state.InvertStrings = value == 1;
+        _editor.RequestRedraw();
     }
 
     public void Revert() => Load();

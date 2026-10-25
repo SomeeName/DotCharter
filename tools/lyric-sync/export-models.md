@@ -103,12 +103,24 @@ machine this note was written on. Everything here is INFERRED:
   which symbol wins per frame, not the fine structure of the distribution. The
   cost is 340 MB against 1.26 GB.
 - **Re-run the probes before publishing a new export.**
-  `LocalOnly_LyricAlignmentProbe` (romaji) and
-  `LocalOnly_LyricAlignmentPsarcProbe` (English). The per-model onset bias in
+  `LyricCorpusProbeTests` over the romaji and English corpus (recipe in
+  `docs/agents/services/lyric-autosync.md` § Probes). The per-model onset bias in
   `LyricModelCatalog` is a property of where *that* CTC head fires inside a
   syllable, so a different export can invalidate it.
+- **Strip `allowzero` before zipping a NEW archive.** The published v1 archives
+  still carry it and the app strips it in memory (`OnnxReshapeAllowZero`); a
+  re-export without it, uploaded as a v2 asset, would skip that work. torch.export writes `allowzero=1` on every
+  `Reshape`; DirectML rejects it and the graph silently falls back to the CPU
+  (~20x slower). No shape holds a zero, so removing the attribute changes
+  nothing on the CPU. With `DOTCHARTER_LYRIC_MODEL_DIRS` pointing at the
+  unpacked archives, `LyricModelGraphTests` scans each model file for it and
+  `LyricModelDirectMlSmokeTests` encodes on DirectML against the CPU (a stripped
+  model measured 98.75 % / 100 % argmax agreement; an unstripped one fails its first
+  DirectML encode at `Reshape node_view_1`). Strip with onnx: delete the `allowzero` attribute
+  from every `Reshape` node and save, nothing else.
 - **Publishing**: the archives are release assets named `lyric-align-v1.zip` and
-  `lyric-align-en-v1.zip`, versioned in the NAME so an app release need not
+  `lyric-align-en-v1.zip` (a stripped re-export would be `-v2`; none is published
+  yet, so the catalogue must not name one), versioned in the NAME so an app release need not
   re-upload them. Bump the name, the SHA-256 and the byte count in
   `LyricModelCatalog.MultilingualDownload` / `EnglishDownload` together — the
   hash is the whole integrity story, and a mismatch discards the download

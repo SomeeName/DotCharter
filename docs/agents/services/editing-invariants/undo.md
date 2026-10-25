@@ -89,7 +89,7 @@
   `StartingTone`, its derived `ToneNames`, and every `ToneChange.ToneName` — and
   the Song tab and the Tone designer each used to rewrite a different subset, so
   a rename "worked" where it was made and the export then found no definition.
-  Both callers (`SongOverviewViewModel`, `ToneDesignerViewModel.CommitPendingEdit`
+  Both callers (`MarkerGroupsViewModel`, `ToneDesignerViewModel.CommitPendingEdit`
   / `DeleteTone`) go through the verb; matching is trim- and case-insensitive
   like `UpsertToneDefinitionAction`, and undo gives each tone change back ITS OWN
   spelling (`RetargetToneChangesAction`). The definition's display NAME follows

@@ -1,3 +1,5 @@
+using DotCharter.Services.Editing.ChordShapes;
+using DotCharter.Services.Editing.HandShapes;
 using DotCharter.Services.State;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using ChordTemplate = DotCharter.Core.Domain.Guitar.ChordTemplate;
@@ -9,14 +11,16 @@ namespace DotCharter.Services.Editing.Highway.HighwayCommands;
 ///     One keyboard mutation verb applied to the whole selection — notes AND
 ///     chords — as ONE history entry.
 ///     <para>
-///         Chords carry two extra obligations a note does not. (1) Their per-
+///         Chords carry three extra obligations a note does not. (1) Their per-
 ///         string state lives on <c>ChordNote</c>s, so a per-string verb is
 ///         filtered by the <see cref="StringEditMask" /> while a whole-chord verb
 ///         writes the <c>Chord</c> itself. (2) A shape change (fret or string)
 ///         must resolve-or-create a <c>ChordTemplate</c> and repoint
 ///         <c>TemplateId</c> — templates are SHARED, and an rscp
 ///         <c>&lt;chordNote&gt;</c> has no <c>fret</c> attribute, so a fret
-///         written without repointing is silently discarded on save.
+///         written without repointing is silently discarded on save. (3) The hand shape over a
+///         repointed chord follows it onto the new template in the same history entry
+///         (<see cref="ChordHandShapeSync" />) while the sync is on.
 ///     </para>
 /// </summary>
 internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
@@ -86,7 +90,9 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
             actions.Insert(0, new AddChordTemplatesAction(arrangement.ChordTemplates, createdTemplates));
 
         if (actions.Count == 0) return false;
-        return history.Do(actions.Count == 1 ? actions[0] : new CompositeAction(actions));
+        // A fret or string change can leave the chord's old template with no user: it leaves in the same node.
+        return history.Do(StrandedShapes.Wrap(_targets.Arrangement,
+            actions.Count == 1 ? actions[0] : new CompositeAction(actions)));
     }
 
     /// <summary>
@@ -117,6 +123,7 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
     {
         var oldStates = new List<Chord>(chords.Count);
         var newStates = new List<Chord>(chords.Count);
+        var moves = new List<ChordHandShapeSync.ChordMove>();
 
         for (var i = 0; i < chords.Count; i++)
         {
@@ -133,6 +140,7 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
             {
                 newState.TemplateId = ChordTemplateResolver
                     .ResolveForChord(arrangement, newState, createdTemplates).Id;
+                moves.Add(new ChordHandShapeSync.ChordMove(chords[i], chords[i].TemplateId, newState.TemplateId));
             }
 
             oldStates.Add(oldState);
@@ -141,6 +149,14 @@ internal sealed class SelectedNoteMutationCommand : IHighwayEditCommand
 
         actions.Add(new MutateChordsAction(_targets.Chords, chords, oldStates, newStates,
             _targets.OnPostExecute, _mergeVerb));
+
+        // The hand shapes over the chords follow them onto the new templates, in the same undo node.
+        if (_targets.SyncedHandShapes is { } handShapes && moves.Count > 0)
+        {
+            var follow = ChordHandShapeSync.BuildAction(handShapes,
+                ChordHandShapeSync.Follow(handShapes, _targets.Chords, moves), _targets.OnPostExecute, _mergeVerb);
+            if (follow != null) actions.Add(follow);
+        }
     }
 
     /// <summary>Did the (string → fret) set change? That — not any technique

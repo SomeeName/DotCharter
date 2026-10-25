@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
-             xmlns:converters="using:DotCharter.UI.Converters"
+             xmlns:inspector="using:DotCharter.UI.Views.Editor.Inspector"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.SongInspectorView"
              x:DataType="viewModels:SongOverviewViewModel">
@@ -52,18 +52,6 @@
                             Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
                             IsVisible="{Binding #SongRailSectionsEntry.IsChecked}" />
                 </Panel>
-                <Panel x:Name="SongRailPhrases">
-                    <ToggleButton x:Name="SongRailPhrasesEntry" Tag="SongPhrasesBody" Theme="{StaticResource FireSegmentItemToggle}" Classes="FireSegmentItem"
-                                  Width="30" Height="30" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                  AutomationProperties.Name="{localization:Loc Inspector_Phrases}"
-                                  ToolTip.Tip="{localization:Loc Inspector_Phrases}" ToolTip.Placement="Right">
-                        <PathIcon Data="{DynamicResource IconPencil}" Width="13" Height="13" />
-                    </ToggleButton>
-                    <!-- the open section's accent bar -->
-                    <Border Width="2" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="{StaticResource FireRadiusBar}"
-                            Background="{DynamicResource FireAccent}" IsHitTestVisible="False"
-                            IsVisible="{Binding #SongRailPhrasesEntry.IsChecked}" />
-                </Panel>
             </StackPanel>
         </Border>
 
@@ -91,136 +79,18 @@
                                   IsChecked="{Binding KeyIsMinor, Mode=TwoWay}" />
                     </Grid>
 
-                    <StackPanel x:Name="SongTonesBody" IsVisible="{Binding #SongRailTonesEntry.IsChecked}" Spacing="{StaticResource SpaceXs}">
-                    <!-- An empty card said nothing at all; say why it is empty. -->
-                    <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption" TextWrapping="Wrap" IsVisible="{Binding !Tones.Count}"
-                               Text="{localization:Loc Inspector_Tones_None}" />
-                    <ItemsControl ItemsSource="{Binding Tones}" IsVisible="{Binding Tones.Count}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="viewModels:RenameableItem">
-                                <!-- A tone is renamed and deleted EVERYWHERE it is stored (#181).
-                                     The two marks under the row are its state: a placed key with
-                                     no definition, and why the last Apply was refused. -->
-                                <StackPanel Margin="0,2" Spacing="4">
-                                <Grid ColumnDefinitions="*,Auto,Auto,Auto"
-                                      ColumnSpacing="6">
-                                    <TextBox Grid.Column="0" Text="{Binding NewName, Mode=TwoWay}"
-                                             AutomationProperties.Name="{Binding OriginalName}" />
-                                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                                               Text="{Binding Count, StringFormat=(\{0\})}" Theme="{StaticResource LabelText}" Classes="Label" />
-                                    <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                            Content="{localization:Loc Action_Apply}"
-                                            Command="{Binding $parent[ItemsControl].((viewModels:SongOverviewViewModel)DataContext).RenameToneCommand}"
-                                            CommandParameter="{Binding}" />
-                                    <Button Grid.Column="3" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="✕"
-                                            ToolTip.Tip="{localization:Loc Action_Delete}"
-                                            AutomationProperties.Name="{localization:Loc Action_Delete}"
-                                            Command="{Binding $parent[ItemsControl].((viewModels:SongOverviewViewModel)DataContext).DeleteToneCommand}"
-                                            CommandParameter="{Binding}" />
-                                </Grid>
-                                <Border Classes="FieldIssue Warn" x:Name="ToneNotDefinedMark"
-                                        IsVisible="{Binding IsUndefined}"
-                                        ToolTip.Tip="{localization:Loc Inspector_Tones_NotDefinedTip}">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <PathIcon Grid.Column="0" Data="{DynamicResource IconInfo}"
-                                                  Margin="{StaticResource GapRightSm}" />
-                                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{localization:Loc Inspector_Tones_NotDefined}" />
-                                    </Grid>
-                                </Border>
-                                <Border Classes="FieldIssue Warn" x:Name="ToneRenameRefusal"
-                                        IsVisible="{Binding HasError}">
-                                    <Grid ColumnDefinitions="Auto,*">
-                                        <PathIcon Grid.Column="0" Data="{DynamicResource IconAlert}"
-                                                  Margin="{StaticResource GapRightSm}" />
-                                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{Binding Error}" />
-                                    </Grid>
-                                </Border>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    </StackPanel>
+                    <!-- The tones and the sections are named-marker lists in the Phrases panel's shape
+                         (MarkerGroupsView): a row per name folding open to its places, renamed in
+                         place and deleted as one undo step. A Panel around each, so the section
+                         prewarm (which measures a hidden root's VISIBLE children) builds the rows. -->
+                    <Panel x:Name="SongTonesBody" IsVisible="{Binding #SongRailTonesEntry.IsChecked}">
+                        <inspector:MarkerGroupsView x:Name="SongTonesList" DataContext="{Binding TonesPanel}" />
+                    </Panel>
 
-                    <!-- ListBox instead of ItemsControl: a dense arrangement can
-                         have hundreds of names, and the ListBox scrolls inside its own
-                         bounded viewport. It VIRTUALIZES only once the list is long
-                         (#141): a virtualized list behind the hidden tab has no
-                         viewport, so it can never be prewarmed and the click on "Song"
-                         built its rows. ItemsPanelConverters says why. -->
-                    <!-- A Panel around the list, so the section prewarm (which measures a hidden root's
-                         VISIBLE children) builds the list's rows rather than measuring an empty ListBox. -->
                     <Panel x:Name="SongSectionsBody" IsVisible="{Binding #SongRailSectionsEntry.IsChecked}">
-                        <!-- An empty section says why it is empty, as the Tones one does. -->
-                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption" TextWrapping="Wrap" IsVisible="{Binding !Sections.Count}"
-                                   Text="{localization:Loc Inspector_Sections_None}" />
-                        <ListBox ItemsSource="{Binding Sections}" MaxHeight="360"
-                                 ItemsPanel="{Binding Sections.Count, Converter={x:Static converters:ItemsPanelConverters.StackedWhenShort}}"
-                                 AutomationProperties.Name="{localization:Loc Inspector_Sections}">
-                            <ListBox.Styles>
-                                <!-- A row is announced by its own words, not its CLR type name (#311). -->
-                                <Style Selector="ListBoxItem" x:DataType="viewModels:RenameableItem">
-                                    <Setter Property="AutomationProperties.Name" Value="{Binding OriginalName}" />
-                                </Style>
-                            </ListBox.Styles>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:RenameableItem">
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,2"
-                                          ColumnSpacing="6">
-                                        <TextBox Grid.Column="0" Text="{Binding NewName, Mode=TwoWay}"
-                                                 AutomationProperties.Name="{Binding OriginalName}" />
-                                        <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                                                   Text="{Binding Count, StringFormat=(\{0\})}" Theme="{StaticResource LabelText}" Classes="Label" />
-                                        <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                                Content="{localization:Loc Action_Apply}"
-                                                Command="{Binding $parent[ItemsControl].((viewModels:SongOverviewViewModel)DataContext).RenameSectionCommand}"
-                                                CommandParameter="{Binding}" />
-                                        <Button Grid.Column="3" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="✕"
-                                                ToolTip.Tip="{localization:Loc Action_Delete}"
-                                                AutomationProperties.Name="{localization:Loc Action_Delete}"
-                                                Command="{Binding $parent[ItemsControl].((viewModels:SongOverviewViewModel)DataContext).DeleteSectionCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <inspector:MarkerGroupsView x:Name="SongSectionsList" DataContext="{Binding SectionsPanel}" />
                     </Panel>
 
-                    <!-- A Panel around the list, so the section prewarm (which measures a hidden root's
-                         VISIBLE children) builds the list's rows rather than measuring an empty ListBox. -->
-                    <Panel x:Name="SongPhrasesBody" IsVisible="{Binding #SongRailPhrasesEntry.IsChecked}">
-                        <TextBlock Theme="{StaticResource CaptionText}" Classes="Caption" TextWrapping="Wrap" IsVisible="{Binding !Phrases.Count}"
-                                   Text="{localization:Loc Inspector_Phrases_Empty}" />
-                        <ListBox ItemsSource="{Binding Phrases}" MaxHeight="360"
-                                 ItemsPanel="{Binding Phrases.Count, Converter={x:Static converters:ItemsPanelConverters.StackedWhenShort}}"
-                                 AutomationProperties.Name="{localization:Loc Inspector_Phrases}">
-                            <ListBox.Styles>
-                                <!-- A row is announced by its own words, not its CLR type name (#311). -->
-                                <Style Selector="ListBoxItem" x:DataType="viewModels:RenameableItem">
-                                    <Setter Property="AutomationProperties.Name" Value="{Binding OriginalName}" />
-                                </Style>
-                            </ListBox.Styles>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:RenameableItem">
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,2"
-                                          ColumnSpacing="6">
-                                        <TextBox Grid.Column="0" Text="{Binding NewName, Mode=TwoWay}"
-                                                 AutomationProperties.Name="{Binding OriginalName}" />
-                                        <TextBlock Grid.Column="1" VerticalAlignment="Center"
-                                                   Text="{Binding Count, StringFormat=(\{0\})}" Theme="{StaticResource LabelText}" Classes="Label" />
-                                        <Button Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
-                                                Content="{localization:Loc Action_Apply}"
-                                                Command="{Binding $parent[ItemsControl].((viewModels:SongOverviewViewModel)DataContext).RenamePhraseCommand}"
-                                                CommandParameter="{Binding}" />
-                                        <Button Grid.Column="3" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact" Content="✕"
-                                                ToolTip.Tip="{localization:Loc Action_Delete}"
-                                                AutomationProperties.Name="{localization:Loc Action_Delete}"
-                                                Command="{Binding $parent[ItemsControl].((viewModels:SongOverviewViewModel)DataContext).DeletePhraseCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Panel>
                 </Panel>
                 <Button Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
                         Content="{localization:Loc Action_Refresh}"

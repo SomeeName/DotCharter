@@ -21,16 +21,16 @@ public sealed class SongOverviewToneRenameTests
         var before = ChartProjectCloner.Clone(project);
         var lead = project.Arrangements[0];
 
-        var row = Assert.Single(vm.Tones);
-        row.NewName = "lead_crunch";
-        vm.RenameToneCommand.Execute(row);
+        var row = Assert.Single(vm.TonesPanel.Groups);
+        row.EditName = "lead_crunch";
+        vm.TonesPanel.RenameCommand.Execute(row);
 
         Assert.Equal("lead_crunch", Assert.Single(project.ToneDefinitions).Key);
         Assert.Equal(["lead_crunch", "lead_crunch", "lead_crunch"], [lead.ToneBase, lead.ToneA, lead.StartingTone]);
         Assert.Equal(["lead_crunch"], lead.ToneNames);
         Assert.Equal("lead_crunch", Assert.Single(lead.ToneChanges).ToneName);
         Assert.Empty(MissingTones(project));
-        Assert.Equal("lead_crunch", Assert.Single(vm.Tones).OriginalName);
+        Assert.Equal("lead_crunch", Assert.Single(vm.TonesPanel.Groups).Name);
 
         history.Undo();
         Assert.False(history.CanUndo, "the rename must be ONE undo step");
@@ -46,9 +46,9 @@ public sealed class SongOverviewToneRenameTests
         state.ActiveProject = project;
         var before = ChartProjectCloner.Clone(project);
 
-        var row = vm.Tones.Single(t => t.OriginalName == "lead_dist");
-        row.NewName = "Lead_Clean";
-        vm.RenameToneCommand.Execute(row);
+        var row = vm.TonesPanel.Groups.Single(t => t.Name == "lead_dist");
+        row.EditName = "Lead_Clean";
+        vm.TonesPanel.RenameCommand.Execute(row);
 
         Assert.False(history.CanUndo);
         Assert.Empty(DeepCompare.Diff("project", before, project, new HashSet<string>()));
@@ -58,7 +58,7 @@ public sealed class SongOverviewToneRenameTests
             string.Format(System.Globalization.CultureInfo.InvariantCulture, FakeLocalization.English()["Inspector_Tones_RenameTaken"], "Lead_Clean"),
             row.Error);
 
-        row.NewName = "lead_clean_2";
+        row.EditName = "lead_clean_2";
         Assert.False(row.HasError);
     }
 
@@ -74,9 +74,9 @@ public sealed class SongOverviewToneRenameTests
         });
         state.ActiveProject = project;
 
-        Assert.Equal(["dangling", "lead_dist", "unplaced"], vm.Tones.Select(t => t.OriginalName));
-        Assert.Equal([true, false, false], vm.Tones.Select(t => t.IsUndefined));
-        Assert.Equal(0, vm.Tones.Single(t => t.OriginalName == "unplaced").Count);
+        Assert.Equal(["lead_dist", "dangling", "unplaced"], vm.TonesPanel.Groups.Select(t => t.Name));
+        Assert.Equal([false, true, false], vm.TonesPanel.Groups.Select(t => t.HasWarning));
+        Assert.Empty(vm.TonesPanel.Groups.Single(t => t.Name == "unplaced").Occurrences);
     }
 
     [Fact]
@@ -87,13 +87,13 @@ public sealed class SongOverviewToneRenameTests
         state.ActiveProject = project;
         var lead = project.Arrangements[0];
 
-        vm.DeleteToneCommand.Execute(Assert.Single(vm.Tones));
+        vm.TonesPanel.DeleteCommand.Execute(Assert.Single(vm.TonesPanel.Groups));
 
         Assert.Empty(project.ToneDefinitions);
         Assert.Empty(lead.ToneChanges);
         Assert.Equal(["", "", ""], [lead.ToneBase, lead.ToneA, lead.StartingTone]);
         Assert.Empty(lead.ToneNames);
-        Assert.Empty(vm.Tones);
+        Assert.Empty(vm.TonesPanel.Groups);
 
         history.Undo();
         Assert.Equal("lead_dist", Assert.Single(project.ToneDefinitions).Key);
@@ -106,7 +106,8 @@ public sealed class SongOverviewToneRenameTests
         var logger = new FakeAppLogger();
         var state = new ProjectState();
         var history = new HistoryService(logger);
-        return (new SongOverviewViewModel(state, history, logger, FakeLocalization.English()), history, state);
+        return (new SongOverviewViewModel(state, history, logger, FakeLocalization.English(),
+            DotCharter.Tests.Presentation.Dialogs.RecordingProxy.Create<DotCharter.Services.Editing.IChartEditorSurface>().Proxy), history, state);
     }
 
     /// <summary>Steps 1–2 of the issue: a designed tone, Lead's Base tone and Tone A, one tone change.</summary>

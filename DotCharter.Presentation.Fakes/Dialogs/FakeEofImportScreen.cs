@@ -30,7 +30,8 @@ public sealed class FakeEofImportScreen : FakeDialog<EofImportSelection?>, IEofI
         new(FakeVariantNames.Full, Full)
     ];
 
-    private static readonly string[] Tracks = ["PART REAL_GUITAR (812 notes)", "PART REAL_BASS (604 notes)"];
+    private static readonly string[] Tracks =
+        ["PART REAL_GUITAR (812 notes)", "PART REAL_BASS (604 notes)", "PART VOCALS (214 lyrics)"];
 
     public static FakeEofImportScreen Default() => new(Tracks, false, "");
 

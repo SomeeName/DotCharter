@@ -124,7 +124,7 @@ public sealed class HandShapeOverrideTests
             State.ActiveArrangement = Arrangement;
             State.ActiveLevel = Arrangement.Levels[0];
 
-            Splitter = new HandShapeSplitter(new FingeringGenerationService(), Service, Selection, logger);
+            Splitter = new HandShapeSplitter(new FingeringGenerationService(), Service, Selection, config, logger);
             Track = new TrackEditorContext(Arrangement, Selection)
             {
                 Project = _project,

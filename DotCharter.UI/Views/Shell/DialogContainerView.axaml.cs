@@ -98,12 +98,14 @@ public partial class DialogContainerView : UserControl, IPrewarmableSurfaces, IP
     }
 
     /// <summary>
-    ///     The two dialog bodies gated on a SELECTION the dialog has none of
-    ///     when it opens — the Tone Designer's editor column and the Pattern
-    ///     Builder's editor — 37 and 40+ markup elements that would otherwise pay their
-    ///     whole first layout on the first row click.
+    ///     The dialog bodies gated on state the dialog has none of when it opens —
+    ///     the Tone Designer's editor column, the Pattern Builder's editor (both
+    ///     selection-gated) and the first-run wizard's Audio output and Guitar input
+    ///     pages (step-gated) — markup that would otherwise pay its whole first layout
+    ///     on the first row click or the first Next.
     /// </summary>
-    internal static readonly string[] NestedDialogBodyNames = ["ToneEditor", "PatternEditorBody"];
+    internal static readonly string[] NestedDialogBodyNames =
+        ["ToneEditor", "PatternEditorBody", "OnboardingAudioStep", "OnboardingInputStep"];
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {

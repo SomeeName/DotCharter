@@ -26,6 +26,132 @@
                 <StackPanel>
                     <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
                         <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Import_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Import_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpShortNotes}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpTruncateShortNotes}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpTruncateShortNotes}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpTruncateShortNotes}"
+                                      IsChecked="{Binding GpImportTruncateShortNotes, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpShortChords}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpTruncateShortChords}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpTruncateShortChords}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpTruncateShortChords}"
+                                      IsChecked="{Binding GpImportTruncateShortChords, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpShortRests}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpPreserveShortRests}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpPreserveShortRests}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpPreserveShortRests}"
+                                      IsChecked="{Binding GpImportPreserveShortRests, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.latinLookup}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_OnlineLatinNameLookup}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_OnlineLatinNameLookup}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_OnlineLatinNameLookup}"
+                                      IsChecked="{Binding OnlineLatinNameLookup, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpBeatText}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpBeatTextTechniques}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpBeatTextTechniques}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpBeatTextTechniques}"
+                                      IsChecked="{Binding GpImportBeatTextTechniques, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpMarkers}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpMarkersToSections}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpMarkersToSections}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpMarkersToSections}"
+                                      IsChecked="{Binding GpImportMarkersToSections, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpTimeSignatures}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpImportTimeSignatures}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpImportTimeSignatures}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpImportTimeSignatures}"
+                                      IsChecked="{Binding GpImportTimeSignatures, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpMidBeatTempo}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpDropMidBeatTempo}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpDropMidBeatTempo}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_GpDropMidBeatTempo}"
+                                      IsChecked="{Binding GpImportDropMidBeatTempoChanges, Mode=TwoWay}" />
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.gpSlideIn}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_GpSlideInDistance}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_GpSlideInDistance}" />
+                        </StackPanel>
+                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="140,*" ColumnSpacing="12">
+                            <NumericUpDown Grid.Column="0" AutomationProperties.Name="{localization:Loc Settings_GpSlideInDistance}"
+                                           Value="{Binding GpImportSlideInFretDistance, Mode=TwoWay}" Minimum="1" Maximum="3" Increment="1" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Grid.Column="1" Classes="SettingDesc" Margin="0" VerticalAlignment="Center"
+                                       Text="{localization:Loc Settings_GpSlideInDistanceUnit}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.1}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_PsarcOpen_Title}" />
+                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_PsarcOpen_Subtitle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" x:Name="PsarcHardestOnlyRow" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.psarcHardestOnly}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_PsarcOpenHardestOnly}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_PsarcOpenHardestOnly}" />
+                        </StackPanel>
+                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_PsarcOpenHardestOnly}"
+                                      IsChecked="{Binding PsarcOpenHardestLevelOnly, Mode=TwoWay}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.2}">
+                <StackPanel>
+                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
+                        <StackPanel Grid.Column="1">
                             <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_SaveCompanions}" />
                             <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_SaveCompanions_Subtitle}" />
                         </StackPanel>
@@ -138,7 +264,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.1}">
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.3}">
                 <StackPanel>
                     <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
                         <StackPanel Grid.Column="1">
@@ -209,7 +335,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.2}">
+            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.4}">
                 <StackPanel>
                     <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
                         <StackPanel Grid.Column="1">
@@ -241,27 +367,6 @@
                     <TextBlock Theme="{StaticResource HelpText}" Classes="HelpText" Margin="0,0,0,12" TextWrapping="Wrap"
                                IsVisible="{Binding HasLibraryAudioCacheDetail}"
                                Text="{Binding LibraryAudioCacheDetail}" />
-                </StackPanel>
-            </Border>
-
-            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.group.3}">
-                <StackPanel>
-                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_PsarcOpen_Title}" />
-                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_PsarcOpen_Subtitle}" />
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" x:Name="PsarcHardestOnlyRow" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=files.psarcHardestOnly}"
-                          Classes="FormRow" ColumnDefinitions="*,300">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_PsarcOpenHardestOnly}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_PsarcOpenHardestOnly}" />
-                        </StackPanel>
-                        <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_PsarcOpenHardestOnly}"
-                                      IsChecked="{Binding PsarcOpenHardestLevelOnly, Mode=TwoWay}" />
-                    </Grid>
                 </StackPanel>
             </Border>
 

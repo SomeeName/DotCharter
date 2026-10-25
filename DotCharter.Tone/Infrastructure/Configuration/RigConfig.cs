@@ -64,6 +64,8 @@ public enum AppLogLevel
 public class RigConfig
 {
     public string AudioDriver { get; set; } = "WASAPI"; // "WASAPI" or "ASIO"
+    // 0-based output channels of the master pair, for ASIO and WASAPI alike
+    // (the names are historical): OutputChannelPairs turns them into the engine's mask.
     public int AsioOutputChannelLeft { get; set; }
     public int AsioOutputChannelRight { get; set; } = 1;
     // Stable device identifiers. Indices above are kept for back-compat only;
@@ -83,6 +85,11 @@ public class RigConfig
     ///     gone: there is one engine now (CSVD).
     /// </summary>
     public string DropTunerEngine { get; set; } = "balanced";
+    /// <summary>
+    ///     The guitar's input jacks (0-based) and whether one or two are open. The
+    ///     engine masks them on ASIO and WASAPI alike; the names keep the saved
+    ///     JSON keys.
+    /// </summary>
     public int AsioInputChannelLeft { get; set; }
     public int AsioInputChannelRight { get; set; } = 1;
     public bool AsioInputMono { get; set; } = true;

@@ -18,24 +18,25 @@ public sealed class ChordShapeEditsTests
     private IEnumerable<HandShape> AllShapes => _f.Arrangement.Levels.SelectMany(l => l.HandShapes);
 
     [Fact]
-    public void Merge_MovesEveryChordAndHandShapeOnEveryLevel_AndLeavesTheSourceUnused()
+    public void Merge_MovesEveryChordAndHandShapeOnEveryLevel_AndTakesTheSourceOut()
     {
         var plan = ChordShapeEdits.PlanMerge(_f.Arrangement, _f.AmAlt, _f.Am, _editor);
         Assert.False(plan.IsRefused);
-        Assert.Equal((3, 1), (plan.ChordsMoved, plan.HandShapesMoved));
+        Assert.Equal((3, 1, 1), (plan.ChordsMoved, plan.HandShapesMoved, plan.TemplatesRemoved));
         var before = AllChords.Select(c => (c, c.ChordNotes.Select(n => (n.StringIndex, n.Fret)).ToList())).ToList();
 
         Assert.True(_history.Do(plan.Action!));
 
-        Assert.DoesNotContain(AllChords, c => c.TemplateId == _f.AmAlt.Id);
-        Assert.DoesNotContain(AllShapes, h => h.TemplateId == _f.AmAlt.Id);
-        Assert.Equal(7, AllChords.Count(c => c.TemplateId == _f.Am.Id));
-        Assert.Equal(2, AllShapes.Count(h => h.TemplateId == _f.Am.Id));
-        Assert.Equal(0, ChordShapeCatalog.Build(_f.Arrangement, _f.Level1).Single(e => e.Template == _f.AmAlt).Uses.All);
-        // The source stays declared; nothing reshaped a chord or the shared templates.
-        Assert.Contains(_f.AmAlt, _f.Arrangement.ChordTemplates);
+        // Every use now resolves to the kept template; the source is gone, not left unused.
+        var byId = ChordTemplateResolver.IndexById(_f.Arrangement.ChordTemplates);
+        Assert.Equal(7, AllChords.Count(c => ReferenceEquals(byId[c.TemplateId], _f.Am)));
+        Assert.Equal(2, AllShapes.Count(h => ReferenceEquals(byId[h.TemplateId], _f.Am)));
+        Assert.DoesNotContain(_f.AmAlt, _f.Arrangement.ChordTemplates);
+        Assert.Equal([_f.G], ChordShapeEdits.UnusedTemplates(_f.Arrangement));
+        Assert.All(AllChords, c => Assert.True(byId.ContainsKey(c.TemplateId)));
+        Assert.All(AllShapes, h => Assert.True(byId.ContainsKey(h.TemplateId)));
+        // Nothing reshaped a chord.
         Assert.All(before, b => Assert.Equal(b.Item2, b.c.ChordNotes.Select(n => (n.StringIndex, n.Fret)).ToList()));
-        Assert.True(_f.Am.HasFrets(ChordShapesFixture.AmFrets) && _f.AmAlt.HasFrets(ChordShapesFixture.AmFrets));
     }
 
     [Fact]
@@ -51,6 +52,8 @@ public sealed class ChordShapeEditsTests
 
         Assert.Equal(chordIds, AllChords.Select(c => c.TemplateId));
         Assert.Equal(shapeIds, AllShapes.Select(h => h.TemplateId));
+        Assert.Equal([0, 1, 2, 3, 4, 5], _f.Arrangement.ChordTemplates.Select(t => t.Id));
+        Assert.Same(_f.AmAlt, _f.Arrangement.ChordTemplates[1]);
         Assert.False(_history.CanUndo);
     }
 

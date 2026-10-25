@@ -10,6 +10,7 @@ public sealed partial class FakeAppearanceSettingsScreen : ObservableObject, IAp
 {
     [ObservableProperty] private int _selectedStringPaletteIndex;
     [ObservableProperty] private int _uiScaleChoiceIndex;
+    [ObservableProperty] private bool _animatedHomeHero = true;
     [ObservableProperty] private string _uiScaleReadout = "100 %";
 
     private FakeAppearanceSettingsScreen(IReadOnlyList<IAppearanceColorGroup> groups)

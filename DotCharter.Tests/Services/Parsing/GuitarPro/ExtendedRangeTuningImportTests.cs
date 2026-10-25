@@ -37,7 +37,8 @@ public sealed class ExtendedRangeTuningImportTests
     [InlineData(6, new[] { "E", "A", "D", "G", "B", "E" })]
     [InlineData(7, new[] { "B", "E", "A", "D", "G", "B", "E" })]
     [InlineData(8, new[] { "F#", "B", "E", "A", "D", "G", "B", "E" })]
-    [InlineData(9, new[] { "F#", "B", "E", "A", "D", "G", "B", "E", "E" })]
+    [InlineData(9, new[] { "C#", "F#", "B", "E", "A", "D", "G", "B", "E" })]
+    [InlineData(10, new[] { "C#", "F#", "B", "E", "A", "D", "G", "B", "E", "E" })]
     public void TheStandardPitchesAndTheNamesAreOneTable(int stringCount, string[] expected)
     {
         var standard = TuningUtilities.GetStandardMidiPitches(stringCount);
@@ -100,6 +101,8 @@ public sealed class ExtendedRangeTuningImportTests
     [Theory]
     // F# B E A D G B E — standard 8-string.
     [InlineData("30 35 40 45 50 55 59 64", 8, new[] { "F#", "B", "E", "A", "D", "G", "B", "E" })]
+    // C# F# B E A D G B E — standard 9-string: every string survives the import.
+    [InlineData("25 30 35 40 45 50 55 59 64", 9, new[] { "C#", "F#", "B", "E", "A", "D", "G", "B", "E" })]
     // B E A D G B E — standard 7-string (a regression guard: this row existed).
     [InlineData("35 40 45 50 55 59 64", 7, new[] { "B", "E", "A", "D", "G", "B", "E" })]
     // E A D G B e — standard 6-string.
@@ -138,6 +141,7 @@ public sealed class ExtendedRangeTuningImportTests
     [InlineData("35 40 45 50 55 59 64", new[] { "B", "E", "A", "D", "G", "B", "E" })]
     [InlineData("33 40 45 50 55 59 64", new[] { "A", "E", "A", "D", "G", "B", "E" })]
     [InlineData("30 35 40 45 50 55 59 64", new[] { "F#", "B", "E", "A", "D", "G", "B", "E" })]
+    [InlineData("25 30 35 40 45 50 55 59 64", new[] { "C#", "F#", "B", "E", "A", "D", "G", "B", "E" })]
     public void AnImportedExtendedRangeTab_IsTunedAndJudgedAtTheTabsOwnPitches(string pitches, string[] gutter)
     {
         var tab = pitches.Split(' ').Select(p => int.Parse(p, System.Globalization.CultureInfo.InvariantCulture)).ToArray();

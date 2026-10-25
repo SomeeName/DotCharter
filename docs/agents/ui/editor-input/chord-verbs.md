@@ -81,6 +81,26 @@ words cannot drift from the write. The ladder resolves once per refresh (and
 the Save count once per draft change), never per property read. Every edit uses it: fret, finger, name, arpeggio, and the template
 dropdown / containing-shape pills / New (`ChordTemplateEditKind.Switch`).
 
+**The result is stated before the edit (#266).** `ChordApplyLadder.ResultText`
+(`ApplyToResult` in `ChordApplyScopeBar`) says what the next shape edit does, read off the same
+`Resolve`: "“Am” itself changes, so every use plays the new grip" (the in-place path) or "A new shape
+is made for these 4 chords; the other 10 keep “Am”" (the rebind). The old *Selected* rung meant either,
+silently; it is still the same write, now stated. An in-place fret or fingering edit that gives the
+shape exactly the frets and fingers of ANOTHER shape JOINS it (`ChordTemplateEditPlanner.JoinExisting`):
+every chord and hand shape of the shape moves there, the target keeps its own name, and the emptied shape
+goes in the same undo node. **Edit shape…** (`ChordShapeEditOpener`, `EditShapeButton`) opens the scope-first
+dialog: `IShapeEditScreen` → `Presentation/Screens/Editor/ShapeEditViewModel` over
+`Services/Editing/ChordShapes/ShapeEditPlanner` (the pure planner: `ReachOf`, `FindMatch`, `Plan`; This chord /
+Selection / Every use, the outcome `ChangesShape` / `MakesNewShape` / `JoinsExisting`, hand shapes follow or
+keep a copy of the old grip, ONE undo node). **Edit together** (the Shapes panel's ticked cards, #270) adds the
+scope `Together` (`ShapeEditInput.Together`, `ShapeBulkEdits.PlanTogether`): every ticked shape takes the one grip
+typed and they become ONE shape — the keeper is the shape that already has exactly that grip (the edited shape,
+then a ticked one, then any) or else the edited shape rewritten in place (`ShapeEditPlanner.RewriteInPlace`); the
+others hand over their chords, and with hand-shape sync their hand shapes, and `RemoveStrandedShapesAction` takes
+out the copies nothing uses afterwards (outcome `MergesShapes`). The reached uses are marked on the timeline while it is open
+(`IChordUseMarks`, implemented by `ViewModels/Editor/ChordUseMarks`); the Shapes panel's card Edit opens it
+on a shape with no origin chord (`ShapeEditRequest`).
+
 | Rung | Reaches | Write path |
 |---|---|---|
 | this chord | the chord the panel shows (+ its hand shape when the sync is on — the label says "+ its hand shape") | rebind onto a find-or-created template |

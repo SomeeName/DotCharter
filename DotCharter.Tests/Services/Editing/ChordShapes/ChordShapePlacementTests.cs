@@ -102,6 +102,25 @@ public sealed class ChordShapePlacementTests
     }
 
     [Fact]
+    public void OverAChord_TakesTheShapeThatChordLeftOutWithIt_InTheSameNode()
+    {
+        // The open-string E5 has this one chord as its only use; the unused G was never anyone's to remove.
+        var chord = _f.Level1.Chords.Single(c => c.TemplateId == _f.Open.Id);
+
+        Commit(ChordShapePlacement.Plan(_target, _f.C, [chord.Position]));
+
+        Assert.DoesNotContain(_f.Open, _f.Arrangement.ChordTemplates);
+        Assert.Contains(_f.G, _f.Arrangement.ChordTemplates);
+        Assert.Equal([0, 1, 2, 3, 4], _f.Arrangement.ChordTemplates.Select(t => t.Id));
+        Assert.Single(_history.GetUndoSteps());
+
+        _history.Undo();
+        Assert.Contains(_f.Open, _f.Arrangement.ChordTemplates);
+        Assert.Equal([0, 1, 2, 3, 4, 5], _f.Arrangement.ChordTemplates.Select(t => t.Id));
+        Assert.Equal(_f.Open.Id, chord.TemplateId);
+    }
+
+    [Fact]
     public void OverTheSameShapeAlready_IsRefused_AndRecordsNothing()
     {
         var chord = _f.Level1.Chords.Single(c => c.TemplateId == _f.C.Id);

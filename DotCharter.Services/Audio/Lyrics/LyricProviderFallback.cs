@@ -27,6 +27,20 @@ public sealed class LyricProviderMemory
 
     /// <summary>Records the failure; true only for the first caller, which is the one that logs it.</summary>
     internal bool RememberCpu(string modelId) => _cpuOnly.TryAdd(modelId, 0);
+
+    private readonly ConcurrentDictionary<string, OnnxExecutionProvider> _lastRun = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The provider <paramref name="modelId" />'s last finished encode ran on, or null before its first.</summary>
+    public OnnxExecutionProvider? LastProvider(string modelId) =>
+        _lastRun.TryGetValue(modelId, out var provider) ? provider : null;
+
+    internal void RecordRun(string modelId, OnnxExecutionProvider provider) => _lastRun[modelId] = provider;
+
+    /// <summary>
+    ///     Settings ▸ AI &amp; models' "Retry GPU": the next session for
+    ///     <paramref name="modelId" /> asks for the GPU again. True when a fallback was remembered.
+    /// </summary>
+    public bool ForgetCpu(string modelId) => _cpuOnly.TryRemove(modelId, out _);
 }
 
 /// <summary>
@@ -78,7 +92,9 @@ internal sealed class LyricProviderFallbackSession : ILyricAcousticSession
     {
         try
         {
-            return _inner!.Encode(mono16k, cancellationToken);
+            var emissions = _inner!.Encode(mono16k, cancellationToken);
+            _memory.RecordRun(_model.Id, ActiveProvider);
+            return emissions;
         }
         catch (Exception ex) when (ex is not OperationCanceledException && ActiveProvider != OnnxExecutionProvider.Cpu)
         {
@@ -96,7 +112,9 @@ internal sealed class LyricProviderFallbackSession : ILyricAcousticSession
             failed.Dispose();
             _inner = _open(_model, OnnxExecutionProvider.Cpu, _log);
 
-            return _inner.Encode(mono16k, cancellationToken);
+            var emissions = _inner.Encode(mono16k, cancellationToken);
+            _memory.RecordRun(_model.Id, ActiveProvider);
+            return emissions;
         }
     }
 

@@ -22,7 +22,7 @@ namespace DotCharter.UI.Input.Actions;
 ///         have.
 ///     </para>
 /// </summary>
-public sealed class ResizeHandShapesAction : IChartAction, IMergeableAction, ILinkPolicyAction
+public sealed class ResizeHandShapesAction : IChartAction, IMergeableAction, ILinkPolicyAction, ITemplateUseReporter
 {
     /// <summary>Linked measures: an editing gesture, copied to every linked placement.</summary>
     public LinkPolicy LinkPolicy => LinkPolicy.Propagate;
@@ -55,6 +55,9 @@ public sealed class ResizeHandShapesAction : IChartAction, IMergeableAction, ILi
     public string MergeVerb => MergeVerbs.HandShapeLength;
 
     public bool HasEffect => _spans.HasEffect || _grips.Count > 0 || _minted.Count > 0;
+
+    /// <summary>A bar that moves onto the template of the chord it now covers leaves its own behind.</summary>
+    public void ReportTemplateUses(TemplateUseDelta delta) => _spans.ReportTemplateUses(delta);
 
     public void Execute()
     {

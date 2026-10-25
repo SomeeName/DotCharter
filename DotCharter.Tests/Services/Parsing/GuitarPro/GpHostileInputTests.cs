@@ -141,7 +141,7 @@ public sealed class GpHostileInputTests
     }
 
     /// <summary>§4.5 — the gpif string count is unbounded and sizes every
-    /// per-string allocation loop downstream. The EOF parser rejects &gt; 8 and
+    /// per-string allocation loop downstream. The EOF parser rejects more than the maximum and
     /// the GP binary reader clamps to 1..7.</summary>
     [Fact]
     public void AnAbsurdStringCount_IsClamped()
@@ -149,7 +149,7 @@ public sealed class GpHostileInputTests
         var pitches = string.Join(' ', Enumerable.Repeat("40", 5000));
         var arr = ImportGpif(Score(pitches: pitches));
 
-        Assert.InRange(arr.StringCount, 1, 8);
+        Assert.InRange(arr.StringCount, 1, StandardOpenStrings.MaxStringCount);
         Assert.Equal(arr.StringCount, arr.TuningPitches.Count);
     }
 

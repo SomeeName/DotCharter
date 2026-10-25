@@ -1,0 +1,157 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.ShapeCleanupDialogView"
+             x:DataType="contracts:IShapeCleanupScreen"
+             x:CompileBindings="True">
+
+    <!-- Clean up shapes: three groups of proposals (duplicates to merge, unused
+         shapes to remove, near-duplicates to decide), each row a tick or a choice,
+         applied together as one undo step. Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconSparkles}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc ShapeCleanup_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{localization:Loc ShapeCleanup_Subtitle}" />
+                        <TextBlock Theme="{DynamicResource DialogContextText}" Classes="DialogContext" Text="{Binding Summary}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody" Padding="0,0,16,0" Margin="0,0,-16,0"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="{DynamicResource FireSpaceMd}">
+
+                        <Border Theme="{DynamicResource DlgEmptyBorder}" Classes="DlgEmpty" IsVisible="{Binding IsTidy}">
+                            <TextBlock Text="{localization:Loc ShapeCleanup_Tidy}" />
+                        </Border>
+
+                        <Border x:Name="ShapeCleanupDuplicates" Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection"
+                                IsVisible="{Binding HasDuplicates}">
+                            <StackPanel Spacing="{DynamicResource FireSpaceXs}">
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{Binding DuplicatesHeader}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeCleanup_DuplicatesDesc}"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding Duplicates}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IShapeCleanupMerge">
+                                            <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="12">
+                                                    <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsIncluded}"
+                                                              AutomationProperties.Name="{Binding Title}" />
+                                                    <ctl:ChordDiagramControl Grid.Column="1" Width="56" Height="52" Chord="{Binding DiagramChord}"
+                                                                             Template="{Binding Diagram}" StringCount="{Binding StringCount}" />
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding Title}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Detail}"
+                                                                   TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="ShapeCleanupReview" Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection"
+                                IsVisible="{Binding HasNearDuplicates}">
+                            <StackPanel Spacing="{DynamicResource FireSpaceXs}">
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{Binding NearDuplicatesHeader}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeCleanup_ReviewDesc}"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding NearDuplicates}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IShapeNearDuplicate">
+                                            <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow">
+                                                <StackPanel Spacing="{DynamicResource FireSpaceSm}">
+                                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{Binding DifferenceText}"
+                                                               TextWrapping="Wrap" />
+                                                    <Grid ColumnDefinitions="Auto,Auto,24,Auto,Auto,*" ColumnSpacing="8">
+                                                        <ctl:ChordDiagramControl Grid.Column="0" Width="56" Height="52" Chord="{Binding FirstChord}"
+                                                                                 Template="{Binding FirstDiagram}" StringCount="{Binding StringCount}" />
+                                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                                   Text="{Binding FirstLabel}" />
+                                                        <ctl:ChordDiagramControl Grid.Column="3" Width="56" Height="52" Chord="{Binding SecondChord}"
+                                                                                 Template="{Binding SecondDiagram}" StringCount="{Binding StringCount}" />
+                                                        <TextBlock Grid.Column="4" VerticalAlignment="Center" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                                                   Text="{Binding SecondLabel}" />
+                                                    </Grid>
+                                                    <ItemsControl ItemsSource="{Binding Choices}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <WrapPanel ItemSpacing="6" LineSpacing="4" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="contracts:IShapeCleanupChoice">
+                                                                <RadioButton Classes="FireSegmentItem Dense"
+                                                                             IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                                             Command="{Binding SelectCommand}"
+                                                                             Content="{Binding Label}"
+                                                                             AutomationProperties.Name="{Binding Label}" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="ShapeCleanupUnused" Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection"
+                                IsVisible="{Binding HasUnused}">
+                            <StackPanel Spacing="{DynamicResource FireSpaceXs}">
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel" Text="{Binding UnusedHeader}" />
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeCleanup_UnusedDesc}"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding Unused}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel ItemSpacing="8" LineSpacing="8" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IShapeCleanupRemoval">
+                                            <Border Theme="{DynamicResource DlgListRowBorder}" Classes="DlgListRow" Width="200">
+                                                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
+                                                    <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsIncluded}"
+                                                              AutomationProperties.Name="{Binding Name}" />
+                                                    <ctl:ChordDiagramControl Grid.Column="1" Width="44" Height="42" Chord="{Binding DiagramChord}"
+                                                                             Template="{Binding Diagram}" StringCount="{Binding StringCount}" />
+                                                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{Binding ApplyLabel}" IsEnabled="{Binding !IsTidy}"
+                                AutomationProperties.Name="{localization:Loc Action_Apply}"
+                                Command="{Binding ApplyCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

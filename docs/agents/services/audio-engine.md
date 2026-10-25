@@ -23,7 +23,7 @@ one instance (`App.AddAudioSeams`); none is `IDisposable` itself.
 | Seam (members) | Members (signatures) | Uses it today / will use it | Threading |
 |---|---|---|---|
 | `IPlaybackTransport` (20) | `CurrentTimeMs`, `RawPlayheadMs`, `IsPlaying`, `SeekGeneration` { get; }; `PlaybackSpeed` { get; set; }; `event EventHandler<double> PositionChanged`; `Play()`, `Pause()`, `Stop()`, `SeekTo(double)`; `LoadAudioAsync(string)`, `LoadAudioFromMemoryAsync(ReadOnlyMemory<byte>, string, string?)`, `FreeAudio()`, `GetTotalAudioLengthMs()`, `CurrentAudioPath`; `PlayMetronomeTick(bool)`, `PlayClap()`, `TryScheduleClick(int, double)`, `ClearScheduledClicks()`, `TryScheduleCalibrationClap(out long)` | **now:** `ChartRenderer`, `Preview3DRenderDriver`. **will:** every Play Mode screen that plays a song (Countdown, Playing HUD, Paused, Results listen-back), `AudioPlaybackCoordinator` | `PositionChanged` on a thread-pool timer at up to 250 Hz — coalesce to ≤ 60 Hz before UI state. `Play`/`Pause`/`Stop`/`SeekTo` reach `_gate` (short holds). Schedule against `RawPlayheadMs`, never `CurrentTimeMs` |
-| `IAudioDeviceControl` (19) | `ActiveSampleRate`, `ActualBufferFrames`, `EstimatedOutputLatencyMs`, `MeasuredOutputLatencyMs`, `IsDeviceLost` { get; }; `AudioDelayMs`, `MidiOffsetMs` { get; set; }; `event DeviceBufferFramesChanged` (`int`), `DeviceLost`, `DeviceReconnected` (`AudioDeviceReconnectedEventArgs`); `ApplyAudioConfiguration(AppConfig)`, `EnsureAsioDevicesProbed(AppConfig)`, `EnsureWasapiDevicesProbed(AppConfig)`, `TryOpenAsioControlPanel(IntPtr, out string?)`, `GetWasapiOutputDevices()`, `GetAsioDevices()`, `GetWasapiInputDevices()`, `GetAsioInputDevices()`, `GetInputDeviceChannelCount(string, string)` | **now:** `LiveInputChannelViewModel`, the Settings ▸ Audio tab. **will:** the status bar, Diagnostics, the latency wizard | the three events may arrive on any thread (watchdog timer, engine rebuild). `ApplyAudioConfiguration`, the probes and the ASIO panel may rebuild or stop the engine — slow, never on a hot path |
+| `IAudioDeviceControl` (22) | `ActiveSampleRate`, `ActualBufferFrames`, `EstimatedOutputLatencyMs`, `MeasuredOutputLatencyMs`, `IsDeviceLost` { get; }; `AudioDelayMs`, `MidiOffsetMs` { get; set; }; `event DeviceBufferFramesChanged` (`int`), `DeviceLost`, `DeviceReconnected` (`AudioDeviceReconnectedEventArgs`); `ApplyAudioConfiguration(AppConfig)`, `EnsureAsioDevicesProbed(AppConfig)`, `EnsureWasapiDevicesProbed(AppConfig)`, `TryOpenAsioControlPanel(IntPtr, out string?)`, `GetWasapiOutputDevices()`, `GetAsioDevices()`, `GetWasapiInputDevices()`, `GetAsioInputDevices()`, `GetInputDeviceChannelCount(string, string)`, `GetOutputDeviceChannelCount(string, string)`, `GetOutputChannelNames(string, string)`, `GetInputChannelNames(string, string)` | **now:** `LiveInputChannelViewModel`, the Settings ▸ Audio tab. **will:** the status bar, Diagnostics, the latency wizard | the three events may arrive on any thread (watchdog timer, engine rebuild). `ApplyAudioConfiguration`, the probes and the ASIO panel may rebuild or stop the engine — slow, never on a hot path |
 | `IStemMixer` (9) | `SongVolume` { get; set; }; `HasStems`, `LoadedStemNames` { get; }; `LoadStemsAsync(IReadOnlyList<StemLoadRequest>)`, `ClearStems()`, `SetStemVolume(string, double)`, `SetStemMute(string, bool)`, `SetStemSolo(string, bool)`, `SetMasterMixMuted(bool)` | **now:** `StemMixerViewModel`, `StemTrackViewModel`, `StemDuckFollower`. **will:** the rewritten mixer pane | no events; `LoadStemsAsync` opens the stem files (async) |
 | `IVstChainHost` (17) | `IsVstEffectEnabled`, `IsVstInstrumentEnabled` { get; set; }, `VstEffectVolume`, `VstInstrumentVolume` { get; set; }; `IsInstrumentVstLoaded`, `IsInstrumentVstLoading` { get; }; `IsGuitarVstSlotLoaded(Guid)`; events `InstrumentVstLoadChanged` (`bool`), `GuitarVstSlotLoadChanged` (`(Guid, bool)`), `GuitarVstSlotEditorClosed` (`Guid`), `InstrumentVstEditorClosed`; `ScanVstPlugins()`, `SetGuitarVstChain(IReadOnlyList<VstChainEntry>)`, `ToggleGuitarVstSlotEditor(Guid, bool)`, `SetGuitarVstSlotBypass(Guid, bool)`, `LoadInstrumentVst(string, bool)`, `ToggleInstrumentVstEditor(bool)` | **now: nobody — so it is NOT registered.** Its only caller, the editor's `TransportViewModel`, also drives the master bus and the transport. **will:** the editor wave's VST pane | events may arrive on the caller's thread or a worker (load task, sandbox pipe reader). A load returns before the plugin is up; the result is the `…LoadChanged` event |
 | `ILiveInputCapture` (7) | `InputSampleRate` { get; }; `InputPitchShiftSemitones` { get; set; }, `InputPitchShiftMode` { get; set; }; `ReadInputCapture(float[])`, `ReadInputCapture(float[], out ulong)`, `ReadInputCaptureWindow(float[])`, `TryGetInputCaptureSync(out ulong, out long)` | **now:** `Audio/Tuning/LiveTuner` (the Tuner dialog and the Tools popover's readout). **will:** the rig tuner, the guided tuning check, onboarding, the tone matcher, Live Play's detection. The latency wizard does NOT take this: it needs the calibration clap and the seat-0 routing override too, so it has its own `Audio/Calibration/ICalibrationAudio` (`CalibrationAudio` over the engine) | reads copy out of a native ring, take no managed lock, never throw — any thread. `ReadInputCapture` is SINGLE-consumer (a read cursor); everyone else uses `ReadInputCaptureWindow` |
@@ -282,7 +282,23 @@ step 0 the plumbing, step 1 + the bass step the voice; #50 the instrument models
   natively, ~0.05–0.5 s); `WaitForChartSynthPushes`
   is the test seam. A live push does NOT re-upload the notes (that would choke and
   re-start every sounding note instead of the engine's cross-fade); the rebuild
-  replay does (`includeNotes: true`).
+  replay does (`includeNotes: true`). **A caller that reads the status after
+  enabling must wait for that push first:** `ChartSynthStatus.IsClockPlaying` and
+  `NotesStarted` are written only by blocks `ChartScheduler` RAN (synth on natively,
+  with a voice), so before the push lands they keep their old values while the song
+  plays on (#215: a starved thread pool let an 8 s test song play out un-synthed,
+  and the stale "not playing" read like a stopped clock).
+- **A CPU stall is not a seek (#215).** The song clock is sample-counted, never wall
+  time: `TransportSource::readSongClockRt` reports the transport's read position
+  minus the stretcher's read-ahead, and every callback, however late, pulls and
+  advances exactly one block. A preloaded song has no read-ahead thread at all; a
+  streamed one's `juce::BufferingAudioSource` fills an unread section with silence
+  but still advances by the block. So a slow block or a starved read-ahead never
+  moves the position by the block plus `kJumpToleranceSeconds` (250 ms) that
+  `ChartScheduler` calls a discontinuity — on the null device or on WASAPI / ASIO,
+  where a starved callback is an audible dropout, not a jump. The clock stops only
+  when the transport does (pause, end of the song); a resume after a pause IS a
+  re-seat, and the notes held across it are chased.
 - **Off frees the samples (#61 part 2):** switching the synth off makes the engine
   release the voice and its pack once silent (`ChartSynthStatus.IsVoiceLoaded`,
   `PackBytes`); `ChartSynthNullDeviceTests` waits for it after a real rebuild.
@@ -389,3 +405,63 @@ step 0 the plumbing, step 1 + the bass step the voice; #50 the instrument models
   that they drive the service and save the choice;
   `Perf/ChartSynthInstrumentUiPerfSmokeTests` lays the view out alone and in the
   Amp/FX panel.
+
+
+## Audio architecture (JUCE): root-guide rules (moved verbatim from the root AGENTS.md)
+
+Three layers, bottom up:
+
+1. `JuceSharp/src/JuceSharp.Native` — C++ JUCE shared lib exporting a versioned
+   C ABI (`include/dotcharter_audio.h`, `DCA_ABI_VERSION`). Owns
+   `AudioDeviceManager`, mixer, transports, VST3 chain.
+2. `JuceSharp/src/JuceSharp` — thin P/Invoke wrapper. The DLL is deployed to
+   `runtimes/win-x64/native/juce_sharp.dll` by CMake POST_BUILD.
+3. `DotCharter.Tone/Audio/JuceAudioPlaybackService.cs` (namespace
+   `DotCharter.Tone.Audio`) implements `IAudioPlaybackService` on the wrapper.
+
+The toolchain that actually exists on the owner's machine (VS 2026 Build Tools
+with its bundled CMake, neither on PATH; CLion is not installed) is in `JuceSharp/AGENTS.md` — the
+generic `cmake -G "Visual Studio 17 2022"` line does not work there.
+
+- All real-time audio lives in the native engine. **Never add managed audio
+  pumps on the hot path.** The wrapper stays marshalling + lifetime only.
+- **The DLL is a build artifact, not tracked.** An ABI bump means rebuilding it
+  before any managed code runs, or engine open fails with a version mismatch.
+- **The native pair imports only Windows system DLLs (#176).** `juce_sharp.dll`
+  and `juce_vst_host.exe` link the MSVC runtime statically (JuceSharp's
+  `JUCESHARP_STATIC_CRT`); v1.0.0 linked it dynamically and failed to load on a
+  Windows without the VC++ redistributable. `Services/Update/NativeImportAudit`
+  enforces it two ways: `Services/Update/NativeImportAuditTests` in the default
+  gate (over `JuceSharp/src/JuceSharp/runtimes/win-x64/native`), and
+  `tools/release/CheckPayloadBinaries.cs` over every staged payload and extracted
+  zip. There is no exception: ONNX Runtime (a NuGet binary on the dynamic
+  runtime) is satisfied by the four app-local VC++ DLLs the release copies beside it from
+  the pinned redistributable (`tools/release/vcredist.json`, `VcRedist.psm1`).
+- **Contributors get it prebuilt (#832).** When `juce_sharp.dll` is MISSING, the
+  build (`tools/setup/NativeRuntime.targets`, hooked by `Directory.Solution.targets`
+  and `Directory.Build.targets`) runs `tools/setup/Get-NativeRuntime.ps1`: it
+  downloads the pair for the gitlink from JuceSharp's `native-prebuilt` release
+  and installs it only if its SHA-256s match `tools/setup/native-runtime.json` and
+  `dca_abi_version()` matches the header. The manifest may name only
+  `SomeeName/JuceSharp` or `SomeeName/JuceSharp`, and the ABI probe loads the
+  DLL only after both hashes matched, in a child PowerShell without any GitHub
+  token. A present DLL is never touched; the
+  build in CI never fetches unless `DotCharterFetchNative=true` (CI's `native` job
+  calls the script as a step instead, with `SUBMODULES_TOKEN` as `GH_TOKEN` on the
+  private repo only, and compiles C++ only if that fails or the native suite
+  is asked for); `DotCharterSkipNativeFetch=true`
+  turns it off. **A gitlink bump publishes its pair**
+  (`tools/release/Publish-NativeRuntime.ps1 -Upload`) and commits the pin with
+  it — `Infrastructure/NativeRuntimeFetchTests` fails while the gitlink is unpinned.
+- JuceSharp changes: commit in the submodule first, then bump the pointer here.
+  **Push the submodule before the parent** or the gitlink dangles.
+- `PositionChanged` fires at up to 250 Hz on a timer thread. UI-visible state
+  goes through a coalescing `Dispatcher.UIThread.Post` (see `AudioPlaybackCoordinator`).
+- **Any master-bus or per-seat state must be replayed on engine REBUILD** (device
+  change, NAM 48 kHz request, watchdog recovery), or it is dropped silently.
+- **The live seat count follows the input configuration, and exactly one place
+  writes it**: `LiveInputSeatLayout.FromInputConfig` (recorded from
+  `ApplyAudioConfigurationCore`). A temporary override (the latency wizard's
+  channel probe) layers on top and hands it back. "Two guitars" is an explicit
+  setting, never inferred from a second open channel (that is a stereo pickup).
+- **A capability the app cannot honour must never look live.** The UI ships it

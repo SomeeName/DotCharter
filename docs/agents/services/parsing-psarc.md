@@ -409,6 +409,13 @@ its own copy of this guide for the reader's half.
   persists it and `EofExporter` re-emits it — so the first tempo edit after an
   import dragged pinned beats and a round trip back to `.eof` lost every flag.
   `EofBeatAnchorImportTests` pins the mapping and lints the dialog's call site.
+  **PART VOCALS imports as the project's lyrics** (`EofVocalTrackParser`, #232): the
+  track is listed by `GetAvailableTracks` once it holds a lyric (`EofTrackInfo.IsVocals`,
+  `NoteCount` = lyrics) and lands in `EofImportResult.VocalTracks`. EOF text is Rock
+  Band syntax: a trailing `-` is `IsWordPart`, a bare `+` is a pitch slide and stays a
+  lyric, and each lyric LINE (section type 5) is one `LyricPhrase`; a file without
+  lines falls back to `RsVocalPhraseBuilder`. Each lyric set is its own track.
+  `EofVocalImportTests` round-trips the exporter's vocals.
   Round-trip parity against `EofImporter` is gated by
   `EofRoundTripParityTests` — an exporter change that breaks reimport
   equality fails the suite. Four EOF-invariants added in 0.33 (all
@@ -607,7 +614,7 @@ its own copy of this guide for the reader's half.
     `UI/LibraryAudioCacheReachabilityTests.Only_the_composition_root_arms_automatic_eviction`
     (the second half matters: a safe default with nothing asserting the opt-in is
     a dead feature instead of a destructive one).
-  - Settings row: Files & backups tab, "Decoded song audio", beside the other
+  - Settings row: Import & export tab, "Decoded song audio", beside the other
     file/storage cards. Its three readouts are STATUS and are not in
     `FilesSettingsViewModel`'s `Tracked` list — the `BackupStatusText` fault.
   - Tests: `Services/Parsing/Psarc/LibraryAudioCacheEvictionPlannerTests` (policy,

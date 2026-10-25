@@ -116,7 +116,7 @@ DotCharter-side changes in DotCharter. Otherwise the gitlink dangles for
 everyone else. An agent worktree built with the plain `JuceSharp/` copy
 cannot commit to the submodule, so ABI work belongs in the main checkout.
 Update `native-engine-abi.md` (a section for the new version) and the
-hard-rule index in `JuceSharp/AGENTS.md` in the same change.
+hard-rule index (`JuceSharp/docs/agents/hard-rule-index.md`) in the same change.
 
 The gitlink bump also publishes the new DLL pair for contributors without a C++
 toolchain: `pwsh -NoProfile -File tools/release/Publish-NativeRuntime.ps1 -Upload`

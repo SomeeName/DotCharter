@@ -64,12 +64,21 @@ public sealed class UserSettingsState
     /// toggle), never persisted in AppConfig.</summary>
     public bool LeftyFlip { get; set; }
 
-    /// <summary>Inverted string layout (tab convention): flips the VERTICAL
-    /// string order in both the 3D highway and the 2D timeline so the chart
-    /// reads like standard tab. Independent of <see cref="LeftyFlip"/> (which is
-    /// a HORIZONTAL fret-axis mirror in 3D); in the 2D lanes the two compose
-    /// (XOR). AppConfig display setting, mirrored here — default OFF.</summary>
+    /// <summary>The editor's String order: <c>true</c> is Tab (low string at the bottom). It
+    /// flips the VERTICAL string order of the 2D timeline and the editor's 3D preview.
+    /// Independent of <see cref="LeftyFlip"/> (a HORIZONTAL fret-axis mirror in 3D); in the 2D
+    /// lanes the two compose (XOR). AppConfig display setting, mirrored here — default OFF.</summary>
     public bool InvertStrings { get; set; }
+
+    /// <summary>Play Mode's String order, for the highway while a run is presenting.</summary>
+    public bool PlayModeInvertStrings { get; set; }
+
+    /// <summary>A Play Mode run is presenting on the editor's 3D surface (the shell's
+    /// gameplay presentation): the highway takes <see cref="PlayModeInvertStrings" />.</summary>
+    public bool GameplayPresentation { get; set; }
+
+    /// <summary>The 3D highway's string order this frame: Play Mode's during a run, the editor's otherwise.</summary>
+    public bool HighwayInvertStrings => GameplayPresentation ? PlayModeInvertStrings : InvertStrings;
 
     // 0.15.6 highway fidelity: composite-time filmic tonemap (default off).
     public bool EnableFilmicTonemap { get; set; }

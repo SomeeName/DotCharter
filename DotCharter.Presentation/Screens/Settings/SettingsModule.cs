@@ -99,6 +99,7 @@ public static class SettingsModule
                     sp.GetRequiredService<StemCacheViewModel>()),
                 sp.GetRequiredService<IDialogs>(),
                 sp.GetService<IAppLogger>()));
+        RegisterTab<ILyricModelsSettingsScreen, LyricModelsSettingsViewModel>(services);
         RegisterTab<IAiSettingsScreen, AiSettingsViewModel>(services, sp => new AiSettingsViewModel(
             sp.GetRequiredService<IConfigurationService>(),
             sp.GetRequiredService<ILocalizationService>(),

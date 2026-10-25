@@ -6,13 +6,35 @@ namespace DotCharter.Tests.Presentation.Settings;
 /// <summary>Settings ▸ Play on the Presentation layer: load, the unsaved counter, save, revert, reset and search.</summary>
 public sealed class PlaySettingsViewModelTests
 {
-    private static (PlaySettingsViewModel Vm, FakeConfigurationService Config) NewRig(Action<AppConfig>? seed = null)
+    private static (PlaySettingsViewModel Vm, FakeConfigurationService Config) NewRig(Action<AppConfig>? seed = null) =>
+        NewRig(new ProjectState(), seed);
+
+    private static (PlaySettingsViewModel Vm, FakeConfigurationService Config) NewRig(ProjectState state, Action<AppConfig>? seed = null)
     {
         var config = new FakeConfigurationService();
         seed?.Invoke(config.AppConfig);
-        var vm = new PlaySettingsViewModel(config, FakeLocalization.English());
+        var vm = new PlaySettingsViewModel(config, FakeLocalization.English(), state);
         vm.Load();
         return (vm, config);
+    }
+
+    /// <summary>#229: Play Mode has its own String order, saved apart from the editor's and handed to the highway.</summary>
+    [Fact]
+    public void TheStringOrder_IsPlayModesOwn()
+    {
+        var state = new ProjectState();
+        var (vm, config) = NewRig(state, c => c.InvertStrings = true);
+        Assert.Equal(0, vm.StringOrderIndex);
+
+        vm.StringOrderIndex = 1;
+        Assert.Contains("play.StringOrderIndex", vm.UnsavedSettings);
+        vm.Save();
+
+        Assert.True(config.AppConfig.PlayModeInvertStrings);
+        Assert.True(config.AppConfig.InvertStrings);
+        Assert.True(state.PlayModeInvertStrings);
+        Assert.False(state.InvertStrings);
+        Assert.Equal(1, NewRig(c => c.PlayModeInvertStrings = true).Vm.StringOrderIndex);
     }
 
     [Fact]

@@ -9,7 +9,6 @@ public sealed partial class FakeGraphicsSettingsScreen : ObservableObject, IGrap
     [ObservableProperty] private double _renderScalePercent = 100;
     [ObservableProperty] private IGraphicsChoice? _selectedMaxFps;
     [ObservableProperty] private double _idleFps = 10;
-    [ObservableProperty] private bool _animatedHomeHero;
     [ObservableProperty] private IGraphicsChoice? _selectedPresentMode;
     [ObservableProperty] private IGraphicsChoice? _selectedMsaa;
     [ObservableProperty] private bool _enableAnchorPreview = true;
@@ -21,9 +20,6 @@ public sealed partial class FakeGraphicsSettingsScreen : ObservableObject, IGrap
     [ObservableProperty] private double _highwayDrawDistanceZ = 45;
     [ObservableProperty] private double _cameraDistancePercent = 100;
     [ObservableProperty] private bool _show3DFingering = true;
-    [ObservableProperty] private bool _timeline2DPolish = true;
-    [ObservableProperty] private bool _timeline2DLaneTint;
-    [ObservableProperty] private bool _invertStrings;
     [ObservableProperty] private bool _enableHighwayNearFade = true;
     [ObservableProperty] private bool _enableNoteHitExplosions = true;
     [ObservableProperty] private bool _enableEnhancedHitFeedback = true;

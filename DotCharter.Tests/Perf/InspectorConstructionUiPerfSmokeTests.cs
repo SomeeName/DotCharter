@@ -182,7 +182,7 @@ public sealed class InspectorConstructionUiPerfSmokeTests
                 var rail = song.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "SongRail");
                 Assert.Equal(38, rail.Bounds.Width, 0.5);
                 var entries = rail.GetVisualDescendants().OfType<ToggleButton>().ToList();
-                Assert.Equal(4, entries.Count);
+                Assert.Equal(3, entries.Count);
                 Assert.All(entries, e => Assert.True(e.Classes.Contains("FireSegmentItem") && e.Bounds is { Width: 30, Height: 30 },
                     $"{e.Name} laid out as {e.Bounds}"));
                 Assert.Single(entries, e => e.IsChecked == true);

@@ -20,7 +20,7 @@
          edit is on screen wherever the edit is made. -->
     <StackPanel Spacing="{StaticResource SpaceXs}">
         <Border x:Name="ApplyToLadder" Classes="ScopeBar" IsVisible="{Binding Ladder.IsVisible}">
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto"
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto"
                   ColumnSpacing="{StaticResource SpaceSm}">
                 <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Top"
                            Margin="{StaticResource GapTopXs}"
@@ -75,11 +75,19 @@
                 </WrapPanel>
 
                 <!-- What the lit rung reaches: "4 chords · 2 hand shapes · all levels". -->
-                <TextBlock x:Name="ApplyToReach" Grid.Row="1" Grid.Column="1"
-                           Text="{Binding Ladder.EffectiveDetail}"
-                           IsVisible="{Binding Ladder.HasEffectiveDetail}"
-                           FontSize="{StaticResource FontSizeMicro}" FontWeight="Normal"
-                           Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="{StaticResource SpaceXxs}">
+                    <TextBlock x:Name="ApplyToReach"
+                               Text="{Binding Ladder.EffectiveDetail}"
+                               IsVisible="{Binding Ladder.HasEffectiveDetail}"
+                               FontSize="{StaticResource FontSizeMicro}" FontWeight="Normal"
+                               Foreground="{DynamicResource TextDim}" TextWrapping="Wrap" />
+                    <!-- What the next shape edit does, said before it is made. -->
+                    <TextBlock x:Name="ApplyToResult"
+                               Text="{Binding Ladder.ResultText}"
+                               IsVisible="{Binding Ladder.HasResultText}"
+                               FontSize="{StaticResource FontSizeMicro}" FontWeight="Normal"
+                               TextWrapping="Wrap" />
+                </StackPanel>
 
                 <!-- The bulk-edit preview (#485): while the lit rung reaches more
                      than the selection, what it would change is outlined on the
@@ -104,6 +112,13 @@
                             ToolTip.Tip="{localization:Loc ChordTemplate_Preview_Next}"
                             AutomationProperties.Name="{localization:Loc ChordTemplate_Preview_Next}" />
                 </Grid>
+
+                <Button x:Name="EditShapeButton" Grid.Row="3" Grid.Column="1" HorizontalAlignment="Left"
+                        Theme="{StaticResource PillButton}" Classes="Pill"
+                        Content="{localization:Loc ChordTemplate_EditShape}"
+                        Command="{Binding ShapeEditor.OpenCommand}"
+                        ToolTip.Tip="{localization:Loc ChordTemplate_EditShapeTip}"
+                        AutomationProperties.Name="{localization:Loc ChordTemplate_EditShape}" />
             </Grid>
         </Border>
         <!-- A reshape with nothing selected is refused (it would rewrite every

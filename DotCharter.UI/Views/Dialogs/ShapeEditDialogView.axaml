@@ -1,0 +1,201 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
+             xmlns:ctl="using:DotCharter.UI.Controls"
+             xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
+             x:Class="DotCharter.UI.Views.Dialogs.ShapeEditDialogView"
+             x:DataType="contracts:IShapeEditScreen"
+             x:CompileBindings="True">
+
+    <!-- The shape editor. Reading order is the model: first WHAT CHANGES (the
+         scope, with the uses it reaches lit in the song strip), then the grip
+         (now → after, one row per string), the name, the hand shapes, and last
+         the one sentence Apply carries out. Grammar: Views/Dialogs/DialogStyles.axaml -->
+    <Grid Classes="DialogFrame">
+        <Border Theme="{DynamicResource DialogCardBorder}" Classes="DialogCard Lg">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Theme="{DynamicResource DialogHeadGrid}" Grid.Row="0" Classes="DialogHead" ColumnDefinitions="Auto,*">
+                    <Border Theme="{DynamicResource DialogIconBoxBorder}" Grid.Column="0" Classes="DialogIconBox">
+                        <PathIcon Classes="DialogIcon" Data="{DynamicResource IconGuitar}" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Theme="{DynamicResource DialogTitleText}" Classes="DialogTitle" Text="{localization:Loc ShapeEdit_Title}" />
+                        <TextBlock Theme="{DynamicResource DialogSubtitleText}" Classes="DialogSubtitle" Text="{Binding ShapeTitle}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Theme="{DynamicResource DialogContextText}" Classes="DialogContext" Text="{Binding OpenedFromText}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" Classes="DialogBody" Padding="0,0,16,0" Margin="0,0,-16,0"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="{DynamicResource FireSpaceSm}">
+
+                        <!-- 1. Scope, before anything else. -->
+                        <Border x:Name="ShapeEditScopeSection" Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource FireSpaceSm}">
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                           Text="{localization:Loc ShapeEdit_ScopeSection}" />
+                                <ItemsControl x:Name="ShapeEditScopes" ItemsSource="{Binding Scopes}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Rows="1" ColumnSpacing="8" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IShapeEditScope">
+                                            <RadioButton GroupName="ShapeEditScope" Classes="FireSegmentItem"
+                                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                                         IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                         IsEnabled="{Binding IsAvailable}"
+                                                         Command="{Binding SelectCommand}"
+                                                         AutomationProperties.Name="{Binding Label}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{Binding Detail}"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </RadioButton>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- The song strip: a cell per bar; a use is a muted mark, a
+                                     reached use is lit, the bar it was opened from is ringed. -->
+                                <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                           Text="{localization:Loc ShapeEdit_StripLabel}" />
+                                <ItemsControl x:Name="ShapeEditStrip" ItemsSource="{Binding UseBars}" Height="22">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Rows="1" ColumnSpacing="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="contracts:IShapeUseBar">
+                                            <Panel>
+                                                <Border CornerRadius="2" Background="{DynamicResource FireSurfaceRaised}" />
+                                                <Border CornerRadius="2" Background="{DynamicResource FireTextDim}" Opacity="0.55"
+                                                        IsVisible="{Binding IsUse}" />
+                                                <Border CornerRadius="2" Background="{DynamicResource FireAccent}"
+                                                        IsVisible="{Binding IsReached}" />
+                                                <Border CornerRadius="2" BorderThickness="2" Margin="-2"
+                                                        BorderBrush="{DynamicResource FireTextPrimary}"
+                                                        IsVisible="{Binding IsOrigin}" />
+                                            </Panel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="ShapeEditPreview" Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel"
+                                           Text="{Binding PreviewText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 2. The grip (now → after, a row per string) beside its name. -->
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <StackPanel Spacing="{DynamicResource FireSpaceSm}">
+                                <TextBlock Theme="{DynamicResource DlgSectionLabelText}" Classes="DlgSectionLabel"
+                                           Text="{localization:Loc ShapeEdit_GripSection}" />
+                                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*" ColumnSpacing="14">
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeEdit_Before}" />
+                                        <ctl:ChordDiagramControl Width="88" Height="86" Chord="{Binding BeforeChord}"
+                                                                 Template="{Binding BeforeDiagram}" StringCount="{Binding StringCount}" />
+                                    </StackPanel>
+                                    <PathIcon Grid.Column="1" Width="12" Height="12" VerticalAlignment="Center"
+                                              Data="{DynamicResource IconChevronRight}" Foreground="{DynamicResource FireTextDim}" />
+                                    <StackPanel Grid.Column="2" Spacing="4">
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeEdit_After}" />
+                                        <ctl:ChordDiagramControl Width="88" Height="86" Chord="{Binding AfterChord}"
+                                                                 Template="{Binding AfterDiagram}" StringCount="{Binding StringCount}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="2">
+                                        <Grid ColumnDefinitions="40,56,56,10" ColumnSpacing="6">
+                                            <TextBlock Grid.Column="0" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeEdit_String}" />
+                                            <TextBlock Grid.Column="1" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeEdit_Fret}" />
+                                            <TextBlock Grid.Column="2" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeEdit_Finger}" />
+                                        </Grid>
+                                        <ItemsControl x:Name="ShapeEditStrings" ItemsSource="{Binding Strings}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="contracts:IShapeEditString">
+                                                    <Grid ColumnDefinitions="40,56,56,10" ColumnSpacing="6" Margin="0,0,0,2">
+                                                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding StringName}"
+                                                                   FontFamily="{DynamicResource FireFontMono}"
+                                                                   Foreground="{DynamicResource FireTextPrimary}" />
+                                                        <TextBox Grid.Column="1" Text="{Binding Fret}" MinHeight="22" Padding="6,1"
+                                                                 AutomationProperties.Name="{localization:Loc ShapeEdit_Fret}" />
+                                                        <TextBox Grid.Column="2" Text="{Binding Finger}" MinHeight="22" Padding="6,1"
+                                                                 AutomationProperties.Name="{localization:Loc ShapeEdit_Finger}" />
+                                                        <Ellipse Grid.Column="3" Width="7" Height="7" HorizontalAlignment="Center"
+                                                                 Fill="{DynamicResource FireAccent}" IsVisible="{Binding IsChanged}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <!-- The name: typed, taken from the suggestion, or No name on purpose. -->
+                                    <StackPanel Grid.Column="4" Spacing="6" Margin="10,0,0,0">
+                                        <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc ShapeEdit_Name}" />
+                                        <TextBox Text="{Binding NameDraft}" PlaceholderText="{Binding NamePlaceholder}" IsEnabled="{Binding !IsNoName}"
+                                                 AutomationProperties.Name="{localization:Loc ShapeEdit_Name}" />
+                                        <TextBlock Theme="{DynamicResource DlgDescText}" Classes="DlgDesc" Text="{localization:Loc ShapeEdit_NameDesc}"
+                                                   TextWrapping="Wrap" />
+                                        <Button Classes="DlgChip" HorizontalAlignment="Left"
+                                                IsVisible="{Binding HasSuggestedName}"
+                                                Content="{Binding SuggestedName}"
+                                                AutomationProperties.Name="{localization:Loc ShapeEdit_UseSuggested}"
+                                                ToolTip.Tip="{localization:Loc ShapeEdit_UseSuggested}"
+                                                Command="{Binding UseSuggestedNameCommand}" />
+                                        <CheckBox IsChecked="{Binding IsNoName}" Content="{localization:Loc ShapeEdit_NoName}"
+                                                  ToolTip.Tip="{localization:Loc ShapeEdit_NoNameDesc}"
+                                                  AutomationProperties.Name="{localization:Loc ShapeEdit_NoName}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Border Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Notice" IsVisible="{Binding HasMatch}">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding MatchText}" TextWrapping="Wrap" />
+                                        <Button Grid.Column="1" Classes="DlgLink" VerticalAlignment="Center"
+                                                Content="{localization:Loc ShapeEdit_UseMatch}"
+                                                AutomationProperties.Name="{localization:Loc ShapeEdit_UseMatch}"
+                                                Command="{Binding UseMatchCommand}" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 3. Hand shapes follow their chords unless switched off. -->
+                        <Border Theme="{DynamicResource DlgSectionBorder}" Classes="DlgSection">
+                            <Grid Theme="{DynamicResource DlgRowGrid}" Classes="DlgRow Last" ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Theme="{DynamicResource DlgLabelText}" Classes="DlgLabel" Text="{localization:Loc ShapeEdit_HandShapes}" />
+                                    <TextBlock x:Name="ShapeEditHandShapes" Theme="{DynamicResource DlgDescText}" Classes="DlgDesc"
+                                               Text="{Binding HandShapeSyncText}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <ToggleSwitch Grid.Column="1" VerticalAlignment="Center" Theme="{DynamicResource FireToggleSwitch}"
+                                              IsChecked="{Binding KeepHandShapesInSync, Mode=TwoWay}"
+                                              AutomationProperties.Name="{localization:Loc ShapeEdit_HandShapes}" />
+                            </Grid>
+                        </Border>
+
+                        <!-- 4. What Apply does, in one sentence. -->
+                        <Border x:Name="ShapeEditResult" Theme="{DynamicResource DlgStripBorder}" Classes="DlgStrip Ok">
+                            <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Theme="{DynamicResource DialogFooterBorder}" Grid.Row="2" Classes="DialogFooter">
+                    <StackPanel Theme="{DynamicResource DlgActionsPanel}" Classes="DlgActions">
+                        <Button Theme="{DynamicResource SubtleButton}" Classes="DlgAction Subtle" Content="{localization:Loc Action_Cancel}"
+                                Command="{Binding CancelCommand}" IsCancel="True" />
+                        <Button Classes="DlgAction Primary" Content="{Binding ApplyLabel}"
+                                AutomationProperties.Name="{localization:Loc Action_Apply}"
+                                Command="{Binding ApplyCommand}" IsDefault="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

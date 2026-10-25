@@ -246,8 +246,15 @@ public static class ArrangementSoundSync
         var sourceTemplate = ChordTemplateResolver.FindById(source, sourceTemplateId);
         if (sourceTemplate == null) return null;
 
+        var before = minted.Count;
         var resolved = ChordTemplateResolver.Resolve(target, sourceTemplate.Frets,
             ArpeggioFlavour.Of(sourceTemplate), sourceTemplate.Name, minted);
+        // A copy of a shape the charter left unnamed on purpose is unnamed too.
+        if (minted.Count > before && sourceTemplate.Unnamed)
+        {
+            resolved.Name = string.Empty;
+            resolved.Unnamed = true;
+        }
 
         if (sourceTemplate.Fingers.Count > 0)
             resolved.Fingers = new Dictionary<int, int>(sourceTemplate.Fingers);

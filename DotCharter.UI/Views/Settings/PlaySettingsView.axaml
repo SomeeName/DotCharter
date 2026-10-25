@@ -74,6 +74,20 @@
                         <ToggleSwitch VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc PlayMode_RockMeter_SettingLabel}"
                                       IsChecked="{Binding GameplayRockMeterEnabled, Mode=TwoWay}" />
                     </Grid>
+
+                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=play.stringOrder}"
+                          Classes="FormRow" ColumnDefinitions="*,300">
+                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_StringOrder}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_PlayStringOrder}" />
+                        </StackPanel>
+                        <!-- Named by both conventions: tab is not the "inverted" one to a tab reader. -->
+                        <ComboBox x:Name="PlayStringOrder" VerticalAlignment="Top" Grid.Column="1" AutomationProperties.Name="{localization:Loc Settings_StringOrder}"
+                                  SelectedIndex="{Binding StringOrderIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="{localization:Loc Settings_StringOrder_Rocksmith}" />
+                            <ComboBoxItem Content="{localization:Loc Settings_StringOrder_Tab}" />
+                        </ComboBox>
+                    </Grid>
                 </StackPanel>
             </Border>
 

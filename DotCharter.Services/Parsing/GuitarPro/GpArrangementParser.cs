@@ -441,7 +441,7 @@ public sealed class GpArrangementParser
 
     /// <summary>Most strings an imported track may declare. Matches
     /// <c>EofProGuitarTrackParser</c>'s rejection above 8.</summary>
-    private const int MaxStringCount = 8;
+    private const int MaxStringCount = StandardOpenStrings.MaxStringCount;
 
     private static FractionalPosition ApplyFeelToPosition(FractionalPosition pos, string feel)
     {

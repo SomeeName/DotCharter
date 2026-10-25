@@ -109,14 +109,6 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.animatedHomeHero}" Classes="FormRow" ColumnDefinitions="*,300">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_AnimatedHomeHero}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_AnimatedHomeHero_Desc}" />
-                        </StackPanel>
-                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_AnimatedHomeHero}" Grid.Column="1" IsChecked="{Binding AnimatedHomeHero, Mode=TwoWay}" />
-                    </Grid>
                 </StackPanel>
             </Border>
 
@@ -247,14 +239,6 @@
                         </StackPanel>
                         <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Show3DFingering}" Grid.Column="1" IsChecked="{Binding Show3DFingering}" />
                     </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.invertStrings}" Classes="FormRow" ColumnDefinitions="*,300">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_InvertStrings}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_InvertStrings_Desc}" />
-                        </StackPanel>
-                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_InvertStrings}" Grid.Column="1" IsChecked="{Binding InvertStrings, Mode=TwoWay}" />
-                    </Grid>
                 </StackPanel>
             </Border>
 
@@ -288,38 +272,6 @@
                 </StackPanel>
             </Border>
 
-            <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.4}">
-                <StackPanel>
-                    <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
-                        <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
-                            <PathIcon Classes="GroupIcon" Data="{DynamicResource IconSineWave}" />
-                        </Border>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Theme="{StaticResource GroupKickerText}" Classes="GroupKicker" Text="{localization:Loc Settings_Kicker_Rendering}" />
-                            <TextBlock Theme="{StaticResource GroupTitleText}" Classes="GroupTitle" Text="{localization:Loc Settings_Graphics_Timeline2DTitle}" />
-                            <TextBlock Theme="{StaticResource GroupSubtitleText}" Classes="GroupSubtitle" Text="{localization:Loc Settings_Graphics_Timeline2DSubtitle}" />
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.timeline2DPolish}" Classes="FormRow" ColumnDefinitions="*,300">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_Timeline2DPolish}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_Timeline2DPolish_Desc}" />
-                        </StackPanel>
-                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_Timeline2DPolish}" Grid.Column="1" IsChecked="{Binding Timeline2DPolish, Mode=TwoWay}" />
-                    </Grid>
-
-                    <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.timeline2DLaneTint}" Classes="FormRow" ColumnDefinitions="*,300">
-                        <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_Graphics_Timeline2DLaneTint}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Graphics_Timeline2DLaneTint_Desc}" />
-                        </StackPanel>
-                        <ToggleSwitch VerticalAlignment="Top" AutomationProperties.Name="{localization:Loc Settings_Graphics_Timeline2DLaneTint}" Grid.Column="1" IsChecked="{Binding Timeline2DLaneTint, Mode=TwoWay}" />
-                    </Grid>
-
-                </StackPanel>
-            </Border>
-
             <!-- ── Advanced (cosmetic FX) ────────────────────────────────────
                  Collapsed by default so the common path is short. A bare toggle
                  header + the effect cards nested in an IsVisible-bound panel, so
@@ -338,7 +290,7 @@
             </ToggleButton>
             <StackPanel x:Name="GraphicsAdvancedBody" IsVisible="{Binding IsAdvancedOpen}">
 
-                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.5}">
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.4}">
                     <StackPanel>
                         <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
                             <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
@@ -441,7 +393,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.6}">
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.5}">
                     <StackPanel>
                         <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
                             <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">
@@ -472,7 +424,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.7}">
+                <Border Theme="{StaticResource SettingsGroupBorder}" Classes="SettingsGroup" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=graphics.group.6}">
                     <StackPanel>
                         <Grid Theme="{StaticResource GroupHeadGrid}" Classes="GroupHead" ColumnDefinitions="Auto,*">
                             <Border Theme="{StaticResource GroupIconBoxBorder}" Grid.Column="0" Classes="GroupIconBox">

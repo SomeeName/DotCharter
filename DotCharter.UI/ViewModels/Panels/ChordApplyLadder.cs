@@ -98,6 +98,17 @@ public sealed partial class ChordApplyLadder : ObservableObject
     public bool HasEffectiveDetail => EffectiveDetail.Length > 0;
 
     /// <summary>
+    ///     What the next fret or shape edit does, in one sentence, BEFORE it is made: "“Am” itself
+    ///     changes, so every use plays the new grip" or "A new shape is made for these 4 chords; the
+    ///     other 10 keep “Am”". The old "Selected" rung silently meant either one, depending on
+    ///     whether the selection happened to cover every use. Empty when the edit is refused or is a
+    ///     technique edit, which never writes the shape.
+    /// </summary>
+    public string ResultText { get; private set; } = string.Empty;
+
+    public bool HasResultText => ResultText.Length > 0;
+
+    /// <summary>
     ///     How many sounds one press of Save re-fingers with the pending draft —
     ///     every chord and hand shape, the "same grip" templates' included. It is
     ///     resolved once per <see cref="Update" /> or draft change on the cached
@@ -128,6 +139,9 @@ public sealed partial class ChordApplyLadder : ObservableObject
             Fill(row, scope);
         OnPropertyChanged(nameof(EffectiveDetail));
         OnPropertyChanged(nameof(HasEffectiveDetail));
+        ResultText = family == ChordApplyFamily.Shape ? ResultOf(scope, chosen) : string.Empty;
+        OnPropertyChanged(nameof(ResultText));
+        OnPropertyChanged(nameof(HasResultText));
         UpdateFingering(draft);
     }
 
@@ -139,6 +153,27 @@ public sealed partial class ChordApplyLadder : ObservableObject
         FingeringTargetCount = targets is null or { Path: ChordApplyPath.Refused }
             ? 0
             : targets.ChordCount + targets.HandShapeCount;
+    }
+
+    private string ResultOf(ChordApplyScope? scope, ChordApplyRung chosen)
+    {
+        if (scope is null) return string.Empty;
+        var targets = scope.Resolve(chosen, ChordTemplateEditKind.Shape);
+        var shape = scope.Loaded;
+        var name = shape.Unnamed || shape.Name.Length == 0 ? shape.GetTemplateFrets() : shape.Name;
+        switch (targets.Path)
+        {
+            case ChordApplyPath.InPlace:
+                return _loc.Format("ShapeEdit_Result_Changes", name);
+            case ChordApplyPath.Rebind:
+                var reached = targets.Sounds.Chords.Count;
+                var kept = Math.Max(0, scope.Reach(ChordApplyRung.EveryUse).Chords - reached);
+                return reached == 1
+                    ? _loc.Format("ShapeEdit_Result_NewOne", kept, name)
+                    : _loc.Format("ShapeEdit_Result_NewMany", reached, kept, name);
+            default:
+                return string.Empty;
+        }
     }
 
     private void Fill(ChordApplyRungRow row, ChordApplyScope? scope)

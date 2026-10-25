@@ -22,8 +22,8 @@ Play Mode has a smaller settings panel of its own, applied live while you play; 
 
 ## Editor
 
-How the chart editor behaves while you edit, the defaults of a new project and how Guitar Pro files are
-imported.
+How the chart editor behaves while you edit, how the 2D timeline looks (string order, lane tint and
+polish) and the defaults of a new project.
 
 ![Editor](images/settings-editor.png)
 
@@ -64,7 +64,7 @@ The 3D highway and the editor's timeline.
 3. **Highway view.** Scroll speed, draw distance and camera.
 <!-- /guide:callouts -->
 
-Further down: **Timing** (visual lead, to line the picture up with the sound), **2D timeline**,
+Further down: **Timing** (visual lead, to line the picture up with the sound),
 **Highway** effects, **Showlights** and the **Stage background**.
 
 ## Audio
@@ -85,9 +85,11 @@ calibration), a **Streaming mirror** that copies the mix to a second device, and
 ASIO gives the lowest latency when your audio interface has an ASIO driver; WASAPI works with every
 device.
 
-## Files & backups
+## Import & export
 
-![Files & backups](images/settings-files.png)
+How Guitar Pro files and song packages are read, what a save writes next to the project, and backups.
+
+![Import & export](images/settings-files.png)
 
 <!-- guide:callouts settings-files -->
 1. **Save companions.** Extra files written next to the project on every save.
@@ -103,7 +105,7 @@ device.
 2. **Bindings.** Every command and its key. Click a field and press the new key.
 <!-- /guide:callouts -->
 
-## Stem models
+## AI & models: stem separation
 
 Stem separation splits a song's audio into instruments, so Play Mode can mute the part you play.
 Separated stems are kept, so a song is separated only once.
@@ -114,7 +116,12 @@ Separated stems are kept, so a song is separated only once.
 1. **Models.** The stem-separation models; pick the active one.
 <!-- /guide:callouts -->
 
-Further down: **GPU acceleration**, the **Stem cache** and adding a custom model.
+Further down: **GPU acceleration**, the **Stem cache** and adding a custom model. Stem separation is a
+section of the **AI & models** page, under the provider and match-model cards.
+
+Below it, **Lyric models** lists the models that transcribe and align lyrics: download or repair each
+one, and see whether it last ran on the GPU or fell back to the CPU (with a button to try the GPU
+again).
 
 ## Tone3000
 
@@ -124,9 +131,9 @@ Further down: **GPU acceleration**, the **Stem cache** and adding a custom model
 1. **Tone3000.** Sign in to browse and download community amp captures.
 <!-- /guide:callouts -->
 
-## AI
+## AI & models
 
-![AI](images/settings-ai.png)
+![AI & models](images/settings-ai.png)
 
 <!-- guide:callouts settings-ai -->
 1. **Provider.** Which AI answers tone, chart and chat requests, and its model.

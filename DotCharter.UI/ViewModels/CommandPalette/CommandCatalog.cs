@@ -167,31 +167,9 @@ public static class CommandCatalog
         list.Add(FromAction("view.toggleWaveform", "Keybind_ToggleWaveform", vw,
             () => vm.ProjectState.ShowWaveform = !vm.ProjectState.ShowWaveform, () => k.ToggleWaveform));
         list.Add(FromCommand("view.toggleMinimap", "Menu_ShowMinimap", vw, vm.ToggleMinimapCommand));
-        // View ▸ Timeline Rows — the ActiveRibbon flags, twins of the menu rows.
-        // Titles are "Timeline Rows · X" from the keys the menu rows wear, so the
-        // two surfaces cannot drift. The ribbon is read at CLICK time — it follows
-        // the focused track and is null with no chart (then a no-op, like the menu).
-        string RowTitle(string key) => $"{l["Timeline_Rows"]} · {l[key]}";
-        void AddRowToggle(string id, string titleKey, Action<RibbonVisibility> flip) =>
-            list.Add(new AppCommand(id, RowTitle(titleKey), l[vw], () =>
-            {
-                var ribbon = vm.ChartEditor.ActiveRibbon;
-                if (ribbon != null) flip(ribbon);
-            }));
-        AddRowToggle("view.toggleRowSections", "Ribbon_Sections",
-            ribbon => ribbon.ShowSections = !ribbon.ShowSections);
-        AddRowToggle("view.toggleRowPhrases", "Ribbon_Phrases",
-            ribbon => ribbon.ShowPhrases = !ribbon.ShowPhrases);
-        AddRowToggle("view.toggleRowLyrics", "Ribbon_Lyrics",
-            ribbon => ribbon.ShowLyrics = !ribbon.ShowLyrics);
-        AddRowToggle("view.toggleRowTones", "Ribbon_Tones",
-            ribbon => ribbon.ShowTones = !ribbon.ShowTones);
-        AddRowToggle("view.toggleRowMeasureInfo", "Ribbon_MeasureInfo",
-            ribbon => ribbon.ShowMeasureMetadata = !ribbon.ShowMeasureMetadata);
-        AddRowToggle("view.toggleRowLinks", "Ribbon_Links",
-            ribbon => ribbon.ShowLinks = !ribbon.ShowLinks);
-        AddRowToggle("view.toggleLaneAutoHide", "TimelineLanes_AutoHide", ribbon => ribbon.AutoHideEmpty = !ribbon.AutoHideEmpty);
-        AddRowToggle("view.toggleLaneCompact", "TimelineLanes_Compact", ribbon => ribbon.CompactRows = !ribbon.CompactRows);
+        list.Add(FromAction("view.tabStringOrder", "Menu_TabStringOrder", vw,
+            () => vm.StringOrder.IsTab = !vm.StringOrder.IsTab));
+        AddTimelineRowToggles(list, vm, l, vw);
         list.Add(FromCommand("view.zoomIn", "Keybind_ZoomIn", vw, vm.ZoomInCommand, () => k.ZoomIn));
         list.Add(FromCommand("view.zoomOut", "Keybind_ZoomOut", vw, vm.ZoomOutCommand, () => k.ZoomOut));
         list.Add(FromCommand("view.followPlayhead", "Menu_FollowPlayhead", vw, vm.ToggleTimelineFollowCommand));
@@ -517,6 +495,37 @@ public static class CommandCatalog
         // The YouTube entry is dropped when the public-build switch is off, a
         // package-reading one when the build cannot read packages.
         return ContestedFeatures.FilterPalette(list, c => c.Id, ContestedFeatures.Enabled, vm.Project.PackageFeatures);
+    }
+
+    /// <summary>
+    ///     View ▸ Timeline Rows — the ActiveRibbon flags, twins of the menu rows.
+    ///     Titles are "Timeline Rows · X" from the keys the menu rows wear, so the
+    ///     two surfaces cannot drift. The ribbon is read at CLICK time — it follows
+    ///     the focused track and is null with no chart (then a no-op, like the menu).
+    /// </summary>
+    private static void AddTimelineRowToggles(List<AppCommand> list, MainWindowViewModel vm, ILocalizationService l, string vw)
+    {
+        string RowTitle(string key) => $"{l["Timeline_Rows"]} · {l[key]}";
+        void AddRowToggle(string id, string titleKey, Action<RibbonVisibility> flip) =>
+            list.Add(new AppCommand(id, RowTitle(titleKey), l[vw], () =>
+            {
+                var ribbon = vm.ChartEditor.ActiveRibbon;
+                if (ribbon != null) flip(ribbon);
+            }));
+        AddRowToggle("view.toggleRowSections", "Ribbon_Sections",
+            ribbon => ribbon.ShowSections = !ribbon.ShowSections);
+        AddRowToggle("view.toggleRowPhrases", "Ribbon_Phrases",
+            ribbon => ribbon.ShowPhrases = !ribbon.ShowPhrases);
+        AddRowToggle("view.toggleRowLyrics", "Ribbon_Lyrics",
+            ribbon => ribbon.ShowLyrics = !ribbon.ShowLyrics);
+        AddRowToggle("view.toggleRowTones", "Ribbon_Tones",
+            ribbon => ribbon.ShowTones = !ribbon.ShowTones);
+        AddRowToggle("view.toggleRowMeasureInfo", "Ribbon_MeasureInfo",
+            ribbon => ribbon.ShowMeasureMetadata = !ribbon.ShowMeasureMetadata);
+        AddRowToggle("view.toggleRowLinks", "Ribbon_Links",
+            ribbon => ribbon.ShowLinks = !ribbon.ShowLinks);
+        AddRowToggle("view.toggleLaneAutoHide", "TimelineLanes_AutoHide", ribbon => ribbon.AutoHideEmpty = !ribbon.AutoHideEmpty);
+        AddRowToggle("view.toggleLaneCompact", "TimelineLanes_Compact", ribbon => ribbon.CompactRows = !ribbon.CompactRows);
     }
 
     /// <summary>Open Recent: the palette is rebuilt on every open, so the MRU rows are cheap

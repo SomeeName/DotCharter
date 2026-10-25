@@ -73,18 +73,6 @@ public interface IGraphicsSettingsScreen : INotifyPropertyChanged
 
     bool Show3DFingering { get; set; }
 
-    /// <summary>Home's hero image animates. Off, it is the same image, drawn once.</summary>
-    bool AnimatedHomeHero { get; set; }
-
-    // ── 2D timeline ──────────────────────────────────────────────────────
-
-    bool Timeline2DPolish { get; set; }
-
-    bool Timeline2DLaneTint { get; set; }
-
-    /// <summary>Tab convention: flips the string order in BOTH the 3D highway and the 2D timeline.</summary>
-    bool InvertStrings { get; set; }
-
     // ── advanced: highway effects ────────────────────────────────────────
 
     bool EnableHighwayNearFade { get; set; }

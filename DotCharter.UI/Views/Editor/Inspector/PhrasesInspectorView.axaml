@@ -1,16 +1,18 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:viewModels="using:DotCharter.UI.ViewModels.Editor"
+             xmlns:contracts="using:DotCharter.Presentation.Contracts.Editor"
              xmlns:localization="clr-namespace:DotCharter.Tone.UI.Localization;assembly=DotCharter.Tone.UI"
              x:Class="DotCharter.UI.Views.Editor.Inspector.PhrasesInspectorView"
-             x:DataType="viewModels:PhrasesInspectorViewModel">
+             x:DataType="contracts:IPhrasesScreen"
+             x:CompileBindings="True">
 
     <!--
-        v0.29 phrase-iteration browser: every phrase's iterations, time-ordered;
-        a row click jumps the editor (the deliberate-seek funnel), and the
-        Propagate button copies THAT iteration into all others — two-step
-        confirm (button relabels, status line names the rewrite count), one
-        undo step through the shipped propagation engine.
+        The one Phrases panel: every phrase's iterations from both phrase stores,
+        time-ordered. A phrase line renames in place (Apply and Enter only once the
+        text changed, Esc cancels) and deletes with its effect named on the button;
+        an iteration line jumps the editor (the deliberate-seek funnel), and
+        Propagate copies THAT iteration into all others — two-step confirm (button
+        relabels, status line names the rewrite count). Every edit is one undo step.
     -->
     <Grid RowDefinitions="Auto,Auto,*">
 
@@ -43,33 +45,59 @@
         </StackPanel>
 
         <ScrollViewer Grid.Row="2" IsVisible="{Binding HasPhrases}">
-            <ItemsControl ItemsSource="{Binding Phrases}" Margin="{StaticResource PaddingRow}">
+            <StackPanel>
+            <ItemsControl x:Name="PhraseGroups" ItemsSource="{Binding Phrases}" Margin="{StaticResource PaddingRow}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="viewModels:PhraseGroupRow">
+                    <DataTemplate x:DataType="contracts:IPhraseGroupRow">
                         <Border Padding="{StaticResource GapBottomSm}" Margin="{StaticResource GapBottomSm}"
                                 BorderBrush="{DynamicResource FireBorderSeam}" BorderThickness="0,0,0,1">
                             <StackPanel Spacing="2">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"
-                                               FontSize="{StaticResource FireSizeXs}" Foreground="{DynamicResource FireTextBright}"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="1" Text="{Binding CountLabel}"
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="{StaticResource SpaceXs}">
+                                    <ToggleButton x:Name="PhraseGroupExpand" Grid.Column="0" Classes="MarkerFold"
+                                                  IsChecked="{Binding IsExpanded}"
+                                                  AutomationProperties.Name="{localization:Loc Inspector_Phrases_ShowIterations}"
+                                                  ToolTip.Tip="{localization:Loc Inspector_Phrases_ShowIterations}">
+                                        <PathIcon Data="{DynamicResource IconChevronRight}" />
+                                    </ToggleButton>
+                                    <TextBox x:Name="PhraseRenameBox" Grid.Column="1" Text="{Binding EditName}"
+                                             FontWeight="SemiBold" VerticalAlignment="Center"
+                                             AutomationProperties.Name="{Binding Name}"
+                                             ToolTip.Tip="{localization:Loc Inspector_Phrases_RenameTip}">
+                                        <TextBox.KeyBindings>
+                                            <KeyBinding Gesture="Enter"
+                                                        Command="{Binding $parent[UserControl].((contracts:IPhrasesScreen)DataContext).RenamePhraseCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            <KeyBinding Gesture="Escape"
+                                                        Command="{Binding $parent[UserControl].((contracts:IPhrasesScreen)DataContext).CancelRenameCommand}"
+                                                        CommandParameter="{Binding}" />
+                                        </TextBox.KeyBindings>
+                                    </TextBox>
+                                    <Button x:Name="PhraseRenameApply" Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                            Content="{localization:Loc Action_Apply}" IsVisible="{Binding IsRenameDirty}"
+                                            Command="{Binding $parent[UserControl].((contracts:IPhrasesScreen)DataContext).RenamePhraseCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding CountLabel}" VerticalAlignment="Center"
                                                Foreground="{DynamicResource TextMuted}"
                                                FontSize="{StaticResource FontSizeSm}" />
+                                    <Button x:Name="PhraseDelete" Grid.Column="4" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
+                                            Content="{localization:Loc Action_Delete}"
+                                            ToolTip.Tip="{Binding DeleteTip}" AutomationProperties.Name="{Binding DeleteTip}"
+                                            Command="{Binding $parent[UserControl].((contracts:IPhrasesScreen)DataContext).DeletePhraseCommand}"
+                                            CommandParameter="{Binding}" />
                                 </Grid>
-                                <ItemsControl ItemsSource="{Binding Iterations}">
+                                <ItemsControl ItemsSource="{Binding Iterations}" IsVisible="{Binding IsExpanded}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:PhraseIterationRow">
+                                        <DataTemplate x:DataType="contracts:IPhraseIterationRow">
                                             <Grid ColumnDefinitions="*,6,Auto">
                                                 <Button Grid.Column="0" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
                                                         HorizontalAlignment="Stretch"
                                                         HorizontalContentAlignment="Left"
                                                         Content="{Binding Label}"
-                                                        Command="{Binding $parent[UserControl].((viewModels:PhrasesInspectorViewModel)DataContext).JumpToCommand}"
+                                                        Command="{Binding $parent[UserControl].((contracts:IPhrasesScreen)DataContext).JumpToCommand}"
                                                         CommandParameter="{Binding}" />
                                                 <Button AutomationProperties.Name="{localization:Loc Inspector_Phrases_Propagate}" Grid.Column="2" Theme="{StaticResource SubtleButton}" Classes="Subtle Compact"
                                                         IsVisible="{Binding CanPropagate}"
-                                                        Command="{Binding $parent[UserControl].((viewModels:PhrasesInspectorViewModel)DataContext).PropagateCommand}"
+                                                        Command="{Binding $parent[UserControl].((contracts:IPhrasesScreen)DataContext).PropagateCommand}"
                                                         CommandParameter="{Binding}">
                                                     <Panel>
                                                         <TextBlock Text="{localization:Loc Inspector_Phrases_Propagate}"
@@ -89,6 +117,11 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <!-- What an export adds that the arrangement does not carry. -->
+            <TextBlock x:Name="PhrasesExportNote" Theme="{StaticResource CaptionText}" Classes="Caption" TextWrapping="Wrap"
+                       Margin="{StaticResource PaddingRow}" Text="{Binding ExportNote}"
+                       IsVisible="{Binding ExportNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>

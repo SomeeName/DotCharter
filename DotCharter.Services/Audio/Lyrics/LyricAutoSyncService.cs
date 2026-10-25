@@ -45,6 +45,14 @@ public sealed record LyricAutoSyncOptions
     public bool SpanPhraseEndToNextPhrase { get; init; }
 
     /// <summary>
+    ///     Thresholds for following the vocal envelope (only used when the sync
+    ///     listened to a vocal stem). A syllable's end moves with the voice in both
+    ///     directions: it holds on while the voice sounds and stops where the voice
+    ///     falls silent, inside a word as well. See <see cref="VocalEndRefiner" />.
+    /// </summary>
+    public VocalEndOptions VocalEnd { get; init; } = VocalEndOptions.Default;
+
+    /// <summary>
     ///     Spacing rules the span keeps as a minimum gap before the next
     ///     syllable — the same <see cref="AppConfig.MinNoteDistanceMode" />
     ///     family notes use (<see cref="ChartSpacingEnforcer.GetMinDistance" />).
@@ -343,7 +351,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
         var result = Align(lyricsText, audioPath, options.ToSyncOptions(), progress, ct);
         if (!result.Ran) return LyricAutoSyncOutcome.Failed(result.Error!);
 
-        var phrases = BuildPhrases(result.Sheet, result.Aligned, beats, options);
+        var phrases = BuildPhrases(result.Sheet, result.Aligned, beats, options, result.Envelope);
 
         _logger?.Info(AppLogCategory.Audio,
             $"Lyric auto-sync: {result.Sheet.Syllables.Count} syllables over {phrases.Count} phrases " +
@@ -432,6 +440,12 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
 
             ct.ThrowIfCancellationRequested();
 
+            // The voice's envelope comes from the samples the aligner already
+            // decoded, and only from a stem — a mix's loudness is the band's.
+            var envelope = stemPath != null
+                ? VocalEnvelope.FromSamples(audio, LyricAcousticModel.RequiredSampleRate)
+                : null;
+
             // The English head only for text that is clearly English, and only if
             // it is installed; everything else goes to the multilingual model.
             var selection = _pinned != null
@@ -475,15 +489,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
 
             progress?.Report(_localization["Progress_AligningLyrics"]);
             var totalBias = options.OnsetBiasSeconds + selection.OnsetBiasSeconds;
-            var alignment = LyricAligner.Align(sheet, model.Vocabulary, emissions,
-                new LyricAlignmentOptions
-                {
-                    // The model's own correction, plus whatever the caller asked
-                    // for. The per-model part is a property of where that CTC head
-                    // fires inside a syllable, so it is not the caller's business.
-                    OnsetBiasSeconds = totalBias,
-                    StarLogProb = options.StarLogProb
-                });
+            var alignment = AlignSheet(sheet, model.Vocabulary, emissions, options, selection, totalBias);
 
             if (!alignment.Succeeded) return LyricSyncResult.Failed(alignment.Failure!, warnings);
 
@@ -502,7 +508,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
                 Flatten(sheet, alignment.Syllables),
                 interpolated, lowConfidence, sourceLabel, listenPath,
                 selection.Describe(), selection.IsEnsemble, totalBias,
-                emissions.FrameCount * emissions.SecondsPerFrame, warnings);
+                emissions.FrameCount * emissions.SecondsPerFrame, warnings, envelope);
         }
         catch (OperationCanceledException)
         {
@@ -514,6 +520,24 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
             return LyricSyncResult.Failed(ex.Message, warnings);
         }
     }
+
+    /// <summary>
+    ///     The trellis over the (possibly blended) emissions, with the model's own
+    ///     onset corrections added to the caller's.
+    /// </summary>
+    private static LyricAlignmentResult AlignSheet(
+        LyricSheet sheet, LyricVocabulary vocabulary, CtcEmissions emissions,
+        LyricSyncOptions options, LyricModelSelection selection, double totalBias)
+        => LyricAligner.Align(sheet, vocabulary, emissions,
+            new LyricAlignmentOptions
+            {
+                // The model's own correction, plus whatever the caller asked
+                // for. The per-model part is a property of where that CTC head
+                // fires inside a syllable, so it is not the caller's business.
+                OnsetBiasSeconds = totalBias,
+                VowelInitialOnsetBiasSeconds = selection.VowelInitialOnsetBiasSeconds,
+                StarLogProb = options.StarLogProb
+            });
 
     /// <summary>
     ///     Opens one head so that a failed GPU run is answered on the CPU
@@ -627,14 +651,26 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
     ///         shortening what was heard, and never past
     ///         <see cref="LyricAutoSyncOptions.MaxSyllableSeconds" />.
     ///     </para>
+    ///     <para>
+    ///         With a vocal <paramref name="envelope" /> the end follows the voice
+    ///         instead of the span rule alone (<see cref="VocalEndRefiner" />): a
+    ///         spanned end stops where the voice falls silent, even inside a
+    ///         word, and an unspanned end — a phrase-final held vowel — extends
+    ///         until the voice fades. Both stay inside the same bounds.
+    ///     </para>
     /// </summary>
     internal static List<LyricPhrase> BuildPhrases(
         LyricSheet sheet, IReadOnlyList<AlignedSyllable> aligned,
-        IList<BeatMarker> beats, LyricAutoSyncOptions options)
+        IList<BeatMarker> beats, LyricAutoSyncOptions options, VocalEnvelope? envelope = null)
     {
         var phrases = new List<LyricPhrase>();
         LyricPhrase? phrase = null;
         var spacingConfig = options.SpacingConfig ?? DefaultSpacingConfig;
+        var ends = LyricSyllableEnds.Compute(
+            [.. sheet.Syllables.Select((syllable, i) => new LyricEndSyllable(
+                aligned[i].StartSeconds, aligned[i].EndSeconds, syllable.LineIndex, ShouldSpanToNext(syllable, options)))],
+            (start, nextStart) => SpanTargetSeconds(start, nextStart, beats, spacingConfig),
+            options.MaxSyllableSeconds, envelope, options.VocalEnd);
 
         for (var i = 0; i < sheet.Syllables.Count; i++)
         {
@@ -647,18 +683,7 @@ public sealed class LyricAutoSyncService : ILyricAutoSyncService, ILyricSyncCore
                 phrases.Add(phrase);
             }
 
-            var end = placement.EndSeconds;
-            if (i + 1 < aligned.Count) end = Math.Min(end, aligned[i + 1].StartSeconds);
-            end = Math.Min(end, placement.StartSeconds + options.MaxSyllableSeconds);
-            if (end < placement.StartSeconds) end = placement.StartSeconds;
-
-            if (i + 1 < aligned.Count && ShouldSpanToNext(syllable, options))
-            {
-                var target = SpanTargetSeconds(
-                    placement.StartSeconds, aligned[i + 1].StartSeconds, beats, spacingConfig);
-                if (target > end)
-                    end = Math.Min(target, placement.StartSeconds + options.MaxSyllableSeconds);
-            }
+            var end = ends[i];
 
             // The hyphen is INPUT SYNTAX, never stored text. In this model the
             // continuation lives in IsWordPart, and the writers append the '-'

@@ -102,6 +102,15 @@ public class ChordTemplate
     public bool Pinned { get; set; }
 
     /// <summary>
+    ///     The charter chose NO name for this grip (the chord editor's No name box): an empty
+    ///     <see cref="Name" /> that no automatic flow fills back in. Setting a name clears it
+    ///     (<c>SetTemplateNameAction</c>). Provenance, like <see cref="Pinned" />: not in
+    ///     <see cref="Equals(object?)" />, and only <c>.dcproj</c> writes it (absent when false);
+    ///     every interchange format already writes an empty name as empty.
+    /// </summary>
+    public bool Unnamed { get; set; }
+
+    /// <summary>
     ///     "May an automatic flow replace or re-finger this template?" — no, when the user
     ///     pinned it or it holds ghost gems (a grip nothing plays cannot be re-derived from
     ///     the notes). The ONE pin answer: <c>ChordTemplateResolver</c>, the fingering style,
@@ -254,6 +263,7 @@ public class ChordTemplate
             Fingerless = Fingerless,
             GhostMask = GhostMask,
             Pinned = Pinned,
+            Unnamed = Unnamed,
             Frets = new Dictionary<int, int>(Frets),
             Fingers = new Dictionary<int, int>(Fingers)
         };

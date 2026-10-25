@@ -126,26 +126,17 @@ public sealed partial class JuceAudioPlaybackService
 
     public IReadOnlyList<Midi.MidiOutputDeviceInfo> GetMidiOutputDevices() => Midi.WinMMMidiOutput.EnumerateDevices();
 
-    public int GetInputDeviceChannelCount(string driver, string deviceName)
-    {
-        var e = _engine;
-        if (e == null || string.IsNullOrWhiteSpace(deviceName)) return 0;
-        var isAsio = string.Equals(driver, "ASIO", StringComparison.OrdinalIgnoreCase);
-        var wanted = isAsio ? deviceName : ParseWasapiLabel(deviceName).DeviceName;
-        try
-        {
-            return e.EnumerateInputDevicesLive()
-                .Where(d => d.Driver == (isAsio ? JuceDriver.Asio : JuceDriver.Wasapi))
-                .Where(d => string.Equals(d.Name, wanted, StringComparison.OrdinalIgnoreCase))
-                .Select(d => d.MaxInputChannels)
-                .DefaultIfEmpty(0)
-                .Max();
-        }
-        catch
-        {
-            return 0;
-        }
-    }
+    public int GetInputDeviceChannelCount(string driver, string deviceName) =>
+        DeviceChannelCounts.Input(_engine, driver, deviceName);
+
+    public int GetOutputDeviceChannelCount(string driver, string deviceName) =>
+        DeviceChannelCounts.Output(_engine, driver, deviceName);
+
+    public IReadOnlyList<string> GetOutputChannelNames(string driver, string deviceName) =>
+        DeviceChannelCounts.Names(_engine, driver, deviceName, input: false);
+
+    public IReadOnlyList<string> GetInputChannelNames(string driver, string deviceName) =>
+        DeviceChannelCounts.Names(_engine, driver, deviceName, input: true);
 
     // Suffix used in user-facing WASAPI labels.
     private const string WasapiSharedSuffix = " (Shared)";
@@ -208,7 +199,7 @@ public sealed partial class JuceAudioPlaybackService
     // Inverse of LabelWasapiModes: turn a user-facing label back into the
     // bare device name + the JUCE AudioIODeviceType name that the native
     // engine needs to pick the right WASAPI mode.
-    private static (string DeviceName, string TypeName) ParseWasapiLabel(string label)
+    internal static (string DeviceName, string TypeName) ParseWasapiLabel(string label)
     {
         if (string.IsNullOrEmpty(label)) return (string.Empty, string.Empty);
         if (label.EndsWith(WasapiExclusiveSuffix, StringComparison.Ordinal))

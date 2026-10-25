@@ -1,5 +1,7 @@
 using DotCharter.Presentation.Contracts.Dialogs;
+using DotCharter.Presentation.Contracts.Editor;
 using DotCharter.Presentation.Screens.Dialogs;
+using DotCharter.Presentation.Screens.Editor;
 using DotCharter.Services.Infrastructure.Features;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -36,6 +38,11 @@ public static class DialogsModule
         services.AddScoped<IFhpScreen, FhpViewModel>();
         services.AddScoped<ILevelGenerationScreen, LevelGenerationViewModel>();
         services.AddScoped<IBeatScreen, BeatViewModel>();
+        services.AddScoped<IShapeEditScreen, ShapeEditViewModel>();
+        services.AddScoped<IShapeCleanupScreen, ShapeCleanupViewModel>();
+        // A factory: the offer outlives any one dialog scope, and its chart-edit bundle is singletons only.
+        services.AddSingleton(sp => new ShapeCleanupOffer(sp.GetRequiredService<IDialogs>(),
+            ActivatorUtilities.CreateInstance<ChartEditDialogServices>(sp)));
 
         services.AddSingleton<DialogMemory>();
         services.AddScoped<IPasteSpecialScreen, PasteSpecialViewModel>();

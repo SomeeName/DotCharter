@@ -12,14 +12,14 @@ public sealed record EofImportRequest(string FilePath, IReadOnlyList<EofTrackInf
 
 /// <summary>
 ///     File ▸ Import ▸ Editor on Fire: pick the Pro Guitar tracks that become
-///     arrangements. Import parses them off the UI thread and finds the song's
+///     arrangements, and whether the vocal track brings its lyrics. Import parses them off the UI thread and finds the song's
 ///     audio beside the file; a failure of either stays IN the dialog. The
 ///     project is created after it closes (<c>EofProjectCreator</c>).
 ///     <see cref="IDialogScreen{TResult}.Result" /> is what was parsed, or null.
 /// </summary>
 public interface IEofImportScreen : IDialogScreen<EofImportSelection?>
 {
-    /// <summary>The file's Pro Guitar tracks that have notes, all ticked on open.</summary>
+    /// <summary>The file's Pro Guitar tracks that have notes and its vocal track if it has lyrics, all ticked on open.</summary>
     IReadOnlyList<IEofTrackOption> AvailableTracks { get; }
 
     bool HasNoTracks { get; }
@@ -37,7 +37,7 @@ public interface IEofImportScreen : IDialogScreen<EofImportSelection?>
 
 public interface IEofTrackOption : INotifyPropertyChanged
 {
-    /// <summary>"Name (N notes)".</summary>
+    /// <summary>"Name (N notes)", or "Name (N lyrics)" for the vocal track.</summary>
     string Name { get; }
 
     bool IsSelected { get; set; }

@@ -45,7 +45,7 @@ public sealed class PhrasesInspectorViewModelTests
     {
         var propagation = new FakePropagation();
         var seeks = new List<double>();
-        var vm = new PhrasesInspectorViewModel(() => arrangement, () => Beats, seeks.Add, propagation, FakeLocalization.English());
+        var vm = new PhrasesInspectorViewModel(() => arrangement, () => Beats, seeks.Add, propagation, FakeLocalization.English(), new HistoryService(new FakeAppLogger()));
         vm.Refresh();
         return (vm, propagation, seeks);
     }
@@ -161,7 +161,7 @@ public sealed class PhrasesInspectorViewModelTests
     public void Activation_KeepsTheRows_UntilThePhrasesMove()
     {
         var arrangement = BuildArrangement();
-        var vm = new PhrasesInspectorViewModel(() => arrangement, () => Beats, _ => { }, null, FakeLocalization.English());
+        var vm = new PhrasesInspectorViewModel(() => arrangement, () => Beats, _ => { }, null, FakeLocalization.English(), new HistoryService(new FakeAppLogger()));
         vm.EnsureCurrent();
         var first = vm.Phrases.ToArray();
         Assert.NotEmpty(first);
@@ -178,5 +178,115 @@ public sealed class PhrasesInspectorViewModelTests
         arrangement.Phrases[1] = "bridge";   // a rename moves the rows too
         vm.EnsureCurrent();
         Assert.Contains(vm.Phrases, g => g.Name == "bridge");
+    }
+
+    /// <summary>A chart placed in the editor (or imported from EOF) keeps its phrases as markers
+    ///     only, and the browser read "No phrase iterations" for it.</summary>
+    [Fact]
+    public void AMarkersOnlyArrangement_ListsItsPhrases()
+    {
+        var arrangement = new Arrangement { Name = "Lead" };
+        foreach (var (beat, name) in new[] { (0, "verse"), (8, "verse_b"), (16, "verse") })
+            arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(beat), Phrase = name });
+
+        var (vm, _, _) = Build(arrangement);
+
+        Assert.True(vm.HasPhrases);
+        Assert.Equal(["verse", "verse_b"], vm.Phrases.Select(p => p.Name).ToArray());
+        Assert.Equal(2, vm.Phrases[0].Iterations.Count);
+        Assert.True(vm.Phrases[0].CanPropagate);
+    }
+
+    // ── the one Phrases panel: rename, delete, export note ─────────────────
+
+    private static Arrangement MarkersOnly()
+    {
+        var arrangement = new Arrangement { Name = "Lead" };
+        foreach (var (beat, name) in new[] { (0, "verse"), (8, "chorus"), (16, "verse") })
+            arrangement.EventPoints.Add(new EventPoint { Position = new FractionalPosition(beat), Phrase = name });
+        return arrangement;
+    }
+
+    private static (PhrasesInspectorViewModel Vm, HistoryService History) BuildEditable(Arrangement arrangement)
+    {
+        var history = new HistoryService(new FakeAppLogger());
+        var vm = new PhrasesInspectorViewModel(() => arrangement, () => Beats, _ => { }, null, FakeLocalization.English(), history);
+        vm.Refresh();
+        return (vm, history);
+    }
+
+    /// <summary>Apply shows only once the text differs from the name; Esc puts the name back.</summary>
+    [Fact]
+    public void TheRenameBox_IsDirtyOnlyWhileTheTextDiffers_AndCancelPutsTheNameBack()
+    {
+        var (vm, _) = BuildEditable(MarkersOnly());
+        var verse = vm.Phrases[0];
+
+        Assert.False(verse.IsRenameDirty);
+        verse.EditName = "verse ";
+        Assert.False(verse.IsRenameDirty);
+        verse.EditName = "A";
+        Assert.True(verse.IsRenameDirty);
+
+        vm.CancelRenameCommand.Execute(verse);
+
+        Assert.Equal("verse", verse.EditName);
+        Assert.False(verse.IsRenameDirty);
+    }
+
+    [Fact]
+    public void Rename_RenamesThePhrase_AsOneUndoNode_AndTheRowsFollowTheUndo()
+    {
+        var arrangement = MarkersOnly();
+        var (vm, history) = BuildEditable(arrangement);
+        var verse = vm.Phrases[0];
+
+        verse.EditName = "A";
+        vm.RenamePhraseCommand.Execute(verse);
+
+        Assert.Equal(["A", "chorus"], vm.Phrases.Select(p => p.Name));
+        Assert.Equal("Renamed “verse” to “A”.", vm.StatusLine);
+
+        history.Undo();
+
+        Assert.Equal(["verse", "chorus"], vm.Phrases.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void Delete_RemovesEveryIteration_NamesItsEffect_AndUndoBringsItBack()
+    {
+        var arrangement = MarkersOnly();
+        var (vm, history) = BuildEditable(arrangement);
+        var verse = vm.Phrases[0];
+        Assert.Equal("Delete “verse”: removes all 2 of its iterations. Ctrl+Z undoes it.", verse.DeleteTip);
+
+        vm.DeletePhraseCommand.Execute(verse);
+
+        Assert.Equal(["chorus"], vm.Phrases.Select(p => p.Name));
+        Assert.Equal("Deleted “verse” (2 iterations). Ctrl+Z brings them back.", vm.StatusLine);
+
+        history.Undo();
+
+        Assert.Equal(["verse", "chorus"], vm.Phrases.Select(p => p.Name));
+    }
+
+    /// <summary>Explicit iterations, markers, and both at once: the panel lists the union.</summary>
+    [Fact]
+    public void ThePanel_ListsEveryStore()
+    {
+        var mixed = BuildArrangement();
+        mixed.EventPoints.Add(new EventPoint { Position = new FractionalPosition(24), Phrase = "outro" });
+
+        Assert.Equal(["verse", "chorus"], Build(BuildArrangement()).Vm.Phrases.Select(p => p.Name));
+        Assert.Equal(["verse", "chorus"], Build(MarkersOnly()).Vm.Phrases.Select(p => p.Name));
+        Assert.Equal(["verse", "chorus", "outro"], Build(mixed).Vm.Phrases.Select(p => p.Name));
+    }
+
+    /// <summary>A markers-only chart is told what its export adds; an imported one carries its own.</summary>
+    [Fact]
+    public void TheExportNote_SaysWhatAnExportAdds()
+    {
+        Assert.Equal("On export: COUNT is added at the start and END after the last note.", Build(MarkersOnly()).Vm.ExportNote);
+        Assert.Equal("", Build(BuildArrangement()).Vm.ExportNote);
     }
 }

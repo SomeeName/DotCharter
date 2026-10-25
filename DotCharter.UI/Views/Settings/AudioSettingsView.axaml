@@ -88,23 +88,20 @@
                         </Panel>
                     </Grid>
 
-                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300">
-                        <Grid.IsVisible>
-                            <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                <Binding Path="IsAsioOutput" />
-                                <Binding Path="HiddenKeys" Converter="{x:Static settings:SettingsKeyVisibility.Instance}" ConverterParameter="audio.asioOutChannels" />
-                            </MultiBinding>
-                        </Grid.IsVisible>
+                    <!-- Output pair, on BOTH drivers: the engine opens the picked
+                         pair as an output channel mask on ASIO and WASAPI alike
+                         (OutputChannelPairs.ChannelMask). A PICK over the device's
+                         outputs, the same rows the first-run wizard offers. -->
+                    <Grid Theme="{StaticResource FormRowGrid}" Classes="FormRow Sub" ColumnDefinitions="*,300"
+                          IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.outputChannels}">
                         <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
-                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_AsioOutChannels}" />
-                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_AsioOutChannels}" />
+                            <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_OutChannels}" />
+                            <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_OutChannels}" />
                         </StackPanel>
-                        <Grid VerticalAlignment="Top" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="10">
-                            <TextBox Grid.Column="0" Text="{Binding AsioOutputChannelLeft}" TextAlignment="Center"
-                                     AutomationProperties.Name="{localization:Loc Settings_AsioOutChannelLeft}" />
-                            <TextBox Grid.Column="1" Text="{Binding AsioOutputChannelRight}" TextAlignment="Center"
-                                     AutomationProperties.Name="{localization:Loc Settings_AsioOutChannelRight}" />
-                        </Grid>
+                        <ComboBox x:Name="AudioOutputPair" VerticalAlignment="Top" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  AutomationProperties.Name="{localization:Loc Settings_OutChannels}"
+                                  ItemsSource="{Binding OutputPairOptions}"
+                                  SelectedIndex="{Binding SelectedOutputPairIndex}" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -154,24 +151,20 @@
                             </Panel>
                         </Grid>
 
-                        <!-- Input channels. Shown on BOTH drivers on purpose: the
-                             CHANNEL COUNT the engine opens is Mono ? 1 : 2 whatever
-                             the driver (JuceAudioPlaybackService.ApplyAudioConfigurationCore),
-                             and only the channel INDEXES are ASIO-only, because the
-                             input mask is. Hiding the whole row on WASAPI left the
-                             second input unreachable there while a (since removed) co-op HUD told
-                             the player to go and open it in Settings. -->
+                        <!-- Input channels, on BOTH drivers: the engine opens the
+                             picked jacks as an input channel mask on ASIO and WASAPI
+                             alike (GuitarInputChannels.InputChannelMask),
+                             and Mono ? 1 : 2 is the channel count on either. -->
                         <Grid Theme="{StaticResource FormRowGrid}" IsVisible="{Binding HiddenKeys, Converter={x:Static settings:SettingsKeyVisibility.Instance}, ConverterParameter=audio.inputChannels}" Classes="FormRow Sub" ColumnDefinitions="*,300">
                             <StackPanel Margin="0,8,0,0" VerticalAlignment="Top" Grid.Column="0">
                                 <TextBlock Theme="{StaticResource SettingTitleText}" Classes="SettingTitle" Text="{localization:Loc Settings_InChannels}" />
                                 <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc" Text="{localization:Loc Settings_Tip_AsioInChannels}" />
-                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc Note"
-                                           IsVisible="{Binding !AreInputChannelIndexesUsed}"
+                                <TextBlock Theme="{StaticResource SettingDescText}" Classes="SettingDesc Note" x:Name="AudioWasapiDevicesNote"
+                                           IsVisible="{Binding IsWasapiDevicesNoteShown}"
                                            Text="{localization:Loc Settings_InChannels_WasapiNote}" />
                             </StackPanel>
                             <StackPanel VerticalAlignment="Top" Grid.Column="1" Spacing="6">
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10"
-                                      IsVisible="{Binding AreInputChannelIndexesUsed}">
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                                     <!-- The guitar's jack is a PICK, not a typed index:
                                          the same option list the rig footer and the
                                          first-run wizard offer (GuitarInputChannels),

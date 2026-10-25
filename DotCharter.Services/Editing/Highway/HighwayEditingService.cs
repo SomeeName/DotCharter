@@ -1,6 +1,8 @@
+using System.Collections.ObjectModel;
 using BeatMarker = DotCharter.Core.Domain.Events.BeatMarker;
 using Chord = DotCharter.Core.Domain.Guitar.Chord;
 using DotCharter.Services.Editing.Anchors;
+using DotCharter.Services.Editing.ChordShapes;
 using DotCharter.Services.Editing.Targets;
 using DotCharter.Services.State;
 using FretAnchor = DotCharter.Core.Domain.Events.FretAnchor;
@@ -85,7 +87,8 @@ public class HighwayEditingService : IHighwayEditingService
             _scope.Arrangement,
             hitChord,
             stringIndex,
-            GetLinkNextUpdater());
+            GetLinkNextUpdater(),
+            SyncedHandShapes());
 
         if (!ExecuteHighwayCommand(command)) return;
 
@@ -128,7 +131,8 @@ public class HighwayEditingService : IHighwayEditingService
             targetPos,
             stringIndex,
             previewFret,
-            GetLinkNextUpdater());
+            GetLinkNextUpdater(),
+            SyncedHandShapes());
 
         if (ExecuteHighwayCommand(command))
         {
@@ -157,8 +161,8 @@ public class HighwayEditingService : IHighwayEditingService
         _selectionManager.SelectedHandShapes.Remove(handShape);
         if (ReferenceEquals(_selectionManager.HoveredHandShape, handShape))
             _selectionManager.HoveredHandShape = null;
-        _historyManager.Do(new RemoveHandShapesAction(_scope.HandShapes, new[] { handShape },
-            GetLinkNextUpdater()));
+        _historyManager.Do(StrandedShapes.Wrap(_scope.Arrangement,
+            new RemoveHandShapesAction(_scope.HandShapes, new[] { handShape }, GetLinkNextUpdater())));
         _logger.Info(AppLogCategory.Editing, $"Removed {FormatHandShape(handShape)}.");
     }
 
@@ -198,7 +202,10 @@ public class HighwayEditingService : IHighwayEditingService
             FormatPosition,
             FormatChord,
             incomingTemplates,
-            mintedTemplates);
+            mintedTemplates)
+        {
+            SyncedHandShapes = SyncedHandShapes()
+        };
 
         if (!ExecuteHighwayCommand(command))
         {
@@ -265,8 +272,15 @@ public class HighwayEditingService : IHighwayEditingService
             target.Chords,
             _scope.Arrangement,
             _projectState.StringEditMask,
-            GetLinkNextUpdater());
+            GetLinkNextUpdater())
+        {
+            SyncedHandShapes = SyncedHandShapes()
+        };
     }
+
+    /// <summary>The level's hand shapes while the chord / hand shape sync is on, else null.</summary>
+    private ObservableCollection<HandShape>? SyncedHandShapes() =>
+        _configService.LoadAppConfig().SyncHandShapeToChordTemplate ? _scope.HandShapes : null;
 
     public void MoveSelectedStringUp(int maxStrings)
     {

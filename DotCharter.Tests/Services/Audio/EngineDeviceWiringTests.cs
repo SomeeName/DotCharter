@@ -58,6 +58,40 @@ public sealed class EngineDeviceWiringTests
             new AppConfig { EnableStreamingMirror = true, StreamingMirrorDeviceName = "  " }));
     }
 
+    // ── The input channel mask ────────────────────────────────────────────────
+
+    /// <summary>
+    ///     The engine config takes its input mask from
+    ///     <c>GuitarInputChannels.InputChannelMask</c> with no driver condition, so
+    ///     the WASAPI engine opens the picked jack too. A driver gate in front of
+    ///     it is what kept WASAPI users on the device's first channels.
+    /// </summary>
+    [Fact]
+    public void TheEngineConfig_TakesTheInputMask_OnEveryDriver()
+    {
+        var src = ServiceSource();
+        Assert.Contains("InputChannelMask = GuitarInputChannels.InputChannelMask(config, inputCount),", src, StringComparison.Ordinal);
+        Assert.DoesNotContain("InputChannelMask = (config.EnableInput && driver", src, StringComparison.Ordinal);
+    }
+
+    // ── The output channel mask ───────────────────────────────────────────────
+
+    /// <summary>
+    ///     The engine config takes its output mask from
+    ///     <c>OutputChannelPairs.ChannelMask</c>, checked against the playback
+    ///     device's own output count, with no driver condition: the WASAPI engine
+    ///     opens the picked pair too. An ASIO-only gate in front of it is what kept
+    ///     WASAPI users on outputs 1 and 2.
+    /// </summary>
+    [Fact]
+    public void TheEngineConfig_TakesTheOutputMask_OnEveryDriver()
+    {
+        var src = ServiceSource();
+        Assert.Contains("OutputChannelMask = OutputChannelPairs.ChannelMask(config, outputCount),", src, StringComparison.Ordinal);
+        Assert.DoesNotContain("OutputChannelMask = driver == JuceDriver.Asio", src, StringComparison.Ordinal);
+        Assert.Contains("OutputChannelPairs.PairPastDevice(config, outputCount)", src, StringComparison.Ordinal);
+    }
+
     // ── The driver-fallback ladder ────────────────────────────────────────────
 
     /// <summary>

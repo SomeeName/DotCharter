@@ -9,17 +9,17 @@ public sealed class AppVersionTests
     public void Public_release_has_binary_and_informational_versions()
     {
         var ui = typeof(DotCharter.UI.App).Assembly;
-        Assert.Equal(new Version(1, 2, 0, 0), ui.GetName().Version);
-        Assert.Equal("1.2.0", DotCharter.Services.Infrastructure.AppVersionInfo.FromAssembly(ui));
-        Assert.Equal("1.2.0", DotCharter.Services.Infrastructure.AppVersionInfo.Current);
-        Assert.Equal("1.2.0", DotCharter.Services.Parsing.Rscp.RscpFormatContract.CurrentWriterVersion);
+        Assert.Equal(new Version(1, 3, 0, 0), ui.GetName().Version);
+        Assert.Equal("1.3.0", DotCharter.Services.Infrastructure.AppVersionInfo.FromAssembly(ui));
+        Assert.Equal("1.3.0", DotCharter.Services.Infrastructure.AppVersionInfo.Current);
+        Assert.Equal("1.3.0", DotCharter.Services.Parsing.Rscp.RscpFormatContract.CurrentWriterVersion);
         Assert.False(DotCharter.Services.Parsing.Rscp.RscpFormatContract.IsNewerThanCurrent("1.0.0-beta.2"));
-        Assert.True(DotCharter.Services.Parsing.Rscp.RscpFormatContract.IsNewerThanCurrent("1.2.1"));
+        Assert.True(DotCharter.Services.Parsing.Rscp.RscpFormatContract.IsNewerThanCurrent("1.3.1"));
         Assert.False(DotCharter.Services.Parsing.Rscp.RscpFormatContract.IsNewerThanCurrent("1.0.0+other"));
         var crashVersion = typeof(DotCharter.Services.Infrastructure.CrashReporting.CrashReportService)
             .GetMethod("ResolveAppVersion", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, null);
-        Assert.Equal("1.2.0", crashVersion);
-        Assert.StartsWith("DotCharter/1.2.0 ",
+        Assert.Equal("1.3.0", crashVersion);
+        Assert.StartsWith("DotCharter/1.3.0 ",
             DotCharter.Services.Online.MusicBrainz.MusicBrainzClient.DefaultUserAgent(), StringComparison.Ordinal);
     }
 

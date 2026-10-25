@@ -230,6 +230,8 @@ public partial class MainWindowViewModel
 
     partial void OnIsGameplayPresentationChanged(bool value)
     {
+        // The highway takes Play Mode's String order while a run presents.
+        ProjectState.GameplayPresentation = value;
         if (value) ShellContext = ShellContext.Playing;
         ToneRig.SyncRigCloseButton();
 

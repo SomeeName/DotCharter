@@ -93,8 +93,9 @@ update it in the same change.
   AudioChartLintService` (decode + chart projection) — the one place SERVICES
   references this project; never reference Services back (cycle).
 - `Lyrics/` — **pasted lyrics → syllable onsets** (CTC forced alignment). Pure:
-  never touches audio, only a frames × symbols log-probability matrix the
-  Services layer hands it. `LyricSheetParser` (the paste format) →
+  no I/O; the aligner reads a frames × symbols log-probability matrix the
+  Services layer hands it, and `VocalEnvelope` + `VocalEndRefiner` read a vocal
+  stem's RMS envelope to place syllable ENDS. `LyricSheetParser` (the paste format) →
   `RomanizedLyricTokenizer` + `LyricVocabulary` → `CtcForcedAligner` (the Viterbi
   trellis) → `LyricAligner`. Two acoustic models since 0.41, routed by
   `Lyrics/LyricScriptDetector` and ENSEMBLED by `CtcEmissionBlender`.

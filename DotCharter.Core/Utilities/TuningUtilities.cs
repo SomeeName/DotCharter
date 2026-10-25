@@ -17,7 +17,7 @@ public static class TuningUtilities
     ///     while the namer already knew 8 starts on F#. A standard-tuned
     ///     8-string gpif imported as offsets <c>-10 -10 -10 -10 -9 -9 0 0</c>
     ///     and came out named <c>G# C# F# B F Bb B E</c> — wrong in both halves
-    ///     and not even consistent with each other. Past 8 strings the reference
+    ///     and not even consistent with each other. Past 9 strings the reference
     ///     repeats the 6-string top E, which is what the namer has always
     ///     padded with.
     ///     </para>
@@ -31,8 +31,8 @@ public static class TuningUtilities
     public static int[] GetStandardMidiPitches(int stringCount)
     {
         // The rows live in StandardOpenStrings: 4 = bass E1 A1 D2 G2,
-        // 7 = B1 E2 A2 D3 G3 B3 E4, 8 = F#1 B1 E2 ..., every other count the
-        // 6-string guitar row truncated, and past 8 the top E repeats.
+        // 7 = B1 E2 A2 D3 G3 B3 E4, 8 = F#1 B1 E2 ..., 9 = C#1 F#1 B1 E2 ..., every other count the
+        // 6-string guitar row truncated, and past 9 the top E repeats.
         var lowE = stringCount == 4 ? StandardOpenStrings.BassLowEMidi : StandardOpenStrings.GuitarLowEMidi;
         var pitches = StandardOpenStrings.SemitonesAboveLowE(stringCount);
         for (var i = 0; i < pitches.Length; i++) pitches[i] += lowE;
@@ -85,7 +85,7 @@ public static class TuningUtilities
         // first — derived from the ONE reference table (GetStandardMidiPitches) so
         // a namer/importer drift like the 8-string one cannot come back. Past 6
         // strings the reference is not the 6-string one with E repeated: a
-        // 7-string starts on B and an 8-string on F#.
+        // 7-string starts on B, an 8-string on F# and a 9-string on C#.
         //
         // 5 stays on the 6-string table (E A D G B), and every importer measures a
         // 5-string track against it: the GP importers turn a B E A D G bass into
@@ -191,11 +191,8 @@ public static class TuningUtilities
             _ => null
         };
 
-        if (nineStringTuning is null)
-        {
-            offsets = [];
-            return false;
-        }
+        // The bass and extended-range names rscharter's table has no row for.
+        if (nineStringTuning is null) return ExtendedRangeTunings.TryGetOffsets(key, stringCount, out offsets);
 
         offsets = Slice(nineStringTuning, stringCount);
         return true;

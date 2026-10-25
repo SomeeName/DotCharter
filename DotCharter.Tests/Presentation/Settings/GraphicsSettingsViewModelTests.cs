@@ -1,7 +1,5 @@
 using static DotCharter.Tests.Presentation.Settings.GraphicsStubs;
-using System.Reflection;
 using DotCharter.Presentation.Screens.Settings;
-using DotCharter.Services.Editing;
 
 namespace DotCharter.Tests.Presentation.Settings;
 
@@ -15,7 +13,7 @@ public sealed class GraphicsSettingsViewModelTests
 {
     private sealed record Rig(
         GraphicsSettingsViewModel Vm, FakeConfigurationService Config, ProjectState State,
-        FakeDevice Device, FakeWizard Wizard, RedrawCounter Editor);
+        FakeDevice Device, FakeWizard Wizard);
 
     private static Rig NewRig(Action<AppConfig>? seed = null)
     {
@@ -27,10 +25,9 @@ public sealed class GraphicsSettingsViewModelTests
         var state = new ProjectState();
         var device = new FakeDevice();
         var wizard = new FakeWizard();
-        var editor = DispatchProxy.Create<IChartEditorSurface, RedrawCounter>();
-        var vm = new GraphicsSettingsViewModel(config, state, device, editor, FakeLocalization.English(), wizard);
+        var vm = new GraphicsSettingsViewModel(config, state, device, FakeLocalization.English(), wizard);
         vm.Load();
-        return new Rig(vm, config, state, device, wizard, (RedrawCounter)(object)editor);
+        return new Rig(vm, config, state, device, wizard);
     }
 
     [Fact]
@@ -41,14 +38,12 @@ public sealed class GraphicsSettingsViewModelTests
             c.MaxFps = 144;
             c.PresentMode = "Mailbox";
             c.MsaaSamples = 8;
-            c.InvertStrings = true;
             c.EnableBloom = false;
         });
 
         Assert.Equal("144", rig.Vm.SelectedMaxFps!.Label);
         Assert.Same(rig.Vm.PresentModeOptions[1], rig.Vm.SelectedPresentMode);
         Assert.Equal("8×", rig.Vm.SelectedMsaa!.Label);
-        Assert.True(rig.Vm.InvertStrings);
         Assert.False(rig.Vm.EnableBloom);
         Assert.False(rig.State.EnableBloom);
         Assert.Empty(rig.Vm.UnsavedSettings);
@@ -62,8 +57,7 @@ public sealed class GraphicsSettingsViewModelTests
         var config = new FakeConfigurationService();
         config.AppConfig.PresentMode = "Mailbox";
         var device = new FakeDevice { SupportedPresentModes = ["Fifo"] };
-        var vm = new GraphicsSettingsViewModel(config, new ProjectState(), device,
-            DispatchProxy.Create<IChartEditorSurface, RedrawCounter>(), FakeLocalization.English(), new FakeWizard());
+        var vm = new GraphicsSettingsViewModel(config, new ProjectState(), device, FakeLocalization.English(), new FakeWizard());
         vm.Load();
 
         Assert.Equal(2, vm.PresentModeOptions.Count);
@@ -80,16 +74,11 @@ public sealed class GraphicsSettingsViewModelTests
 
         rig.Vm.SelectedMaxFps = rig.Vm.MaxFpsOptions.Single(o => o.Label == "240");
         rig.Vm.SelectedMsaa = rig.Vm.MsaaOptions[1];
-        rig.Vm.Timeline2DLaneTint = !rig.Vm.Timeline2DLaneTint;
-        rig.Vm.InvertStrings = !rig.Vm.InvertStrings;
         rig.Vm.EnableVignette = !rig.Vm.EnableVignette;
 
         Assert.Contains("fps:240", rig.Device.Calls);
         Assert.Contains("msaa:2", rig.Device.Calls);
-        Assert.Contains(rig.Device.Calls, c => c.StartsWith("timeline:", StringComparison.Ordinal));
-        Assert.Equal(rig.Vm.InvertStrings, rig.State.InvertStrings);
         Assert.Equal(rig.Vm.EnableVignette, rig.State.EnableVignette);
-        Assert.Equal(2, rig.Editor.Redraws);
     }
 
     [Fact]
@@ -159,21 +148,6 @@ public sealed class GraphicsSettingsViewModelTests
         Assert.Empty(rig.Vm.UnsavedSettings);
     }
 
-    /// <summary>Home's moving hero is opt-in: off on a fresh config, saved when switched on.</summary>
-    [Fact]
-    public void TheAnimatedHomeHero_IsOffByDefault_AndSaves()
-    {
-        var rig = NewRig();
-        Assert.False(rig.Vm.AnimatedHomeHero);
-
-        rig.Vm.AnimatedHomeHero = true;
-        Assert.Single(rig.Vm.UnsavedSettings);
-        rig.Vm.Save();
-
-        Assert.True(rig.Config.AppConfig.AnimatedHomeHero);
-        Assert.Empty(rig.Vm.UnsavedSettings);
-    }
-
     [Fact]
     public void TheFingeringOverlay_AppliesLive_AndRevertTakesItBack()
     {
@@ -193,14 +167,11 @@ public sealed class GraphicsSettingsViewModelTests
     {
         var rig = NewRig();
         var bloom = rig.Vm.EnableBloom;
-        var invert = rig.Vm.InvertStrings;
 
         rig.Vm.EnableBloom = !bloom;
-        rig.Vm.InvertStrings = !invert;
         rig.Vm.Revert();
 
         Assert.Equal(bloom, rig.State.EnableBloom);
-        Assert.Equal(invert, rig.State.InvertStrings);
         Assert.Empty(rig.Vm.UnsavedSettings);
     }
 
@@ -263,7 +234,7 @@ public sealed class GraphicsSettingsViewModelTests
             .GetProperties()
             .Where(p => p.PropertyType == typeof(bool) && p.CanWrite && p.Name != "IsAdvancedOpen")
             .ToList();
-        Assert.True(settable.Count >= 20, $"only {settable.Count} settable toggles found; the walk went vacuous");
+        Assert.True(settable.Count >= 18, $"only {settable.Count} settable toggles found; the walk went vacuous");
 
         foreach (var property in settable)
         {
