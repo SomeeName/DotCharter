@@ -73,7 +73,9 @@ function Get-GateResultRoot {
         [Parameter(Mandatory)][string]$TempRoot,
         [Parameter(Mandatory)][string]$RunId
     )
-    if ($ResultsDir) { return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $ResultsDir)) }
+    # Path.Combine, not Join-Path: an absolute -ResultsDir (another drive, as a
+    # CI runner's temp folder is) must win, not be glued onto the repo root (#888).
+    if ($ResultsDir) { return [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($RepoRoot, $ResultsDir)) }
     return Join-Path (Get-GateCheckoutRoot -RepoRoot $RepoRoot -TempRoot $TempRoot) $RunId
 }
 

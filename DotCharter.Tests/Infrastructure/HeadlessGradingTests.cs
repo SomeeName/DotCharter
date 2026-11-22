@@ -150,6 +150,37 @@ public sealed class HeadlessGradingTests : IDisposable
         Assert.Equal($"full={ClassA},{ClassB}", lines[^1]);
     }
 
+    /// <summary>
+    ///     SDK 11's <c>dotnet test</c> reads an optional format after <c>--list-tests</c>
+    ///     (<c>text|json</c>), so a flag after it broke discovery on the CI runner (#888):
+    ///     every discovery argument list ends with it.
+    /// </summary>
+    [Fact]
+    public void Discovery_PutsListTestsLast_SoTheSdkCannotReadAFlagAsItsFormat()
+    {
+        var log = Path.Combine(_scratch, "discovery-args.log");
+        var output = Run($$"""
+            function global:dotnet { $global:seen = @($args); $global:LASTEXITCODE = 0 }
+            $null = Get-HeadlessDiscovery @('test', '--no-build') @('--filter-class', '*UiPerfSmokeTests') '{{log}}'
+            "discovery=$($global:seen -join ' ')"
+            "shard=$((New-TestShardArgs @('test') @('--filter-class', 'A') 't.trx' 'C:\r' -ListTests) -join ' ')"
+            "run=$((New-TestShardArgs @('test') @('--filter-class', 'A') 't.trx' 'C:\r') -join ' ')"
+            """);
+
+        Assert.Equal(
+            "discovery=test --no-build --filter-class *UiPerfSmokeTests --list-tests\n"
+            + @"shard=test --filter-class A --report-xunit-trx --report-xunit-trx-filename t.trx --results-directory C:\r --list-tests" + "\n"
+            + @"run=test --filter-class A --report-xunit-trx --report-xunit-trx-filename t.trx --results-directory C:\r",
+            Normalize(output));
+
+        // No script appends the flag to a prefix of its own again (the gate's shard self-test did).
+        foreach (var script in Directory.EnumerateFiles(Path.Combine(TestPaths.RepoRoot(), "tools"), "*.ps*1", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(script) == "HeadlessShards.psm1") continue;
+            Assert.DoesNotContain("@('--list-tests')", File.ReadAllText(script), StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void Retry_AClassReportingAnotherCaseDoesNotVerifyTheMissingHarnessCase()
     {

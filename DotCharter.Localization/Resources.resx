@@ -1420,6 +1420,8 @@
  <data name="Inspector_IssueFix_RefingerOne" xml:space="preserve"><value>Re-finger {1}, as {0} other chord plays it</value></data>
  <data name="Inspector_IssueFix_Refinger" xml:space="preserve"><value>Re-finger {1}, as {0} other chords play it</value></data>
  <data name="Inspector_IssueFix_RefingerTip" xml:space="preserve"><value>Keeps the hand position on fret {0} and gives this grip the fingering the arrangement already plays under it ({1}). The anchor and the other sounds under it stay as they are. One undo step.</value></data>
+ <data name="Inspector_IssueFix_UseShapeFingeringTip" xml:space="preserve"><value>Keeps the hand position on fret {0} and gives this chord the fingering of the hand shape over it ({1}), which plays the same frets. The anchor, the hand shape and its chord template stay as they are. One undo step.</value></data>
+ <data name="Inspector_IssueFix_UseShapeFingering" xml:space="preserve"><value>Use the hand shape's fingering ({0})</value></data>
  <data name="Inspector_IssueFix_MoveAnchor" xml:space="preserve"><value>Move the hand position to fret {0}</value></data>
  <data name="Inspector_IssueFix_MoveAnchorTip" xml:space="preserve"><value>Moves the fret-hand position from fret {0} to fret {1}, where this fingering puts the index finger. Every sound under that anchor is then played from the new position. One undo step.</value></data>
  <data name="Inspector_IssueFix_ToneEarlier" xml:space="preserve"><value>Move the tone change a 16th note earlier</value></data>
@@ -6489,6 +6491,7 @@
   <data name="Validation_IndexFingerStated_Inferred" xml:space="preserve"><value>This chord has no finger 1, but its finger {0} on fret {1} puts the index finger on {2} (inferred)</value></data>
   <data name="Validation_IndexFingerStated_Authored" xml:space="preserve"><value>This chord is fingered with the index finger on fret {0}</value></data>
   <data name="Validation_IndexFingerNotOnAnchorFret" xml:space="preserve"><value>{0}, but the fret-hand position is on fret {1}. Rocksmith derives the playing finger from the anchor, so it will show a different fingering than the chart states — move the anchor to match, or re-finger the chord.</value></data>
+  <data name="Validation_IndexFingerNotOnAnchorFret_ShapeFingering" xml:space="preserve"><value>{0}, but the fret-hand position is on fret {1}. The hand shape over it plays the same frets with a different fingering that fits the anchor — use the hand shape's fingering for the chord.</value></data>
   <data name="Validation_LinkNextMissingTargetNote" xml:space="preserve"><value>Sound has Link-Next but there's no following note on the same string.</value></data>
   <data name="Validation_IncorrectLinkNext" xml:space="preserve"><value>Link-Next target note doesn't start where this sound's sustain ends.</value></data>
   <data name="Validation_LinkNextSlideMismatch" xml:space="preserve"><value>Link-Next slide ends on fret {0} but next note is on fret {1}.</value></data>

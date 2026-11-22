@@ -23,12 +23,19 @@ namespace DotCharter.Services.Editing.Anchors;
 ///         frets, so no note moves and no other user of either template changes.
 ///         Each fix is ONE action, so one Ctrl+Z undoes it.
 ///     </para>
+///     <para>
+///         <b>A hand shape over the chord outranks the corpus.</b> When the shape plays the
+///         chord's frets with a fingering the anchor allows, the chord was left behind by an edit of
+///         the shape alone: re-pointing the chord to the shape's template is the default
+///         (<see cref="FromHandShape" />), and the shape itself is not touched.
+///     </para>
 /// </summary>
 public sealed class IndexAnchorRepair
 {
     private IndexAnchorRepair(FretAnchor anchor, ChordTemplate template, int? moveAnchorTo, ChordTemplate? refinger,
-        int evidence, List<Chord> chords, List<HandShape> handShapes)
+        int evidence, List<Chord> chords, List<HandShape> handShapes, bool fromHandShape)
     {
+        FromHandShape = fromHandShape;
         Anchor = anchor;
         Template = template;
         MoveAnchorTo = moveAnchorTo;
@@ -61,6 +68,9 @@ public sealed class IndexAnchorRepair
     /// shape are one decision, so they are rebound together.</summary>
     public IReadOnlyList<HandShape> HandShapes { get; }
 
+    /// <summary>True when <see cref="Refinger" /> is the template of a hand shape over the chord.</summary>
+    public bool FromHandShape { get; }
+
     /// <summary>True when re-fingering is the default fix.</summary>
     public bool PrefersRefinger => Refinger != null;
 
@@ -83,12 +93,40 @@ public sealed class IndexAnchorRepair
         var index = IndexFingerPosition.Find(template, arrangement.Capo);
         if (index is { } stated && stated.Allows(anchor.Fret)) return null;
 
-        var (grip, evidence) = AgreeingGrip(arrangement, template, anchor.Fret);
         var move = index?.Nearest(anchor.Fret);
+        if (chord != null && handShape == null && ShapeGrip(arrangement, level, chord, template, anchor.Fret) is { } shapeGrip)
+            return new IndexAnchorRepair(anchor, template, move, shapeGrip, 0, [chord], [], true);
+
+        var (grip, evidence) = AgreeingGrip(arrangement, template, anchor.Fret);
         if (grip == null && move == null) return null;
 
         var (chords, handShapes) = Sounds(level, chord, handShape, templateId);
-        return new IndexAnchorRepair(anchor, template, move, grip, evidence, chords, handShapes);
+        return new IndexAnchorRepair(anchor, template, move, grip, evidence, chords, handShapes, false);
+    }
+
+    /// <summary>
+    ///     The template of a hand shape on <paramref name="level" /> over <paramref name="chord" /> that plays
+    ///     <paramref name="template" />'s frets (same arpeggio flavour, another id) with an index an anchor on
+    ///     <paramref name="anchorFret" /> allows, or null. E04 names it in its text and offers it first.
+    /// </summary>
+    public static ChordTemplate? ShapeGrip(Arrangement arrangement, ChartLevel level, Chord chord, ChordTemplate template,
+        int anchorFret)
+    {
+        ArgumentNullException.ThrowIfNull(arrangement);
+        ArgumentNullException.ThrowIfNull(level);
+        ArgumentNullException.ThrowIfNull(chord);
+        ArgumentNullException.ThrowIfNull(template);
+
+        var flavour = ArpeggioFlavour.Of(template);
+        foreach (var shape in level.HandShapes)
+        {
+            if (shape.TemplateId < 0 || shape.TemplateId == template.Id || !shape.Covers(chord.Position)) continue;
+            if (arrangement.FindChordTemplate(shape.TemplateId) is not { } grip) continue;
+            if (!flavour.Matches(grip) || !grip.HasFrets(template.Frets)) continue;
+            if (IndexFingerPosition.Find(grip, arrangement.Capo) is { } index && index.Allows(anchorFret)) return grip;
+        }
+
+        return null;
     }
 
     /// <summary>

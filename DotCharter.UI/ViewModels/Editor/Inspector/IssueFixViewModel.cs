@@ -10,7 +10,8 @@ namespace DotCharter.UI.ViewModels.Editor.Inspector;
 ///     <c>InspectorIssuesViewModel.IssueFix</c>. Today it answers E04 and I46 — a grip whose index finger
 ///     disagrees with the hand position — with <see cref="IndexAnchorRepair" />: the DEFAULT first
 ///     (re-finger the grip the way the arrangement already plays it under this anchor, when it does;
-///     otherwise move the anchor), and the other one beside it. Each is one undo step.
+///     otherwise move the anchor), and the other one beside it. Each is one undo step. A chord under a
+///     hand shape that plays its frets the way the anchor wants is offered that shape's fingering first.
 ///     <para>
 ///         It holds a finding, not a selection: a recompute keeps the offer while the same finding
 ///         (same rule, same element) still stands and withdraws it once it is gone, so a button never
@@ -195,11 +196,14 @@ public sealed partial class IssueFixViewModel : ObservableObject
         _ => ""
     };
 
-    private string RefingerLabel(IndexAnchorRepair repair) => _localization.Plural(
-        "Inspector_IssueFix_RefingerOne", "Inspector_IssueFix_Refinger", repair.Evidence, Fingering(repair.Refinger!));
+    private string RefingerLabel(IndexAnchorRepair repair) => repair.FromHandShape
+        ? _localization.Format("Inspector_IssueFix_UseShapeFingering", Fingering(repair.Refinger!))
+        : _localization.Plural("Inspector_IssueFix_RefingerOne", "Inspector_IssueFix_Refinger", repair.Evidence,
+            Fingering(repair.Refinger!));
 
-    private string RefingerTip(IndexAnchorRepair repair) =>
-        _localization.Format("Inspector_IssueFix_RefingerTip", repair.Anchor.Fret, Fingering(repair.Refinger!));
+    private string RefingerTip(IndexAnchorRepair repair) => _localization.Format(
+        repair.FromHandShape ? "Inspector_IssueFix_UseShapeFingeringTip" : "Inspector_IssueFix_RefingerTip",
+        repair.Anchor.Fret, Fingering(repair.Refinger!));
 
     private string MoveLabel(IndexAnchorRepair repair) =>
         _localization.Format("Inspector_IssueFix_MoveAnchor", repair.MoveAnchorTo ?? repair.Anchor.Fret);

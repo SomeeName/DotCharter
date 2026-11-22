@@ -210,8 +210,9 @@ public sealed partial class GripInspectorViewModel
         if (_arrangement == null || !HasDraft) return;
         var actions = new List<IChartAction>();
         var minted = new List<ChordTemplate>();
-        if (_draft.HasGripEdits) actions.AddRange(SaveShapes(minted));
-        actions.AddRange(SaveChords(minted));
+        var savedShapes = new List<(ChartLevel Level, HandShape Next)>();
+        if (_draft.HasGripEdits) actions.AddRange(SaveShapes(minted, savedShapes));
+        actions.AddRange(SaveChords(minted, savedShapes));
         _draft = new GripInspectorDraft();
         var saved = _shape;
         // A grip save is an editing gesture: in a linked measure it reaches every placement in the same step.
@@ -220,29 +221,35 @@ public sealed partial class GripInspectorViewModel
         OfferIdenticalShapes(saved);
     }
 
-    private IEnumerable<IChartAction> SaveShapes(List<ChordTemplate> minted)
+    private IEnumerable<IChartAction> SaveShapes(List<ChordTemplate> minted, List<(ChartLevel, HandShape)> saved)
     {
         foreach (var group in _targets.Shapes.GroupBy(t => t.Level))
         {
             var changes = group.Where(t => _draft.AppliesTo(t.Fields) && t.Level.HandShapes.Contains(t.Shape))
                 .Select(t => (t.Shape, Next: SaveGrip(t, minted))).ToArray();
+            saved.AddRange(changes.Select(c => (group.Key, c.Next)));
             yield return new MutateHandShapesAction(group.Key.HandShapes, changes.Select(c => c.Shape),
                 changes.Select(c => c.Shape.Clone()), changes.Select(c => c.Next));
         }
     }
 
-    private IEnumerable<IChartAction> SaveChords(List<ChordTemplate> minted)
+    /// <summary>
+    ///     Note frets to the chords, and each chord the grip a saved shape over it now plays. A finger edit
+    ///     re-points only the SHAPE to a template with the new fingering; a chord left on its old template keeps
+    ///     the old fingers, which rule E04 reads while the page shows the shape's.
+    /// </summary>
+    private IEnumerable<IChartAction> SaveChords(List<ChordTemplate> minted, List<(ChartLevel Level, HandShape Next)> savedShapes)
     {
         var arrangement = _arrangement!;
         foreach (var group in _targets.Chords.GroupBy(t => t.Level))
         {
             var changes = group.Where(t => t.Level.Chords.Contains(t.Chord))
-                .Select(t => (t.Chord, Next: GripEdit.Refret(t.Chord, _draft.ChordFrets)))
+                .Select(t => (t.Chord, Next: FollowShape(t.Level, t.Chord, minted, savedShapes)))
                 .Where(t => t.Next != null).ToArray();
             foreach (var (chord, next) in changes)
             {
                 var previous = arrangement.FindChordTemplate(chord.TemplateId);
-                if (previous?.DescribesChordNotes(next!.ChordNotes) == true) continue;
+                if (next!.TemplateId != chord.TemplateId || previous?.DescribesChordNotes(next.ChordNotes) == true) continue;
                 var frets = next!.ChordNotes.GroupBy(n => n.StringIndex).ToDictionary(g => g.Key, g => g.First().Fret);
                 next.TemplateId = ChordTemplateResolver.Resolve(arrangement, frets,
                     ArpeggioFlavour.Of(previous), null, minted).Id;
@@ -250,6 +257,28 @@ public sealed partial class GripInspectorViewModel
             yield return new MutateChordsAction(group.Key.Chords, changes.Select(c => c.Chord),
                 changes.Select(c => c.Chord.Clone()), changes.Select(c => c.Next!));
         }
+    }
+
+    /// <summary>The chord refretted by the draft, bound to the grip of a saved shape over it when that grip
+    ///     strikes exactly its notes in the same arpeggio flavour; null when neither changes it.</summary>
+    private Chord? FollowShape(ChartLevel level, Chord chord, List<ChordTemplate> minted,
+        List<(ChartLevel Level, HandShape Next)> savedShapes)
+    {
+        var arrangement = _arrangement!;
+        var next = GripEdit.Refret(chord, _draft.ChordFrets);
+        var previous = arrangement.FindChordTemplate(chord.TemplateId);
+        foreach (var (shapeLevel, shape) in savedShapes)
+        {
+            if (!ReferenceEquals(shapeLevel, level) || !shape.Covers(chord.Position)) continue;
+            var grip = arrangement.FindChordTemplate(shape.TemplateId) ?? minted.FirstOrDefault(t => t.Id == shape.TemplateId);
+            if (grip == null || grip.Id == chord.TemplateId || ArpeggioFlavour.Of(grip) != ArpeggioFlavour.Of(previous)) continue;
+            if (!grip.DescribesChordNotes((next ?? chord).ChordNotes)) continue;
+            next ??= chord.Clone();
+            next.TemplateId = grip.Id;
+            break;
+        }
+
+        return next;
     }
 
     private HandShape SaveGrip(GripShapeTarget target, List<ChordTemplate> minted)

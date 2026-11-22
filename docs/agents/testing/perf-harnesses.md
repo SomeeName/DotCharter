@@ -263,7 +263,9 @@ splits the suite and every runner goes through it:
 | CI `headless-ui` (`Invoke-HeadlessUiCi.ps1 -Shards 2`) | 2 | the private repo's `windows-latest` runner has 2 vCPUs; raise it only against the step summary's peak RSS |
 | release preflight (`New-Release.ps1 -HeadlessShards`) | 4 | the full en-US pass and each localized layout pass |
 
-- **Partition:** `--list-tests` with the suite's filter → class → case count;
+- **Partition:** `--list-tests` with the suite's filter → class → case count
+  (`--list-tests` goes LAST, `New-TestListingArgs`: SDK 11 reads a `text|json`
+  format after it, #888);
   each class weighs its seconds in `tools/ci/headless-shard-weights.json`, or
   (a class the file does not know) its case count × the suite's mean seconds
   per case; longest-processing-time first, ties by ordinal name. Whole classes

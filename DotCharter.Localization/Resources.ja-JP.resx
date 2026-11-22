@@ -1418,6 +1418,8 @@
     <data name="Inspector_IssueFix_RefingerOne" xml:space="preserve"><value>{1} で押さえ直す（他の {0} か所と同じ）</value></data>
     <data name="Inspector_IssueFix_Refinger" xml:space="preserve"><value>{1} で押さえ直す（他の {0} か所と同じ）</value></data>
     <data name="Inspector_IssueFix_RefingerTip" xml:space="preserve"><value>左手ポジション（FHP）はフレット {0} のまま、このグリップをアレンジメントがその下で既に使っている運指（{1}）に変えます。アンカーとその下の他の音はそのままです。元に戻す 1 回で戻せます。</value></data>
+    <data name="Inspector_IssueFix_UseShapeFingeringTip" xml:space="preserve"><value>左手ポジション（FHP）はフレット {0} のまま、このコードに上のハンドシェイプの運指（{1}）を使います。ハンドシェイプは同じフレットを押さえています。アンカー、ハンドシェイプ、そのコードテンプレートはそのままです。元に戻す 1 回で戻せます。</value></data>
+    <data name="Inspector_IssueFix_UseShapeFingering" xml:space="preserve"><value>ハンドシェイプの運指を使う（{0}）</value></data>
     <data name="Inspector_IssueFix_MoveAnchor" xml:space="preserve"><value>左手ポジションをフレット {0} へ移動</value></data>
     <data name="Inspector_IssueFix_MoveAnchorTip" xml:space="preserve"><value>左手ポジション（FHP）をフレット {0} から、この運指で人差し指が来るフレット {1} へ移動します。このアンカーの下の音はすべて新しいポジションから演奏されます。元に戻す 1 回で戻せます。</value></data>
     <data name="Inspector_IssueFix_ToneEarlier" xml:space="preserve"><value>トーン切り替えを16分音符ぶん前へ移動</value></data>
@@ -6447,6 +6449,7 @@
   <data name="Validation_IndexFingerStated_Inferred" xml:space="preserve"><value>このコードには指1がありませんが、指{0}が{1}フレットにあるため、人差し指は{2}になります（推定）</value></data>
   <data name="Validation_IndexFingerStated_Authored" xml:space="preserve"><value>このコードは人差し指を{0}フレットに置く指使いです</value></data>
   <data name="Validation_IndexFingerNotOnAnchorFret" xml:space="preserve"><value>{0}が、フレットハンドのポジションは{1}フレットです。Rocksmith は演奏する指をアンカーから決定するため、チャートの指定とは異なる指使いが表示されます。アンカーを合わせて移動するか、コードの指使いを付け直してください。</value></data>
+  <data name="Validation_IndexFingerNotOnAnchorFret_ShapeFingering" xml:space="preserve"><value>{0}が、フレットハンドのポジションは{1}フレットです。上のハンドシェイプは同じフレットをアンカーに合う別の運指で押さえています。コードにハンドシェイプの運指を使ってください。</value></data>
   <data name="Validation_LinkNextMissingTargetNote" xml:space="preserve"><value>サウンドにLink-Nextが設定されていますが、同じ弦に後続のノートがありません。</value></data>
   <data name="Validation_IncorrectLinkNext" xml:space="preserve"><value>Link-Nextの対象ノートが、このサウンドのサステイン終了位置から始まっていません。</value></data>
   <data name="Validation_LinkNextSlideMismatch" xml:space="preserve"><value>Link-Nextのスライドは{0}フレットで終わりますが、次のノートは{1}フレットです。</value></data>

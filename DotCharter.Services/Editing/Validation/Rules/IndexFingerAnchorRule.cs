@@ -72,9 +72,13 @@ public sealed class IndexFingerAnchorRule : IArrangementRule
                     ? new IssueTextRef("Validation_IndexFingerStated_Inferred",
                         [index.FromFinger, index.FromFret, IndexFretText.Of(index)])
                     : new IssueTextRef("Validation_IndexFingerStated_Authored", [index.Fret]);
+                // A hand shape over the chord that plays its frets the way the
+                // anchor wants: the chord was left behind by a shape-only edit,
+                // and the text says so (its first fix re-points the chord).
+                var shapeFingered = IndexAnchorRepair.ShapeGrip(arr, level, chord, template, anchor.Fret) != null;
                 issues.Add(ArrangementIssues.Make(
                     ArrangementIssueType.IndexFingerNotOnAnchorFret,
-                    "Validation_IndexFingerNotOnAnchorFret",
+                    shapeFingered ? "Validation_IndexFingerNotOnAnchorFret_ShapeFingering" : "Validation_IndexFingerNotOnAnchorFret",
                     chord.Position.GetPositionMs(beats),
                     chord: chord,
                     anchor: anchor, args: [stated, anchor.Fret]));

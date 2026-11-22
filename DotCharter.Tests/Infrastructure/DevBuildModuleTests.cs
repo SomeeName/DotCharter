@@ -144,6 +144,11 @@ public sealed class DevBuildModuleTests : IDisposable
     public void GateResults_AnExplicitResultsDir_IsTheCallers() =>
         Assert.Equal(@"C:\r\out\gate", Run("Get-GateResultRoot -RepoRoot 'C:\\r' -ResultsDir 'out\\gate' -TempRoot 'C:\\t' -RunId 'x'"));
 
+    /// <summary>An absolute folder on another drive (a CI runner's temp) is used as given, not glued onto the repo (#888).</summary>
+    [Fact]
+    public void GateResults_AnAbsoluteResultsDirOnAnotherDrive_IsUsedAsGiven() =>
+        Assert.Equal(@"D:\elsewhere\gate", Run("Get-GateResultRoot -RepoRoot 'C:\\r' -ResultsDir 'D:\\elsewhere\\gate' -TempRoot 'C:\\t' -RunId 'x'"));
+
     [Fact]
     public void GateResults_PruningKeepsTheNewestTenRuns() =>
         Assert.Equal("20261101-000000-1,20261102-000000-1", Run(

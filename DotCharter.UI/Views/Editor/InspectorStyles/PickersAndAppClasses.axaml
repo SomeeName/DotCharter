@@ -257,6 +257,14 @@
     <Style Selector="ToggleButton.Seg:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource FireAccentTintStrong}" />
     </Style>
+    <!-- `.Mixed`: this value is held by SOME of the targets (a grip row's finger
+         cells). The same claim as `Chip:indeterminate`: the WARNING edge
+         and tint, never the accent fill, so it cannot read as "selected". -->
+    <Style Selector="ToggleButton.Seg.Mixed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource FireWarningTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource FireWarningBorder}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource FireWarning}" />
+    </Style>
     <!-- A segment may carry a `PathIcon` instead of a glyph; PathIcon does not
          inherit Foreground, so every state has to be driven explicitly. -->
     <Style Selector="ToggleButton.Seg PathIcon">

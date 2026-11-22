@@ -75,6 +75,10 @@ public sealed partial class GripInspectorViewModel : ViewModelBase, IDisposable
     public Chord? FretboardChord { get; private set; }
     public Chord? BoardNotes { get; private set; }
     public IReadOnlyList<int> MutedStrings { get; private set; } = [];
+
+    /// <summary>Per string, the board dot's caption where the targets' fingers disagree ("1/2"): the board shows the
+    /// mixed state instead of only the shape's finger. A fresh dictionary each refresh, so the board re-renders.</summary>
+    public IReadOnlyDictionary<int, string> MixedFingers { get; private set; } = new Dictionary<int, string>();
     public string TargetCount { get; private set; } = "";
 
     /// <summary>The chords a Save reaches, short ("12 chords"): the footer Save's second line (the tooltip says all).</summary>
@@ -315,9 +319,10 @@ public sealed partial class GripInspectorViewModel : ViewModelBase, IDisposable
         NamePlaceholder = _grips.Select(g => g.Name).Distinct().Skip(1).Any() ? _loc["GripInspector_Mixed"] : "";
         GripSummary = DisplayTemplate(FretboardTemplate);
         RefreshRows();
+        MixedFingers = Rows.Where(row => row.MixedFingerCaption != null).ToDictionary(row => row.StringIndex, row => row.MixedFingerCaption!);
         RefreshNameOffers();
         RefreshDoubleStopPair();
-        Notify(nameof(FretboardTemplate), nameof(FretboardChord), nameof(BoardNotes), nameof(MutedStrings), nameof(HasRebindWarning),
+        Notify(nameof(FretboardTemplate), nameof(FretboardChord), nameof(BoardNotes), nameof(MutedStrings), nameof(MixedFingers), nameof(HasRebindWarning),
             nameof(RebindCount), nameof(RebindWarning), nameof(GripSummary),
             nameof(ChordNameText), nameof(NamePlaceholder), nameof(Arpeggio), nameof(DoubleStop), nameof(NoName),
             nameof(Fingerless), nameof(IsPinned), nameof(CanName), nameof(CanEditPin), nameof(HasDraft));
@@ -423,9 +428,20 @@ public sealed partial class GripInspectorViewModel : ViewModelBase, IDisposable
                 var note = t.Chord.ChordNotes.FirstOrDefault(n => n.StringIndex == index);
                 return note == null || note.Mute == MuteType.Full ? (int?)null : _draft.ChordFrets.GetValueOrDefault(index, note.Fret);
             }).Distinct().ToArray();
-            row.Update(frets, _grips, _arrangement);
+            row.Update(frets, _grips, _arrangement, ChordFingers(index));
         }
     }
+
+    /// <summary>
+    ///     The fingers the target chords' OWN templates state on <paramref name="index" /> — what rule E04 judges.
+    ///     A chord bound to another template than its shape showed the shape's fingers alone, so the page
+    ///     read 2/2 while E04 reported the chord's finger 1. A drafted finger replaces both on save, and an
+    ///     unfingered template states nothing.
+    /// </summary>
+    private int[] ChordFingers(int index) => _draft.Fingers.ContainsKey(index) || _arrangement == null ? [] :
+        _targets.Chords.Select(t => _arrangement.FindChordTemplate(t.Chord.TemplateId))
+            .Where(g => g is { Fingers.Count: > 0 } && g.Frets.ContainsKey(index))
+            .Select(g => g!.GetFinger(index)).ToArray();
 
     private void Notify(params string[] names)
     {

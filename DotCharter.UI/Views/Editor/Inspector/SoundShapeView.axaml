@@ -151,6 +151,7 @@
                                                           Command="{Binding ToggleCommand}"
                                                           IsEnabled="{Binding $parent[ItemsControl].((inspector:GripRow)DataContext).CanEditFinger}"
                                                           Content="{Binding Display}"
+                                                          Classes.Mixed="{Binding IsFretboardMixed}"
                                                           ToolTip.Tip="{Binding FretboardMixedHint}"
                                                           AutomationProperties.Name="{Binding Display}" />
                                         </DataTemplate>
@@ -182,6 +183,7 @@
                                          FlipStrings="{Binding InvertStrings}"
                                          Mask="{Binding Mask}"
                                          MutedStrings="{Binding MutedStrings}"
+                                         MixedFingers="{Binding MixedFingers}"
                                          ToggleNoteCommand="{Binding ToggleBoardFretCommand}"
                                          SetFretCommand="{Binding SetBoardFretCommand}"
                                          SetFingerCommand="{Binding SetBoardFingerCommand}"

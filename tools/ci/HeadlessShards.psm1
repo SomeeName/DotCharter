@@ -75,11 +75,33 @@ function Read-HeadlessTestListing([string]$LogPath) {
 }
 
 <#
+    The argument list of a `dotnet test` discovery run: `--list-tests` goes LAST.
+    SDK 11's `dotnet test` reads an optional format value after it
+    (`--list-tests [text|json]`), so any flag that followed it was parsed as that
+    value and discovery exited 1 (#888). Older SDKs accept the same order.
+#>
+function New-TestListingArgs([string[]]$DotnetTestArgs, [string[]]$Filter) {
+    return [string[]](@($DotnetTestArgs) + @($Filter) + @('--list-tests'))
+}
+
+<#
+    The argument list of one shard: the caller's prefix, the shard's filter,
+    its TRX report and results folder; -ListTests appends `--list-tests` last
+    (New-TestListingArgs says why).
+#>
+function New-TestShardArgs([string[]]$DotnetTestArgs, [string[]]$Filter, [string]$TrxName, [string]$ResultsDirectory, [switch]$ListTests) {
+    $argv = @($DotnetTestArgs) + @($Filter) + @('--report-xunit-trx', '--report-xunit-trx-filename', $TrxName, '--results-directory', $ResultsDirectory)
+    if ($ListTests) { $argv += '--list-tests' }
+    return [string[]]$argv
+}
+
+<#
     Runs discovery for $Filter and returns class -> case count. $DotnetTestArgs is
     the caller's `test --project ... --no-build [-c ...] [-r ...]` prefix.
 #>
 function Get-HeadlessDiscovery([string[]]$DotnetTestArgs, [string[]]$Filter, [string]$LogPath) {
-    & dotnet @($DotnetTestArgs + @('--list-tests') + $Filter) *> $LogPath
+    $argv = New-TestListingArgs $DotnetTestArgs $Filter
+    & dotnet @argv *> $LogPath
     $code = $LASTEXITCODE
     # A listing that failed part-way still prints the classes it reached (#611):
     # accepting it would shrink both the run plan and the coverage check.
@@ -247,7 +269,8 @@ function Start-TestShards {
         [string]$ResultsDir,
         [string]$Label,
         [string]$Culture = '',
-        [string]$WorkingDirectory = (Get-Location).Path
+        [string]$WorkingDirectory = (Get-Location).Path,
+        [switch]$ListTests
     )
     New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
     $runs = @()
@@ -262,7 +285,7 @@ function Start-TestShards {
             $filter = @()
             if ($shard.PSObject.Properties['CommandArgs'] -and $null -ne $shard.CommandArgs) { $filter = @($shard.CommandArgs) }
             else { foreach ($c in $shard.Classes) { $filter += @('--filter-class', $c) } }
-            $argv = $DotnetTestArgs + $filter + @('--report-xunit-trx', '--report-xunit-trx-filename', $trxName, '--results-directory', $dir)
+            $argv = New-TestShardArgs $DotnetTestArgs $filter $trxName $dir -ListTests:$ListTests
             $line = ($argv | ForEach-Object { ConvertTo-CommandLineArgument $_ }) -join ' '
             $out = Join-Path $dir 'stdout.log'; $err = Join-Path $dir 'stderr.log'
             $proc = Start-Process -FilePath 'dotnet' -ArgumentList $line -WorkingDirectory $WorkingDirectory `
@@ -741,7 +764,7 @@ function Save-HeadlessFailureEvidence {
     return $Folder
 }
 
-Export-ModuleMember -Function Get-HeadlessClassName, Read-HeadlessTestListing, Get-HeadlessDiscovery, `
+Export-ModuleMember -Function Get-HeadlessClassName, Read-HeadlessTestListing, New-TestListingArgs, New-TestShardArgs, Get-HeadlessDiscovery, `
     Read-HeadlessShardWeights, New-HeadlessShardPlan, Invoke-HeadlessShards, Start-TestShards, Wait-TestShards, Merge-HeadlessTrx, `
     Write-HeadlessShardWeights, Stop-ProcessTree, ConvertTo-CommandLineArgument, `
     Get-HeadlessHarnessFaults, Test-HeadlessHarnessFault, Read-HeadlessTrxFailures, Get-HeadlessRaceRerunDecision, `

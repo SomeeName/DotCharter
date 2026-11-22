@@ -35,6 +35,11 @@ public sealed class ColumnFlowFretboard : ChordBoxControl
     public static readonly DirectProperty<ColumnFlowFretboard, string> WindowLabelProperty =
         AvaloniaProperty.RegisterDirect<ColumnFlowFretboard, string>(nameof(WindowLabel), board => board.WindowLabel);
 
+    /// <summary>Strings whose fingers disagree across the targets, with the dot's caption ("1/2"): the dot gets a dashed
+    /// warning ring and that caption instead of the shape's finger. Bind a FRESH dictionary to re-render.</summary>
+    public static readonly StyledProperty<IReadOnlyDictionary<int, string>?> MixedFingersProperty =
+        AvaloniaProperty.Register<ColumnFlowFretboard, IReadOnlyDictionary<int, string>?>(nameof(MixedFingers));
+
     private (int String, int Fret)? _hover;
     private int? _requestedFret;
     private string _windowLabel = "";
@@ -46,7 +51,17 @@ public sealed class ColumnFlowFretboard : ChordBoxControl
         private set => SetAndRaise(WindowLabelProperty, ref _windowLabel, value);
     }
 
-    static ColumnFlowFretboard() => AffectsMeasure<ColumnFlowFretboard>(StringCountProperty, LanePitchProperty);
+    static ColumnFlowFretboard()
+    {
+        AffectsMeasure<ColumnFlowFretboard>(StringCountProperty, LanePitchProperty);
+        AffectsRender<ColumnFlowFretboard>(MixedFingersProperty);
+    }
+
+    public IReadOnlyDictionary<int, string>? MixedFingers
+    {
+        get => GetValue(MixedFingersProperty);
+        set => SetValue(MixedFingersProperty, value);
+    }
 
     public double LanePitch
     {
@@ -320,6 +335,16 @@ public sealed class ColumnFlowFretboard : ChordBoxControl
             context.DrawEllipse(ghost ? surface : color, ghost ? new Pen(color, 2) : null, center, radius, radius);
             var fill = ghost && surface is ISolidColorBrush ghostFill ? ghostFill.Color : color.Color;
             var ink = FingerInk(fill) == Colors.Black ? Brushes.Black : Brushes.White;
+            if (MixedFingers?.TryGetValue(index, out var mixed) == true)
+            {
+                context.DrawEllipse(null, new Pen(FindBrush("FireWarning", Brushes.Orange), 1.5, new DashStyle([2, 1.5], 0)),
+                    center, radius + 2.5, radius + 2.5);
+                if (radius < 5) continue;
+                var label = Format(mixed, ink, mixed.Length > 3 ? 7 : 8);
+                context.DrawText(label, new Point(center.X - label.Width / 2, center.Y - label.Height / 2));
+                continue;
+            }
+
             if (radius >= 5 && Template?.Fingers is { } fingers && fingers.TryGetValue(index, out var finger))
             {
                 var caption = Format(finger == 0 ? "T" : finger.ToString(CultureInfo.InvariantCulture), ink, radius < 8 ? 10 : 11);

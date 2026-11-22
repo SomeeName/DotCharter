@@ -421,6 +421,48 @@ public sealed class SoundShapeViewUiPerfSmokeTests
         }, CancellationToken.None);
     }
 
+    /// <summary>
+    ///     #890: a chord whose own template fingers string 0 with 2 while its hand shape says 1 is MIXED there. The
+    ///     row's finger cells 1 and 2 (and no other cell) carry the <c>Mixed</c> warning class, keep their tooltip, and
+    ///     the board's dot on that string is captioned "1/2" instead of the shape's finger alone.
+    /// </summary>
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("de-DE")]
+    [InlineData("ja-JP")]
+    public async Task AMixedFinger_ShowsOnItsCellsAndOnTheBoard(string culture) =>
+        await HeadlessSessionFixture.Dispatch(() => InCulture(culture, () => WithShape(530, 370, 6, false, (window, view, vm) =>
+        {
+            var row = vm.GripInspector.Rows.Single(r => r.StringIndex == 0);
+            Assert.True(row.HasMixedFinger, "string 0's fingers disagree (shape 1, chord 2)");
+            if (InspectorCapture.InspectorCaptureFixture.Enabled)
+            {
+                InspectorCapture.InspectorCaptureFixture.Settle(window);
+                InspectorCapture.InspectorCaptureFixture.Save(window, "", $"shape-mixed-finger-{culture}");
+            }
+            var cells = view.GetVisualDescendants().OfType<ToggleButton>()
+                .Where(t => t.DataContext is GripFingerChoice && t.IsEffectivelyVisible).ToArray();
+            Assert.NotEmpty(cells);
+            var mixed = cells.Where(t => t.Classes.Contains("Mixed")).ToArray();
+            Assert.Equal([1, 2], mixed.Select(t => ((GripFingerChoice)t.DataContext!).Value));
+            Assert.All(mixed, t => Assert.Same(row, t.FindAncestorOfType<ItemsControl>()!.DataContext));
+            Assert.All(mixed, t =>
+            {
+                Assert.True(t.Bounds is { Width: > 1, Height: > 1 }, $"a mixed cell laid out as {t.Bounds}");
+                Assert.False(string.IsNullOrEmpty(ToolTip.GetTip(t) as string), "a mixed cell keeps its tooltip");
+            });
+            var board = (ColumnFlowFretboard)Named(view, "SoundShapeBoard");
+            Assert.True(board.Bounds is { Width: > 40, Height: > 28 }, $"the board laid out as {board.Bounds}");
+            Assert.Equal("1/2", Assert.Single(board.MixedFingers!).Value);
+            Assert.Equal(0, board.MixedFingers!.Single().Key);
+        }, selectChord: true, arrange: (lead, chord) =>
+        {
+            lead.ChordTemplates[0].Fingers = new() { [0] = 1, [1] = 3, [2] = 4 };
+            var own = new ChordTemplate { Id = 1, Name = "G5", Frets = new(lead.ChordTemplates[0].Frets), Fingers = new() { [0] = 2, [1] = 3, [2] = 4 } };
+            lead.ChordTemplates.Add(own);
+            chord.TemplateId = 1;
+        })), CancellationToken.None);
+
     private static void AssertBoardOnRows(Control view, IReadOnlyList<GripRow> rows, string at)
     {
         var board = (ColumnFlowFretboard)Named(view, "SoundShapeBoard");
@@ -496,7 +538,7 @@ public sealed class SoundShapeViewUiPerfSmokeTests
     // A hand shape over a chord of the same grip: frets 3-5-5 (6 strings), plus 7 and 9 on strings 6 and 7 for
     // an 8-string; the stretch holds 12 on the low string and 19 on the next.
     private static void WithShape(double width, double height, int strings, bool stretch,
-        Action<Window, InspectorView, InspectorViewModel> body, bool selectChord = false)
+        Action<Window, InspectorView, InspectorViewModel> body, bool selectChord = false, Action<Arrangement, Chord>? arrange = null)
     {
         var services = App.Services ?? throw new InvalidOperationException("the headless app session did not boot.");
         var state = services.GetRequiredService<ProjectState>();
@@ -524,6 +566,7 @@ public sealed class SoundShapeViewUiPerfSmokeTests
             var song = new ChartProject();
             for (var i = 0; i < 16; i++) song.Beats.Add(new BeatMarker { Time = i * 500.0, Bpm = 120 });
             song.Arrangements.Add(lead);
+            arrange?.Invoke(lead, chord);
             state.ActiveProject = song;
             state.ActiveArrangement = lead;
             state.ActiveLevel = chart;

@@ -51,6 +51,11 @@ public sealed class GripRow : ObservableObject
     public bool HasMixedGripFret => _gripFrets.Length > 1;
     public bool HasMixedFinger => _fingers.Length > 1;
     public int? Finger => _fingers.Length == 1 ? _fingers[0] : null;
+
+    /// <summary>The fretboard dot's caption on a mixed string, "1/2" (a third value adds "+"); null when not mixed.</summary>
+    public string? MixedFingerCaption => HasMixedFinger
+        ? string.Join("/", _fingers.Order().Take(2).Select(FingerText)) + (_fingers.Length > 2 ? "+" : "")
+        : null;
     public string ChordPlaceholder => HasMixedChordFret ? _mixed : _owner.MutedStrings.Contains(StringIndex) ? "×" : "—";
     public string GripPlaceholder => HasMixedGripFret ? _mixed : "—";
 
@@ -86,11 +91,14 @@ public sealed class GripRow : ObservableObject
         }
     }
 
-    internal void Update(int?[] chord, ChordTemplate[] grips, Arrangement? arrangement)
+    // chordFingers: the fingers the chords' own templates state here. They join the grips' only on a string a
+    // grip covers, so a chord whose template disagrees with its shape shows as mixed.
+    internal void Update(int?[] chord, ChordTemplate[] grips, Arrangement? arrangement, IReadOnlyCollection<int> chordFingers)
     {
         _chordFrets = chord;
         _gripFrets = grips.Select(g => g.Frets.TryGetValue(StringIndex, out var fret) ? (int?)fret : null).Distinct().ToArray();
-        _fingers = grips.Where(g => g.Frets.ContainsKey(StringIndex)).Select(g => g.GetFinger(StringIndex)).Distinct().ToArray();
+        var gripFingers = grips.Where(g => g.Frets.ContainsKey(StringIndex)).Select(g => g.GetFinger(StringIndex)).ToArray();
+        _fingers = gripFingers.Length == 0 ? [] : gripFingers.Concat(chordFingers).Distinct().ToArray();
         var ghosts = grips.Where(g => g.Frets.ContainsKey(StringIndex)).Select(g => g.IsGhost(StringIndex)).Distinct().ToArray();
         _ghost = ghosts.Length > 1 ? null : ghosts.FirstOrDefault();
         _canFinger = grips.Any(g => !g.Fingerless && g.Frets.ContainsKey(StringIndex));
@@ -102,6 +110,13 @@ public sealed class GripRow : ObservableObject
     internal bool IncludesFinger(int finger) => _fingers.Contains(finger);
 
     public void ChooseFinger(int finger) => _owner.SetFinger(StringIndex, finger);
+
+    private static string FingerText(int finger) => finger switch
+    {
+        < 0 => "–",
+        0 => "T",
+        _ => finger.ToString(CultureInfo.InvariantCulture)
+    };
 
     private static string FretText(int?[] values) =>
         values is [int value] ? value.ToString(CultureInfo.InvariantCulture) : "";

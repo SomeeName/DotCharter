@@ -552,7 +552,7 @@ function Invoke-GateShardSelfTest {
     $started = Get-Date
     # Index 0 is the unsharded gate, on the command line exactly as -Shards 1 runs it.
     $whole = [pscustomobject]@{ Index = 0; Classes = [string[]]@(); Weight = 0.0; CommandArgs = [string[]]@('--filter-not-class', $GateExclusion) }
-    $runs = @(Start-TestShards -Plan (@($whole) + $plan) -DotnetTestArgs ($testBase + @('--list-tests')) -ResultsDir $dir -Label 'list' -WorkingDirectory $repoRoot)
+    $runs = @(Start-TestShards -Plan (@($whole) + $plan) -DotnetTestArgs $testBase -ResultsDir $dir -Label 'list' -WorkingDirectory $repoRoot -ListTests)
     $runs = @(Wait-TestShards -Runs $runs)
     $wholeNames = Read-TestListingNames $runs[0].LogPath
     $parts = @(); foreach ($r in ($runs | Select-Object -Skip 1)) { $parts += , (Read-TestListingNames $r.LogPath) }

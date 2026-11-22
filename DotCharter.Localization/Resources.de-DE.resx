@@ -1420,6 +1420,8 @@
  <data name="Inspector_IssueFix_RefingerOne" xml:space="preserve"><value>Mit {1} greifen, wie an {0} anderen Stelle</value></data>
  <data name="Inspector_IssueFix_Refinger" xml:space="preserve"><value>Mit {1} greifen, wie an {0} anderen Stellen</value></data>
  <data name="Inspector_IssueFix_RefingerTip" xml:space="preserve"><value>Die Greifhandposition bleibt auf Bund {0}, und dieser Griff bekommt den Fingersatz, den das Arrangement darunter schon spielt ({1}). Der Anker und die übrigen Töne darunter bleiben, wie sie sind. Ein Rückgängig-Schritt.</value></data>
+ <data name="Inspector_IssueFix_UseShapeFingeringTip" xml:space="preserve"><value>Die Greifhandposition bleibt auf Bund {0}, und dieser Akkord bekommt den Fingersatz des Griffbilds darüber ({1}), der dieselben Bünde greift. Anker, Griffbild und dessen Akkordvorlage bleiben, wie sie sind. Ein Rückgängig-Schritt.</value></data>
+ <data name="Inspector_IssueFix_UseShapeFingering" xml:space="preserve"><value>Fingersatz des Griffbilds übernehmen ({0})</value></data>
  <data name="Inspector_IssueFix_MoveAnchor" xml:space="preserve"><value>Greifhandposition auf Bund {0} verschieben</value></data>
  <data name="Inspector_IssueFix_MoveAnchorTip" xml:space="preserve"><value>Verschiebt die Greifhandposition von Bund {0} auf Bund {1}, wo dieser Fingersatz den Zeigefinger hat. Alle Töne unter diesem Anker werden danach aus der neuen Position gespielt. Ein Rückgängig-Schritt.</value></data>
  <data name="Inspector_IssueFix_ToneEarlier" xml:space="preserve"><value>Sound-Wechsel eine Sechzehntel früher setzen</value></data>
@@ -6483,6 +6485,7 @@
   <data name="Validation_IndexFingerStated_Inferred" xml:space="preserve"><value>Dieser Akkord hat keinen Finger 1, aber sein Finger {0} auf Bund {1} legt den Zeigefinger auf {2} (abgeleitet)</value></data>
   <data name="Validation_IndexFingerStated_Authored" xml:space="preserve"><value>Dieser Akkord wird mit dem Zeigefinger auf Bund {0} gegriffen</value></data>
   <data name="Validation_IndexFingerNotOnAnchorFret" xml:space="preserve"><value>{0}, die Greifhandposition liegt aber auf Bund {1}. Rocksmith leitet den Spielfinger aus dem Anker ab und zeigt daher einen anderen Griff als im Chart angegeben — verschiebe den Anker passend oder greife den Akkord neu.</value></data>
+  <data name="Validation_IndexFingerNotOnAnchorFret_ShapeFingering" xml:space="preserve"><value>{0}, die Greifhandposition liegt aber auf Bund {1}. Das Griffbild darüber greift dieselben Bünde mit einem anderen Fingersatz, der zum Anker passt — übernimm den Fingersatz des Griffbilds für den Akkord.</value></data>
   <data name="Validation_LinkNextMissingTargetNote" xml:space="preserve"><value>Der Klang hat Link-Next, aber auf derselben Saite folgt keine Note.</value></data>
   <data name="Validation_IncorrectLinkNext" xml:space="preserve"><value>Die Link-Next-Zielnote beginnt nicht dort, wo das Sustain dieses Klangs endet.</value></data>
   <data name="Validation_LinkNextSlideMismatch" xml:space="preserve"><value>Der Link-Next-Slide endet auf Bund {0}, die nächste Note liegt aber auf Bund {1}.</value></data>
